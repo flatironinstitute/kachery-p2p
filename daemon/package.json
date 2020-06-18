@@ -1,0 +1,21 @@
+{
+  "name": "kachery-p2p-daemon",
+  "version": "0.1.0",
+  "description": "Peer-to-peer content-addressable file sharing using hypercore and hyperswarm",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"No tests\" && exit 0",
+    "start": "node --experimental-modules server/main.js",
+    "start-docker": "PORT=8080 KACHERY_P2P_DAEMON_DIR=/data node --experimental-modules server/main.js"
+  },
+  "repository": "https://github.com/flatironinstitute/kachery_p2p",
+  "author": "Jeremy Magland",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "hypercore": "7",
+    "hyperswarm": "^2.14.0",
+    "json-socket": "^0.3.0",
+    "pump": "^3.0.0",
+    "random-access-memory": "^3.1.1"
+  }
+}
