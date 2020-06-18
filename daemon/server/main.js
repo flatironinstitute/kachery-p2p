@@ -46,11 +46,10 @@ class FileSeeker {
                 const swarmConnection = this._swarmConnectionManager.swarmConnection(swarmName);
                 for (let id of swarmConnection.peerIds()) {
                     const peerConnection = swarmConnection.peerConnection(id);
-                    const ps = peerConnection.getPeerState();
-                    if (sha1 in (ps.fileInfos || {})) {
+                    if (sha1 in peerConnection._receivedFileInfos) {
                         // Delete state.seekingFileInfos[sha1] = true on all swarms
                         this._removeSeekingFileInfoInSwarms(this._swarmConnectionManager.swarmNames(), sha1);
-                        return ps.fileInfos[sha1];
+                        return peerConnection._receivedFileInfos[sha1];
                     }
                 }
             }
@@ -99,23 +98,22 @@ class FileProvider {
             // For each file info being saught, let's see if we can provide that info
             let updateFileInfos = {};
             for (let sha1 in beingSaught) {
-                if (!swarmConnection.getState().fileInfos[sha1]) {
-                    const info = await this._loadFileInfo(sha1);
-                    if (info) {
-                        updateFileInfos[sha1] = info;
+                const info = await this._loadFileInfo(sha1);
+                if (info) {
+                    for (let id of swarmConnection.peerIds()) {
+                        const peerConnection = swarmConnection.peerConnection(id);
+                        if (peerConnection) {
+                            const ps = peerConnection.getPeerState();
+                            for (let sha1 in (ps.seekingFileInfos || {})) {
+                                peerConnection.sendMessage({
+                                    name: 'fileInfo',
+                                    sha1: sha1,
+                                    info: info
+                                })
+                            }
+                        }
                     }
                 }
-            }
-            // Let's see which file infos are no longer needed by any peers, and remove them
-            for (let sha1 in swarmConnection.getState().fileInfos) {
-                if (!(sha1 in beingSaught)) {
-                    updateFileInfos[sha1] = undefined;
-                }
-            }
-            if (Object.keys(updateFileInfos).length > 0) {
-                swarmConnection.updateState({
-                    fileInfos: updateFileInfos
-                })
             }
         }
     }
@@ -163,7 +161,6 @@ class SwarmConnection {
         this._state = {
             seekingFileInfos: {},
             seekingFiles: {},
-            fileInfos: {},
             filesAvailableForDownload: {}
         }
         const key = {
@@ -295,11 +292,13 @@ class PeerConnection {
         this._outgoingSocketReadyCallbacks = [];
         this._peerState = {};
         this._state = {};
+        this._receivedFileInfos = {};
     }
     setIncomingSocket(jsonSocket) {
         this._incomingJsonSocket = jsonSocket;
         this._incomingJsonSocket.on('message', msg => {
             if (msg.name === 'ready') {
+                console.log('--- incoming socket ready');
                 this._incomingSocketReady = true;
                 for (let cb of this._incomingSocketReadyCallbacks) {
                     cb();
@@ -315,6 +314,7 @@ class PeerConnection {
         this._outgoingJsonSocket = jsonSocket;
         this._outgoingJsonSocket.on('message', msg => {
             if (msg.name === 'ready') {
+                console.log('--- outgoing socket ready');
                 this._outgoingSocketReady = true;
                 for (let cb of this._outgoingSocketReadyCallbacks) {
                     cb();
@@ -333,8 +333,11 @@ class PeerConnection {
         else if (msg.name === 'setState') {
             this._peerState = msg.state;
         }
+        else if (msg.name === 'fileInfo') {
+            this._receivedFileInfos[msg.sha1] = msg.info;
+        }
     }
-    _sendMessage(msg) {
+    sendMessage(msg) {
         const _waitForSocketReady = async () => {
             if (this._incomingSocketReady) return this._incomingJsonSocket;
             if (this._outgoingSocketReady) return this._outgoingJsonSocket;
@@ -360,14 +363,14 @@ class PeerConnection {
     }
     updateState(update) {
         this._state = deepExtendAndDeleteUndefined(this._state, update);
-        this._sendMessage({
+        this.sendMessage({
             name: 'updateState',
             update: update
         });
     }
     setState(state) {
         this._state = state;
-        this._sendMessage({
+        this.sendMessage({
             name: 'setState',
             state: state
         });
