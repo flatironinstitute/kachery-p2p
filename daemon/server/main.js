@@ -327,6 +327,7 @@ class PeerConnection {
         this._outgoingJsonSocket.sendMessage({name: 'ready'});
     }
     _handleMessage(msg) {
+        console.log('--- handlemessage', JSON.stringify(msg));
         if (msg.name === 'updateState') {
             this._peerState === deepExtendAndDeleteUndefined(this._peerState, msg.update);
         }
@@ -338,6 +339,7 @@ class PeerConnection {
         }
     }
     sendMessage(msg) {
+        console.log('--- sendmessage', JSON.stringify(msg));
         const _waitForSocketReady = async () => {
             if (this._incomingSocketReady) return this._incomingJsonSocket;
             if (this._outgoingSocketReady) return this._outgoingJsonSocket;
