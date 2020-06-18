@@ -311,7 +311,11 @@ class PeerConnection {
     }
     _handleMessageFromIncomingSocket(msg) {
         if (msg.name === 'ready') {
+            console.log('--- incoming socket ready.');
             this._incomingSocketReady = true;
+            for (let cb of this._incomingSocketReadyCallbacks) {
+                cb();
+            }
         }
         else if (msg.name === 'reportState') {
             this._setPeerState(msg.state);
@@ -319,6 +323,7 @@ class PeerConnection {
     }
     _handleMessageFromOutgoingSocket(msg) {
         if (msg.name === 'ready') {
+            console.log('--- outgoing socket ready.');
             this._outgoingSocketReady = true;
             for (let cb of this._outgoingSocketReadyCallbacks) {
                 cb();
