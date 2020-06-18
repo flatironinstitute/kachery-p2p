@@ -4,6 +4,7 @@ import hypercore from 'hypercore';
 import fs from 'fs';
 import JsonSocket from 'json-socket';
 import ram from 'random-access-memory';
+import deepExtend from 'deep-extend';
 import { exec } from 'child_process';
 
 const daemon_dir = process.env['KACHERY_P2P_DAEMON_DIR'] || undefined;
@@ -12,7 +13,7 @@ if (!daemon_dir) {
     process.exit(-1);
 }
 
-async function main() {
+const main = async () => {
     const swarmConnectionManager = new SwarmConnectionManager();
     await swarmConnectionManager.joinSwarm('test1');
 
@@ -33,10 +34,8 @@ class FileSeeker {
         for (let swarmName of this._swarmConnectionManager.swarmNames()) {
             const swarmConnection = this._swarmConnectionManager.swarmConnection(swarmName);
             const s = swarmConnection.getState();
-            swarmConnection.setState({
-                ...s,
+            swarmConnection.updateState({
                 seekingFileInfos: {
-                    ...s.seekingFileInfos,
                     [sha1]: true
                 }
             })
@@ -62,9 +61,10 @@ class FileSeeker {
         for (let swarmName of this._swarmConnectionManager.swarmNames()) {
             const swarmConnection = this._swarmConnectionManager.swarmConnection(swarmName);
             const s = swarmConnection.getState();
-            swarmConnection.setState({
-                ...s,
-                seekingFileInfos: removeKey(sha1, s.seekingFileInfos)
+            swarmConnection.updateState({
+                seekingFileInfos: {
+                    [sha1]: undefined
+                }
             })
         }
     }
@@ -97,25 +97,26 @@ class FileProvider {
                 }
             }
             // For each file info being saught, let's see if we can provide that info
-            let newFileInfos = {...swarmConnection.getState().fileInfos};
+            let updateFileInfos = {};
             for (let sha1 in beingSaught) {
                 if (!swarmConnection.getState().fileInfos[sha1]) {
                     const info = await this._loadFileInfo(sha1);
                     if (info) {
-                        newFileInfos[sha1] = info;
+                        updateFileInfos[sha1] = info;
                     }
                 }
             }
             // Let's see which file infos are no longer needed by any peers, and remove them
-            for (let sha1 in newFileInfos) {
+            for (let sha1 in swarmConnection.getState().fileInfos) {
                 if (!(sha1 in beingSaught)) {
-                    delete newFileInfos[sha1];
+                    updateFileInfos[sha1] = undefined;
                 }
             }
-            swarmConnection.setState({
-                ...swarmConnection.getState(),
-                fileInfos: newFileInfos
-            })
+            if (Object.keys(updateFileInfos).length > 0) {
+                swarmConnection.updateState({
+                    fileInfos: updateFileInfos
+                })
+            }
         }
     }
     async _loadFileInfo(sha1) {
@@ -162,8 +163,9 @@ class SwarmConnection {
         this._state = {
             seekingFileInfos: {},
             seekingFiles: {},
-            fileInfos: {}
-        };
+            fileInfos: {},
+            filesAvailableForDownload: {}
+        }
         const key = {
             type: 'kacheryP2PKey',
             swarmName: swarmName
@@ -221,7 +223,7 @@ class SwarmConnection {
                         this._peerConnections[msg.id] = new PeerConnection();
                     }
                     this._peerConnections[msg.id].setOutgoingSocket(jsonSocket);
-                    this._peerConnections[msg.id].reportState(this._state);
+                    this._peerConnections[msg.id].setState(this._state);
                     this.printInfo();
                 });
             }
@@ -271,12 +273,10 @@ class SwarmConnection {
     getState() {
         return this._state;
     }
-    setState(state) {
-        const newState = {...this._state, ...state};
-        if (JSON.stringify(newState) === JSON.stringify(this._state)) return;
-        this._state = newState;
+    updateState(update) {
+        this._state = deepExtendAndDeleteUndefined(this._state, update);
         for (let id in this._peerConnections) {
-            this._peerConnections[id].reportState(this._state);
+            this._peerConnections[id].updateState(update);
         }
     }
 }
@@ -294,67 +294,113 @@ class PeerConnection {
         this._incomingSocketReadyCallbacks = [];
         this._outgoingSocketReadyCallbacks = [];
         this._peerState = {};
+        this._state = {};
     }
     setIncomingSocket(jsonSocket) {
         this._incomingJsonSocket = jsonSocket;
         this._incomingJsonSocket.on('message', msg => {
-            this._handleMessageFromIncomingSocket(msg);
+            if (msg.name === 'ready') {
+                this._incomingSocketReady = true;
+                for (let cb of this._incomingSocketReadyCallbacks) {
+                    cb();
+                }
+            }
+            else {
+                this._handleMessage(msg);
+            }
         })
         this._incomingJsonSocket.sendMessage({name: 'ready'});
     }
     setOutgoingSocket(jsonSocket) {
         this._outgoingJsonSocket = jsonSocket;
         this._outgoingJsonSocket.on('message', msg => {
-            this._handleMessageFromOutgoingSocket(msg);
+            if (msg.name === 'ready') {
+                this._outgoingSocketReady = true;
+                for (let cb of this._outgoingSocketReadyCallbacks) {
+                    cb();
+                }
+            }
+            else {
+                this._handleMessage(msg);
+            }
         })
         this._outgoingJsonSocket.sendMessage({name: 'ready'});
     }
-    _handleMessageFromIncomingSocket(msg) {
-        if (msg.name === 'ready') {
-            console.log('--- incoming socket ready.');
-            this._incomingSocketReady = true;
-            for (let cb of this._incomingSocketReadyCallbacks) {
-                cb();
-            }
+    _handleMessage(msg) {
+        if (msg.name === 'updateState') {
+            this._peerState === deepExtendAndDeleteUndefined(this._peerState, msg.update);
         }
-        else if (msg.name === 'reportState') {
-            this._setPeerState(msg.state);
+        else if (msg.name === 'setState') {
+            this._peerState = msg.state;
         }
     }
-    _handleMessageFromOutgoingSocket(msg) {
-        if (msg.name === 'ready') {
-            console.log('--- outgoing socket ready.');
-            this._outgoingSocketReady = true;
-            for (let cb of this._outgoingSocketReadyCallbacks) {
-                cb();
-            }
+    _sendMessage(msg) {
+        const _waitForSocketReady = async () => {
+            if (this._incomingSocketReady) return this._incomingJsonSocket;
+            if (this._outgoingSocketReady) return this._outgoingJsonSocket;
+            return new Promise((resolve, reject) => {
+                let resolved = false;
+                this._incomingSocketReadyCallbacks.push(() => {
+                    if (resolved) return;
+                    resolved = true;
+                    return resolve(this._incomingJsonSocket);
+                });
+                this._outgoingSocketReadyCallbacks.push(() => {
+                    if (resolved) return;
+                    resolved = true;
+                    return resolve(this._outgoingJsonSocket);
+                });
+            });
         }
+        const asyncHelper = async () => {
+            const socket = await _waitForSocketReady();
+            socket.sendMessage(msg);
+        }
+        asyncHelper();
     }
-    async _waitForIncomingSocketReady() {
-        if (this._incomingSocketReady) return;
-        return new Promise((resolve, reject) => {
-            this._incomingSocketReadyCallbacks.push(resolve);
+    updateState(update) {
+        this._state = deepExtendAndDeleteUndefined(this._state, update);
+        this._sendMessage({
+            name: 'updateState',
+            update: update
         });
     }
-    async _waitForOutgoingSocketReady() {
-        if (this._outgoingSocketReady) return;
-        return new Promise((resolve, reject) => {
-            this._outgoingSocketReadyCallbacks.push(resolve);
+    setState(state) {
+        this._state = state;
+        this._sendMessage({
+            name: 'setState',
+            state: state
         });
-    }
-    async reportState(state) {
-        await this._waitForOutgoingSocketReady();
-        this._outgoingJsonSocket.sendMessage({
-            name: 'reportState',
-            state
-        })
     }
     getPeerState() {
         return this._peerState;
     }
-    _setPeerState(state) {
-        this._peerState = state;
-        console.log('--- peer state', this._peerState);
+    
+}
+
+function deepExtendAndDeleteUndefined(x, y) {
+    let a = deepExtend(x, y);
+    return deleteUndefined(a);
+}
+
+function deleteUndefined(x) {
+    if (!x) return x;
+    if (typeof(x) === 'object') {
+        if (Array.isArray(x)) {
+            return x.filter(a => (a !== undefined)).map(a => deleteUndefined(a));
+        }
+        else {
+            let ret = {};
+            for (let key in x) {
+                if (x[key] !== undefined) {
+                    ret[key] = x[key];
+                }
+            }
+            return ret;
+        }
+    }
+    else {
+        return x;
     }
 }
 

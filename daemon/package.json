@@ -12,6 +12,7 @@
   "author": "Jeremy Magland",
   "license": "Apache-2.0",
   "dependencies": {
+    "deep-extend": "^0.6.0",
     "hypercore": "7",
     "hyperswarm": "^2.14.0",
     "json-socket": "^0.3.0",
