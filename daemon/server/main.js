@@ -218,9 +218,9 @@ class SwarmConnection {
                     receivedServerMessage = true;
                     if (!this._peerConnections[msg.id]) {
                         this._peerConnections[msg.id] = new PeerConnection();
+                        this._peerConnections[msg.id].setState(this._state);
                     }
                     this._peerConnections[msg.id].setOutgoingSocket(jsonSocket);
-                    this._peerConnections[msg.id].setState(this._state);
                     this.printInfo();
                 });
             }
@@ -232,6 +232,7 @@ class SwarmConnection {
                     receivedClientMessage = true;
                     if (!this._peerConnections[msg.id]) {
                         this._peerConnections[msg.id] = new PeerConnection();
+                        this._peerConnections[msg.id].setState(this._state);
                     }
                     this._peerConnections[msg.id].setIncomingSocket(jsonSocket);
                     this.printInfo();
