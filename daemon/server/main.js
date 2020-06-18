@@ -62,7 +62,7 @@ class FileSeeker {
             const s = swarmConnection.getState();
             swarmConnection.updateState({
                 seekingFileInfos: {
-                    [sha1]: undefined
+                    [sha1]: null
                 }
             })
         }
@@ -271,7 +271,9 @@ class SwarmConnection {
         return this._state;
     }
     updateState(update) {
-        this._state = deepExtendAndDeleteUndefined(this._state, update);
+        console.log('--- updateState', JSON.stringify(update));
+        this._state = deepExtendAndDeleteNull(this._state, update);
+        console.log('--- new state', this._state);
         for (let id in this._peerConnections) {
             this._peerConnections[id].updateState(update);
         }
@@ -329,7 +331,7 @@ class PeerConnection {
     _handleMessage(msg) {
         console.log('--- handlemessage', JSON.stringify(msg));
         if (msg.name === 'updateState') {
-            this._peerState === deepExtendAndDeleteUndefined(this._peerState, msg.update);
+            this._peerState = deepExtendAndDeleteNull(this._peerState, msg.update);
         }
         else if (msg.name === 'setState') {
             this._peerState = msg.state;
@@ -364,7 +366,7 @@ class PeerConnection {
         asyncHelper();
     }
     updateState(update) {
-        this._state = deepExtendAndDeleteUndefined(this._state, update);
+        this._state = deepExtendAndDeleteNull(this._state, update);
         this.sendMessage({
             name: 'updateState',
             update: update
@@ -383,22 +385,22 @@ class PeerConnection {
     
 }
 
-function deepExtendAndDeleteUndefined(x, y) {
+function deepExtendAndDeleteNull(x, y) {
     let a = deepExtend(x, y);
-    return deleteUndefined(a);
+    return deleteNull(a);
 }
 
-function deleteUndefined(x) {
+function deleteNull(x) {
     if (!x) return x;
     if (typeof(x) === 'object') {
         if (Array.isArray(x)) {
-            return x.filter(a => (a !== undefined)).map(a => deleteUndefined(a));
+            return x.filter(a => (a !== null)).map(a => deleteNull(a));
         }
         else {
             let ret = {};
             for (let key in x) {
-                if (x[key] !== undefined) {
-                    ret[key] = x[key];
+                if (x[key] !== null) {
+                    ret[key] = deleteNull(x[key]);
                 }
             }
             return ret;
