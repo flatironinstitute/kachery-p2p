@@ -20,7 +20,7 @@ const main = async () => {
     const fileSeeker = new FileSeeker(swarmConnectionManager);
     const fileProvider = new FileProvider(swarmConnectionManager);
 
-    const info = await fileSeeker.getFileInfoForSha1('226944af1df1e716284dcd0177922221406ef2fd');
+    const info = await fileSeeker.getFileInfoForSha1('b4f1725eff03cddf9625e491e4863c926b03126a');
     console.log('INFO:', info);
 }
 
@@ -272,9 +272,7 @@ class SwarmConnection {
         return this._state;
     }
     updateState(update) {
-        console.log('--- updateState', JSON.stringify(update));
         this._state = deepExtendAndDeleteNull(this._state, update);
-        console.log('--- new state', this._state);
         for (let id in this._peerConnections) {
             this._peerConnections[id].updateState(update);
         }
@@ -301,7 +299,6 @@ class PeerConnection {
         this._incomingJsonSocket = jsonSocket;
         this._incomingJsonSocket.on('message', msg => {
             if (msg.name === 'ready') {
-                console.log('--- incoming socket ready');
                 this._incomingSocketReady = true;
                 for (let cb of this._incomingSocketReadyCallbacks) {
                     cb();
@@ -317,7 +314,6 @@ class PeerConnection {
         this._outgoingJsonSocket = jsonSocket;
         this._outgoingJsonSocket.on('message', msg => {
             if (msg.name === 'ready') {
-                console.log('--- outgoing socket ready');
                 this._outgoingSocketReady = true;
                 for (let cb of this._outgoingSocketReadyCallbacks) {
                     cb();
@@ -330,7 +326,6 @@ class PeerConnection {
         this._outgoingJsonSocket.sendMessage({name: 'ready'});
     }
     _handleMessage(msg) {
-        console.log('--- handlemessage', JSON.stringify(msg));
         if (msg.name === 'updateState') {
             this._peerState = deepExtendAndDeleteNull(this._peerState, msg.update);
         }
@@ -342,7 +337,6 @@ class PeerConnection {
         }
     }
     sendMessage(msg) {
-        console.log('--- sendmessage', JSON.stringify(msg));
         const _waitForSocketReady = async () => {
             if (this._incomingSocketReady) return this._incomingJsonSocket;
             if (this._outgoingSocketReady) return this._outgoingJsonSocket;
