@@ -48,7 +48,7 @@ class FileSeeker {
                 for (let id of swarmConnection.peerIds()) {
                     const peerConnection = swarmConnection.peerConnection(id);
                     const ps = peerConnection.getPeerState();
-                    if (sha1 in ps.fileInfos) {
+                    if (sha1 in (ps.fileInfos || {})) {
                         // Delete state.seekingFileInfos[sha1] = true on all swarms
                         this._removeSeekingFileInfoInSwarms(this._swarmConnectionManager.swarmNames(), sha1);
                         return ps.fileInfos[sha1];
