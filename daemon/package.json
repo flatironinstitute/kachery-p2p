@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "echo \"No tests\" && exit 0",
-    "start": "node --experimental-modules server/main.js",
-    "start-docker": "PORT=8080 KACHERY_P2P_DAEMON_DIR=/data node --experimental-modules server/main.js"
+    "start": "node --experimental-modules src/main.js",
+    "start-docker": "KACHERY_STORAGE_DIR=/kachery-storage node --experimental-modules src/main.js"
   },
   "repository": "https://github.com/flatironinstitute/kachery_p2p",
   "author": "Jeremy Magland",
