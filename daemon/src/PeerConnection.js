@@ -270,7 +270,6 @@ class PeerConnection {
             });
         }
         const socket = await _waitForSocketReady();
-        console.log('--- sending message', msg);
         socket.sendMessage(msg);
     }
     sendMessage(msg) {

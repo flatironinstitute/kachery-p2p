@@ -12,11 +12,13 @@
   "author": "Jeremy Magland",
   "license": "Apache-2.0",
   "dependencies": {
-    "deep-extend": "^0.6.0",
-    "hypercore": "7",
+    "axios": "^0.19.2",
+    "express": "^4.17.1",
     "hyperswarm": "^2.14.0",
     "json-socket": "^0.3.0",
-    "pump": "^3.0.0",
-    "random-access-memory": "^3.1.1"
+    "yargs": "^15.3.1"
+  },
+  "devDependencies": {
+    "nexe": "^3.3.2"
   }
 }

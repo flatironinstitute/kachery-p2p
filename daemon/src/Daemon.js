@@ -163,7 +163,7 @@ class Daemon {
     _getPeers = () => {
         let ret = [];
         for (let swarmName in this._swarmConnections) {
-            let peerIds = this._swarmConnections[swarmName].getPeerIds();
+            let peerIds = this._swarmConnections[swarmName].peerIds();
             for (let peerId of peerIds) {
                 const peerConnection = this._swarmConnections[swarmName].peerConnection(peerId);
                 ret.push({
@@ -173,6 +173,7 @@ class Daemon {
                 })
             }
         }
+        return ret;
     }
     _disconnectPeer = (swarmName, peerId) => {
         if (!(swarmName in this._swarmConnections)) {
