@@ -31,6 +31,12 @@ def find_file(path):
     for info in infos:
         print(json.dumps(info, indent=4))
 
+@click.command(help="Download a file.")
+@click.argument('path')
+def load_file(path):
+    x = kp.load_file(path)
+    print(x)
+
 @click.command(help="Display kachery_p2p version and exit.")
 def version():
     click.echo(f"This is kachery_p2p version {kp.__version__}.")
@@ -40,6 +46,7 @@ cli.add_command(get_swarms)
 cli.add_command(join_swarm)
 cli.add_command(leave_swarm)
 cli.add_command(find_file)
+cli.add_command(load_file)
 cli.add_command(version)
 
 if __name__ == "__main__":

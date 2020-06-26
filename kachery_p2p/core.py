@@ -62,6 +62,19 @@ def find_file(path):
         raise Exception(resp['error'])
     return resp['results']
 
+def load_file(path):
+    results = find_file(path)
+    if len(results) == 0:
+        return None
+    result0 = results[0]
+
+    port = _api_port()
+    url = f'http://localhost:{port}/downloadFile'
+    resp = _http_post_json(url, dict(swarmName=result0['swarmName'], nodeIdPath=result0['nodeIdPath'], kacheryPath=path))
+    if not resp['success']:
+        raise Exception(resp['error'])
+    return resp
+
 def _http_post_json(url: str, data: dict, verbose: Optional[bool] = None) -> dict:
     timer = time.time()
     if verbose is None:

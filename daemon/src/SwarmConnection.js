@@ -149,38 +149,77 @@ class SwarmConnection {
                 finalize();
                 return;
             }
-            this.makeRequestToAllNodes(msg.requestBody, {requestId: msg.requestId, excludeSelf: false}, (nodeId, responseBody) => {
+            this.makeRequestToAllNodes(msg.requestBody, {requestId, excludeSelf: false}, (nodeIdPath, responseBody) => {
                 if (peerId in this._peerConnections) {
-                    this._peerConnections[peerId].sendMessage({type: 'requestToAllNodesResponse', nodeId, requestId, responseBody});
+                    this._peerConnections[peerId].sendMessage({type: 'requestToAllNodesResponse', nodeIdPath, requestId, responseBody});
                 }
             }, () => {
                 finalize();
             });
         }
+        else if (msg.type === 'requestToNode') {
+            const requestId = msg.requestId;
+            this.makeRequestToNode(msg.nodeIdPath, msg.requestBody, {requestId}, (responseBody) => {
+                this._peerConnections[peerId].sendMessage({type: 'requestToNodeResponse', requestId, responseBody});
+            });
+        }
     }
     _handleRequestToNode = async (requestBody) => {
-        console.log('--- debug1 handleRequestToNode');
         if (requestBody.type === 'findFile') {
-            console.log('--- debug2 handleRequestToNode');
             const kacheryPath = requestBody.kacheryPath;
             const info = await kacheryInfo(kacheryPath);
             if (info) {
-                console.log('--- debug3 handleRequestToNode');
                 return {
                     found: true,
                     info
                 };
             }
             else {
-                console.log('--- debug4 handleRequestToNode');
+                return {
+                    found: false
+                };
+            }
+        }
+        else if (requestBody.type === 'downloadFile') {
+            const kacheryPath = requestBody.kacheryPath;
+            const info = await kacheryInfo(kacheryPath);
+            if (info) {
+                return {
+                    found: true,
+                    data: 'test-data'
+                };
+            }
+            else {
                 return {
                     found: false
                 };
             }
         }
         else {
-            console.log('--- debug5 handleRequestToNode');
             return {}
+        }
+    }
+    makeRequestToNode = (nodeIdPath, requestBody, opts, onNodeResponse) => {
+        const requestId = opts.requestId || randomString(10);
+        if (nodeIdPath.length === 0) {
+            const asyncHelper = async () => {
+                let responseBody = null;
+                try {
+                    responseBody = await this._handleRequestToNode(requestBody);
+                }
+                catch(err) {
+                    console.warn(`Problem handling request to node: {err.message}`);
+                    responseBody = null;
+                }
+                onNodeResponse(responseBody);
+            }
+            asyncHelper();
+        }
+        else if (nodeIdPath[0] in this._peerConnections) {
+            this._peerConnections[nodeIdPath[0]].makeRequestToNode(nodeIdPath.slice(1), requestBody, {requestId}, onNodeResponse);
+        }
+        else {
+            throw Error(`No such peer: ${nodeIdPath[0]}`);
         }
     }
     makeRequestToAllNodes = (requestBody, opts, onNodeResponse, onFinished) => {
@@ -215,7 +254,7 @@ class SwarmConnection {
                     responseBody = null;
                 }
                 thisNodeFinished = true;
-                onNodeResponse(this._nodeId, responseBody);
+                onNodeResponse([], responseBody);
                 checkFinished();
             }
             asyncHelper();
@@ -228,12 +267,10 @@ class SwarmConnection {
         // peer nodes
         peerIds.forEach(peerId => {
             const peerConnection = this._peerConnections[peerId];
-            const onPeerNodeResponse = (nodeId, responseBody) => {
-                console.log('------------- onPeerReponse', nodeId);
-                onNodeResponse(nodeId, responseBody);
+            const onPeerNodeResponse = (nodeIdPath, responseBody) => {
+                onNodeResponse([peerId, ...nodeIdPath], responseBody);
             }
             const onPeerFinished = () => {
-                console.log('------------- onPeerFinished', peerId);
                 peersFinished[peerId] = true;
                 checkFinished();
             }
@@ -243,31 +280,37 @@ class SwarmConnection {
     }
 
     async findFile(kacheryPath, opts) {
-        console.log('--- debug1 findFile', this._swarmName, kacheryPath);
         return new Promise((resolve, reject) => {
-            console.log('--- debug2 findFile', this._swarmName, kacheryPath);
             const requestBody = {
                 type: 'findFile',
                 kacheryPath
             };
             const results = [];
-            const onNodeResponse = (nodeId, responseBody) => {
-                console.log('--- debug3 findFile', this._swarmName, kacheryPath, responseBody);
+            const onNodeResponse = (nodeIdPath, responseBody) => {
                 if (responseBody.found) {
                     results.push({
                         swarmName: this._swarmName,
-                        nodeId: nodeId,
+                        nodeIdPath: nodeIdPath,
                         info: responseBody.info
                     });
                 }
             }
             const onFinished = () => {
-                console.log('--- debug4 findFile', this._swarmName, kacheryPath);
                 resolve({results});
-                console.log('--- debug4.1 findFile', this._swarmName, kacheryPath);
             }
-            console.log('--- debug5 findFile', this._swarmName, kacheryPath);
             this.makeRequestToAllNodes(requestBody, {excludeSelf: true}, onNodeResponse, onFinished);
+        });
+    }
+    async downloadFile(nodeIdPath, kacheryPath, opts) {
+        return new Promise((resolve, reject) => {
+            const onResponse = (responseBody) => {
+                resolve(responseBody);
+            }
+            const requestBody = {
+                type: 'downloadFile',
+                kacheryPath: kacheryPath
+            };
+            this.makeRequestToNode(nodeIdPath, requestBody, {}, onResponse);
         });
     }
     async _start() {

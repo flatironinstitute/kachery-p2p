@@ -54,6 +54,24 @@ class PeerConnection {
         }
         return details;
     }
+    makeRequestToNode = (nodeIdPath, requestBody, opts, onNodeResponse) => {
+        const requestId = opts.requestId;
+        const message = {
+            type: 'requestToNode',
+            nodeIdPath,
+            requestId,
+            requestBody
+        };
+        this.sendMessage(message);
+        this.onMessage((msg, details) => {
+            if (msg.type === 'requestToNodeResponse') {
+                if (msg.requestId === requestId) {
+                    details.removeCallback();
+                    onNodeResponse(msg.responseBody);
+                }
+            }
+        })
+    }
     makeRequestToAllNodes = (requestBody, opts, onNodeResponse, onFinished) => {
         const requestId = opts.requestId;
         const message = {
@@ -65,7 +83,7 @@ class PeerConnection {
         this.onMessage((msg, details) => {
             if (msg.type === 'requestToAllNodesResponse') {
                 if (msg.requestId === requestId) {
-                    onNodeResponse(msg.nodeId, msg.responseBody);
+                    onNodeResponse(msg.nodeIdPath, msg.responseBody);
                 }
             }
             else if (msg.type === 'requestToAllNodesFinished') {

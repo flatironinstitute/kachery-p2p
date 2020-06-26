@@ -36,7 +36,6 @@ export const kacheryLoadFile = async (kacheryPath) => {
 }
 
 export const kacheryInfo = async (kacheryPath) => {
-    console.log('----------------- test kacheryInfo', kacheryPath);
     let json;
     try {
         json = await executeAndGetStdout(`kachery-info ${kacheryPath}`);
@@ -44,7 +43,6 @@ export const kacheryInfo = async (kacheryPath) => {
     catch(err) {
         return null;
     }
-    console.log('------------------- test kacheryInfo', json);
     let obj;
     try {
         obj = JSON.parse(json);
