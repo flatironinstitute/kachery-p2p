@@ -22,9 +22,33 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
-        this._app.get('/getState', async (req, res) => {
+        this._app.post('/getState', async (req, res) => {
             try {
                 await this._apiGetState(req, res)
+            }
+            catch(err) {
+                await this._errorResponse(req, res, 500, err.message);
+            }
+        });
+        this._app.post('/joinSwarm', async (req, res) => {
+            try {
+                await this._apiJoinSwarm(req, res)
+            }
+            catch(err) {
+                await this._errorResponse(req, res, 500, err.message);
+            }
+        });
+        this._app.post('/leaveSwarm', async (req, res) => {
+            try {
+                await this._apiLeaveSwarm(req, res)
+            }
+            catch(err) {
+                await this._errorResponse(req, res, 500, err.message);
+            }
+        });
+        this._app.post('/findFile', async (req, res) => {
+            try {
+                await this._apiFindFile(req, res)
             }
             catch(err) {
                 await this._errorResponse(req, res, 500, err.message);
@@ -37,11 +61,26 @@ export default class ApiServer {
     async _apiGetState(req, res) {
         const state = {
             swarms: this._daemon.getSwarms(),
-            incomingFileRequests: this._daemon.getIncomingFileRequests(),
-            outgoingFileRequests: this._daemon.getOutgoingFileRequests(),
             peers: this._daemon.getPeers()
         };
-        res.json({ success: true, ...state });
+        res.json({ success: true, state });
+    }
+    async _apiJoinSwarm(req, res) {
+        const reqData = req.body;
+        const swarmName = reqData.swarmName;
+        await this._daemon.joinSwarm(swarmName);
+        res.json({ success: true });
+    }
+    async _apiLeaveSwarm(req, res) {
+        const reqData = req.body;
+        const swarmName = reqData.swarmName;
+        await this._daemon.leaveSwarm(swarmName);
+        res.json({ success: true });
+    }
+    async _apiFindFile(req, res) {
+        const reqData = req.body;
+        const output = await this._daemon.findFile(reqData.kacheryPath, reqData.opts || {});
+        res.json({ success: true,  results: output.results });
     }
     async _errorResponse(req, res, code, errstr) {
         console.info(`Responding with error: ${code} ${errstr}`);

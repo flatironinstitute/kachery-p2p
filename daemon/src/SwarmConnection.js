@@ -3,14 +3,14 @@ import hyperswarm from 'hyperswarm';
 import JsonSocket from 'json-socket';
 import PeerConnection from './PeerConnection.js';
 import { randomString, sleepMsec } from './util.js';
+import { kacheryInfo } from './kachery.js';
 
-const PROTOCOL_VERSION = 'kachery-p2p-1'
+const PROTOCOL_VERSION = 'kachery-p2p-2'
 
 class SwarmConnection {
     constructor(swarmName) {
         this._swarmName = swarmName;
         this._nodeId = randomString(10);
-        this._outgoingFileRequests = [];
         const key = {
             protocolVersion: PROTOCOL_VERSION,
             swarmName: swarmName
@@ -23,6 +23,7 @@ class SwarmConnection {
             .digest('hex')
         this._hyperswarm = null;
         this._peerConnections = {};
+        this._requestIdsHandled = {};
 
         this._start();
     }
@@ -75,10 +76,11 @@ class SwarmConnection {
                     return;
                 }
                 if (!this._peerConnections[msg.nodeId]) {
-                    this._peerConnections[msg.nodeId] = new PeerConnection({swarmName: this._swarmName, peerId: msg.nodeId});
-                    for (let outgoingFileRequest of this._outgoingFileRequests) {
-                        this._peerConnections[msg.nodeId].addOutgoingFileRequest(outgoingFileRequest);
-                    }
+                    const peerConnection = new PeerConnection({swarmName: this._swarmName, peerId: msg.nodeId});
+                    this._peerConnections[msg.nodeId] = peerConnection;
+                    peerConnection.onMessage((msg2, details) => {
+                        this._handleMessageFromPeer(msg.nodeId, msg2);
+                    });
                 }
                 if (details.client) {
                     this._peerConnections[msg.nodeId].setOutgoingSocket(jsonSocket);
@@ -93,7 +95,7 @@ class SwarmConnection {
                 socket.on('close', () => {
                     if (msg.nodeId in this._peerConnections) {
                         const peerInfo = this._peerConnections[msg.nodeId].connectionInfo();
-                        console.info(`Socket closed for peer connection: ${peerInfo.host}:${peerInfo.port}${peer.local ? " (local)" : ""} (${msg.nodeId})`);
+                        console.info(`Socket closed for peer connection: ${peerInfo.host}:${peerInfo.port}${peerInfo.local ? " (local)" : ""} (${msg.nodeId})`);
                         this._peerConnections[msg.nodeId].disconnect();
                         delete this._peerConnections[msg.nodeId];
                         this.printInfo();
@@ -106,40 +108,13 @@ class SwarmConnection {
         this._hyperswarm.on('disconnection', (socket, info) => {
             const peer = info.peer;
             if (peer) {
-                console.info(`${this._swarmName}: Disconnecting from peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""} (${id})`);
+                console.info(`${this._swarmName}: Disconnecting from peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`);
             }
         })
         this.printInfo();
     }
-    leave() {
+    async leave() {
         this._hyperswarm.leave(this._topic);
-    }
-    getIncomingFileRequests() {
-        let ret = [];
-        for (let peerId in this._peerConnections) {
-            const x = this._peerConnections[peerId].getIncomingFileRequests();
-            for (let a of x) {
-                ret.push(a);
-            }
-        }
-        return ret;
-    }
-    getOutgoingFileRequests() {
-        return this._outgoingFileRequests;
-    }
-    requestFile(kacheryPath, opts) {
-        const outgoingFileRequest = {
-            requestId: randomString(10),
-            kacheryPath: kacheryPath,
-            opts: opts,
-            status: 'pending',
-            offers: []
-            // todo: put a cancel() function here
-        }
-        this._outgoingFileRequests.push(outgoingFileRequest);
-        for (let peerId in this._peerConnections) {
-            this._peerConnections[peerId].addOutgoingFileRequest(outgoingFileRequest);
-        }
     }
     peerIds() {
         return Object.keys(this._peerConnections);
@@ -162,22 +137,142 @@ class SwarmConnection {
         const numPeers = this.numPeers();
         console.info(`${numPeers} ${numPeers === 1 ? "peer" : "peers"}`);
     }
+    _handleMessageFromPeer = (peerId, msg) => {
+        if (msg.type === 'requestToAllNodes') {
+            const requestId = msg.requestId;
+            const finalize = () => {
+                if (peerId in this._peerConnections) {
+                    this._peerConnections[peerId].sendMessage({type: 'requestToAllNodesFinished', requestId});
+                }
+            }
+            if (this._requestIdsHandled[requestId]) {
+                finalize();
+                return;
+            }
+            this.makeRequestToAllNodes(msg.requestBody, {requestId: msg.requestId, excludeSelf: false}, (nodeId, responseBody) => {
+                if (peerId in this._peerConnections) {
+                    this._peerConnections[peerId].sendMessage({type: 'requestToAllNodesResponse', nodeId, requestId, responseBody});
+                }
+            }, () => {
+                finalize();
+            });
+        }
+    }
+    _handleRequestToNode = async (requestBody) => {
+        console.log('--- debug1 handleRequestToNode');
+        if (requestBody.type === 'findFile') {
+            console.log('--- debug2 handleRequestToNode');
+            const kacheryPath = requestBody.kacheryPath;
+            const info = await kacheryInfo(kacheryPath);
+            if (info) {
+                console.log('--- debug3 handleRequestToNode');
+                return {
+                    found: true,
+                    info
+                };
+            }
+            else {
+                console.log('--- debug4 handleRequestToNode');
+                return {
+                    found: false
+                };
+            }
+        }
+        else {
+            console.log('--- debug5 handleRequestToNode');
+            return {}
+        }
+    }
+    makeRequestToAllNodes = (requestBody, opts, onNodeResponse, onFinished) => {
+        const requestId = opts.requestId || randomString(10);
+        this._requestIdsHandled[requestId] = true;
+
+        const peerIds = Object.keys(this._peerConnections);
+        const peersFinished = {};
+        let thisNodeFinished = false;
+        const checkFinished = () => {
+            let allFinished = true;
+            if (!thisNodeFinished) allFinished = false;
+            for (let id0 of peerIds) {
+                if (!peersFinished[id0]) {
+                    allFinished = false;
+                }
+            }
+            if (allFinished) {
+                onFinished();
+            }
+        }
+
+        // this node
+        if (!opts.excludeSelf) {
+            const asyncHelper = async () => {
+                let responseBody = null;
+                try {
+                    responseBody = await this._handleRequestToNode(requestBody);
+                }
+                catch(err) {
+                    console.warn(`Problem handling request to node: {err.message}`);
+                    responseBody = null;
+                }
+                thisNodeFinished = true;
+                onNodeResponse(this._nodeId, responseBody);
+                checkFinished();
+            }
+            asyncHelper();
+        }
+        else {
+            thisNodeFinished = true;
+            checkFinished();
+        }
+
+        // peer nodes
+        peerIds.forEach(peerId => {
+            const peerConnection = this._peerConnections[peerId];
+            const onPeerNodeResponse = (nodeId, responseBody) => {
+                console.log('------------- onPeerReponse', nodeId);
+                onNodeResponse(nodeId, responseBody);
+            }
+            const onPeerFinished = () => {
+                console.log('------------- onPeerFinished', peerId);
+                peersFinished[peerId] = true;
+                checkFinished();
+            }
+            peerConnection.makeRequestToAllNodes(requestBody, {requestId}, onPeerNodeResponse, onPeerFinished);
+        });
+        checkFinished();
+    }
+
+    async findFile(kacheryPath, opts) {
+        console.log('--- debug1 findFile', this._swarmName, kacheryPath);
+        return new Promise((resolve, reject) => {
+            console.log('--- debug2 findFile', this._swarmName, kacheryPath);
+            const requestBody = {
+                type: 'findFile',
+                kacheryPath
+            };
+            const results = [];
+            const onNodeResponse = (nodeId, responseBody) => {
+                console.log('--- debug3 findFile', this._swarmName, kacheryPath, responseBody);
+                if (responseBody.found) {
+                    results.push({
+                        swarmName: this._swarmName,
+                        nodeId: nodeId,
+                        info: responseBody.info
+                    });
+                }
+            }
+            const onFinished = () => {
+                console.log('--- debug4 findFile', this._swarmName, kacheryPath);
+                resolve({results});
+                console.log('--- debug4.1 findFile', this._swarmName, kacheryPath);
+            }
+            console.log('--- debug5 findFile', this._swarmName, kacheryPath);
+            this.makeRequestToAllNodes(requestBody, {excludeSelf: true}, onNodeResponse, onFinished);
+        });
+    }
     async _start() {
         while (true) {
-            const keepStatuses1 = {
-                pending: true,
-                downloading: true
-            }
-            this._outgoingFileRequests = this._outgoingFileRequests.filter(r => keepStatuses1[r.status]);
-
-            const keepStatuses2 = {
-                pending: true,
-                "accepted-pending": true,
-                "accepted-downloading": true
-            }
-            for (let outgoingFileRequest of this._outgoingFileRequests) {
-                outgoingFileRequest.offers = outgoingFileRequest.offers.filter(o => keepStatuses2[o.status]);
-            }
+            //maintenance goes here
             await sleepMsec(100);
         }
     }

@@ -2,3 +2,8 @@ node_modules
 .vscode
 data
 data2
+kachery-storage*
+old-*
+
+__pycache__
+*.egg-info

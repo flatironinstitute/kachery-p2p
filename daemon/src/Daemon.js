@@ -1,83 +1,12 @@
 import SwarmConnection from './SwarmConnection.js'
-
-/*
-    
------------------------------------------------
-Each incoming request has the following format:
-{
-    requestId: 'unique-id',
-    swarmName: 'name-of-the-swarm',
-    peerId: 'unique-id-of-the-peer-node',
-    kacheryPath: 'sha1://path or similar',
-    opts: {
-        infoOnly: false
-        start: null,
-        end: null
-    },
-    status: 'pending', // see below
-    timestampReceived: null,
-    timestampAccepted: null,
-    accept: function, // pass in info={sizeBytes: expected-size-of-transfer}
-    decline: function,
-    cancel: function
-}
-Status:
-    pending: waiting for accept/decline
-    accepted-pending: accepted but waiting for response from peer
-    accepted-uploading: accepted and uploading
-    error
-    declined
-    canceled
-    canceled-by-peer
-
------------------------------------------------
-Each outgoing request has the following format:
-{
-    requestId: 'unique-id',
-    kacheryPath: 'sha1://path or similar',
-    opts: {
-        infoOnly: false
-        start: null,
-        end: null
-    },
-    status: 'pending', // pending, downloading, finished, canceled
-    offers: [
-        {
-            offerId: 'unique-id',
-            swarmName: 'name-of-the-swarm',
-            peerId: 'id-of-the-peer-making-the-offer',
-            status: 'pending', // see below
-            timestampReceived: null,
-            sizeBytes: null, // expected size of the response
-            progressBytes: null, // number of bytes downloaded already
-            accept: function,
-            decline: function,
-    localPath: path-of-locally-downloaded-file
-            cancel: function,
-            onFinished: function(cb) {...} // callback with be called when the accepted offer completes (err, result)
-        }, ...
-    ]
-}
-result in the callback:
-{
-    kacheryPath: 'as-provided',
-    opts: 'as-provided',
-    fileInfo: ...if requested...
-}
-Status for offer:
-    pending: waiting for accept/decline
-    accepted-pending: accepted but waiting for response from peer
-    accepted-downloading: accepted and downloading
-    finished
-    error
-    rejected
-    canceled
-    canceled-by-peer
-*/
+import { randomString, sleepMsec } from './util.js'
+import { kacheryInfo } from './kachery.js';
 
 class Daemon {
     constructor() {
         this._swarmConnections = {};
+
+        this._start();
     }
 
     /*****************************************************************************
@@ -86,17 +15,11 @@ class Daemon {
     
     // swarms
     joinSwarm = async (swarmName) => await this._joinSwarm(swarmName);
-    leaveSwarm = (swarmName) => this._leaveSwarm(swarmName);
+    leaveSwarm = async (swarmName) => await this._leaveSwarm(swarmName);
     getSwarms = () => (this._getSwarms());
 
-    // Incoming file requests from peers (see above)
-    getIncomingFileRequests = () => this._getIncomingFileRequests();
-
-    // Make an outgoing file request
-    requestFile = (swarmName, kacheryPath, opts) => (this._requestFile(swarmName, kacheryPath, opts));
-
-    // Outgoing file requests (see above)
-    getOutgoingFileRequests = () => (this._getOutgoingFileRequests());
+    // Find a file
+    findFile = async (kacheryPath, opts) => (await this._findFile(kacheryPath, opts));
 
     // peers
     getPeers = () => (this._getPeers());
@@ -108,18 +31,18 @@ class Daemon {
 
     _joinSwarm = async (swarmName) => {
         if (swarmName in this._swarmConnections) {
-            console.warn(`Cannot join swarm. Already joined: ${swarmName}`);
-            return;
+            throw Error(`Cannot join swarm. Already joined: ${swarmName}`);
         }
+        console.info(`Joining swarm: ${swarmName}`);
         this._swarmConnections[swarmName] = new SwarmConnection(swarmName);
         await this._swarmConnections[swarmName].join();
     }
-    _leaveSwarm = (swarmName) => {
+    _leaveSwarm = async (swarmName) => {
         if (!(swarmName in this._swarmConnections)) {
-            console.warn(`Cannot leave swarm. Not joined: ${swarmName}`);
-            return;
+            throw Error(`Cannot leave swarm. Not joined: ${swarmName}`);
         }
-        this._swarmConnections[swarmName].leave();
+        console.info(`Leaving swarm: ${swarmName}`);
+        await this._swarmConnections[swarmName].leave();
         delete this._swarmConnections[swarmName];
     }
     _getSwarms = () => {
@@ -132,32 +55,19 @@ class Daemon {
         ));
     }
 
-    _getIncomingFileRequests = () => {
-        let ret = [];
-        for (let swarmName in this._swarmConnections) {
-            const x = this._swarmConnections[swarmName].getIncomingFileRequests();
-            ret = [...ret, ...x];
-        }
-        return ret;
-    }
-
     ///////////////////////////xxxxxxxxxxxxxxxxxxxxxxxxxx
 
-    _requestFile = (swarmName, kacheryPath, opts) => {
-        if (!(swarmName in this._swarmConnections)) {
-            console.warn(`Cannot request file from swarm. Not joined: ${swarmName}`);
-            return;
-        }
-        this._swarmConnections[swarmName].requestFile(kacheryPath, opts);
-    }
-
-    _getOutgoingFileRequests = () => {
-        let ret = [];
+    _findFile = async (kacheryPath, opts) => {
+        console.log('--- findFile debug1');
+        const allResults = [];
         for (let swarmName in this._swarmConnections) {
-            const x = this._swarmConnections[swarmName].getOutgoingFileRequests();
-            ret = [...ret, ...x];
+            const swarmConnection = this._swarmConnections[swarmName];
+            const output = await swarmConnection.findFile(kacheryPath, opts);
+            for (let result of output.results)
+                allResults.push(result);
         }
-        return ret;
+        console.log('--- findFile debug2');
+        return {results: allResults};
     }
 
     _getPeers = () => {
@@ -181,6 +91,12 @@ class Daemon {
             return;
         }
         this._swarmConnections[peerId].disconnectPeer(peerId);
+    }
+    async _start() {
+        while (true) {
+            // maintenance goes here
+            await sleepMsec(100);
+        }
     }
 }
 
