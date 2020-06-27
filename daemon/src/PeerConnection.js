@@ -45,8 +45,15 @@ class PeerConnection {
     }
     async _handleMessage(msg) {
         this._timestampLastIncomingMessage = new Date();
-        if (this._verbose >= 2) {
-            console.info(`handleMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
+        if (msg.type === 'keepAlive') {
+            if (this._verbose >= 4) {
+                console.info(`handleMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
+            }    
+        }
+        else {
+            if (this._verbose >= 3) {
+                console.info(`handleMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
+            }
         }
         if (msg.type === 'keepAlive') {
             return;
@@ -154,8 +161,15 @@ class PeerConnection {
     }
     sendMessage(msg) {
         this._timestampLastOutgoingMessage = new Date();
-        if (this._verbose >= 2) {
-            console.info(`sendMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
+        if (msg.type === 'keepAlive') {
+            if (this._verbose >= 4) {
+                console.info(`handleMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
+            }    
+        }
+        else {
+            if (this._verbose >= 3) {
+                console.info(`sendMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
+            }
         }
         this.asyncSendMessage(msg);
     }

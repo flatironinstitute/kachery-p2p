@@ -31,7 +31,7 @@ setuptools.setup(
         "bin/kachery-p2p"
     ],
     install_requires=[
-        "kachery>=0.6.2"
+        "kachery>=0.6.3"
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
