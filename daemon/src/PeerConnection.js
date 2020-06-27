@@ -3,9 +3,10 @@ import fs from 'fs';
 import { info } from 'console';
 
 class PeerConnection {
-    constructor({swarmName, peerId}) {
+    constructor({swarmName, peerId, verbose}) {
         this._swarmName = swarmName;
         this._peerId = peerId;
+        this._verbose = verbose;
 
         this._incomingJsonSocket = null;
         this._outgoingJsonSocket = null;

@@ -68,7 +68,7 @@ def load_file(path):
         fname = tmpdir + '/download.dat'
         _http_post_download_file(url, dict(swarmName=result0['swarmName'], nodeIdPath=result0['nodeIdPath'], kacheryPath=path), fname)
         with ka.config(use_hard_links=True):
-            protocol, algorithm, expected_hash, additional_path = ka.get_file_hash(path)
+            protocol, algorithm, expected_hash, additional_path = _parse_kachery_path(path)
             if algorithm == 'sha1':
                 hash0 = ka._get_file_hash_from_path(path)
                 assert hash0 == expected_hash, f'Unexpected: hashes do not match: {expected_hash} <> {hash0}'
