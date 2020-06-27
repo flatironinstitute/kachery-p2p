@@ -1,4 +1,4 @@
 #!/bin/bash
 
 DIRECTORY=$(cd `dirname $0` && pwd)
-exec $DIRECTORY/../src/cli.js "$@"
+exec node --experimental-modules $DIRECTORY/../src/cli.js "$@"
