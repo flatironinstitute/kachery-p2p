@@ -10,9 +10,10 @@ import { kacheryInfo } from './kachery.js';
 const PROTOCOL_VERSION = 'kachery-p2p-2'
 
 class SwarmConnection {
-    constructor(swarmName) {
+    constructor(swarmName, {verbose}) {
         this._swarmName = swarmName;
         this._nodeId = randomString(10);
+        this._verbose = verbose;
         const key = {
             protocolVersion: PROTOCOL_VERSION,
             swarmName: swarmName
@@ -30,8 +31,19 @@ class SwarmConnection {
         this._start();
     }
     async join() {
-        console.info(`joining swarm: ${this._swarmName} (${this._topicHex})`)
-        this._hyperswarm = hyperswarm();
+        if (this._verbose >= 1) {
+            console.info(`joining swarm: ${this._swarmName} (${this._topicHex})`)
+        }
+        this._hyperswarm = hyperswarm({
+            forget: {
+                // how long to wait before forgetting that a peer
+                // has become unresponsive
+                unresponsive: 3,
+                // how long to wait before fogetting that a peer
+                // has been banned
+                banned: 3
+            }
+        });
         this._hyperswarm.join(this._topic, {
             lookup: true, // find & connect to peers
             announce: true // announce self as a connection target
@@ -40,14 +52,18 @@ class SwarmConnection {
         //     console.info(`${this._swarmName}: Peer discovered: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`)
         // });
         this._hyperswarm.on('peer-rejected', peer => {
-            console.info(`${this._swarmName}: Peer rejected: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`)
+            if (this._verbose >= 0) {
+                console.info(`${this._swarmName}: Peer rejected: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`)
+            }
         });
         this._hyperswarm.on('connection', (socket, details) => {
             const jsonSocket = new JsonSocket(socket);
             jsonSocket._socket = socket;
             const peer = details.peer;
             if (peer) {
-                console.info(`${this._swarmName}: Connecting to peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`);
+                if (this._verbose >= 0) {
+                    console.info(`${this._swarmName}: Connecting to peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`);
+                }
                 // const pc = new PeerConnection(peer, jsonSocket);
                 // this._peerConnections[peerId] = pc;
             }
@@ -58,27 +74,27 @@ class SwarmConnection {
                 if (receivedInitialMessage) return;
                 receivedInitialMessage = true;
                 if (msg.type !== 'initial') {
-                    console.info('Unexpected initial message from peer connection. Closing.');
+                    console.warn('Unexpected initial message from peer connection. Closing.');
                     socket.destroy();
                     return;
                 }
                 if (msg.protocolVersion !== PROTOCOL_VERSION) {
-                    console.info('Incorrect protocol version from peer connection. Closing.');
+                    console.warn('Incorrect protocol version from peer connection. Closing.');
                     socket.destroy();
                     return;
                 }
                 if (!validatePeerNodeId(msg.nodeId)) {
-                    console.info('Missing or incorrect node ID from peer connection. Closing.');
+                    console.warn('Missing or incorrect node ID from peer connection. Closing.');
                     socket.destroy();
                     return;
                 }
                 if (msg.from !== (details.client ? 'client' : 'server')) {
-                    console.info('Unexpected "from" field from peer connection. Closing.');
+                    console.warn('Unexpected "from" field from peer connection. Closing.');
                     socket.destroy();
                     return;
                 }
                 if (!this._peerConnections[msg.nodeId]) {
-                    const peerConnection = new PeerConnection({swarmName: this._swarmName, peerId: msg.nodeId});
+                    const peerConnection = new PeerConnection({swarmName: this._swarmName, peerId: msg.nodeId, verbose: this._verbose});
                     this._peerConnections[msg.nodeId] = peerConnection;
                     peerConnection.onMessage((msg2, details) => {
                         this._handleMessageFromPeer(msg.nodeId, msg2);
@@ -110,7 +126,9 @@ class SwarmConnection {
         this._hyperswarm.on('disconnection', (socket, info) => {
             const peer = info.peer;
             if (peer) {
-                console.info(`${this._swarmName}: Disconnecting from peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`);
+                if (this._verbose >= 0) {
+                    console.info(`${this._swarmName}: Disconnecting from peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`);
+                }
             }
         })
         this.printInfo();
@@ -140,6 +158,9 @@ class SwarmConnection {
         console.info(`${numPeers} ${numPeers === 1 ? "peer" : "peers"}`);
     }
     _handleMessageFromPeer = (peerId, msg) => {
+        if (this._verbose >= 1) {
+            console.info(`handleMessageFromPeer: ${this._swarmName} ${peerId} ${msg.type}`);
+        }
         if (msg.type === 'requestToAllNodes') {
             const requestId = msg.requestId;
             const finalize = () => {
@@ -173,10 +194,16 @@ class SwarmConnection {
         }
     }
     _handleRequestToNode = (requestBody, onResponse, onFinished) => {
+        if (this._verbose >= 1) {
+            console.info(`handleRequestToNode: ${this._swarmName} ${requestBody.type}`);
+        }
         (async () => {
             if (requestBody.type === 'findFile') {
                 const kacheryPath = requestBody.kacheryPath;
                 const info = await kacheryInfo(kacheryPath);
+                if (this._verbose >= 0) {
+                    console.info(`Result of findFile for ${kacheryPath}: ${JSON.stringify(info || 'null')}`);
+                }
                 if (info) {
                     if ('path' in info)
                         delete info['path'];
@@ -222,6 +249,9 @@ class SwarmConnection {
         })();
     }
     makeRequestToNode = (nodeIdPath, requestBody, opts, onResponse, onFinished) => {
+        if (this._verbose >= 1) {
+            console.info(`makeRequestToNode: ${this._swarmName} ${nodeIdPath.join(',')} ${requestBody.type}`);
+        }
         const requestId = opts.requestId || randomString(10);
         if (nodeIdPath.length === 0) {
             this._handleRequestToNode(requestBody, onResponse, onFinished);
@@ -234,6 +264,9 @@ class SwarmConnection {
         }
     }
     makeRequestToAllNodes = (requestBody, opts, onNodeResponse, onFinished) => {
+        if (this._verbose >= 1) {
+            console.info(`makeRequestToAllNodes: ${this._swarmName} ${requestBody.type}`);
+        }
         const requestId = opts.requestId || randomString(10);
         this._requestIdsHandled[requestId] = true;
 
@@ -336,6 +369,17 @@ class SwarmConnection {
     async _start() {
         while (true) {
             //maintenance goes here
+            const peerIds = this.peerIds();
+            for (let peerId of peerIds) {
+                const peerConnection = this._peerConnections[peerId];
+                if (peerConnection.elapsedTimeSecSinceLastIncomingMessage() > 10) {
+                    this.disconnectPeer(peerId);
+                }
+                if (peerConnection.elapsedTimeSecSinceLastOutgoingMessage() > 5) {
+                    peerConnection.sendMessage({type: 'keepAlive'});
+                }
+            }
+
             await sleepMsec(100);
         }
     }

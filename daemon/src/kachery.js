@@ -41,6 +41,7 @@ export const kacheryInfo = async (kacheryPath) => {
         json = await executeAndGetStdout(`kachery-info ${kacheryPath}`);
     }
     catch(err) {
+        console.warn(err);
         return null;
     }
     let obj;

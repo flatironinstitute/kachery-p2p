@@ -15,13 +15,18 @@ function main() {
           describe: 'Name of swarm to join',
           type: 'array',
         })
+        yargs.option('verbose', {
+          describe: 'Verbosity level.',
+          type: 'number',
+          default: 0
+        })
       },
       handler: (argv) => {
         let swarmNames = argv.swarm || [];
         if (swarmNames.length === 0) {
           console.warn('WARNING: no swarms specified. Use --swarm [swarm-name].');
         }
-        startDaemon({ swarmNames });
+        startDaemon({ swarmNames, verbose: argv.verbose });
       }
     })
     .command({
@@ -71,8 +76,8 @@ function main() {
 
 const apiPort = process.env.API_PORT || 20431;
 
-const startDaemon = async ({ swarmNames }) => {
-  const daemon = new Daemon();
+const startDaemon = async ({ swarmNames, verbose }) => {
+  const daemon = new Daemon({verbose});
 
   const apiServer = new ApiServer(daemon);
   apiServer.listen(apiPort);

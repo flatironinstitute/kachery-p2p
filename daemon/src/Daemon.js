@@ -3,8 +3,10 @@ import { randomString, sleepMsec } from './util.js'
 import { kacheryInfo } from './kachery.js';
 
 class Daemon {
-    constructor() {
+    constructor({ verbose }) {
         this._swarmConnections = {};
+        this._verbose = verbose;
+        console.info(`Verbose level: ${verbose}`);
 
         this._start();
     }
@@ -35,15 +37,19 @@ class Daemon {
         if (swarmName in this._swarmConnections) {
             throw Error(`Cannot join swarm. Already joined: ${swarmName}`);
         }
-        console.info(`Joining swarm: ${swarmName}`);
-        this._swarmConnections[swarmName] = new SwarmConnection(swarmName);
+        if (this._verbose >= 0) {
+            console.info(`Joining swarm: ${swarmName}`);
+        }
+        this._swarmConnections[swarmName] = new SwarmConnection(swarmName, {verbose: this._verbose});
         await this._swarmConnections[swarmName].join();
     }
     _leaveSwarm = async (swarmName) => {
         if (!(swarmName in this._swarmConnections)) {
             throw Error(`Cannot leave swarm. Not joined: ${swarmName}`);
         }
-        console.info(`Leaving swarm: ${swarmName}`);
+        if (this._verbose >= 0) {
+            console.info(`Leaving swarm: ${swarmName}`);
+        }
         await this._swarmConnections[swarmName].leave();
         delete this._swarmConnections[swarmName];
     }
@@ -60,6 +66,9 @@ class Daemon {
     ///////////////////////////xxxxxxxxxxxxxxxxxxxxxxxxxx
 
     _findFile = async (kacheryPath, opts) => {
+        if (this._verbose >= 1) {
+            console.info(`findFile: ${kacheryPath}`);
+        }
         const allResults = [];
         for (let swarmName in this._swarmConnections) {
             const swarmConnection = this._swarmConnections[swarmName];
@@ -72,6 +81,9 @@ class Daemon {
 
     // returns a stream
     _downloadFile = (swarmName, nodeIdPath, kacheryPath, opts) => {
+        if (this._verbose >= 1) {
+            console.info(`downloadFile: ${swarmName} ${nodeIdPath.join(',')} ${kacheryPath}`);
+        }
         if (!(swarmName in this._swarmConnections)) {
             throw Error(`Cannot download file. Not joined to swarm: ${swarmName}`);
         }
@@ -95,6 +107,9 @@ class Daemon {
         return ret;
     }
     _disconnectPeer = (swarmName, peerId) => {
+        if (this._verbose >= 1) {
+            console.info(`disconnectPeer: ${swarmName} ${peerId}`);
+        }
         if (!(swarmName in this._swarmConnections)) {
             console.warn(`Cannot disconnect peer in swarm. Not joined: ${swarmName}`);
             return;

@@ -1,3 +1,4 @@
+from typing import Tuple
 from types import SimpleNamespace
 import time
 import os
@@ -40,6 +41,21 @@ def find_file(path):
         raise Exception(resp['error'])
     return resp['results']
 
+def _parse_kachery_path(url: str) -> Tuple[str, str, str, str]:
+    list0 = url.split('/')
+    protocol = list0[0].replace(':', '')
+    hash0 = list0[2]
+    if '.' in hash0:
+        hash0 = hash0.split('.')[0]
+    additional_path = '/'.join(list0[3:])
+    algorithm = None
+    for alg in ['sha1', 'md5', 'key']:
+        if protocol.startswith(alg):
+            algorithm = alg
+    if algorithm is None:
+        raise Exception('Unexpected protocol: {}'.format(protocol))
+    return protocol, algorithm, hash0, additional_path
+
 def load_file(path):
     results = find_file(path)
     if len(results) == 0:
@@ -52,9 +68,10 @@ def load_file(path):
         fname = tmpdir + '/download.dat'
         _http_post_download_file(url, dict(swarmName=result0['swarmName'], nodeIdPath=result0['nodeIdPath'], kacheryPath=path), fname)
         with ka.config(use_hard_links=True):
-            expected_hash = ka.get_file_hash(path)
-            hash0 = ka.get_file_hash(fname)
-            assert hash0 == expected_hash, f'Unexpected: hashes do not match: {expected_hash} <> {hash0}'
+            protocol, algorithm, expected_hash, additional_path = ka.get_file_hash(path)
+            if algorithm == 'sha1':
+                hash0 = ka._get_file_hash_from_path(path)
+                assert hash0 == expected_hash, f'Unexpected: hashes do not match: {expected_hash} <> {hash0}'
             ka.store_file(fname)
             return ka.load_file(path)
 

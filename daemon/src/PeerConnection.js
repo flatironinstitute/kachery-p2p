@@ -21,6 +21,11 @@ class PeerConnection {
         this._waitForMessageTestFunctions = {};
 
         this._onMessageCallbacks = {};
+
+        this._timestampLastIncomingMessage = new Date();
+        this._timestampLastOutgoingMessage = new Date();
+
+        this._disconnected = false;
     }
     setIncomingSocket(jsonSocket) {
         this._incomingJsonSocket = jsonSocket;
@@ -38,6 +43,13 @@ class PeerConnection {
         this._incomingJsonSocket.sendMessage({type: 'ready'});
     }
     async _handleMessage(msg) {
+        this._timestampLastIncomingMessage = new Date();
+        if (this._verbose >= 2) {
+            console.info(`handleMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
+        }
+        if (msg.type === 'keepAlive') {
+            return;
+        }
         for (let id in this._onMessageCallbacks) {
             const x = this._onMessageCallbacks[id];
             x.callback(msg, x.details);
@@ -115,6 +127,7 @@ class PeerConnection {
         this._outgoingJsonSocket.sendMessage({type: 'ready'});
     }
     asyncSendMessage = async (msg) => {
+        if (this._disconnected) return;
         const _waitForSocketReady = async () => {
             if (this._incomingSocketReady) return this._incomingJsonSocket;
             if (this._outgoingSocketReady) return this._outgoingJsonSocket;
@@ -135,9 +148,14 @@ class PeerConnection {
             });
         }
         const socket = await _waitForSocketReady();
+        if (this._disconnected) return;
         socket.sendMessage(msg);
     }
     sendMessage(msg) {
+        this._timestampLastOutgoingMessage = new Date();
+        if (this._verbose >= 2) {
+            console.info(`sendMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
+        }
         this.asyncSendMessage(msg);
     }
     setConnectionInfo(info) {
@@ -147,12 +165,19 @@ class PeerConnection {
         return this._connectionInfo;
     }
     disconnect() {
+        this._disconnected = true;
         if (this._incomingJsonSocket) {
             this._incomingJsonSocket._socket.destroy();
         }
         if (this._outgoingJsonSocket) {
             this._outgoingJsonSocket._socket.destroy();
         }
+    }
+    elapsedTimeSecSinceLastIncomingMessage() {
+        return ((new Date()) - this._timestampLastIncomingMessage) / 1000;
+    }
+    elapsedTimeSecSinceLastOutgoingMessage() {
+        return ((new Date()) - this._timestampLastOutgoingMessage) / 1000;
     }
 }
 
