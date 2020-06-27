@@ -70,7 +70,7 @@ def load_file(path):
         with ka.config(use_hard_links=True):
             protocol, algorithm, expected_hash, additional_path = _parse_kachery_path(path)
             if algorithm == 'sha1':
-                hash0 = ka._get_file_hash_from_path(path)
+                hash0 = ka.get_file_hash(fname)
                 assert hash0 == expected_hash, f'Unexpected: hashes do not match: {expected_hash} <> {hash0}'
             ka.store_file(fname)
             return ka.load_file(path)
