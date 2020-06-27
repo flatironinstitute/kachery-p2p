@@ -50,7 +50,6 @@ export const kacheryInfo = async (kacheryPath) => {
     catch(err) {
         return null;
     }
-    delete obj['path'];
     return obj;
 }
 

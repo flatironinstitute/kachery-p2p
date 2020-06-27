@@ -5,32 +5,10 @@ import json
 import time
 from typing import Optional
 import kachery as ka
+from ._temporarydirectory import TemporaryDirectory
 
 def _api_port():
     return 20431
-
-# def load_file(kachery_path, _debug=False):
-#     if not _debug:
-#         x = ka.load_file(kachery_path)
-#         if x is not None:
-#             return x
-#     port = _api_port()
-#     url = f'http://localhost:{port}/requestFile'
-#     resp = _http_post_json(url, dict(kacheryPath=kachery_path, opts={}))
-#     if not resp['success']:
-#         raise Exception('Error requesting file.')
-#     R = resp['outgoingFileRequest']
-#     request_id = R['requestId']
-#     while True:
-#         url = f'http://localhost:{port}/getFileRequest'
-#         resp = _http_post_json(url, dict(requestId=request_id))
-#         if not resp['success']:
-#             print(resp)
-#             raise Exception('Error getting file request.')
-#         outgoing_file_request = resp['outgoingFileRequest']
-#         status = outgoing_file_request['status']
-#         print(status)
-#         time.sleep(1)
 
 def get_swarms():
     port = _api_port()
@@ -70,10 +48,27 @@ def load_file(path):
 
     port = _api_port()
     url = f'http://localhost:{port}/downloadFile'
-    resp = _http_post_json(url, dict(swarmName=result0['swarmName'], nodeIdPath=result0['nodeIdPath'], kacheryPath=path))
-    if not resp['success']:
-        raise Exception(resp['error'])
-    return resp
+    with TemporaryDirectory() as tmpdir:
+        fname = tmpdir + '/download.dat'
+        _http_post_download_file(url, dict(swarmName=result0['swarmName'], nodeIdPath=result0['nodeIdPath'], kacheryPath=path), fname)
+        with ka.config(use_hard_links=True):
+            expected_hash = ka.get_file_hash(path)
+            hash0 = ka.get_file_hash(fname)
+            assert hash0 == expected_hash, f'Unexpected: hashes do not match: {expected_hash} <> {hash0}'
+            ka.store_file(fname)
+            return ka.load_file(path)
+
+def _http_post_download_file(url: str, data: dict, dest_path: str):
+    try:
+        import requests
+    except:
+        raise Exception('Error importing requests *')
+
+    with requests.post(url, json=data, stream=True) as r:
+        r.raise_for_status()
+        with open(dest_path, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192): 
+                f.write(chunk)
 
 def _http_post_json(url: str, data: dict, verbose: Optional[bool] = None) -> dict:
     timer = time.time()

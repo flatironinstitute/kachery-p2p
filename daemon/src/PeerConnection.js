@@ -54,7 +54,7 @@ class PeerConnection {
         }
         return details;
     }
-    makeRequestToNode = (nodeIdPath, requestBody, opts, onNodeResponse) => {
+    makeRequestToNode = (nodeIdPath, requestBody, opts, onResponse, onFinished) => {
         const requestId = opts.requestId;
         const message = {
             type: 'requestToNode',
@@ -66,8 +66,13 @@ class PeerConnection {
         this.onMessage((msg, details) => {
             if (msg.type === 'requestToNodeResponse') {
                 if (msg.requestId === requestId) {
+                    onResponse(msg.responseBody);
+                }
+            }
+            else if (msg.type === 'requestToNodeFinished') {
+                if (msg.requestId === requestId) {
                     details.removeCallback();
-                    onNodeResponse(msg.responseBody);
+                    onFinished();
                 }
             }
         })

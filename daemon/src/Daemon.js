@@ -20,7 +20,8 @@ class Daemon {
 
     // Find a file
     findFile = async (kacheryPath, opts) => (await this._findFile(kacheryPath, opts));
-    downloadFile = async (swarmName, nodeIdPath, kacheryPath, opts) => (await this._downloadFile(swarmName, nodeIdPath, kacheryPath, opts));
+    // returns a stream
+    downloadFile = (swarmName, nodeIdPath, kacheryPath, opts) => (this._downloadFile(swarmName, nodeIdPath, kacheryPath, opts));
 
     // peers
     getPeers = () => (this._getPeers());
@@ -69,13 +70,13 @@ class Daemon {
         return {results: allResults};
     }
 
-    _downloadFile = async (swarmName, nodeIdPath, kacheryPath, opts) => {
+    // returns a stream
+    _downloadFile = (swarmName, nodeIdPath, kacheryPath, opts) => {
         if (!(swarmName in this._swarmConnections)) {
             throw Error(`Cannot download file. Not joined to swarm: ${swarmName}`);
         }
         const swarmConnection = this._swarmConnections[swarmName];
-        const result = await swarmConnection.downloadFile(nodeIdPath, kacheryPath, opts);
-        return {result};
+        return swarmConnection.downloadFile(nodeIdPath, kacheryPath, opts);
     }
 
     _getPeers = () => {

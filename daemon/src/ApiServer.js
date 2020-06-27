@@ -54,12 +54,12 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
-        this._app.post('/downloadFile', async (req, res) => {
+        this._app.post('/downloadFile', (req, res) => {
             try {
-                await this._apiDownloadFile(req, res)
+                this._apiDownloadFile(req, res)
             }
             catch(err) {
-                await this._errorResponse(req, res, 500, err.message);
+                res.status(500).send('Error downloading file.');
             }
         });
     }
@@ -90,10 +90,10 @@ export default class ApiServer {
         const output = await this._daemon.findFile(reqData.kacheryPath, reqData.opts || {});
         res.json({ success: true,  results: output.results });
     }
-    async _apiDownloadFile(req, res) {
+    _apiDownloadFile(req, res) {
         const reqData = req.body;
-        const output = await this._daemon.downloadFile(reqData.swarmName, reqData.nodeIdPath, reqData.kacheryPath, reqData.opts || {});
-        res.json({ success: true,  output });
+        const stream = this._daemon.downloadFile(reqData.swarmName, reqData.nodeIdPath, reqData.kacheryPath, reqData.opts || {});
+        stream.pipe(res);
     }
     async _errorResponse(req, res, code, errstr) {
         console.info(`Responding with error: ${code} ${errstr}`);
