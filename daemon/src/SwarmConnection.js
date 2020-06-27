@@ -158,7 +158,7 @@ class SwarmConnection {
         console.info(`${numPeers} ${numPeers === 1 ? "peer" : "peers"}`);
     }
     _handleMessageFromPeer = (peerId, msg) => {
-        if (this._verbose >= 1) {
+        if (this._verbose >= 2) {
             console.info(`handleMessageFromPeer: ${this._swarmName} ${peerId} ${msg.type}`);
         }
         if (msg.type === 'requestToAllNodes') {
@@ -201,7 +201,7 @@ class SwarmConnection {
             if (requestBody.type === 'findFile') {
                 const kacheryPath = requestBody.kacheryPath;
                 const info = await kacheryInfo(kacheryPath);
-                if (this._verbose >= 0) {
+                if (this._verbose >= 2) {
                     console.info(`Result of findFile for ${kacheryPath}: ${JSON.stringify(info || 'null')}`);
                 }
                 if (info) {
