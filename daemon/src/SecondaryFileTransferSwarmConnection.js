@@ -1,16 +1,14 @@
 import { sleepMsec } from './util.js';
 import HSwarmConnection from './HSwarmConnection.js';
-import { Stream } from 'json-socket';
-
-const PROTOCOL_VERSION = 'kachery-p2p-2'
+import crypto from 'crypto';
+import Stream from 'stream';
 
 class SecondaryFileTransferSwarmConnection {
-    constructor({nodeId, primaryNodeId, verbose}) {
-        this._primaryNodeId = primaryNodeId;
-        this._nodeId = nodeId;
+    constructor({nodeId, swarmName, verbose}) {
+        this._swarmName = swarmName;
         this._verbose = verbose;
-        const swarmName = 'file-transfer:' + this._primaryNodeId;
-        this._swarmConnection = new HSwarmConnection({nodeId, swarmName, verbose});
+        const swarmName0 = 'file-transfer:' + this._swarmName;
+        this._swarmConnection = new HSwarmConnection({nodeId, swarmName: swarmName0, verbose});
         this._swarmConnection.onMessage(() => {this._handleMessage()});
 
         this._start();
@@ -26,22 +24,25 @@ class SecondaryFileTransferSwarmConnection {
     }
     _handleMessage = async msg => {
     }
-    // returns a stream
-    downloadFile = async (fileKey, opts) => {
+    // returns {stream, cancel}
+    downloadFile = async ({fileKey, primaryNodeId, opts}) => {
         const requestBody = {
             type: 'downloadFile',
-            kacheryPath: kacheryPath
+            fileKey: fileKey
         };
         let finished = false;
         let sha1_sum = crypto.createHash('sha1');
-        this._swarmConnection.makeRequestToNode(this._primaryNodeId, requestBody, (responseBody) => {
+
+        const req = this._swarmConnection.makeRequestToNode(primaryNodeId, requestBody, {});
+        req.onResponse(responseBody => {
             if (!finished) {
                 const buf = Buffer.from(responseBody.data_b64, 'base64');
                 sha1_sum.update(buf);
                 // todo: implement this properly so we don't overflow the stream
                 stream.push(buf);
             }
-        }, () => {
+        });
+        req.onFinished(() => {
             finished = true;
             let sha1_hash = sha1_sum.digest('hex');;
             // todo: check hash to see if it is equal to the expected based on kacheryPath
@@ -52,7 +53,10 @@ class SecondaryFileTransferSwarmConnection {
                 // todo: implement this properly so we don't overflow the stream
             }
         });
-        return stream;
+        return {
+            stream,
+            cancel: () => req.cancel()
+        }
     }
     async _start() {
         while (true) {

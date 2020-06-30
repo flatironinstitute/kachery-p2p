@@ -77,3 +77,12 @@ function mkdirIfNeeded(path) {
         }
     }
 }
+
+export const getLocalFileInfo = async ({fileKey}) => {
+    const kacheryPath = kacheryPathFromFileKey(fileKey);
+    return await kacheryInfo(kacheryPath);
+}
+
+const kacheryPathFromFileKey = (fileKey) => {
+    return `sha1://${fileKey.sha1}`;
+}

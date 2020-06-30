@@ -55,9 +55,9 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
-        this._app.post('/downloadFile', (req, res) => {
+        this._app.post('/downloadFile', async (req, res) => {
             try {
-                this._apiDownloadFile(req, res)
+                await this._apiDownloadFile(req, res)
             }
             catch(err) {
                 res.status(500).send('Error downloading file.');
@@ -100,9 +100,10 @@ export default class ApiServer {
             x.cancel();
         });
     }
-    _apiDownloadFile(req, res) {
+    async _apiDownloadFile(req, res) {
         const reqData = req.body;
-        const stream = await this._daemon.downloadFile(reqData.swarmName, reqData.nodeIdPath, reqData.kacheryPath, reqData.opts || {});
+        const {stream, cancel} = await this._daemon.downloadFile({primaryNodeId: reqData.primaryNodeId, swarmName: reqData.swarmName, fileKey: reqData.fileKey, opts: reqData.opts || {}});
+        // todo: cancel on connection closed
         stream.pipe(res);
     }
     async _errorResponse(req, res, code, errstr) {

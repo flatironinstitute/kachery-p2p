@@ -64,23 +64,33 @@ def _parse_kachery_path(url: str) -> Tuple[str, str, str, str]:
     return protocol, algorithm, hash0, additional_path
 
 def load_file(path):
-    results = find_file(path)
-    if len(results) == 0:
-        return None
-    result0 = results[0]
+    x = find_file(path)
+    while True:
+        r = x.get_next()
+        if r is None:
+            return None
+        a = _load_file_helper(primary_node_id=r['primaryNodeId'], swarm_name=r['swarmName'], file_key=r['fileKey'], file_info=r['fileInfo'])
+        if a is not None:
+            return a
 
+def _load_file_helper(primary_node_id, swarm_name, file_key, file_info):
     port = _api_port()
     url = f'http://localhost:{port}/downloadFile'
+    path = _get_kachery_path_from_file_key(file_key)
     with TemporaryDirectory() as tmpdir:
         fname = tmpdir + '/download.dat'
-        _http_post_download_file(url, dict(swarmName=result0['swarmName'], nodeIdPath=result0['nodeIdPath'], kacheryPath=path), fname)
+        _http_post_download_file(url, dict(primaryNodeId=primary_node_id, swarmName=swarm_name, fileKey=file_key), fname)
         with ka.config(use_hard_links=True):
-            protocol, algorithm, expected_hash, additional_path = _parse_kachery_path(path)
-            if algorithm == 'sha1':
-                hash0 = ka.get_file_hash(fname)
-                assert hash0 == expected_hash, f'Unexpected: hashes do not match: {expected_hash} <> {hash0}'
+            expected_hash = file_key['sha1']
+            hash0 = ka.get_file_hash(fname)
+            if hash0 != expected_hash:
+                print(f'Unexpected: hashes do not match: {expected_hash} <> {hash0}')
+                return None
             ka.store_file(fname)
             return ka.load_file(path)
+
+def _get_kachery_path_from_file_key(file_key):
+    return f'sha1://{file_key["sha1"]}'
 
 def _http_post_download_file(url: str, data: dict, dest_path: str):
     try:

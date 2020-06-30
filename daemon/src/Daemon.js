@@ -1,7 +1,8 @@
 import { randomString, sleepMsec } from './util.js'
 import PrimaryFileTransferSwarmConnection from './PrimaryFileTransferSwarmConnection.js';
-import SecondaryFileTransferSwarmConnection from './SecondaryFileTransformSwarmConnection.js';
+import SecondaryFileTransferSwarmConnection from './SecondaryFileTransferSwarmConnection.js';
 import LookupSwarmConnection from './LookupSwarmConnection.js';
+import swarm from 'hyperswarm';
 
 class Daemon {
     constructor({ verbose }) {
@@ -31,8 +32,8 @@ class Daemon {
     //    onFinished()
     //    cancel()
     findFile = ({fileKey, timeoutMsec}) => (this._findFile({fileKey, timeoutMsec}));
-    // returns a stream
-    downloadFile = async (nodeId, fileKey, opts) => (await this._downloadFile(nodeId, fileKey, opts));
+    // returns {stream, cancel}
+    downloadFile = async ({swarmName, primaryNodeId, fileKey, opts}) => (await this._downloadFile({swarmName, primaryNodeId, fileKey, opts}));
 
     /*****************************************************************************
     IMPLEMENTATION
@@ -45,7 +46,7 @@ class Daemon {
         if (this._verbose >= 0) {
             console.info(`Joining network: ${networkName}`);
         }
-        const x = new LookupSwarmConnection({nodeId: this._nodeId, networkName, verbose: this._verbose});
+        const x = new LookupSwarmConnection({nodeId: this._nodeId, networkName, fileTransferSwarmName: this._nodeId, verbose: this._verbose});
         await x.join();
         this._lookupSwarmConnections[networkName] = x;
     }
@@ -81,7 +82,7 @@ class Daemon {
             cancel: handleCancel
         };
         if (this._verbose >= 1) {
-            console.info(`findFile: ${JSON.stringify(key)}`);
+            console.info(`findFile: ${JSON.stringify(fileKey)}`);
         }
         const networkNames = Object.keys(this._lookupSwarmConnections);
         networkNames.forEach(networkName => {
@@ -106,30 +107,38 @@ class Daemon {
         return ret;
     }
 
-    // returns a stream
-    _downloadFile = async (nodeId, fileKey, opts) => {
+    // returns {stream, cancel}
+    _downloadFile = async ({primaryNodeId, swarmName, fileKey, opts}) => {
         if (this._verbose >= 1) {
-            console.info(`downloadFile: ${nodeId} ${JSON.stringify(key)}`);
+            console.info(`downloadFile: ${primaryNodeId} ${swarmName} ${JSON.stringify(fileKey)}`);
         }
-        if (!(nodeId in this._secondaryFileTransferSwarmConnections)) {
-            await this._joinSecondaryFileTransferSwarm(nodeId);
+        console.log('--- debug 1');
+        if (!(swarmName in this._secondaryFileTransferSwarmConnections)) {
+            await this._joinSecondaryFileTransferSwarm({swarmName, primaryNodeId});
         }
-        const swarmConnection = this._secondaryFileTransferSwarmConnections[nodeId];
-        return await swarmConnection.downloadFile(fileKey, opts);
+        console.log('--- debug 2');
+        const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
+        console.log('--- debug 3');
+        return await swarmConnection.downloadFile({primaryNodeId, fileKey, opts});
     }
-    _joinSecondaryFileTransferSwarm = async nodeId => {
-        if (nodeId in this._secondaryFileTransferSwarmConnections) {
-            throw Error(`Cannot join file transfer swarm. Already joined: ${nodeId}`);
+    _joinSecondaryFileTransferSwarm = async ({swarmName, primaryNodeId}) => {
+        console.log('--- debug 4');
+        if (swarmName in this._secondaryFileTransferSwarmConnections) {
+            throw Error(`Cannot join file transfer swarm. Already joined: ${swarmName}`);
         }
         if (this._verbose >= 0) {
-            console.info(`Joining file transfer: ${nodeId}`);
+            console.info(`Joining file transfer: ${swarmName}`);
         }
-        const x = new SecondaryFileTransferSwarmConnection({primaryNodeId: nodeId, nodeId: this._nodeId, verbose: this._verbose});
+        console.log('--- debug 5');
+        const x = new SecondaryFileTransferSwarmConnection({swarmName, primaryNodeId, nodeId: this._nodeId, verbose: this._verbose});
+        console.log('--- debug 6');
         await x.join();
-        this._secondaryFileTransferSwarmConnections[nodeId] = x
+        console.log('--- debug 7');
+        this._secondaryFileTransferSwarmConnections[swarmName] = x
     }
     async _start() {
-        this._primaryFileTransferSwarmConnection = new PrimaryFileTransferSwarmConnection(this._nodeId);
+        this._primaryFileTransferSwarmConnection = new PrimaryFileTransferSwarmConnection({nodeId: this._nodeId, swarmName: this._nodeId, verbose: this._verbose});
+        await this._primaryFileTransferSwarmConnection.join();
         while (true) {
             // maintenance goes here
             // for example, managing the secondary file transfer swarms that we belong to

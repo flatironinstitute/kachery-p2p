@@ -25,14 +25,33 @@ class HSwarmConnection {
         this._peerConnections = {};
 
         this._messageIdsHandled = {};
+        this._requestIdsHandled = {};
         this._onMessageCallbacks = [];
+        this._onRequestCallbacks = [];
         this._messageListeners = {};
 
         this.onMessage(msg => {
-            for (let id in this._messageListeners) {
-                const x = this._messageListeners[id];
-                if (x.testFunction(msg)) {
-                    x.onMessageCallbacks.forEach(cb => {cb(msg);});
+            if (msg.type === 'requestToNode') {
+                if (msg.nodeId === this._nodeId) {
+                    const requestId = msg.requestId;
+                    if (this._requestIdsHandled[requestId]) return;
+                    this._requestIdsHandled[requestId] = true;
+                    this.broadcastMessage({type: 'requestToNodeReceived', requestId});
+                    this._onRequestCallbacks.forEach(cb => {
+                        cb(msg.requestBody, responseBody => {
+                            this.broadcastMessage({type: 'requestToNodeResponse', requestId, responseBody});
+                        }, () => {
+                            this.broadcastMessage({type: 'requestToNodeFinished', requestId});
+                        })
+                    })
+                }
+            }
+            else {
+                for (let id in this._messageListeners) {
+                    const x = this._messageListeners[id];
+                    if (x.testFunction(msg)) {
+                        x.onMessageCallbacks.forEach(cb => {cb(msg);});
+                    }
                 }
             }
         })
@@ -94,6 +113,7 @@ class HSwarmConnection {
                     return;
                 }
                 if (!validatePeerNodeId(msg.nodeId)) {
+                    console.warn(`Node ID: ${msg.nodeID}`);
                     console.warn('Missing or incorrect node ID from peer connection. Closing.');
                     socket.destroy();
                     return;
@@ -178,6 +198,72 @@ class HSwarmConnection {
                 message
             });
         })
+    }
+    onRequest = (cb) => {
+        this._onRequestCallbacks.push(cb);
+    }
+    makeRequestToNode = (nodeId, requestBody, opts) => {
+        const requestId = opts.requestId || randomString(10);
+        const onResponseCallbacks = [];
+        const onFinishedCallbacks = [];
+        // todo: think about doing this without a broadcast
+        const message = {
+            type: 'requestToNode',
+            nodeId,
+            requestId,
+            requestBody
+        }
+        this.broadcastMessage(message);
+        const listener = this.createMessageListener((msg) => {
+            return ((
+                (msg.type === 'requestToNodeResponse') ||
+                (msg.type === 'requestToNodeFinished') ||
+                (msg.type === 'requestToNodeReceived')
+            ) && (msg.requestId === requestId));
+        });
+        let isFinished = false;
+        let requestReceived = false;
+        const handleReceived = () => {
+            requestReceived = true;
+        }
+        const handleFinished = () => {
+            if (isFinished) return;
+            onFinishedCallbacks.forEach(cb => cb());
+            isFinished = true;
+        }
+        const handleResponse = (responseBody) => {
+            if (isFinished) return;
+            onResponseCallbacks.forEach(cb => cb(responseBody));
+        }
+        const timer = new Date();
+        const checkReceived = () => {
+            if (!requestReceived) {
+                // Not yet received. Maybe need to wait for peers. Send it again. (Don't worry it will only be processed once)
+                this.broadcastMessage(message);
+                const elapsed = (new Date()) - timer;
+                if (elapsed < 10000) {
+                    setTimeout(checkReceived, 500);
+                }
+            }
+        }
+        setTimeout(checkReceived, 500);
+        listener.onMessage(msg => {
+            if (msg.type === 'requestToNodeReceived') {
+                handleReceived();
+            }
+            else if (msg.type === 'requestToNodeResponse') {
+                handleResponse(msg.responseBody);
+            }
+            else if (msg.type === 'requestToNodeFinished') {
+                handleFinished();
+            }
+        });
+        return {
+            onResponse: cb => onResponseCallbacks.push(cb),
+            onFinished: cb => onFinishedCallbacks.push(cb),
+            // todo: think about doing more here - send out a cancel message to node
+            cancel: () => {handleFinished(); listener.cancel();}
+        }
     }
     onMessage = cb => {
         this._onMessageCallbacks.push(cb);
