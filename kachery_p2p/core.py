@@ -36,10 +36,17 @@ def leave_swarm(swarm_name):
 def find_file(path):
     port = _api_port()
     url = f'http://localhost:{port}/findFile'
-    resp = _http_post_json(url, dict(kacheryPath=path))
-    if not resp['success']:
-        raise Exception(resp['error'])
-    return resp['results']
+    protocol, algorithm, hash0, additional_path = _parse_kachery_path(path)
+    assert algorithm == 'sha1'
+    file_key = dict(
+        sha1=hash0
+    )
+    x = _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
+    def get_next():
+        return x.get_next()
+    return SimpleNamespace(
+        get_next=get_next
+    )
 
 def _parse_kachery_path(url: str) -> Tuple[str, str, str, str]:
     list0 = url.split('/')
@@ -107,3 +114,40 @@ def _http_post_json(url: str, data: dict, verbose: Optional[bool] = None) -> dic
     if verbose:
         print('Elapsed time for _http_post_json: {}'.format(time.time() - timer))
     return json.loads(req.content)
+
+def _http_post_json_receive_json_socket(url: str, data: dict, verbose: Optional[bool] = None):
+    timer = time.time()
+    if verbose is None:
+        verbose = (os.environ.get('HTTP_VERBOSE', '') == 'TRUE')
+    if verbose:
+        print('_http_post_json::: ' + url)
+    try:
+        import requests
+    except:
+        raise Exception('Error importing requests *')
+    req = requests.post(url, json=data, stream=True)
+    if req.status_code != 200:
+        return dict(
+            success=False,
+            error='Error posting json: {} {}'.format(
+                req.status_code, req.content.decode('utf-8'))
+        )
+    def get_next():
+        buf = bytearray(b'')
+        while True:
+            c = req.raw.read(1)
+            if len(c) == 0:
+                return None
+            if c == b'#':
+                size = int(buf)
+                x = req.raw.read(size)
+                obj = json.loads(x)
+                return obj
+            else:
+                buf.append(c[0])
+    return SimpleNamespace(
+        get_next=get_next
+    )
+
+    if verbose:
+        print('Elapsed time for _http_post_json: {}'.format(time.time() - timer))

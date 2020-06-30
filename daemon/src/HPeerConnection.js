@@ -1,8 +1,6 @@
 import { randomString } from './util.js';
-import fs from 'fs';
-import { info } from 'console';
 
-class PeerConnection {
+class HPeerConnection {
     constructor({swarmName, peerId, verbose}) {
         this._swarmName = swarmName;
         this._peerId = peerId;
@@ -73,51 +71,6 @@ class PeerConnection {
             details
         }
         return details;
-    }
-    makeRequestToNode = (nodeIdPath, requestBody, opts, onResponse, onFinished) => {
-        const requestId = opts.requestId;
-        const message = {
-            type: 'requestToNode',
-            nodeIdPath,
-            requestId,
-            requestBody
-        };
-        this.sendMessage(message);
-        this.onMessage((msg, details) => {
-            if (msg.type === 'requestToNodeResponse') {
-                if (msg.requestId === requestId) {
-                    onResponse(msg.responseBody);
-                }
-            }
-            else if (msg.type === 'requestToNodeFinished') {
-                if (msg.requestId === requestId) {
-                    details.removeCallback();
-                    onFinished();
-                }
-            }
-        })
-    }
-    makeRequestToAllNodes = (requestBody, opts, onNodeResponse, onFinished) => {
-        const requestId = opts.requestId;
-        const message = {
-            type: 'requestToAllNodes',
-            requestId,
-            requestBody
-        };
-        this.sendMessage(message);
-        this.onMessage((msg, details) => {
-            if (msg.type === 'requestToAllNodesResponse') {
-                if (msg.requestId === requestId) {
-                    onNodeResponse(msg.nodeIdPath, msg.responseBody);
-                }
-            }
-            else if (msg.type === 'requestToAllNodesFinished') {
-                if (msg.requestId === requestId) {
-                    details.removeCallback();
-                    onFinished();
-                }
-            }
-        })
     }
     setOutgoingSocket(jsonSocket) {
         this._outgoingJsonSocket = jsonSocket;
@@ -196,4 +149,4 @@ class PeerConnection {
     }
 }
 
-export default PeerConnection;
+export default HPeerConnection;

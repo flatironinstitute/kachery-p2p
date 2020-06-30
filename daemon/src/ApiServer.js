@@ -2,6 +2,7 @@ import express from 'express';
 import https from 'https';
 import http from 'http';
 import fs from 'fs';
+import JsonSocket from 'json-socket';
 
 export default class ApiServer {
     constructor(daemon) {
@@ -87,12 +88,21 @@ export default class ApiServer {
     }
     async _apiFindFile(req, res) {
         const reqData = req.body;
-        const output = await this._daemon.findFile(reqData.kacheryPath, reqData.opts || {});
-        res.json({ success: true,  results: output.results });
+        const x = this._daemon.findFile({fileKey: reqData.fileKey, timeoutMsec: reqData.timeoutMsec});
+        const jsonSocket = new JsonSocket(res);
+        x.onFound(result => {
+            jsonSocket.sendMessage(result);
+        });
+        x.onFinished(() => {
+            res.end();
+        })
+        req.on('close', () => {
+            x.cancel();
+        });
     }
     _apiDownloadFile(req, res) {
         const reqData = req.body;
-        const stream = this._daemon.downloadFile(reqData.swarmName, reqData.nodeIdPath, reqData.kacheryPath, reqData.opts || {});
+        const stream = await this._daemon.downloadFile(reqData.swarmName, reqData.nodeIdPath, reqData.kacheryPath, reqData.opts || {});
         stream.pipe(res);
     }
     async _errorResponse(req, res, code, errstr) {
