@@ -31,17 +31,17 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
-        this._app.post('/joinNetwork', async (req, res) => {
+        this._app.post('/joinChannel', async (req, res) => {
             try {
-                await this._apiJoinNetwork(req, res)
+                await this._apiJoinChannel(req, res)
             }
             catch(err) {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
-        this._app.post('/leaveNetwork', async (req, res) => {
+        this._app.post('/leaveChannel', async (req, res) => {
             try {
-                await this._apiLeaveNetwork(req, res)
+                await this._apiLeaveChannel(req, res)
             }
             catch(err) {
                 await this._errorResponse(req, res, 500, err.message);
@@ -68,22 +68,19 @@ export default class ApiServer {
         res.json({ success: true });
     }
     async _apiGetState(req, res) {
-        const state = {
-            swarms: this._daemon.getSwarms(),
-            peers: this._daemon.getPeers()
-        };
+        const state = this._daemon.getState();
         res.json({ success: true, state });
     }
-    async _apiJoinNetwork(req, res) {
+    async _apiJoinChannel(req, res) {
         const reqData = req.body;
-        const networkName = reqData.networkName;
-        await this._daemon.joinNetwork(networkName);
+        const channelName = reqData.channelName;
+        await this._daemon.joinChannel(channelName);
         res.json({ success: true });
     }
-    async _apiLeaveNetwork(req, res) {
+    async _apiLeaveChannel(req, res) {
         const reqData = req.body;
-        const networkName = reqData.networkName;
-        await this._daemon.leaveNetwork(networkName);
+        const channelName = reqData.channelName;
+        await this._daemon.leaveChannel(channelName);
         res.json({ success: true });
     }
     async _apiFindFile(req, res) {

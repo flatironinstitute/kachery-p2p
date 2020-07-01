@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import os from 'os';
+import fs from 'fs';
 import yargs from 'yargs';
 import Daemon from './Daemon.js';
 import ApiServer from './ApiServer.js';
@@ -11,8 +13,8 @@ function main() {
       command: 'start',
       desc: 'Start the daemon',
       builder: (yargs) => {
-        yargs.option('network', {
-          describe: 'Name of kachery-p2p network to join',
+        yargs.option('channel', {
+          describe: 'Name of a kachery-p2p channel to join (you can join more than one)',
           type: 'array',
         })
         yargs.option('verbose', {
@@ -22,11 +24,12 @@ function main() {
         })
       },
       handler: (argv) => {
-        let networkNames = argv.network || [];
-        if (networkNames.length === 0) {
-          console.warn('WARNING: no networks specified. Use --network [network-name].');
+        let channelNames = argv.channel || [];
+        const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
+        if (!fs.existsSync(configDir)) {
+          fs.mkdirSync(configDir);
         }
-        startDaemon({ networkNames, verbose: argv.verbose });
+        startDaemon({ configDir, channelNames, verbose: argv.verbose });
       }
     })
     .demandCommand()
@@ -38,14 +41,14 @@ function main() {
 
 const apiPort = process.env.KACHERY_P2P_API_PORT || 20431;
 
-const startDaemon = async ({ networkNames, verbose }) => {
-  const daemon = new Daemon({verbose});
+const startDaemon = async ({ channelNames, configDir, verbose }) => {
+  const daemon = new Daemon({configDir, verbose});
 
   const apiServer = new ApiServer(daemon);
   apiServer.listen(apiPort);
 
-  for (let networkName of networkNames) {
-    await daemon.joinNetwork(networkName);
+  for (let channelName of channelNames) {
+    await daemon.joinChannel(channelName);
   }
 }
 

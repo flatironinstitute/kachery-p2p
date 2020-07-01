@@ -4,14 +4,15 @@ import { getLocalFileInfo } from './kachery.js';
 import HSwarmConnection from './HSwarmConnection.js';
 
 class LookupSwarmConnection {
-    constructor({nodeId, networkName, fileTransferSwarmName, verbose}) {
+    constructor({keyPair, nodeId, channelName, fileTransferSwarmName, verbose}) {
+        this._keyPair = keyPair;
         this._nodeId = nodeId;
-        this._networkName = networkName;
+        this._channelName = channelName;
         this._verbose = verbose;
-        const swarmName = 'lookup:' + this._networkName;
+        const swarmName = 'lookup:' + this._channelName;
         this._fileTransferSwarmName = fileTransferSwarmName;
-        this._swarmConnection = new HSwarmConnection({nodeId, swarmName, verbose});
-        this._swarmConnection.onMessage((msg) => {this._handleMessage(msg)});
+        this._swarmConnection = new HSwarmConnection({keyPair: this._keyPair, nodeId, swarmName, verbose});
+        this._swarmConnection.onMessage((fromNodeId, msg) => {this._handleMessage(fromNodeId, msg)});
 
         this._start();
     }
@@ -24,13 +25,14 @@ class LookupSwarmConnection {
     printInfo() {
         this._swarmConnection.printInfo();
     }
-    _handleMessage = async msg => {
+    _handleMessage = async (fromNodeId, msg) => {
         if (msg.type === 'seeking') {
             const fileKey = msg.fileKey;
             const fileInfo = await getLocalFileInfo({fileKey});
             if (fileInfo) {
                 if ('path' in fileInfo)
                     delete fileInfo['path'];
+                // Question: do we want to send this only to the node seeking, or to all?
                 this._swarmConnection.broadcastMessage({
                     type: 'providing',
                     fileKey: fileKey,
@@ -46,7 +48,7 @@ class LookupSwarmConnection {
         const onFinishedCallbacks = [];
         let isFinished = false;
         const listener = this._swarmConnection.createMessageListener(
-            msg => {
+            (fromNodeId, msg) => {
                 return ((msg.type === 'providing') && (fileKeysMatch(msg.fileKey, fileKey)));
             }
         );
@@ -64,7 +66,10 @@ class LookupSwarmConnection {
             type: 'seeking',
             fileKey
         });
-        listener.onMessage(msg => {
+        listener.onMessage((fromNodeId, msg) => {
+            if (fromNodeId !== msg.primaryNodeId) {
+                console.warn(`WARNING: primaryNodeId ${msg.primaryNodeId} is not the same as fromNodeId ${fromNodeId}`);
+            }
             const result = {
                 primaryNodeId: msg.primaryNodeId,
                 swarmName: msg.swarmName,

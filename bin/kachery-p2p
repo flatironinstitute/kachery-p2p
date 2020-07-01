@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from kachery_p2p.core import start_daemon
 import click
 import json
 import kachery_p2p as kp
@@ -8,21 +9,21 @@ import kachery_p2p as kp
 def cli():
     pass
 
-@click.command(help="Show the networks that this node belongs to.")
-def get_networks():
-    networks = kp.get_networks()
-    for network in networks:
-        print(network['networkName'])
+@click.command(help="Show the channels that this node belongs to.")
+def get_channels():
+    channels = kp.get_channels()
+    for channel in channels:
+        print(f'{channel["name"]}: {channel["numPeers"]} peers')
 
-@click.command(help="Join a network.")
-@click.argument('network_name')
-def join_network(network_name):
-    kp.join_network(network_name)
+@click.command(help="Join a channel.")
+@click.argument('channel_name')
+def join_channel(channel_name):
+    kp.join_channel(channel_name)
 
-@click.command(help="Leave a network.")
-@click.argument('network_name')
-def leave_network(network_name):
-    kp.leave_network(network_name)
+@click.command(help="Leave a channel.")
+@click.argument('channel_name')
+def leave_channel(channel_name):
+    kp.leave_channel(channel_name)
 
 @click.command(help="Find a file.")
 @click.argument('path')
@@ -37,17 +38,22 @@ def load_file(path):
     x = kp.load_file(path)
     print(x)
 
+@click.command(help="Start the daemon.")
+def start_daemon():
+    kp.start_daemon()
+
 @click.command(help="Display kachery_p2p version and exit.")
 def version():
     click.echo(f"This is kachery_p2p version {kp.__version__}.")
     exit()
 
-cli.add_command(get_networks)
-cli.add_command(join_network)
-cli.add_command(leave_network)
+cli.add_command(get_channels)
+cli.add_command(join_channel)
+cli.add_command(leave_channel)
 cli.add_command(find_file)
 cli.add_command(load_file)
 cli.add_command(version)
+cli.add_command(start_daemon)
 
 if __name__ == "__main__":
     cli()

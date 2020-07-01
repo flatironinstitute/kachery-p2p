@@ -21,7 +21,7 @@ While it is possible to share these files between computers by hosting kachery s
 In order to share files with another computer:
 
 * The `kachery-p2p` daemon (with the same protocol version) must be running on both computers.
-* The two daemon's must be joined to at least one common `kachery-p2p network`.
+* The two daemon's must be joined to at least one common `kachery-p2p` channel.
 
 ## Installation
 
@@ -41,12 +41,12 @@ Be sure that the `KACHERY_STORAGE_DIR` environment is set and points to an exist
 In order to share files, you must have a running daemon.
 
 ```bash
-# Start the daemon and join one or more kachery-p2p networks
+# Start the daemon and join one or more kachery-p2p channels
 # Keep it running in a terminal
-kachery-p2p daemon-start --network name-of-network --network another-network ...
+kachery-p2p daemon-start --channel name-of-channel --channel another-channel ...
 ```
 
-Note: you can use any names for the networks. In order to share files with another computer, you must have at least one `kachery-p2p` network in common.
+Note: you can use any names for the channels. In order to share files with another computer, you must have at least one `kachery-p2p` channel in common.
 
 ## Sharing a file
 
@@ -65,14 +65,14 @@ Send this kachery URL to your friend. The hash uniquely identifies your file ins
 
 ## How it works
 
-Each running `kachery-p2p` daemon is a node in the distributed kachery-p2p network and has a public/private key pair. The ID of the node is equal to the public key.
+Each running `kachery-p2p` daemon is a node in the distributed kachery-p2p channel and has a public/private key pair. The ID of the node is equal to the public key.
 
 The system is built on top of [hyperswarm](https://github.com/hyperswarm/hyperswarm) which allows peers to find and connect to one another.
 
-`kachery-p2p` uses two types of hyperswarms: `lookup swarms` and `file transfer swarms`. The `lookup swarms` correspond to `kachery-p2p networks` and are used to determine which nodes contain which files. The `file transfer swarms` correspond to individual nodes and are used to perform the file transfer. Each node is the primary member of its own `file transfer swarm`. Other nodes can download files from the primary member by joining the swarm as secondary members.
+`kachery-p2p` uses two types of hyperswarms: `lookup swarms` and `file transfer swarms`. The `lookup swarms` correspond to `kachery-p2p` channels and are used to determine which nodes contain which files. The `file transfer swarms` correspond to individual nodes and are used to perform the file transfer. Each node is the primary member of its own `file transfer swarm`. Other nodes can download files from the primary member by joining the swarm as secondary members.
 
 Each node is a member of the following swarms:
-* The lookup swarm `x` for each kachery-p2p network `x` that the node belongs to
+* The lookup swarm `x` for each kachery-p2p channel `x` that the node belongs to
 * The file transfer swarm `ID` where `ID` is the node ID, as a primary member
 * Other file transfer swarms as needed for file download, as a secondary member
 

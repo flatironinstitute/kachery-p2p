@@ -4,14 +4,15 @@ import { getLocalFileInfo } from './kachery.js';
 import fs from 'fs';
 
 class PrimaryFileTransferSwarmConnection {
-    constructor({nodeId, swarmName, verbose}) {
+    constructor({keyPair, nodeId, swarmName, verbose}) {
+        this._keyPair = keyPair;
         this._nodeId = nodeId;
         this._verbose = verbose;
         this._swarmName = swarmName;
         const swarmName0 = 'file-transfer:' + this._swarmName;
-        this._swarmConnection = new HSwarmConnection({nodeId, swarmName: swarmName0, verbose});
-        this._swarmConnection.onMessage(() => {this._handleMessage()});
-        this._swarmConnection.onRequest((requestBody, onResponse, onFinished) => {this._handleRequest(requestBody, onResponse, onFinished)})
+        this._swarmConnection = new HSwarmConnection({keyPair: this._keyPair, nodeId, swarmName: swarmName0, verbose});
+        this._swarmConnection.onMessage((fromNodeId, msg) => {this._handleMessage(fromNodeId, msg)});
+        this._swarmConnection.onRequest((fromNodeId, requestBody, onResponse, onFinished) => {this._handleRequest(fromNodeId, requestBody, onResponse, onFinished)})
 
         this._start();
     }
@@ -24,9 +25,9 @@ class PrimaryFileTransferSwarmConnection {
     printInfo() {
         this._swarmConnection.printInfo();
     }
-    _handleMessage = async msg => {
+    _handleMessage = async (fromNodeId, msg) => {
     }
-    _handleRequest = async (requestBody, onResponse, onFinished) => {
+    _handleRequest = async (fromNodeId, requestBody, onResponse, onFinished) => {
         if (requestBody.type === 'downloadFile') {
             const fileInfo = await getLocalFileInfo({fileKey: requestBody.fileKey});
             if (fileInfo) {

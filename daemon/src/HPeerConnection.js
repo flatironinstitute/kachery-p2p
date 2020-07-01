@@ -1,7 +1,13 @@
 import { randomString } from './util.js';
+import { getSignature, verifySignature } from './crypto_util.js';
 
 class HPeerConnection {
-    constructor({swarmName, peerId, verbose}) {
+    constructor({keyPair, nodeId, swarmName, peerId, verbose}) {
+        this._keyPair = keyPair;
+        this._nodeId = nodeId;
+        if (this._nodeId !== this._keyPair.publicKey.toString('hex')) {
+            throw Error('public key not consistent with node ID (HPeerConnection).');
+        }
         this._swarmName = swarmName;
         this._peerId = peerId;
         this._verbose = verbose;
@@ -29,17 +35,22 @@ class HPeerConnection {
     setIncomingSocket(jsonSocket) {
         this._incomingJsonSocket = jsonSocket;
         this._incomingJsonSocket.on('message', msg => {
-            if (msg.type === 'ready') {
+            if (!this._verifyMessageFromPeer(msg)) {
+                console.warn('Error verifying message. Disconnecting peer.');
+                this.disconnect();
+                return;
+            }
+            if (msg.body.type === 'ready') {
                 this._incomingSocketReady = true;
                 for (let cb of this._incomingSocketReadyCallbacks) {
                     cb();
                 }
             }
             else {
-                this._handleMessage(msg);
+                this._handleMessage(msg.body);
             }
         })
-        this._incomingJsonSocket.sendMessage({type: 'ready'});
+        this._incomingJsonSocket.sendMessage(this._signMessage({type: 'ready'}));
     }
     async _handleMessage(msg) {
         this._timestampLastIncomingMessage = new Date();
@@ -75,17 +86,22 @@ class HPeerConnection {
     setOutgoingSocket(jsonSocket) {
         this._outgoingJsonSocket = jsonSocket;
         this._outgoingJsonSocket.on('message', msg => {
-            if (msg.type === 'ready') {
+            if (!this._verifyMessageFromPeer(msg)) {
+                console.warn('Error verifying message. Disconnecting peer.');
+                this.disconnect();
+                return;
+            }
+            if (msg.body.type === 'ready') {
                 this._outgoingSocketReady = true;
                 for (let cb of this._outgoingSocketReadyCallbacks) {
                     cb();
                 }
             }
             else {
-                this._handleMessage(msg);
+                this._handleMessage(msg.body);
             }
         })
-        this._outgoingJsonSocket.sendMessage({type: 'ready'});
+        this._outgoingJsonSocket.sendMessage(this._signMessage({type: 'ready'}));
     }
     asyncSendMessage = async (msg) => {
         if (this._disconnected) return;
@@ -110,7 +126,7 @@ class HPeerConnection {
         }
         const socket = await _waitForSocketReady();
         if (this._disconnected) return;
-        socket.sendMessage(msg);
+        socket.sendMessage(this._signMessage(msg));
     }
     sendMessage(msg) {
         this._timestampLastOutgoingMessage = new Date();
@@ -146,6 +162,19 @@ class HPeerConnection {
     }
     elapsedTimeSecSinceLastOutgoingMessage() {
         return ((new Date()) - this._timestampLastOutgoingMessage) / 1000;
+    }
+    _signMessage = (msgBody) => {
+        const signature = getSignature(msgBody, this._keyPair);
+        return {
+            body: msgBody,
+            signature: signature
+        }
+    }
+    _verifyMessageFromPeer = msg => {
+        if (!msg.body) return false;
+        if (!msg.signature) return false;
+        const peerPublicKey = Buffer.from(this._peerId, 'hex');
+        return verifySignature(msg.body, msg.signature, peerPublicKey);
     }
 }
 

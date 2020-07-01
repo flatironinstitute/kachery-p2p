@@ -3,12 +3,17 @@ import hyperswarm from 'hyperswarm';
 import JsonSocket from 'json-socket';
 import HPeerConnection from './HPeerConnection.js';
 import { randomString, sleepMsec } from './util.js';
+import { getSignature, verifySignature } from './crypto_util.js';
 
 const PROTOCOL_VERSION = 'kachery-p2p-3'
 
 class HSwarmConnection {
-    constructor({nodeId, swarmName, verbose}) {
+    constructor({keyPair, nodeId, swarmName, verbose}) {
+        this._keyPair = keyPair;
         this._nodeId = nodeId;
+        if (this._nodeId !== this._keyPair.publicKey.toString('hex')) {
+            throw Error('public key not consistent with node ID.');
+        }
         this._swarmName = swarmName;
         this._verbose = verbose;
         const topicKey = {
@@ -30,27 +35,34 @@ class HSwarmConnection {
         this._onRequestCallbacks = [];
         this._messageListeners = {};
 
-        this.onMessage(msg => {
+        this.onMessage((fromNodeId, msg) => {
             if (msg.type === 'requestToNode') {
-                if (msg.nodeId === this._nodeId) {
+                if (msg.toNodeId === this._nodeId) {
                     const requestId = msg.requestId;
                     if (this._requestIdsHandled[requestId]) return;
                     this._requestIdsHandled[requestId] = true;
-                    this.broadcastMessage({type: 'requestToNodeReceived', requestId});
+                    this.sendMessageToNode(fromNodeId, {type: 'requestToNodeReceived', requestId});
                     this._onRequestCallbacks.forEach(cb => {
-                        cb(msg.requestBody, responseBody => {
-                            this.broadcastMessage({type: 'requestToNodeResponse', requestId, responseBody});
+                        cb(fromNodeId, msg.requestBody, responseBody => {
+                            this.sendMessageToNode(fromNodeId, {type: 'requestToNodeResponse', requestId, responseBody});
                         }, () => {
-                            this.broadcastMessage({type: 'requestToNodeFinished', requestId});
+                            this.sendMessageToNode(fromNodeId, {type: 'requestToNodeFinished', requestId});
                         })
+                    })
+                }
+            }
+            else if (msg.type === 'messageToNode') {
+                if (msg.toNodeId === this._nodeId) {
+                    this._onMessageCallbacks.forEach(cb => {
+                        cb(fromNodeId, msg.messageBody);
                     })
                 }
             }
             else {
                 for (let id in this._messageListeners) {
                     const x = this._messageListeners[id];
-                    if (x.testFunction(msg)) {
-                        x.onMessageCallbacks.forEach(cb => {cb(msg);});
+                    if (x.testFunction(fromNodeId, msg)) {
+                        x.onMessageCallbacks.forEach(cb => {cb(fromNodeId, msg);});
                     }
                 }
             }
@@ -124,7 +136,7 @@ class HSwarmConnection {
                     return;
                 }
                 if (!this._peerConnections[msg.nodeId]) {
-                    const peerConnection = new HPeerConnection({swarmName: this._swarmName, peerId: msg.nodeId, verbose: this._verbose});
+                    const peerConnection = new HPeerConnection({keyPair: this._keyPair, nodeId: this._nodeId, swarmName: this._swarmName, peerId: msg.nodeId, verbose: this._verbose});
                     this._peerConnections[msg.nodeId] = peerConnection;
                     peerConnection.onMessage((msg2, details) => {
                         this._handleMessageFromPeer(msg.nodeId, msg2);
@@ -187,15 +199,30 @@ class HSwarmConnection {
         const numPeers = this.numPeers();
         console.info(`${numPeers} ${numPeers === 1 ? "peer" : "peers"}`);
     }
+    sendMessageToNode(toNodeId, messageBody, opts) {
+        const message = {
+            type: 'messageToNode',
+            toNodeId,
+            messageBody
+        }
+        this.broadcastMessage(message);
+    }
     broadcastMessage = (message, opts) => {
-        const messageId = (opts || {}).messageId || randomString(10);
+        opts = opts || {};
+        const messageId = opts.messageId || randomString(10);
         this._messageIdsHandled[messageId] = true;
         const peerIds = Object.keys(this._peerConnections);
         peerIds.forEach(peerId => {
+            const body = {
+                messageId,
+                message,
+            };
+            const signature = opts.signature || getSignature(body, this._keyPair);
             this._peerConnections[peerId].sendMessage({
                 type: 'broadcast',
-                messageId,
-                message
+                fromNodeId: opts.fromNodeId || this._nodeId,
+                body: body,
+                signature
             });
         })
     }
@@ -209,12 +236,13 @@ class HSwarmConnection {
         // todo: think about doing this without a broadcast
         const message = {
             type: 'requestToNode',
-            nodeId,
+            toNodeId: nodeId,
             requestId,
             requestBody
         }
         this.broadcastMessage(message);
-        const listener = this.createMessageListener((msg) => {
+        const listener = this.createMessageListener((fromNodeId, msg) => {
+            if (fromNodeId !== nodeId) return false;
             return ((
                 (msg.type === 'requestToNodeResponse') ||
                 (msg.type === 'requestToNodeFinished') ||
@@ -247,7 +275,7 @@ class HSwarmConnection {
             }
         }
         setTimeout(checkReceived, 500);
-        listener.onMessage(msg => {
+        listener.onMessage((fromNodeId, msg) => {
             if (msg.type === 'requestToNodeReceived') {
                 handleReceived();
             }
@@ -287,15 +315,19 @@ class HSwarmConnection {
             console.info(`handleMessageFromPeer: ${this._swarmName} ${peerId} ${msg.type}`);
         }
         if (msg.type === 'broadcast') {
-            const messageId = msg.messageId;
+            if (!verifySignature(msg.body, msg.signature, Buffer.from(msg.fromNodeId, 'hex'))) {
+                console.warn(`Unable to verify message from ${msg.fromNodeId}`);
+                return;
+            }
+            const messageId = msg.body.messageId;
             if (messageId in this._messageIdsHandled) {
                 return;
             }
             this._messageIdsHandled[messageId] = true;
             for (let cb of this._onMessageCallbacks) {
-                cb(msg.message);
+                cb(msg.fromNodeId, msg.body.message);
             }
-            this.broadcastMessage(msg.message, {messageId: messageId});
+            this.broadcastMessage(msg.body.message, {messageId: messageId, fromNodeId: msg.fromNodeId, signature: msg.signature});
         }
         else if (msg.type === 'keepAlive') {
 

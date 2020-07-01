@@ -4,12 +4,13 @@ import crypto from 'crypto';
 import Stream from 'stream';
 
 class SecondaryFileTransferSwarmConnection {
-    constructor({nodeId, swarmName, verbose}) {
+    constructor({keyPair, nodeId, swarmName, verbose}) {
+        this._keyPair = keyPair;
         this._swarmName = swarmName;
         this._verbose = verbose;
         const swarmName0 = 'file-transfer:' + this._swarmName;
-        this._swarmConnection = new HSwarmConnection({nodeId, swarmName: swarmName0, verbose});
-        this._swarmConnection.onMessage(() => {this._handleMessage()});
+        this._swarmConnection = new HSwarmConnection({keyPair: this._keyPair, nodeId, swarmName: swarmName0, verbose});
+        this._swarmConnection.onMessage((fromNodeId, msg) => {this._handleMessage(fromNodeId, msg)});
 
         this._start();
     }
@@ -22,7 +23,7 @@ class SecondaryFileTransferSwarmConnection {
     printInfo() {
         this._swarmConnection.printInfo();
     }
-    _handleMessage = async msg => {
+    _handleMessage = async (fromNodeId, msg) => {
     }
     // returns {stream, cancel}
     downloadFile = async ({fileKey, primaryNodeId, opts}) => {

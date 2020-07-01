@@ -2,34 +2,36 @@ from typing import Tuple
 from types import SimpleNamespace
 import time
 import os
+import pathlib
 import json
 import time
 from typing import Optional
 import kachery as ka
 from ._temporarydirectory import TemporaryDirectory
+from ._shellscript import ShellScript
 
 def _api_port():
     return os.getenv('KACHERY_P2P_API_PORT', 20431)
 
-def get_networks():
+def get_channels():
     port = _api_port()
     url = f'http://localhost:{port}/getState'
     resp = _http_post_json(url, dict())
     if not resp['success']:
         raise Exception(resp['error'])
-    return resp['state']['networks']
+    return resp['state']['channels']
 
-def join_network(network_name):
+def join_channel(channel_name):
     port = _api_port()
-    url = f'http://localhost:{port}/joinNetwork'
-    resp = _http_post_json(url, dict(networkName=network_name))
+    url = f'http://localhost:{port}/joinChannel'
+    resp = _http_post_json(url, dict(channelName=channel_name))
     if not resp['success']:
         raise Exception(resp['error'])
 
-def leave_network(network_name):
+def leave_channel(channel_name):
     port = _api_port()
-    url = f'http://localhost:{port}/leaveNetwork'
-    resp = _http_post_json(url, dict(networkName=network_name))
+    url = f'http://localhost:{port}/leaveChannel'
+    resp = _http_post_json(url, dict(channelName=channel_name))
     if not resp['success']:
         raise Exception(resp['error'])
 
@@ -65,6 +67,41 @@ def load_file(path):
             return a
     return None
 
+def _probe_daemon():
+    port = _api_port()
+    url = f'http://localhost:{port}/probe'
+    try:
+        x = _http_get_json(url)
+    except:
+        return False
+    return x.get('success')
+
+def start_daemon():
+    from kachery_p2p import __version__
+
+    if _probe_daemon():
+        raise Exception('Cannot start daemon. Already running.')
+
+    api_port = _api_port()
+    config_dir = os.getenv('KACHERY_P2P_CONFIG_DIR', f'{pathlib.Path.home()}/.kachery-p2p')
+    docker_run_opts = [
+        f'-v {os.environ["KACHERY_STORAGE_DIR"]}:/kachery-storage',
+        f'-v /tmp:/tmp',
+        f'--net host',
+        f'-e KACHERY_P2P_API_PORT={api_port}',
+        f'-v {config_dir}:/kachery-p2p-config',
+        f'-e KACHERY_P2P_CONFIG_DIR=/kachery-p2p-config'
+    ]
+    docker_run_opts = ' '.join(docker_run_opts)
+    ss = ShellScript(f'''
+    #!/bin/bash
+    set -ex
+
+    exec labbox-launcher run --docker_run_opts "{docker_run_opts}" magland/kachery-p2p-daemon:{__version__}
+    ''')
+    ss.start()
+    ss.wait()
+
 def _load_file_helper(primary_node_id, swarm_name, file_key, file_info):
     port = _api_port()
     url = f'http://localhost:{port}/downloadFile'
@@ -95,6 +132,27 @@ def _http_post_download_file(url: str, data: dict, dest_path: str):
         with open(dest_path, 'wb') as f:
             for chunk in r.iter_content(chunk_size=8192): 
                 f.write(chunk)
+
+def _http_get_json(url: str, verbose: Optional[bool] = None) -> dict:
+    timer = time.time()
+    if verbose is None:
+        verbose = (os.environ.get('HTTP_VERBOSE', '') == 'TRUE')
+    if verbose:
+        print('_http_get_json::: ' + url)
+    try:
+        import requests
+    except:
+        raise Exception('Error importing requests *')
+    req = requests.get(url)
+    if req.status_code != 200:
+        return dict(
+            success=False,
+            error='Error getting json: {} {}'.format(
+                req.status_code, req.content.decode('utf-8'))
+        )
+    if verbose:
+        print('Elapsed time for _http_get_json: {}'.format(time.time() - timer))
+    return json.loads(req.content)
 
 def _http_post_json(url: str, data: dict, verbose: Optional[bool] = None) -> dict:
     timer = time.time()

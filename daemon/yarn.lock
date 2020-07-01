@@ -250,7 +250,7 @@ blake2b-wasm@^1.1.0:
   dependencies:
     nanoassert "^1.0.0"
 
-blake2b@^2.1.3:
+blake2b@^2.1.1, blake2b@^2.1.3:
   version "2.1.3"
   resolved "https://registry.yarnpkg.com/blake2b/-/blake2b-2.1.3.tgz#f5388be424768e7c6327025dad0c3c6d83351bca"
   integrity sha512-pkDss4xFVbMb4270aCyGD3qLv92314Et+FsKzilCLxDz5DuZ2/1g3w4nmBbu6nKApPspnjG7JcwTjGZnduB1yg==
@@ -394,6 +394,13 @@ caw@^2.0.1:
     isurl "^1.0.0-alpha5"
     tunnel-agent "^0.6.0"
     url-to-options "^1.0.1"
+
+chacha20-universal@^1.0.4:
+  version "1.0.4"
+  resolved "https://registry.yarnpkg.com/chacha20-universal/-/chacha20-universal-1.0.4.tgz#e8a33a386500b1ce5361b811ec5e81f1797883f5"
+  integrity sha512-/IOxdWWNa7nRabfe7+oF+jVkGjlr2xUL4J8l/OvzZhj+c9RpMqoo3Dq+5nU1j/BflRV4BKnaQ4+4oH1yBpQG1Q==
+  dependencies:
+    nanoassert "^2.0.0"
 
 chalk@^2.0.1, chalk@^2.4.2:
   version "2.4.2"
@@ -1696,6 +1703,11 @@ nanoassert@^1.0.0:
   resolved "https://registry.yarnpkg.com/nanoassert/-/nanoassert-1.1.0.tgz#4f3152e09540fde28c76f44b19bbcd1d5a42478d"
   integrity sha1-TzFS4JVA/eKMdvRLGbvNHVpCR40=
 
+nanoassert@^2.0.0:
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/nanoassert/-/nanoassert-2.0.0.tgz#a05f86de6c7a51618038a620f88878ed1e490c09"
+  integrity sha512-7vO7n28+aYO4J+8w96AzhmU8G+Y/xpPDJz/se19ICsqj/momRbb9mh9ZUtkoJ5X3nTnPdhEJyc0qnM6yAsHBaA==
+
 nanomatch@^1.2.9:
   version "1.2.13"
   resolved "https://registry.yarnpkg.com/nanomatch/-/nanomatch-1.2.13.tgz#b87a8aa4fc0de8fe6be88895b38983ff265bd119"
@@ -1917,6 +1929,11 @@ path-is-absolute@^1.0.0:
   resolved "https://registry.yarnpkg.com/path-is-absolute/-/path-is-absolute-1.0.1.tgz#174b9268735534ffbc7ace6bf53a5a9e1b5c5f5f"
   integrity sha1-F0uSaHNVNP+8es5r9TpanhtcX18=
 
+path-parse@^1.0.6:
+  version "1.0.6"
+  resolved "https://registry.yarnpkg.com/path-parse/-/path-parse-1.0.6.tgz#d62dbb5679405d72c4737ec58600e9ddcf06d24c"
+  integrity sha512-GSmOT2EbHrINBf9SR7CDELwlJ8AENk3Qn7OikK4nFYAu3Ote2+JYNVvkpAEQm3/TLNEJFD/xZJjzyxg3KBWOzw==
+
 path-to-regexp@0.1.7:
   version "0.1.7"
   resolved "https://registry.yarnpkg.com/path-to-regexp/-/path-to-regexp-0.1.7.tgz#df604178005f522f15eb4490e7247a1bfaa67f8c"
@@ -2117,6 +2134,13 @@ resolve-url@^0.2.1:
   resolved "https://registry.yarnpkg.com/resolve-url/-/resolve-url-0.2.1.tgz#2c637fe77c893afd2a663fe21aa9080068e2052a"
   integrity sha1-LGN/53yJOv0qZj/iGqkIAGjiBSo=
 
+resolve@^1.17.0:
+  version "1.17.0"
+  resolved "https://registry.yarnpkg.com/resolve/-/resolve-1.17.0.tgz#b25941b54968231cc2d1bb76a79cb7f2c0bf8444"
+  integrity sha512-ic+7JYiV8Vi2yzQGFWOkiZD5Z9z7O2Zhm9XMaTxdJExKasieFCr+yXZ/WmXsckHiKl12ar0y6XiXDx3m4RHn1w==
+  dependencies:
+    path-parse "^1.0.6"
+
 responselike@1.0.2, responselike@^1.0.2:
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/responselike/-/responselike-1.0.2.tgz#918720ef3b631c5642be068f15ade5a46f4ba1e7"
@@ -2222,6 +2246,20 @@ setprototypeof@1.1.1:
   resolved "https://registry.yarnpkg.com/setprototypeof/-/setprototypeof-1.1.1.tgz#7e95acb24aa92f5885e0abef5ba131330d4ae683"
   integrity sha512-JvdAWfbXeIGaZ9cILp38HntZSFSo3mWg6xGcJJsd+d4aRMOqauag1C63dJfDw7OaMYwEbHMOxEZ1lqVRYP2OAw==
 
+sha256-wasm@^1.3.0:
+  version "1.3.0"
+  resolved "https://registry.yarnpkg.com/sha256-wasm/-/sha256-wasm-1.3.0.tgz#5cdb7d54a9833840277c1cf1e30876e6819ded91"
+  integrity sha512-/bPoRjEXqbSpsA9MDdjy3J3GWQWiZG+tjJbWYqhK+Ap4JWNJBxqSMJnIIzkZOA89UFqQMdKSoioNKXqXAkDyWQ==
+  dependencies:
+    nanoassert "^2.0.0"
+
+sha512-wasm@^1.2.0:
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/sha512-wasm/-/sha512-wasm-1.2.0.tgz#e4e8ffccaa131fbdff25d4e3c1bbe57a74d4308c"
+  integrity sha512-EPphV7XDTefQZw/fXQLfLjfqMCjLKbalgjiDmkMxMk3tjJB4qpjB0w/GEervpLLf0zwLg8EfddJ29PO6s5ec2A==
+  dependencies:
+    nanoassert "^2.0.0"
+
 shuffled-priority-queue@^2.1.0:
   version "2.1.0"
   resolved "https://registry.yarnpkg.com/shuffled-priority-queue/-/shuffled-priority-queue-2.1.0.tgz#432bf14dd90f7c4dd1705752d81aadf454fd3af6"
@@ -2240,6 +2278,13 @@ signed-varint@^2.0.1:
   integrity sha1-UKmYnafJjCxh2tEZvJdHDvhSgSk=
   dependencies:
     varint "~5.0.0"
+
+siphash24@^1.0.1:
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/siphash24/-/siphash24-1.1.1.tgz#94ad021a2b2c62de381b546ee02df0cf778acd50"
+  integrity sha512-dKKwjIoTOa587TARYLlBRXq2lkbu5Iz35XrEVWpelhBP1m8r2BGOy1QlaZe84GTFHG/BTucEUd2btnNc8QzIVA==
+  dependencies:
+    nanoassert "^1.0.0"
 
 slash@^2.0.0:
   version "2.0.0"
@@ -2276,13 +2321,42 @@ snapdragon@^0.8.1:
     source-map-resolve "^0.5.0"
     use "^3.1.0"
 
-sodium-native@^3.0.1, sodium-native@^3.1.1:
+sodium-javascript@~0.6.1:
+  version "0.6.1"
+  resolved "https://registry.yarnpkg.com/sodium-javascript/-/sodium-javascript-0.6.1.tgz#024f8b1118acba6ba4139c44f918099cc8f8ccc3"
+  integrity sha512-XIJRAKKfgtYxfKMMK5YJaNYF+Gio+gBgwMh+kvDHQ4/6BaWm9BQH49OMHPsNMMwud+OZM6MxqSy2NW6GNXZcNg==
+  dependencies:
+    blake2b "^2.1.1"
+    chacha20-universal "^1.0.4"
+    nanoassert "^2.0.0"
+    sha256-wasm "^1.3.0"
+    sha512-wasm "^1.2.0"
+    siphash24 "^1.0.1"
+    xsalsa20 "^1.0.0"
+
+sodium-native@^3.0.1, sodium-native@^3.1.1, sodium-native@^3.2.0:
   version "3.2.0"
   resolved "https://registry.yarnpkg.com/sodium-native/-/sodium-native-3.2.0.tgz#68a9469b96edadffef320cbce51294ad5f72a37f"
   integrity sha512-8aq/vQSegLwsRch8Sb/Bpf9aAqlNe5dp0+NVhb9UjHv42zDZ0D5zX3wBRUbXK9Ejum9uZE6DUgT4vVLlUFRBWg==
   dependencies:
     ini "^1.3.5"
     node-gyp-build "^4.2.0"
+
+sodium-universal@^3.0.1:
+  version "3.0.1"
+  resolved "https://registry.yarnpkg.com/sodium-universal/-/sodium-universal-3.0.1.tgz#59a08ecd21e0a3bde201f899da722313b21bc693"
+  integrity sha512-cKznP/jLjqXw6xMF+CwJzPLJOGMw5HZ4iLDY0+zwSOWFFxPgb8NgLzWupPeH8e5w+cukkD2Aehfxyr157r2Fuw==
+  dependencies:
+    blake2b "^2.1.1"
+    chacha20-universal "^1.0.4"
+    nanoassert "^2.0.0"
+    resolve "^1.17.0"
+    sha256-wasm "^1.3.0"
+    sha512-wasm "^1.2.0"
+    siphash24 "^1.0.1"
+    sodium-javascript "~0.6.1"
+    sodium-native "^3.2.0"
+    xsalsa20 "^1.0.0"
 
 sort-keys-length@^1.0.0:
   version "1.0.1"
@@ -2652,6 +2726,11 @@ xor-distance@^2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/xor-distance/-/xor-distance-2.0.0.tgz#cad3920d3a1e3d73eeedc61a554e51972dae0798"
   integrity sha512-AsAqZfPAuWx7qB/0kyRDUEvoU3QKsHWzHU9smFlkaiprEpGfJ/NBbLze2Uq0rdkxCxkNM9uOLvz/KoNBCbZiLQ==
+
+xsalsa20@^1.0.0:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/xsalsa20/-/xsalsa20-1.1.0.tgz#bee27174af1913aaec0fe677d8ba161ec12bf87d"
+  integrity sha512-zd3ytX2cm+tcSndRU+krm0eL4TMMpZE7evs5hLRAoOy6gviqLfe3qOlkjF3i5SeAkQUCeJk0lJZrEU56kHRfWw==
 
 xtend@^4.0.0:
   version "4.0.2"
