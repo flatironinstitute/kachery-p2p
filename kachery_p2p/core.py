@@ -9,27 +9,27 @@ import kachery as ka
 from ._temporarydirectory import TemporaryDirectory
 
 def _api_port():
-    return 20431
+    return os.getenv('KACHERY_P2P_API_PORT', 20431)
 
-def get_swarms():
+def get_networks():
     port = _api_port()
     url = f'http://localhost:{port}/getState'
     resp = _http_post_json(url, dict())
     if not resp['success']:
         raise Exception(resp['error'])
-    return resp['state']['swarms']
+    return resp['state']['networks']
 
-def join_swarm(swarm_name):
+def join_network(network_name):
     port = _api_port()
-    url = f'http://localhost:{port}/joinSwarm'
-    resp = _http_post_json(url, dict(swarmName=swarm_name))
+    url = f'http://localhost:{port}/joinNetwork'
+    resp = _http_post_json(url, dict(networkName=network_name))
     if not resp['success']:
         raise Exception(resp['error'])
 
-def leave_swarm(swarm_name):
+def leave_network(network_name):
     port = _api_port()
-    url = f'http://localhost:{port}/leaveSwarm'
-    resp = _http_post_json(url, dict(swarmName=swarm_name))
+    url = f'http://localhost:{port}/leaveNetwork'
+    resp = _http_post_json(url, dict(networkName=network_name))
     if not resp['success']:
         raise Exception(resp['error'])
 
@@ -41,12 +41,7 @@ def find_file(path):
     file_key = dict(
         sha1=hash0
     )
-    x = _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
-    def get_next():
-        return x.get_next()
-    return SimpleNamespace(
-        get_next=get_next
-    )
+    return _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
 
 def _parse_kachery_path(url: str) -> Tuple[str, str, str, str]:
     list0 = url.split('/')
@@ -64,14 +59,11 @@ def _parse_kachery_path(url: str) -> Tuple[str, str, str, str]:
     return protocol, algorithm, hash0, additional_path
 
 def load_file(path):
-    x = find_file(path)
-    while True:
-        r = x.get_next()
-        if r is None:
-            return None
+    for r in find_file(path):
         a = _load_file_helper(primary_node_id=r['primaryNodeId'], swarm_name=r['swarmName'], file_key=r['fileKey'], file_info=r['fileInfo'])
         if a is not None:
             return a
+    return None
 
 def _load_file_helper(primary_node_id, swarm_name, file_key, file_info):
     port = _api_port()
@@ -142,22 +134,24 @@ def _http_post_json_receive_json_socket(url: str, data: dict, verbose: Optional[
             error='Error posting json: {} {}'.format(
                 req.status_code, req.content.decode('utf-8'))
         )
-    def get_next():
-        buf = bytearray(b'')
-        while True:
-            c = req.raw.read(1)
-            if len(c) == 0:
-                return None
-            if c == b'#':
-                size = int(buf)
-                x = req.raw.read(size)
-                obj = json.loads(x)
-                return obj
-            else:
-                buf.append(c[0])
-    return SimpleNamespace(
-        get_next=get_next
-    )
+    class custom_iterator:
+        def __init__(self):
+            pass
 
-    if verbose:
-        print('Elapsed time for _http_post_json: {}'.format(time.time() - timer))
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            buf = bytearray(b'')
+            while True:
+                c = req.raw.read(1)
+                if len(c) == 0:
+                    raise StopIteration
+                if c == b'#':
+                    size = int(buf)
+                    x = req.raw.read(size)
+                    obj = json.loads(x)
+                    return obj
+                else:
+                    buf.append(c[0])
+    return custom_iterator()

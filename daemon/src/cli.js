@@ -36,7 +36,7 @@ function main() {
     .argv
 }
 
-const apiPort = process.env.API_PORT || 20431;
+const apiPort = process.env.KACHERY_P2P_API_PORT || 20431;
 
 const startDaemon = async ({ networkNames, verbose }) => {
   const daemon = new Daemon({verbose});

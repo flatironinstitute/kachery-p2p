@@ -8,21 +8,21 @@ import kachery_p2p as kp
 def cli():
     pass
 
-@click.command(help="Show the swarms that this node belongs to.")
-def get_swarms():
-    swarms = kp.get_swarms()
-    for swarm in swarms:
-        print(swarm['swarmName'])
+@click.command(help="Show the networks that this node belongs to.")
+def get_networks():
+    networks = kp.get_networks()
+    for network in networks:
+        print(network['networkName'])
 
-@click.command(help="Join a swarm.")
-@click.argument('swarm_name')
-def join_swarm(swarm_name):
-    kp.join_swarm(swarm_name)
+@click.command(help="Join a network.")
+@click.argument('network_name')
+def join_network(network_name):
+    kp.join_network(network_name)
 
-@click.command(help="Leave a swarm.")
-@click.argument('swarm_name')
-def leave_swarm(swarm_name):
-    kp.leave_swarm(swarm_name)
+@click.command(help="Leave a network.")
+@click.argument('network_name')
+def leave_network(network_name):
+    kp.leave_network(network_name)
 
 @click.command(help="Find a file.")
 @click.argument('path')
@@ -42,9 +42,9 @@ def version():
     click.echo(f"This is kachery_p2p version {kp.__version__}.")
     exit()
 
-cli.add_command(get_swarms)
-cli.add_command(join_swarm)
-cli.add_command(leave_swarm)
+cli.add_command(get_networks)
+cli.add_command(join_network)
+cli.add_command(leave_network)
 cli.add_command(find_file)
 cli.add_command(load_file)
 cli.add_command(version)

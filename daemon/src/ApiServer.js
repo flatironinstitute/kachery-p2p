@@ -31,17 +31,17 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
-        this._app.post('/joinSwarm', async (req, res) => {
+        this._app.post('/joinNetwork', async (req, res) => {
             try {
-                await this._apiJoinSwarm(req, res)
+                await this._apiJoinNetwork(req, res)
             }
             catch(err) {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
-        this._app.post('/leaveSwarm', async (req, res) => {
+        this._app.post('/leaveNetwork', async (req, res) => {
             try {
-                await this._apiLeaveSwarm(req, res)
+                await this._apiLeaveNetwork(req, res)
             }
             catch(err) {
                 await this._errorResponse(req, res, 500, err.message);
@@ -74,16 +74,16 @@ export default class ApiServer {
         };
         res.json({ success: true, state });
     }
-    async _apiJoinSwarm(req, res) {
+    async _apiJoinNetwork(req, res) {
         const reqData = req.body;
-        const swarmName = reqData.swarmName;
-        await this._daemon.joinSwarm(swarmName);
+        const networkName = reqData.networkName;
+        await this._daemon.joinNetwork(networkName);
         res.json({ success: true });
     }
-    async _apiLeaveSwarm(req, res) {
+    async _apiLeaveNetwork(req, res) {
         const reqData = req.body;
-        const swarmName = reqData.swarmName;
-        await this._daemon.leaveSwarm(swarmName);
+        const networkName = reqData.networkName;
+        await this._daemon.leaveNetwork(networkName);
         res.json({ success: true });
     }
     async _apiFindFile(req, res) {
