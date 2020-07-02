@@ -1,11 +1,11 @@
 import { randomString } from './util.js';
-import { getSignature, verifySignature } from './crypto_util.js';
+import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from './crypto_util.js';
 
 class HPeerConnection {
     constructor({keyPair, nodeId, swarmName, peerId, verbose}) {
         this._keyPair = keyPair;
         this._nodeId = nodeId;
-        if (this._nodeId !== this._keyPair.publicKey.toString('hex')) {
+        if (this._nodeId !== publicKeyToHex(this._keyPair.publicKey.toString('hex'))) {
             throw Error('public key not consistent with node ID (HPeerConnection).');
         }
         this._swarmName = swarmName;
@@ -173,7 +173,7 @@ class HPeerConnection {
     _verifyMessageFromPeer = msg => {
         if (!msg.body) return false;
         if (!msg.signature) return false;
-        const peerPublicKey = Buffer.from(this._peerId, 'hex');
+        const peerPublicKey = hexToPublicKey(Buffer.from(this._peerId, 'hex'));
         return verifySignature(msg.body, msg.signature, peerPublicKey);
     }
 }

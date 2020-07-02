@@ -3,16 +3,15 @@ import { randomString, sleepMsec } from './util.js'
 import PrimaryFileTransferSwarmConnection from './PrimaryFileTransferSwarmConnection.js';
 import SecondaryFileTransferSwarmConnection from './SecondaryFileTransferSwarmConnection.js';
 import LookupSwarmConnection from './LookupSwarmConnection.js';
-import { createKeyPair, getSignature, verifySignature } from './crypto_util.js';
+import { createKeyPair, getSignature, verifySignature, publicKeyToHex } from './crypto_util.js';
 
 class Daemon {
     constructor({ configDir, verbose }) {
         this._configDir = configDir;
         
-        const { publicKey, secretKey } = _loadKeypair(configDir);
-        // todo: use public/private key pair and use public key for node id
-        this._keyPair = {publicKey, secretKey};
-        this._nodeId = this._keyPair.publicKey.toString('hex');
+        const { publicKey, privateKey } = _loadKeypair(configDir);
+        this._keyPair = {publicKey, privateKey};
+        this._nodeId = publicKeyToHex(this._keyPair.publicKey);
         this._lookupSwarmConnections = {};
         this._primaryFileTransferSwarmConnection = null;
         this._secondaryFileTransferSwarmConnections = {};
@@ -207,26 +206,29 @@ const _loadKeypair = (configDir) => {
     if (!fs.existsSync(configDir)) {
         throw Error(`Config directory does not exist: ${configDir}`);
     }
-    const publicKeyPath = `${configDir}/publickey`;
-    const secretKeyPath = `${configDir}/secretkey`;
-    if (fs.existsSync(publicKeyPath)) {
-        if (!fs.existsSync(secretKeyPath)) {
+    const publicKeyPath = `${configDir}/public.pem`;
+    const privateKeyPath = `${configDir}/private.pem`;
+    if ((fs.existsSync(publicKeyPath)) && (false)) {
+        if (!fs.existsSync(privateKeyPath)) {
             throw Error(`Public key file exists, but secret key file does not.`);
         }
     }
     else {
-        const {publicKey, secretKey} = createKeyPair();
-        fs.writeFileSync(publicKeyPath, publicKey);
-        fs.writeFileSync(secretKeyPath, secretKey);
-        fs.chmodSync(secretKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR);
+        const {publicKey, privateKey} = createKeyPair();
+        fs.writeFileSync(publicKeyPath, publicKey, {encoding: 'utf-8'});
+        fs.writeFileSync(privateKeyPath, privateKey, {encoding: 'utf-8'});
+        fs.chmodSync(privateKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR);
     }
     
     const keyPair = {
-        publicKey: fs.readFileSync(publicKeyPath),
-        secretKey: fs.readFileSync(secretKeyPath),
+        publicKey: fs.readFileSync(publicKeyPath, {encoding: 'utf-8'}),
+        privateKey: fs.readFileSync(privateKeyPath, {encoding: 'utf-8'}),
     }
-    const signature = getSignature({test: 1}, keyPair);
-    const verify0 = verifySignature({test: 1}, signature, keyPair.publicKey);
+    const signature = getSignature({test: 2}, keyPair);
+    const verify0 = verifySignature({test: 2}, signature, keyPair.publicKey);
+    if (!verify0) {
+        throw new Error('Problem testing public/private keys.')
+    }
     return keyPair;
 }
 

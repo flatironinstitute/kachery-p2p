@@ -4,6 +4,7 @@ data
 data2
 kachery-storage*
 old-*
+daemon/lib
 
 __pycache__
 *.egg-info

@@ -3,7 +3,7 @@ import hyperswarm from 'hyperswarm';
 import JsonSocket from 'json-socket';
 import HPeerConnection from './HPeerConnection.js';
 import { randomString, sleepMsec } from './util.js';
-import { getSignature, verifySignature } from './crypto_util.js';
+import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from './crypto_util.js';
 
 const PROTOCOL_VERSION = 'kachery-p2p-3'
 
@@ -11,7 +11,7 @@ class HSwarmConnection {
     constructor({keyPair, nodeId, swarmName, verbose}) {
         this._keyPair = keyPair;
         this._nodeId = nodeId;
-        if (this._nodeId !== this._keyPair.publicKey.toString('hex')) {
+        if (this._nodeId !== publicKeyToHex(this._keyPair.publicKey.toString('hex'))) {
             throw Error('public key not consistent with node ID.');
         }
         this._swarmName = swarmName;
@@ -315,7 +315,7 @@ class HSwarmConnection {
             console.info(`handleMessageFromPeer: ${this._swarmName} ${peerId} ${msg.type}`);
         }
         if (msg.type === 'broadcast') {
-            if (!verifySignature(msg.body, msg.signature, Buffer.from(msg.fromNodeId, 'hex'))) {
+            if (!verifySignature(msg.body, msg.signature, hexToPublicKey(Buffer.from(msg.fromNodeId, 'hex')))) {
                 console.warn(`Unable to verify message from ${msg.fromNodeId}`);
                 return;
             }

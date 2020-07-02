@@ -1,12 +1,16 @@
 {
   "name": "kachery-p2p-daemon",
-  "version": "0.1.2",
-  "description": "Peer-to-peer content-addressable file sharing using hypercore and hyperswarm",
-  "type": "module",
+  "version": "0.1.6",
+  "engines": {
+    "node": ">=12.0.0"
+  },
+  "description": "Peer-to-peer content-addressable file sharing using hyperswarm",
+  "bin": "./lib/cli.js",
   "scripts": {
     "test": "echo \"No tests\" && exit 0",
-    "start": "node --experimental-modules src/cli.js start",
-    "start-docker": "KACHERY_STORAGE_DIR=/kachery-storage node --experimental-modules src/cli.js start"
+    "babel": "babel src --out-dir lib --ignore node_modules",
+    "publish-dry": "npm run babel && npm publish --dry-run",
+    "publish-go": "npm run babel && npm publish"
   },
   "repository": "https://github.com/flatironinstitute/kachery_p2p",
   "author": "Jeremy Magland",
@@ -16,10 +20,12 @@
     "express": "^4.17.1",
     "hyperswarm": "^2.14.0",
     "json-socket": "^0.3.0",
-    "sodium-universal": "^3.0.1",
     "yargs": "^15.3.1"
   },
   "devDependencies": {
-    "nexe": "^3.3.2"
+    "@babel/cli": "^7.10.4",
+    "@babel/core": "^7.10.4",
+    "@babel/plugin-proposal-class-properties": "^7.10.4",
+    "@babel/preset-env": "^7.10.4"
   }
 }
