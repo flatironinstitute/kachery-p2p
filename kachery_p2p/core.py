@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Union
 from types import SimpleNamespace
 import subprocess
 import time
@@ -61,9 +61,9 @@ def _parse_kachery_path(url: str) -> Tuple[str, str, str, str]:
         raise Exception('Unexpected protocol: {}'.format(protocol))
     return protocol, algorithm, hash0, additional_path
 
-def load_file(path):
+def load_file(path: str, dest: Union[str, None]=None):
     for r in find_file(path):
-        a = _load_file_helper(primary_node_id=r['primaryNodeId'], swarm_name=r['swarmName'], file_key=r['fileKey'], file_info=r['fileInfo'])
+        a = _load_file_helper(primary_node_id=r['primaryNodeId'], swarm_name=r['swarmName'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
         if a is not None:
             return a
     return None
@@ -86,8 +86,9 @@ def start_daemon():
     api_port = _api_port()
     config_dir = os.getenv('KACHERY_P2P_CONFIG_DIR', f'{pathlib.Path.home()}/.kachery-p2p')
 
-    x = subprocess.check_call(['npx', 'check-node-version', '--print', '--node', '>=12'])
-    if x != 0:
+    try:
+        subprocess.check_call(['npx', 'check-node-version', '--print', '--node', '>=12'])
+    except:
         raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
     
     ss = ShellScript(f'''
@@ -96,12 +97,12 @@ def start_daemon():
 
     export KACHERY_P2P_API_PORT="{api_port}"
     export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-    exec npx -p node@12 npx kachery-p2p-daemon@0.1.6 start
+    exec npx kachery-p2p-daemon@0.1.6 start
     ''')
     ss.start()
     ss.wait()
 
-def _load_file_helper(primary_node_id, swarm_name, file_key, file_info):
+def _load_file_helper(primary_node_id, swarm_name, file_key, file_info, dest):
     port = _api_port()
     url = f'http://localhost:{port}/downloadFile'
     path = _get_kachery_path_from_file_key(file_key)
@@ -115,7 +116,7 @@ def _load_file_helper(primary_node_id, swarm_name, file_key, file_info):
                 print(f'Unexpected: hashes do not match: {expected_hash} <> {hash0}')
                 return None
             ka.store_file(fname)
-            return ka.load_file(path)
+            return ka.load_file(path, dest=dest)
 
 def _get_kachery_path_from_file_key(file_key):
     return f'sha1://{file_key["sha1"]}'

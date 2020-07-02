@@ -28,7 +28,14 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     include_package_data=True,
     scripts=[
-        "bin/kachery-p2p"
+        "bin/kachery-p2p",
+        "bin/kachery-p2p-cat",
+        "bin/kachery-p2p-find",
+        "bin/kachery-p2p-get-channels",
+        "bin/kachery-p2p-join-channel",
+        "bin/kachery-p2p-leave-channel",
+        "bin/kachery-p2p-load",
+        "bin/kachery-p2p-start-daemon"
     ],
     install_requires=[
         "kachery>=0.6.3"

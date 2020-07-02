@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-from kachery_p2p.core import start_daemon
+import sys
+import os
 import click
 import json
 import kachery_p2p as kp
@@ -13,7 +14,12 @@ def cli():
 def get_channels():
     channels = kp.get_channels()
     for channel in channels:
-        print(f'{channel["name"]}: {channel["numPeers"]} peers')
+        num_peers = channel["numPeers"]
+        if num_peers == 1:
+            num_peers_str = '1 peer'
+        else:
+            num_peers_str = f'{num_peers} peers'
+        print(f'{channel["name"]}: {num_peers_str}')
 
 @click.command(help="Join a channel.")
 @click.argument('channel_name')
@@ -34,9 +40,29 @@ def find_file(path):
 
 @click.command(help="Download a file.")
 @click.argument('path')
-def load_file(path):
-    x = kp.load_file(path)
+@click.option('--dest', default=None, help='Optional destination file.')
+def load_file(path, dest):
+    x = kp.load_file(path, dest=dest)
     print(x)
+
+@click.command(help="Download a file and write the content to stdout.")
+@click.argument('path')
+def cat_file(path):
+    old_stdout = sys.stdout
+    sys.stdout = sys.stderr
+
+    path1 = kp.load_file(path)
+    if not path1:
+        raise Exception('Error loading file.')
+
+    sys.stdout = old_stdout
+    with open(path1, 'rb') as f:
+        while True:
+            data = os.read(f.fileno(), 4096)
+            if len(data) == 0:
+                break
+            os.write(sys.stdout.fileno(), data)
+    
 
 @click.command(help="Start the daemon.")
 def start_daemon():
@@ -52,6 +78,7 @@ cli.add_command(join_channel)
 cli.add_command(leave_channel)
 cli.add_command(find_file)
 cli.add_command(load_file)
+cli.add_command(cat_file)
 cli.add_command(version)
 cli.add_command(start_daemon)
 
