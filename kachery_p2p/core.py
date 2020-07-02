@@ -1,5 +1,6 @@
 from typing import Tuple
 from types import SimpleNamespace
+import subprocess
 import time
 import os
 import pathlib
@@ -84,20 +85,18 @@ def start_daemon():
 
     api_port = _api_port()
     config_dir = os.getenv('KACHERY_P2P_CONFIG_DIR', f'{pathlib.Path.home()}/.kachery-p2p')
-    docker_run_opts = [
-        f'-v {os.environ["KACHERY_STORAGE_DIR"]}:/kachery-storage',
-        f'-v /tmp:/tmp',
-        f'--net host',
-        f'-e KACHERY_P2P_API_PORT={api_port}',
-        f'-v {config_dir}:/kachery-p2p-config',
-        f'-e KACHERY_P2P_CONFIG_DIR=/kachery-p2p-config'
-    ]
-    docker_run_opts = ' '.join(docker_run_opts)
+
+    x = subprocess.check_call(['npx', 'check-node-version', '--print', '--node', '>=12'])
+    if x != 0:
+        raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
+    
     ss = ShellScript(f'''
     #!/bin/bash
     set -ex
 
-    exec labbox-launcher run --docker_run_opts "{docker_run_opts}" magland/kachery-p2p-daemon:{__version__}
+    export KACHERY_P2P_API_PORT="{api_port}"
+    export KACHERY_P2P_CONFIG_DIR="{config_dir}"
+    exec npx -p node@12 npx kachery-p2p-daemon@0.1.6 start
     ''')
     ss.start()
     ss.wait()
