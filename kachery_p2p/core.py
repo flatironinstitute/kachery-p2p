@@ -97,7 +97,7 @@ def start_daemon():
 
     export KACHERY_P2P_API_PORT="{api_port}"
     export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-    exec npx kachery-p2p-daemon@0.1.6 start
+    exec npx kachery-p2p-daemon@0.1.7 start
     ''')
     ss.start()
     ss.wait()
@@ -108,7 +108,7 @@ def _load_file_helper(primary_node_id, swarm_name, file_key, file_info, dest):
     path = _get_kachery_path_from_file_key(file_key)
     with TemporaryDirectory() as tmpdir:
         fname = tmpdir + '/download.dat'
-        _http_post_download_file(url, dict(primaryNodeId=primary_node_id, swarmName=swarm_name, fileKey=file_key), fname)
+        _http_post_download_file(url, dict(primaryNodeId=primary_node_id, swarmName=swarm_name, fileKey=file_key, fileSize=file_info['size']), total_size=file_info['size'], dest_path=fname)
         with ka.config(use_hard_links=True):
             expected_hash = file_key['sha1']
             hash0 = ka.get_file_hash(fname)
@@ -121,7 +121,7 @@ def _load_file_helper(primary_node_id, swarm_name, file_key, file_info, dest):
 def _get_kachery_path_from_file_key(file_key):
     return f'sha1://{file_key["sha1"]}'
 
-def _http_post_download_file(url: str, data: dict, dest_path: str):
+def _http_post_download_file(url: str, data: dict, total_size: int, dest_path: str):
     try:
         import requests
     except:
@@ -129,8 +129,15 @@ def _http_post_download_file(url: str, data: dict, dest_path: str):
 
     with requests.post(url, json=data, stream=True) as r:
         r.raise_for_status()
+        bytes_downloaded = 0
+        timer = time.time()
         with open(dest_path, 'wb') as f:
             for chunk in r.iter_content(chunk_size=8192): 
+                bytes_downloaded = bytes_downloaded + len(chunk)
+                elapsed = time.time() - timer
+                if elapsed >=3:
+                    timer = time.time()
+                    print(f'Downloaded {bytes_downloaded} of {total_size} bytes')
                 f.write(chunk)
 
 def _http_get_json(url: str, verbose: Optional[bool] = None) -> dict:

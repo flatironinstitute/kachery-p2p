@@ -45,6 +45,8 @@ class HSwarmConnection {
                     this._onRequestCallbacks.forEach(cb => {
                         cb(fromNodeId, msg.requestBody, responseBody => {
                             this.sendMessageToNode(fromNodeId, {type: 'requestToNodeResponse', requestId, responseBody});
+                        }, errorString => {
+                            this.sendMessageToNode(fromNodeId, {type: 'requestToNodeError', requestId, errorString})
                         }, () => {
                             this.sendMessageToNode(fromNodeId, {type: 'requestToNodeFinished', requestId});
                         })
@@ -98,7 +100,17 @@ class HSwarmConnection {
             }
         });
         this._hyperswarm.on('connection', (socket, details) => {
-            const jsonSocket = new JsonSocket(socket);
+            // safe
+            let jsonSocket;
+            try {
+                jsonSocket = new JsonSocket(socket);
+            }
+            catch(err) {
+                console.warn(err);
+                console.warn('Problem creating JsonSocket. Closing socket.');
+                socket.destroy();
+                return;
+            }
             jsonSocket._socket = socket;
             const peer = details.peer;
             if (peer) {
@@ -112,47 +124,91 @@ class HSwarmConnection {
             jsonSocket.sendMessage({type: 'initial', from: details.client ? 'server' : 'client', nodeId: this._nodeId, protocolVersion: PROTOCOL_VERSION});
             let receivedInitialMessage = false;
             jsonSocket.on('message', msg => {
+                // safe
                 if (receivedInitialMessage) return;
                 receivedInitialMessage = true;
                 if (msg.type !== 'initial') {
-                    console.warn('Unexpected initial message from peer connection. Closing.');
+                    console.warn('Unexpected initial message from peer connection. Closing socket.');
                     socket.destroy();
                     return;
                 }
                 if (msg.protocolVersion !== PROTOCOL_VERSION) {
-                    console.warn('Incorrect protocol version from peer connection. Closing.');
+                    console.warn('Incorrect protocol version from peer connection. Closing socket.');
                     socket.destroy();
                     return;
                 }
                 if (!validatePeerNodeId(msg.nodeId)) {
                     console.warn(`Node ID: ${msg.nodeID}`);
-                    console.warn('Missing or incorrect node ID from peer connection. Closing.');
+                    console.warn('Missing or incorrect node ID from peer connection. Closing socket.');
                     socket.destroy();
                     return;
                 }
                 if (msg.from !== (details.client ? 'client' : 'server')) {
-                    console.warn('Unexpected "from" field from peer connection. Closing.');
+                    console.warn('Unexpected "from" value from peer connection. Closing socket.');
                     socket.destroy();
                     return;
                 }
                 if (!this._peerConnections[msg.nodeId]) {
-                    const peerConnection = new HPeerConnection({keyPair: this._keyPair, nodeId: this._nodeId, swarmName: this._swarmName, peerId: msg.nodeId, verbose: this._verbose});
+                    let peerConnection;
+                    try {
+                        peerConnection = new HPeerConnection({keyPair: this._keyPair, nodeId: this._nodeId, swarmName: this._swarmName, peerId: msg.nodeId, verbose: this._verbose});
+                    }
+                    catch(err) {
+                        console.warn(err);
+                        console.warn('Problem creating peer connection. Closing socket.');
+                        socket.destroy();
+                        return;
+                    }
                     this._peerConnections[msg.nodeId] = peerConnection;
                     peerConnection.onMessage((msg2, details) => {
-                        this._handleMessageFromPeer(msg.nodeId, msg2);
+                        try {
+                            this._handleMessageFromPeer(msg.nodeId, msg2);
+                        }
+                        catch(err) {
+                            console.warn(err);
+                            console.warn('Problem handling message from peer. Closing socket.');
+                            socket.destroy();
+                        }
                     });
                 }
                 if (details.client) {
-                    this._peerConnections[msg.nodeId].setOutgoingSocket(jsonSocket);
+                    try {
+                        this._peerConnections[msg.nodeId].setOutgoingSocket(jsonSocket);
+                    }
+                    catch(err) {
+                        console.warn(err);
+                        console.warn('Problem setting outgoing socket. Closing socket.');
+                        socket.destroy();
+                    }
                 }
                 else {
-                    this._peerConnections[msg.nodeId].setIncomingSocket(jsonSocket);
+                    try {
+                        this._peerConnections[msg.nodeId].setIncomingSocket(jsonSocket);
+                    }
+                    catch(err) {
+                        console.warn(err);
+                        console.warn('Problem setting incoming socket. Closing socket.');
+                        socket.destroy();
+                    }
                 }
                 if (details.peer) {
                     console.info(`${this._swarmName}: Connected to peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""} (${msg.nodeId})`);
-                    this._peerConnections[msg.nodeId].setConnectionInfo({host: details.peer.host, port: details.peer.port, local: details.peer.local});
+                    try {
+                        this._peerConnections[msg.nodeId].setConnectionInfo({host: details.peer.host, port: details.peer.port, local: details.peer.local});
+                    }
+                    catch(err) {
+                        console.warn(err);
+                        console.warn('Problem setting connection info. Closing socket.');
+                        socket.destroy();
+                    }
                 }
+                socket.on('error', (err) => {
+                    console.warn(err);
+                    console.warn('Socket error. Closing socket.');
+                    socket.destroy();
+                });
                 socket.on('close', () => {
+                    // safe
                     if (msg.nodeId in this._peerConnections) {
                         const peerInfo = this._peerConnections[msg.nodeId].connectionInfo();
                         console.info(`Socket closed for peer connection: ${peerInfo.host}:${peerInfo.port}${peerInfo.local ? " (local)" : ""} (${msg.nodeId})`);
@@ -166,6 +222,7 @@ class HSwarmConnection {
             });
         });
         this._hyperswarm.on('disconnection', (socket, info) => {
+            // safe
             const peer = info.peer;
             if (peer) {
                 if (this._verbose >= 0) {
@@ -229,9 +286,12 @@ class HSwarmConnection {
     onRequest = (cb) => {
         this._onRequestCallbacks.push(cb);
     }
+    // returns {onResponse, onError, onFinished, cancel}
     makeRequestToNode = (nodeId, requestBody, opts) => {
+        // Send a request to node
         const requestId = opts.requestId || randomString(10);
         const onResponseCallbacks = [];
+        const onErrorCallbacks = [];
         const onFinishedCallbacks = [];
         // todo: think about doing this without a broadcast
         const message = {
@@ -245,12 +305,14 @@ class HSwarmConnection {
             if (fromNodeId !== nodeId) return false;
             return ((
                 (msg.type === 'requestToNodeResponse') ||
+                (msg.type === 'requestToNodeError') ||
                 (msg.type === 'requestToNodeFinished') ||
                 (msg.type === 'requestToNodeReceived')
             ) && (msg.requestId === requestId));
         });
         let isFinished = false;
         let requestReceived = false;
+        let timestampLastResponse = new Date();
         const handleReceived = () => {
             requestReceived = true;
         }
@@ -258,10 +320,18 @@ class HSwarmConnection {
             if (isFinished) return;
             onFinishedCallbacks.forEach(cb => cb());
             isFinished = true;
+            listener.cancel();
         }
         const handleResponse = (responseBody) => {
             if (isFinished) return;
+            timestampLastResponse = new Date();
             onResponseCallbacks.forEach(cb => cb(responseBody));
+        }
+        const handleError = (errorString) => {
+            if (isFinished) return;
+            onErrorCallbacks.forEach(cb => cb(errorString));
+            isFinished = true;
+            listener.cancel();
         }
         const timer = new Date();
         const checkReceived = () => {
@@ -275,6 +345,20 @@ class HSwarmConnection {
             }
         }
         setTimeout(checkReceived, 500);
+
+        if (opts.timeout) {
+            const monitorTimeout = async () => {
+                while (!isFinished) {
+                    const elapsedSinceResponse = (new Date()) - timestampLastResponse;
+                    if (elapsedSinceResponse > opts.timeout) {
+                        handleError('Timeout while waiting for response.');
+                    }
+                    await sleepMsec(1000);
+                }
+            }
+            monitorTimeout();
+        }
+
         listener.onMessage((fromNodeId, msg) => {
             if (msg.type === 'requestToNodeReceived') {
                 handleReceived();
@@ -282,12 +366,16 @@ class HSwarmConnection {
             else if (msg.type === 'requestToNodeResponse') {
                 handleResponse(msg.responseBody);
             }
+            else if (msg.type === 'requestToNodeError') {
+                handleError(msg.errorString);
+            }
             else if (msg.type === 'requestToNodeFinished') {
                 handleFinished();
             }
         });
         return {
             onResponse: cb => onResponseCallbacks.push(cb),
+            onError: cb => onErrorCallbacks.push(cb),
             onFinished: cb => onFinishedCallbacks.push(cb),
             // todo: think about doing more here - send out a cancel message to node
             cancel: () => {handleFinished(); listener.cancel();}
@@ -311,9 +399,6 @@ class HSwarmConnection {
         };
     }
     _handleMessageFromPeer = (peerId, msg) => {
-        if (this._verbose >= 2) {
-            console.info(`handleMessageFromPeer: ${this._swarmName} ${peerId} ${msg.type}`);
-        }
         if (msg.type === 'broadcast') {
             if (!verifySignature(msg.body, msg.signature, hexToPublicKey(Buffer.from(msg.fromNodeId, 'hex')))) {
                 console.warn(`Unable to verify message from ${msg.fromNodeId}`);
@@ -356,6 +441,7 @@ class HSwarmConnection {
     }
 }
 
+// safe
 const validatePeerNodeId = (nodeId) => {
     return ((nodeId) && (typeof(nodeId) == 'string') && (nodeId.length <= 256));
 }

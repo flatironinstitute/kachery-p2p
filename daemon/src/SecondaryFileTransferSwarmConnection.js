@@ -26,37 +26,119 @@ class SecondaryFileTransferSwarmConnection {
     _handleMessage = async (fromNodeId, msg) => {
     }
     // returns {stream, cancel}
-    downloadFile = async ({fileKey, primaryNodeId, opts}) => {
-        const requestBody = {
-            type: 'downloadFile',
-            fileKey: fileKey
-        };
-        let finished = false;
+    downloadFile = async ({fileKey, primaryNodeId, fileSize, opts}) => {
+        const chunkSize = 4000000;
+        const numChunks = Math.ceil(fileSize / chunkSize);
         let sha1_sum = crypto.createHash('sha1');
 
-        const req = this._swarmConnection.makeRequestToNode(primaryNodeId, requestBody, {});
-        req.onResponse(responseBody => {
-            if (!finished) {
-                const buf = Buffer.from(responseBody.data_b64, 'base64');
-                sha1_sum.update(buf);
-                // todo: implement this properly so we don't overflow the stream
-                stream.push(buf);
-            }
-        });
-        req.onFinished(() => {
-            finished = true;
-            let sha1_hash = sha1_sum.digest('hex');;
-            // todo: check hash to see if it is equal to the expected based on kacheryPath
-            stream.push(null);
-        });
+        const streamState = {
+            readyToWrite: false,
+            readyToWriteCallback: null
+        }
         const stream = new Stream.Readable({
             read(size) {
-                // todo: implement this properly so we don't overflow the stream
+                if (!streamState.readyToWrite) {
+                    streamState.readyToWrite = true;
+                    if (streamState.readyToWriteCallback) {
+                        streamState.readyToWriteCallback();
+                    }
+                }
             }
         });
+
+        const _waitForStreamReadyToWrite = async () => {
+            if (streamState.readyToWrite)
+                return;
+            return new Promise((resolve, reject) => {
+                streamState.readyToWriteCallback = resolve;
+            });
+        }
+
+        let _currentReq = null;
+        let _cancelled = false;
+        const _handleCancel = () => {
+            if (_cancelled) return;
+            _cancelled = true;
+            if (_currentReq) {
+                _currentReq.cancel();
+            }
+        }
+
+        const downloadChunk = async (chunkNum) => {
+            return new Promise((resolve, reject) => {
+                const startByte = chunkNum * chunkSize;
+                const endByte = Math.min(startByte + chunkSize, fileSize);
+                const requestBody = {
+                    type: 'downloadFile',
+                    fileKey: fileKey,
+                    startByte,
+                    endByte
+                };
+                let finished = false;
+                let bytesDownloadedThisChunk = 0;
+        
+                const req = this._swarmConnection.makeRequestToNode(primaryNodeId, requestBody, {timeout: 10000});
+                _currentReq = req;
+                req.onResponse(responseBody => {
+                    if (finished) return;
+                    if (!responseBody.data_b64) {
+                        finished = true;
+                        reject('Error downloading file. No data_b64 in response');
+                        return;
+                    }
+                    try {
+                        const buf = Buffer.from(responseBody.data_b64, 'base64');
+                        sha1_sum.update(buf);
+                        // todo: implement this properly so we don't overflow the stream
+                        bytesDownloadedThisChunk += buf.length;
+                        stream.push(buf);
+                        streamState.readyToWrite = false;
+                    }
+                    catch(err) {
+                        console.warn(err);
+                        finished = true;
+                        reject('Problem downloading data: ' + err.message);
+                    }
+                });
+                req.onError(errorString => {
+                    if (finished) return;
+                    finished = true;
+                    reject(Error(errorString));
+                    return;
+                })
+                req.onFinished(() => {
+                    if (finished) return;
+                    finished = true;
+                    if (bytesDownloadedThisChunk != endByte - startByte) {
+                        reject(`Unexpected number of bytes for this chunk: ${bytesDownloadedThisChunk} <> ${endByte - startByte}`);
+                        return;
+                    }
+                    resolve();
+                    _currentReq = null;
+                });
+            });
+        }
+
+        const downloadChunks = async () => {
+            for (let chunkNum = 0; chunkNum < numChunks; chunkNum ++) {
+                if (!_cancelled) {
+                    await _waitForStreamReadyToWrite();
+                    try {
+                        await downloadChunk(chunkNum);
+                    }
+                    catch(err) {
+                        console.warn(err.message);
+                        _handleCancel();
+                    }
+                }
+            }
+            // todo: check the sha1_sum here (if not cancelled)
+            stream.push(null);
+        }
+        downloadChunks();
         return {
             stream,
-            cancel: () => req.cancel()
+            cancel: _handleCancel
         }
     }
     async _start() {

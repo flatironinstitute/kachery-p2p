@@ -32,9 +32,11 @@ class HPeerConnection {
 
         this._disconnected = false;
     }
+    // safe
     setIncomingSocket(jsonSocket) {
         this._incomingJsonSocket = jsonSocket;
         this._incomingJsonSocket.on('message', msg => {
+            // safe
             if (!this._verifyMessageFromPeer(msg)) {
                 console.warn('Error verifying message. Disconnecting peer.');
                 this.disconnect();
@@ -42,35 +44,46 @@ class HPeerConnection {
             }
             if (msg.body.type === 'ready') {
                 this._incomingSocketReady = true;
-                for (let cb of this._incomingSocketReadyCallbacks) {
-                    cb();
-                }
+                setTimeout(() => {
+                    for (let cb of this._incomingSocketReadyCallbacks) {
+                        cb();
+                    }
+                }, 0);
             }
             else {
                 this._handleMessage(msg.body);
             }
         })
-        this._incomingJsonSocket.sendMessage(this._signMessage({type: 'ready'}));
+        try {
+            this._incomingJsonSocket.sendMessage(this._signMessage({type: 'ready'}));
+        }
+        catch(err) {
+            console.warn(err);
+            console.warn('Could not send message. Disconnecting.');
+            this.disconnect();
+        }
     }
+    // safe
     async _handleMessage(msg) {
+        if (this._verbose >= 100) {
+            console.info('handlemessage', msg.type, JSON.stringify(msg).length);
+        }
         this._timestampLastIncomingMessage = new Date();
         if (msg.type === 'keepAlive') {
-            if (this._verbose >= 4) {
-                console.info(`handleMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
-            }    
+            //
         }
         else {
-            if (this._verbose >= 3) {
-                console.info(`handleMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
-            }
+            //
         }
         if (msg.type === 'keepAlive') {
             return;
         }
-        for (let id in this._onMessageCallbacks) {
-            const x = this._onMessageCallbacks[id];
-            x.callback(msg, x.details);
-        }
+        setTimeout(() => {
+            for (let id in this._onMessageCallbacks) {
+                const x = this._onMessageCallbacks[id];
+                x.callback(msg, x.details);
+            }
+        }, 0);
     }
     onMessage = (cb) => {
         const callbackId = randomString(10);
@@ -126,29 +139,36 @@ class HPeerConnection {
         }
         const socket = await _waitForSocketReady();
         if (this._disconnected) return;
-        socket.sendMessage(this._signMessage(msg));
+        try {
+            socket.sendMessage(this._signMessage(msg));
+        }
+        catch(err) {
+            console.warn(err);
+            console.warn('Error sending message')
+        }
     }
-    sendMessage(msg) {
+    // safe
+    sendMessage = (msg) => {
+        if (this._verbose >= 100) {
+            console.info('sendMessage', msg.type, JSON.stringify(msg).length);
+        }
         this._timestampLastOutgoingMessage = new Date();
         if (msg.type === 'keepAlive') {
-            if (this._verbose >= 4) {
-                console.info(`handleMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
-            }    
+            //
         }
         else {
-            if (this._verbose >= 3) {
-                console.info(`sendMessage: ${this._swarmName} ${this._peerId} ${msg.type}`);
-            }
+            //
         }
         this.asyncSendMessage(msg);
     }
-    setConnectionInfo(info) {
+    setConnectionInfo = (info) => {
         this._connectionInfo = info;
     }
-    connectionInfo() {
+    connectionInfo = () => {
         return this._connectionInfo;
     }
-    disconnect() {
+    disconnect = () => {
+        if (this._disconnected) return;
         this._disconnected = true;
         if (this._incomingJsonSocket) {
             this._incomingJsonSocket._socket.destroy();
@@ -163,17 +183,31 @@ class HPeerConnection {
     elapsedTimeSecSinceLastOutgoingMessage() {
         return ((new Date()) - this._timestampLastOutgoingMessage) / 1000;
     }
+    // safe
     _signMessage = (msgBody) => {
         const signature = getSignature(msgBody, this._keyPair);
+        if (!signature) {
+            throw Error('Error signing message.');
+        }
         return {
             body: msgBody,
             signature: signature
         }
     }
+    // safe
     _verifyMessageFromPeer = msg => {
         if (!msg.body) return false;
         if (!msg.signature) return false;
-        const peerPublicKey = hexToPublicKey(Buffer.from(this._peerId, 'hex'));
+        let peerPublicKey;
+        try {
+            peerPublicKey = hexToPublicKey(Buffer.from(this._peerId, 'hex'));
+        }
+        catch(err) {
+            console.warn(err);
+            console.warn('Problem converting peer ID to public key.')
+            return false;
+        }
+        // safe
         return verifySignature(msg.body, msg.signature, peerPublicKey);
     }
 }

@@ -38,41 +38,53 @@ class Daemon {
     //    cancel()
     findFile = ({fileKey, timeoutMsec}) => (this._findFile({fileKey, timeoutMsec}));
     // returns {stream, cancel}
-    downloadFile = async ({swarmName, primaryNodeId, fileKey, opts}) => (await this._downloadFile({swarmName, primaryNodeId, fileKey, opts}));
+    downloadFile = async ({swarmName, primaryNodeId, fileKey, fileSize, opts}) => (await this._downloadFile({swarmName, primaryNodeId, fileKey, fileSize, opts}));
 
     /*****************************************************************************
     IMPLEMENTATION
     ******************************************************************************/
 
     _joinChannel = async (channelName, opts) => {
-        opts = opts || {};
-        if (channelName in this._lookupSwarmConnections) {
-            console.warn(`Cannot join channel. Already joined: ${channelName}`);
-            return;
+        try {
+            opts = opts || {};
+            if (channelName in this._lookupSwarmConnections) {
+                console.warn(`Cannot join channel. Already joined: ${channelName}`);
+                return;
+            }
+            if (this._verbose >= 0) {
+                console.info(`Joining channel: ${channelName}`);
+            }
+            const x = new LookupSwarmConnection({keyPair: this._keyPair, nodeId: this._nodeId, channelName, fileTransferSwarmName: this._nodeId, verbose: this._verbose});
+            await x.join();
+            this._lookupSwarmConnections[channelName] = x;
+            if (!opts._skipUpdateConfig) {
+                await this._updateConfigFile();
+            }
         }
-        if (this._verbose >= 0) {
-            console.info(`Joining channel: ${channelName}`);
-        }
-        const x = new LookupSwarmConnection({keyPair: this._keyPair, nodeId: this._nodeId, channelName, fileTransferSwarmName: this._nodeId, verbose: this._verbose});
-        await x.join();
-        this._lookupSwarmConnections[channelName] = x;
-        if (!opts._skipUpdateConfig) {
-            await this._updateConfigFile();
+        catch(err) {
+            console.warn(err);
+            console.warn(`Problem joining channel: ${channelName}`);
         }
     }
     _leaveChannel = async (channelName, opts) => {
-        opts = opts || {};
-        if (!(channelName in this._lookupSwarmConnections)) {
-            console.warn(`Cannot leave channel. Not joined: ${channelName}`);
-            return;
+        try {
+            opts = opts || {};
+            if (!(channelName in this._lookupSwarmConnections)) {
+                console.warn(`Cannot leave channel. Not joined: ${channelName}`);
+                return;
+            }
+            if (this._verbose >= 0) {
+                console.info(`Leaving channel: ${channelName}`);
+            }
+            await this._lookupSwarmConnections[channelName].leave();
+            delete this._lookupSwarmConnections[channelName];
+            if (!opts._skipUpdateConfig) {
+                await this._updateConfigFile();
+            }
         }
-        if (this._verbose >= 0) {
-            console.info(`Leaving channel: ${channelName}`);
-        }
-        await this._lookupSwarmConnections[channelName].leave();
-        delete this._lookupSwarmConnections[channelName];
-        if (!opts._skipUpdateConfig) {
-            await this._updateConfigFile();
+        catch(err) {
+            console.warn(err);
+            console.warn(`Problem leaving channel: ${channelName}`);
         }
     }
 
@@ -123,15 +135,15 @@ class Daemon {
     }
 
     // returns {stream, cancel}
-    _downloadFile = async ({primaryNodeId, swarmName, fileKey, opts}) => {
+    _downloadFile = async ({primaryNodeId, swarmName, fileKey, fileSize, opts}) => {
         if (this._verbose >= 1) {
-            console.info(`downloadFile: ${primaryNodeId} ${swarmName} ${JSON.stringify(fileKey)}`);
+            console.info(`downloadFile: ${primaryNodeId} ${swarmName} ${JSON.stringify(fileKey)} ${fileSize}`);
         }
         if (!(swarmName in this._secondaryFileTransferSwarmConnections)) {
             await this._joinSecondaryFileTransferSwarm({swarmName, primaryNodeId});
         }
         const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
-        return await swarmConnection.downloadFile({primaryNodeId, fileKey, opts});
+        return await swarmConnection.downloadFile({primaryNodeId, fileKey, fileSize, opts});
     }
     _joinSecondaryFileTransferSwarm = async ({swarmName, primaryNodeId}) => {
         if (swarmName in this._secondaryFileTransferSwarmConnections) {
@@ -224,12 +236,16 @@ const _loadKeypair = (configDir) => {
         publicKey: fs.readFileSync(publicKeyPath, {encoding: 'utf-8'}),
         privateKey: fs.readFileSync(privateKeyPath, {encoding: 'utf-8'}),
     }
-    const signature = getSignature({test: 2}, keyPair);
-    const verify0 = verifySignature({test: 2}, signature, keyPair.publicKey);
-    if (!verify0) {
+    if (!testKeyPair(keyPair)) {
         throw new Error('Problem testing public/private keys.')
     }
     return keyPair;
+}
+
+const testKeyPair = (keyPair) => {
+    const signature = getSignature({test: 1}, keyPair);
+    const verify0 = verifySignature({test: 1}, signature, keyPair.publicKey);
+    return verify0;
 }
 
 export default Daemon;

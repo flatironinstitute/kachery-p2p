@@ -1,11 +1,26 @@
 import crypto from 'crypto';
 
+// safe
 export const getSignature = (obj, keyPair) => {
-    return crypto.sign(null, Buffer.from(JSON.stringify(obj), 'utf-8'), keyPair.privateKey).toString('hex');
+    try {
+        return crypto.sign(null, Buffer.from(JSON.stringify(obj), 'utf-8'), keyPair.privateKey).toString('hex');
+    }
+    catch(err) {
+        console.warn(err);
+        console.warn('Exception when creating signature.');
+        return null;
+    }
 }
 
 export const verifySignature = (obj, signature, publicKey) => {
-    return crypto.verify(null, Buffer.from(JSON.stringify(obj), 'utf-8'), publicKey, Buffer.from(signature, 'hex'));
+    try {
+        return crypto.verify(null, Buffer.from(JSON.stringify(obj), 'utf-8'), publicKey, Buffer.from(signature, 'hex'));
+    }
+    catch(err) {
+        console.warn(err);
+        console.warn('Exception when verifying signature.');
+        return false;
+    }
 }
 
 export const publicKeyToHex = (publicKey) => {

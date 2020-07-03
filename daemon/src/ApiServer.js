@@ -99,7 +99,7 @@ export default class ApiServer {
     }
     async _apiDownloadFile(req, res) {
         const reqData = req.body;
-        const {stream, cancel} = await this._daemon.downloadFile({primaryNodeId: reqData.primaryNodeId, swarmName: reqData.swarmName, fileKey: reqData.fileKey, opts: reqData.opts || {}});
+        const {stream, cancel} = await this._daemon.downloadFile({primaryNodeId: reqData.primaryNodeId, swarmName: reqData.swarmName, fileKey: reqData.fileKey, fileSize: reqData.fileSize, opts: reqData.opts || {}});
         // todo: cancel on connection closed
         stream.pipe(res);
     }
