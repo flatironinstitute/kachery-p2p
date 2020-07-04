@@ -1,4 +1,4 @@
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 from .core import get_channels, join_channel, leave_channel
 from .core import find_file, load_file
