@@ -5,7 +5,7 @@ import HPeerConnection from './HPeerConnection.js';
 import { randomString, sleepMsec } from './util.js';
 import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from './crypto_util.js';
 
-const PROTOCOL_VERSION = 'kachery-p2p-3'
+const PROTOCOL_VERSION = 'kachery-p2p-daemon-0.2'
 
 class HSwarmConnection {
     constructor({keyPair, nodeId, swarmName, verbose}) {
@@ -266,10 +266,11 @@ class HSwarmConnection {
     }
     broadcastMessage = (message, opts) => {
         opts = opts || {};
+        const excludeNodeIds = opts.excludeNodeIds || {};
         const messageId = opts.messageId || randomString(10);
         this._messageIdsHandled[messageId] = true;
         const peerIds = Object.keys(this._peerConnections);
-        peerIds.forEach(peerId => {
+        peerIds.filter(peerId => (!excludeNodeIds[peerId])).forEach(peerId => {
             const body = {
                 messageId,
                 message,
@@ -279,7 +280,8 @@ class HSwarmConnection {
                 type: 'broadcast',
                 fromNodeId: opts.fromNodeId || this._nodeId,
                 body: body,
-                signature
+                signature,
+                excludeNodeIds: {...excludeNodeIds, [this._nodeId]: true}
             });
         })
     }
@@ -412,7 +414,8 @@ class HSwarmConnection {
             for (let cb of this._onMessageCallbacks) {
                 cb(msg.fromNodeId, msg.body.message);
             }
-            this.broadcastMessage(msg.body.message, {messageId: messageId, fromNodeId: msg.fromNodeId, signature: msg.signature});
+            const excludeNodeIds = msg.excludeNodeIds;
+            this.broadcastMessage(msg.body.message, {messageId: messageId, fromNodeId: msg.fromNodeId, signature: msg.signature, excludeNodeIds});
         }
         else if (msg.type === 'keepAlive') {
 

@@ -3,6 +3,7 @@ import https from 'https';
 import http from 'http';
 import fs from 'fs';
 import JsonSocket from 'json-socket';
+import { sleepMsec } from './util.js';
 
 export default class ApiServer {
     constructor(daemon) {
@@ -15,9 +16,20 @@ export default class ApiServer {
         this._app.use(express.json());
 
         this._app.get('/probe', async (req, res) => {
-            await waitMsec(1000);
+            await waitMsec(100);
             try {
                 await this._apiProbe(req, res) 
+            }
+            catch(err) {
+                await this._errorResponse(req, res, 500, err.message);
+            }
+        });
+        this._app.get('/halt', async (req, res) => {
+            await waitMsec(100);
+            try {
+                await this._apiHalt(req, res)
+                await sleepMsec(1000);
+                process.exit(0);
             }
             catch(err) {
                 await this._errorResponse(req, res, 500, err.message);
@@ -65,6 +77,10 @@ export default class ApiServer {
         });
     }
     async _apiProbe(req, res) {
+        res.json({ success: true });
+    }
+    async _apiHalt(req, res) {
+        await this._daemon.halt();
         res.json({ success: true });
     }
     async _apiGetState(req, res) {

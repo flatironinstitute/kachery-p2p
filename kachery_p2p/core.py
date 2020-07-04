@@ -63,8 +63,13 @@ def _parse_kachery_path(url: str) -> Tuple[str, str, str, str]:
 
 def load_file(path: str, dest: Union[str, None]=None):
     for r in find_file(path):
+        timer = time.time()
         a = _load_file_helper(primary_node_id=r['primaryNodeId'], swarm_name=r['swarmName'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
         if a is not None:
+            elapsed = time.time() - timer
+            size = r["fileInfo"]["size"]
+            rate = size / elapsed / (1024 * 1024)
+            print(f'Downloaded {size} bytes in {elapsed} sec ({rate} MB/sec)')
             return a
     return None
 
@@ -97,10 +102,24 @@ def start_daemon():
 
     export KACHERY_P2P_API_PORT="{api_port}"
     export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-    exec npx kachery-p2p-daemon@0.1.7 start
+    exec npx kachery-p2p-daemon@0.2 start
     ''')
     ss.start()
-    ss.wait()
+    try:
+        ss.wait()
+    except:
+        ss.stop()
+        ss.kill()
+        raise
+
+def stop_daemon():
+    port = _api_port()
+    url = f'http://localhost:{port}/halt'
+    try:
+        x = _http_get_json(url)
+    except:
+        return False
+    return x.get('success')
 
 def _load_file_helper(primary_node_id, swarm_name, file_key, file_info, dest):
     port = _api_port()

@@ -16,6 +16,7 @@ class Daemon {
         this._primaryFileTransferSwarmConnection = null;
         this._secondaryFileTransferSwarmConnections = {};
         this._verbose = verbose;
+        this._halted = false;
         console.info(`Verbose level: ${verbose}`);
 
         this._start();
@@ -26,6 +27,7 @@ class Daemon {
     ******************************************************************************/
     
     // channels (aka lookup swarms)
+    halt = async () => await this._halt();
     joinChannel = async (channelName, opts) => await this._joinChannel(channelName, opts);
     leaveChannel = async (channelName, opts) => await this._leaveChannel(channelName, opts);
     joinedChannelNames = () => {return Object.keys(this._lookupSwarmConnections)};
@@ -44,6 +46,17 @@ class Daemon {
     IMPLEMENTATION
     ******************************************************************************/
 
+    _halt = async () => {
+        this._halted = true;
+        for (let channelName of this.joinedChannelNames()) {
+            await this._leaveChannel(channelName);
+        }
+        for (let id in this._secondaryFileTransferSwarmConnections) {
+            const c = this._secondaryFileTransferSwarmConnections[id];
+            await c.leave();
+        }
+        await this._primaryFileTransferSwarmConnection.leave();
+    }
     _joinChannel = async (channelName, opts) => {
         try {
             opts = opts || {};
@@ -177,6 +190,7 @@ class Daemon {
             await this.joinChannel(ch.name, {_skipUpdateConfig: true});
         }
         while (true) {
+            if (this._halted) return;
             // maintenance goes here
             // for example, managing the secondary file transfer swarms that we belong to
             await sleepMsec(100);

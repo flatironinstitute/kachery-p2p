@@ -68,6 +68,10 @@ def cat_file(path):
 def start_daemon():
     kp.start_daemon()
 
+@click.command(help="Stop the daemon.")
+def stop_daemon():
+    kp.stop_daemon()
+
 @click.command(help="Display kachery_p2p version and exit.")
 def version():
     click.echo(f"This is kachery_p2p version {kp.__version__}.")
@@ -81,6 +85,7 @@ cli.add_command(load_file)
 cli.add_command(cat_file)
 cli.add_command(version)
 cli.add_command(start_daemon)
+cli.add_command(stop_daemon)
 
 if __name__ == "__main__":
     cli()
