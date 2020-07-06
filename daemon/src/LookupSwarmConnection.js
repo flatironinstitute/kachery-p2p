@@ -13,13 +13,21 @@ class LookupSwarmConnection {
         this._fileTransferSwarmName = fileTransferSwarmName;
         this._swarmConnection = new HSwarmConnection({keyPair: this._keyPair, nodeId, swarmName, verbose});
         this._swarmConnection.onMessage((fromNodeId, msg) => {this._handleMessage(fromNodeId, msg)});
+        this._nodeIdsInSwarm = {[nodeId]: true};
 
         this._start();
     }
     async join() {
         await this._swarmConnection.join();
+        this._swarmConnection.broadcastMessage({
+            type: 'joining'
+        });
     }
     async leave() {
+        this._swarmConnection.broadcastMessage({
+            type: 'leaving'
+        });
+        await sleepMsec(100);
         await this._swarmConnection.leave();
     }
     printInfo() {
@@ -40,6 +48,20 @@ class LookupSwarmConnection {
                     swarmName: this._fileTransferSwarmName,
                     fileInfo
                 });
+            }
+        }
+        else if (msg.type === 'joining') {
+            this._nodeIdsInSwarm[fromNodeId] = true;
+            this._swarmConnection.sendMessageToNode(fromNodeId, {
+                type: 'introducing'
+            });
+        }
+        else if (msg.type === 'introducing') {
+            this._nodeIdsInSwarm[fromNodeId] = true;
+        }
+        else if (msg.type === 'leaving') {
+            if (fromNodeId in this._nodeIdsInSwarm) {
+                delete this._nodeIdsInSwarm[fromNodeId];
             }
         }
     }

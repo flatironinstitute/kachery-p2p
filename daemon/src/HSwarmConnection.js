@@ -5,7 +5,7 @@ import HPeerConnection from './HPeerConnection.js';
 import { randomString, sleepMsec } from './util.js';
 import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from './crypto_util.js';
 
-const PROTOCOL_VERSION = 'kachery-p2p-daemon-0.2'
+const PROTOCOL_VERSION = 'kachery-p2p-daemon-0.2.2'
 
 class HSwarmConnection {
     constructor({keyPair, nodeId, swarmName, verbose}) {
@@ -262,7 +262,22 @@ class HSwarmConnection {
             toNodeId,
             messageBody
         }
-        this.broadcastMessage(message);
+        if (toNodeId in this._peerConnections) {
+            const body = {
+                messageId: randomString(10),
+                message
+            };
+            const signature = getSignature(body, this._keyPair);
+            this._peerConnections[toNodeId].sendMessage({
+                type: 'directToPeer',
+                fromNodeId: this._nodeId,
+                body,
+                signature
+            })
+        }
+        else {
+            this.broadcastMessage(message);
+        }
     }
     broadcastMessage = (message, opts) => {
         opts = opts || {};
@@ -279,7 +294,7 @@ class HSwarmConnection {
             this._peerConnections[peerId].sendMessage({
                 type: 'broadcast',
                 fromNodeId: opts.fromNodeId || this._nodeId,
-                body: body,
+                body,
                 signature,
                 excludeNodeIds: {...excludeNodeIds, [this._nodeId]: true}
             });
@@ -401,8 +416,8 @@ class HSwarmConnection {
         };
     }
     _handleMessageFromPeer = (peerId, msg) => {
-        if (msg.type === 'broadcast') {
-            if (!verifySignature(msg.body, msg.signature, hexToPublicKey(Buffer.from(msg.fromNodeId, 'hex')))) {
+        if ((msg.type === 'broadcast') || (msg.type === 'directToPeer')) {
+            if (!verifySignature(msg.body, msg.signature, hexToPublicKey(msg.fromNodeId))) {
                 console.warn(`Unable to verify message from ${msg.fromNodeId}`);
                 return;
             }
@@ -414,8 +429,10 @@ class HSwarmConnection {
             for (let cb of this._onMessageCallbacks) {
                 cb(msg.fromNodeId, msg.body.message);
             }
-            const excludeNodeIds = msg.excludeNodeIds;
-            this.broadcastMessage(msg.body.message, {messageId: messageId, fromNodeId: msg.fromNodeId, signature: msg.signature, excludeNodeIds});
+            if (msg.type === 'broadcast') {
+                const excludeNodeIds = msg.excludeNodeIds;
+                this.broadcastMessage(msg.body.message, {messageId: messageId, fromNodeId: msg.fromNodeId, signature: msg.signature, excludeNodeIds});
+            }
         }
         else if (msg.type === 'keepAlive') {
 

@@ -82,7 +82,7 @@ def _probe_daemon():
         return False
     return x.get('success')
 
-def start_daemon():
+def start_daemon(method='npx'):
     from kachery_p2p import __version__
 
     if _probe_daemon():
@@ -91,26 +91,46 @@ def start_daemon():
     api_port = _api_port()
     config_dir = os.getenv('KACHERY_P2P_CONFIG_DIR', f'{pathlib.Path.home()}/.kachery-p2p')
 
-    try:
-        subprocess.check_call(['npx', 'check-node-version', '--print', '--node', '>=12'])
-    except:
-        raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
-    
-    ss = ShellScript(f'''
-    #!/bin/bash
-    set -ex
+    if method == 'npx':
+        try:
+            subprocess.check_call(['npx', 'check-node-version', '--print', '--node', '>=12'])
+        except:
+            raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
+        
+        ss = ShellScript(f'''
+        #!/bin/bash
+        set -ex
 
-    export KACHERY_P2P_API_PORT="{api_port}"
-    export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-    exec npx kachery-p2p-daemon@0.2 start
-    ''')
-    ss.start()
-    try:
-        ss.wait()
-    except:
-        ss.stop()
-        ss.kill()
-        raise
+        export KACHERY_P2P_API_PORT="{api_port}"
+        export KACHERY_P2P_CONFIG_DIR="{config_dir}"
+        exec npx kachery-p2p-daemon@0.2 start
+        ''')
+        ss.start()
+        try:
+            ss.wait()
+        except:
+            ss.stop()
+            ss.kill()
+            raise
+    elif method == 'dev':
+        thisdir = os.path.dirname(os.path.realpath(__file__))
+        ss = ShellScript(f'''
+        #!/bin/bash
+        set -ex
+
+        export KACHERY_P2P_API_PORT="{api_port}"
+        export KACHERY_P2P_CONFIG_DIR="{config_dir}"
+        {thisdir}/../daemon/src/cli.js start
+        ''')
+        ss.start()
+        try:
+            ss.wait()
+        except:
+            ss.stop()
+            ss.kill()
+            raise
+    else:
+        raise Exception(f'Invalid method for starting daemon: {method}')
 
 def stop_daemon():
     port = _api_port()

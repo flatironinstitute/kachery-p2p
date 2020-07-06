@@ -3,7 +3,8 @@ import { randomString, sleepMsec } from './util.js'
 import PrimaryFileTransferSwarmConnection from './PrimaryFileTransferSwarmConnection.js';
 import SecondaryFileTransferSwarmConnection from './SecondaryFileTransferSwarmConnection.js';
 import LookupSwarmConnection from './LookupSwarmConnection.js';
-import { createKeyPair, getSignature, verifySignature, publicKeyToHex } from './crypto_util.js';
+import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './crypto_util.js';
+import FeedManager from './FeedManager.js';
 
 class Daemon {
     constructor({ configDir, verbose }) {
@@ -17,6 +18,9 @@ class Daemon {
         this._secondaryFileTransferSwarmConnections = {};
         this._verbose = verbose;
         this._halted = false;
+
+        this._feedManager = new FeedManager(this);
+
         console.info(`Verbose level: ${verbose}`);
 
         this._start();
@@ -32,6 +36,7 @@ class Daemon {
     leaveChannel = async (channelName, opts) => await this._leaveChannel(channelName, opts);
     joinedChannelNames = () => {return Object.keys(this._lookupSwarmConnections)};
     getState = () => (this._getState());
+    feedManager = () => (this._feedManager);
 
     // Find a file
     // returns on object with:
@@ -41,6 +46,7 @@ class Daemon {
     findFile = ({fileKey, timeoutMsec}) => (this._findFile({fileKey, timeoutMsec}));
     // returns {stream, cancel}
     downloadFile = async ({swarmName, primaryNodeId, fileKey, fileSize, opts}) => (await this._downloadFile({swarmName, primaryNodeId, fileKey, fileSize, opts}));
+    subscribeToRemoteFeed = (feedId) => (this._subscribeToRemoteFeed(feedId));
 
     /*****************************************************************************
     IMPLEMENTATION
@@ -212,6 +218,10 @@ class Daemon {
     _writeConfigFile = async (config) => {
         await writeJsonFile(this._configDir + '/config.json', config);
     }
+    _subscribeToRemoteFeed = feedId => {
+        console.log('Subscribe-to-remote-feed not yet implemented');
+        return {};
+    }
 }
 
 const readJsonFile = async (path) => {
@@ -250,16 +260,23 @@ const _loadKeypair = (configDir) => {
         publicKey: fs.readFileSync(publicKeyPath, {encoding: 'utf-8'}),
         privateKey: fs.readFileSync(privateKeyPath, {encoding: 'utf-8'}),
     }
-    if (!testKeyPair(keyPair)) {
-        throw new Error('Problem testing public/private keys.')
-    }
+    testKeyPair(keyPair);
     return keyPair;
 }
 
 const testKeyPair = (keyPair) => {
     const signature = getSignature({test: 1}, keyPair);
-    const verify0 = verifySignature({test: 1}, signature, keyPair.publicKey);
-    return verify0;
+    if (!verifySignature({test: 1}, signature, keyPair.publicKey)) {
+        throw new Error('Problem testing public/private keys. Error verifying signature.');
+    }
+    if (hexToPublicKey(publicKeyToHex(keyPair.publicKey)) !== keyPair.publicKey) {
+        console.warn(hexToPublicKey(publicKeyToHex(keyPair.publicKey)));
+        console.warn(keyPair.publicKey);
+        throw new Error('Problem testing public/private keys. Error converting public key to/from hex.');
+    }
+    if (hexToPrivateKey(privateKeyToHex(keyPair.privateKey)) !== keyPair.privateKey) {
+        throw new Error('Problem testing public/private keys. Error converting private key to/from hex.');
+    }
 }
 
 export default Daemon;

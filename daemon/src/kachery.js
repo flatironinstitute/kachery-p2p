@@ -1,10 +1,22 @@
 import { exec } from 'child_process'
+import fs from 'fs';
 
 // const _getTemporaryDirectory = () => {
 //     const ret = process.env['KACHERY_STORAGE_DIR'] + '/tmp';
 //     mkdirIfNeeded(ret);
 //     return ret;
 // }
+
+export const kacheryStorageDir = () => {
+    const ret = process.env['KACHERY_STORAGE_DIR'];
+    if (!ret) {
+        throw Error('You must set the KACHERY_STORAGE_DIR environment variable.');
+    }
+    if (!fs.existsSync(ret)) {
+        throw Error(`Kachery storage directory does not exist: ${ret}`);
+    }
+    return ret;
+}
 
 export const kacheryStoreWithHardLink = async (path) => {
     try {
@@ -65,18 +77,18 @@ const executeAndGetStdout = async (command) => {
     });
 }
 
-function mkdirIfNeeded(path) {
-    if (!fs.existsSync(path)) {
-        try {
-            fs.mkdirSync(path);
-        }
-        catch(err) {
-            if (!fs.existsSync(path)) {
-                fs.mkdirSync(path);
-            }
-        }
-    }
-}
+// const mkdirIfNeeded = (path) => {
+//     if (!fs.existsSync(path)) {
+//         try {
+//             fs.mkdirSync(path);
+//         }
+//         catch(err) {
+//             if (!fs.existsSync(path)) {
+//                 fs.mkdirSync(path);
+//             }
+//         }
+//     }
+// }
 
 export const getLocalFileInfo = async ({fileKey}) => {
     const kacheryPath = kacheryPathFromFileKey(fileKey);

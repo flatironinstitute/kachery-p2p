@@ -200,7 +200,7 @@ class HPeerConnection {
         if (!msg.signature) return false;
         let peerPublicKey;
         try {
-            peerPublicKey = hexToPublicKey(Buffer.from(this._peerId, 'hex'));
+            peerPublicKey = hexToPublicKey(this._peerId, 'hex');
         }
         catch(err) {
             console.warn(err);

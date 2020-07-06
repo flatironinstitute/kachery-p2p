@@ -5,8 +5,18 @@ import fs from 'fs';
 import yargs from 'yargs';
 import Daemon from './Daemon.js';
 import ApiServer from './ApiServer.js';
+import { createKeyPair, publicKeyToHex, privateKeyToHex } from './crypto_util.js';
 
 function main() {
+  // for (let i=0; i<10; i++) {
+  //   const keyPair = createKeyPair();
+  //   console.info(publicKeyToHex(keyPair.publicKey));
+  // }
+  // for (let i=0; i<10; i++) {
+  //   const keyPair = createKeyPair();
+  //   console.info(privateKeyToHex(keyPair.privateKey));
+  // }
+  // return;
   const argv = yargs
     .scriptName('kachery-p2p-daemon')
     .command({

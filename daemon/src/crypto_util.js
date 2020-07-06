@@ -1,5 +1,8 @@
 import crypto from 'crypto';
 
+const ed25519PubKeyPrefix = "302a300506032b6570032100";
+const ed25519PrivateKeyPrefix = "302e020100300506032b657004220420";
+
 // safe
 export const getSignature = (obj, keyPair) => {
     try {
@@ -23,13 +26,54 @@ export const verifySignature = (obj, signature, publicKey) => {
     }
 }
 
+// const sha1sum = (txt) => {
+//     var shasum = crypto.createHash('sha1')
+//     shasum.update(txt)
+//     return shasum.digest('hex')
+// }
+
 export const publicKeyToHex = (publicKey) => {
-    const x = publicKey.split('\n')[1];
-    return Buffer.from(x, 'base64').toString('hex');
+    const x = publicKey.split('\n');
+    if (x[0] !== '-----BEGIN PUBLIC KEY-----') {
+        throw Error('Problem in public key format.');
+    }
+    if (x[2] !== '-----END PUBLIC KEY-----') {
+        throw Error('Problem in public key format.');
+    }
+    const ret = Buffer.from(x[1], 'base64').toString('hex');
+    if (!ret.startsWith(ed25519PubKeyPrefix)) {
+        throw Error('Problem in public key format.');
+    }
+    return ret.slice(ed25519PubKeyPrefix.length);
+}
+
+export const privateKeyToHex = (privateKey) => {
+    const x = privateKey.split('\n');
+    if (x[0] !== '-----BEGIN PRIVATE KEY-----') {
+        throw Error('Problem in private key format.');
+    }
+    if (x[2] !== '-----END PRIVATE KEY-----') {
+        throw Error('Problem in private key format.');
+    }
+    const ret = Buffer.from(x[1], 'base64').toString('hex');
+    if (!ret.startsWith(ed25519PrivateKeyPrefix)) {
+        throw Error('Problem in private key format.');
+    }
+    return ret.slice(ed25519PrivateKeyPrefix.length);
 }
 
 export const hexToPublicKey = (x) => {
-    return `-----BEGIN PUBLIC KEY-----\n${Buffer.from(x, 'hex').toString('base64')}\n-----END PUBLIC KEY-----`;
+    if (!x) {
+        throw Error('Error in hexToPublicKey. Input is empty.');
+    }
+    return `-----BEGIN PUBLIC KEY-----\n${Buffer.from(ed25519PubKeyPrefix + x, 'hex').toString('base64')}\n-----END PUBLIC KEY-----\n`;
+}
+
+export const hexToPrivateKey = (x) => {
+    if (!x) {
+        throw Error('Error in hexToPrivateKey. Input is empty.');
+    }
+    return `-----BEGIN PRIVATE KEY-----\n${Buffer.from(ed25519PrivateKeyPrefix + x, 'hex').toString('base64')}\n-----END PRIVATE KEY-----\n`;
 }
 
 export const createKeyPair = () => {

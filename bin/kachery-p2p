@@ -65,8 +65,9 @@ def cat_file(path):
     
 
 @click.command(help="Start the daemon.")
-def start_daemon():
-    kp.start_daemon()
+@click.option('--method', default='npx', help='Method for starting daemon: npx (default), dev')
+def start_daemon(method):
+    kp.start_daemon(method=method)
 
 @click.command(help="Stop the daemon.")
 def stop_daemon():

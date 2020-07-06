@@ -75,6 +75,57 @@ export default class ApiServer {
                 res.status(500).send('Error downloading file.');
             }
         });
+        this._app.post('/feed/createFeed', async (req, res) => {
+            try {
+                await this._feedApiCreateFeed(req, res)
+            }
+            catch(err) {
+                res.status(500).send('Error creating feed.');
+            }
+        });
+        this._app.post('/feed/getFeedId', async (req, res) => {
+            try {
+                await this._feedApiGetFeedId(req, res)
+            }
+            catch(err) {
+                res.status(500).send('Error getting feed id.');
+            }
+        });
+        this._app.post('/feed/appendMessages', async (req, res) => {
+            try {
+                await this._feedApiAppendMessages(req, res)
+            }
+            catch(err) {
+                console.warn(err);
+                res.status(500).send('Error appending messages.');
+            }
+        });
+        this._app.post('/feed/getMessages', async (req, res) => {
+            try {
+                await this._feedApiGetMessages(req, res)
+            }
+            catch(err) {
+                res.status(500).send('Error getting messages.');
+            }
+        });
+        this._app.post('/feed/getNumMessages', async (req, res) => {
+            try {
+                await this._feedApiGetNumMessages(req, res)
+            }
+            catch(err) {
+                console.error(err);
+                res.status(500).send('Error getting num. messages.');
+            }
+        });
+        this._app.post('/feed/getInfo', async (req, res) => {
+            try {
+                await this._feedApiGetInfo(req, res)
+            }
+            catch(err) {
+                console.error(err);
+                res.status(500).send('Error getting info.');
+            }
+        });
     }
     async _apiProbe(req, res) {
         res.json({ success: true });
@@ -118,6 +169,54 @@ export default class ApiServer {
         const {stream, cancel} = await this._daemon.downloadFile({primaryNodeId: reqData.primaryNodeId, swarmName: reqData.swarmName, fileKey: reqData.fileKey, fileSize: reqData.fileSize, opts: reqData.opts || {}});
         // todo: cancel on connection closed
         stream.pipe(res);
+    }
+    async _feedApiCreateFeed(req, res) {
+        const reqData = req.body;
+        const feedName = reqData.feedName;
+        const feedId = await this._daemon.feedManager().createFeed({feedName});
+        res.json({ success: true, feedId });
+    }
+    async _feedApiGetFeedId(req, res) {
+        const reqData = req.body;
+        const feedName = reqData.feedName;
+        const feedId = await this._daemon.feedManager().getFeedId({feedName});
+        if (!feedId) {
+            res.json({ success: false });
+            return;
+        }
+        res.json({ success: true, feedId });
+    }
+    async _feedApiAppendMessages(req, res) {
+        const reqData = req.body;
+        const {
+            feedId, subfeedName, messages
+        } = reqData;
+        await this._daemon.feedManager().appendMessages({feedId, subfeedName, messages});
+        res.json({ success: true })
+    }
+    async _feedApiGetMessages(req, res) {
+        const reqData = req.body;
+        const {
+            feedId, subfeedName, position, maxNumMessages, waitMsec
+        } = reqData;
+        const messages = await this._daemon.feedManager().getMessages({feedId, subfeedName, position, maxNumMessages, waitMsec});
+        res.json({ success: true, messages });
+    }
+    async _feedApiGetNumMessages(req, res) {
+        const reqData = req.body;
+        const {
+            feedId, subfeedName
+        } = reqData;
+        const numMessages = await this._daemon.feedManager().getNumMessages({feedId, subfeedName});
+        res.json({ success: true, numMessages });
+    }
+    async _feedApiGetInfo(req, res) {
+        const reqData = req.body;
+        const {
+            feedId, subfeedName
+        } = reqData;
+        const info = await this._daemon.feedManager().getInfo({feedId, subfeedName});
+        res.json({ success: true, info });
     }
     async _errorResponse(req, res, code, errstr) {
         console.info(`Responding with error: ${code} ${errstr}`);
