@@ -83,6 +83,7 @@ class _Feed:
         ))
         if not x['success']:
             raise Exception('Unable to append messages.')
+    # def submit_message(self, message)
     def get_subfeed(self, subfeed_name):
         if self._subfeed_name is not None:
             raise Exception('Cannot load subfeed of a subfeed.')
