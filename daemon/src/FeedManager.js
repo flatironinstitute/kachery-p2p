@@ -22,6 +22,7 @@ class FeedManager {
         };
         config['feedIdsByName'][feedName] = feedId;
         await this._saveFeedsConfig(config);
+        await _createFeedDirectoryIfNeeded(feedId);
         return feedId;
     }
     async getFeedId({ feedName }) {
@@ -263,10 +264,10 @@ class Subfeed {
                 console.warn(body);
                 console.warn(signature);
                 console.warn(this._publicKey);
-                throw Error(`Error verifying signature when appending signed message for: ${this._feedId} ${this._subfeedName}`);
+                throw Error(`Error verifying signature when appending signed message for: ${this._feedId} ${this._subfeedName} ${signature}`);
             }
             if ((body.previousSignature || null) !== (previousSignature || null)) {
-                throw Error(`Error in previousSignature when appending signed message for: ${this._feedId} ${this._subfeedName}`);
+                throw Error(`Error in previousSignature when appending signed message for: ${this._feedId} ${this._subfeedName} ${body.previousSignature} ${previousSignature}`);
             }
             this._signedMessages.push(signedMessage);
             textLinesToAppend.push(JSON.stringify(signedMessage));

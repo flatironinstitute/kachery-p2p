@@ -123,7 +123,10 @@ def load_feed(feed_name_or_path, create=False):
             feedName=feed_name
         ))
         if not x['success']:
-            return create_feed(feed_name)
+            if create:
+                return create_feed(feed_name)
+            else:
+                raise Exception('Unable to load feed.')
         feed_id = x['feedId']
         return load_feed(f'feed://{feed_id}')
 
