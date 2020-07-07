@@ -168,10 +168,10 @@ class Subfeed {
                     console.warn(msg.body);
                     console.warn(msg.signedMessage);
                     console.warn(this._publicKey);
-                    throw Error(`Unable to verify signature of message in feed: ${this._feedPath}`)
+                    throw Error(`Unable to verify signature of message in feed: ${this._feedPath} ${msg.signature}`)
                 }
                 if (previousSignature !== (msg.body.previousSignature || null)) {
-                    throw Error(`Inconsistent previousSignature of message in feed: ${this._feedPath}`);
+                    throw Error(`Inconsistent previousSignature of message in feed: ${this._feedPath} ${previousSignature} ${msg.body.previousSignature}`);
                 }
                 previousSignature = msg.signature;
             }
