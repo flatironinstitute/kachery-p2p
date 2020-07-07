@@ -46,7 +46,12 @@ class Daemon {
     findFile = ({fileKey, timeoutMsec}) => (this._findFile({fileKey, timeoutMsec}));
     // returns {stream, cancel}
     downloadFile = async ({swarmName, primaryNodeId, fileKey, fileSize, opts}) => (await this._downloadFile({swarmName, primaryNodeId, fileKey, fileSize, opts}));
-    subscribeToRemoteFeed = (feedId) => (this._subscribeToRemoteFeed(feedId));
+    // Find a live feed
+    // returns an object with:
+    //   onFound()
+    //   onFinished()
+    //   cancel()
+    findLiveFeed = ({feedId, subfeedName}) => (this._findLiveFeed({feedId, subfeedName}));
 
     /*****************************************************************************
     IMPLEMENTATION
@@ -73,7 +78,7 @@ class Daemon {
             if (this._verbose >= 0) {
                 console.info(`Joining channel: ${channelName}`);
             }
-            const x = new LookupSwarmConnection({keyPair: this._keyPair, nodeId: this._nodeId, channelName, fileTransferSwarmName: this._nodeId, verbose: this._verbose});
+            const x = new LookupSwarmConnection({keyPair: this._keyPair, nodeId: this._nodeId, channelName, fileTransferSwarmName: this._nodeId, verbose: this._verbose, feedManager: this._feedManager});
             await x.join();
             this._lookupSwarmConnections[channelName] = x;
             if (!opts._skipUpdateConfig) {
@@ -110,6 +115,14 @@ class Daemon {
     ///////////////////////////xxxxxxxxxxxxxxxxxxxxxxxxxx
 
     _findFile = ({fileKey, timeoutMsec}) => {
+        return this._findFileOrLiveFeed({fileKey, timeoutMsec});
+    }
+
+    _findLiveFeed = ({feedId, timeoutMsec}) => {
+        return this._findFileOrLiveFeed({fileKey: {type: 'liveFeed', feedId}, timeoutMsec});
+    }
+
+    _findFileOrLiveFeed = ({fileKey, timeoutMsec}) => {
         const findOutputs = [];
         const foundCallbacks = [];
         const finishedCallbacks = [];
@@ -128,12 +141,15 @@ class Daemon {
             cancel: handleCancel
         };
         if (this._verbose >= 1) {
-            console.info(`findFile: ${JSON.stringify(fileKey)}`);
+            if (fileKey.type === 'liveFeed')
+                console.info(`find live feed: ${JSON.stringify(fileKey)}`);
+            else
+                console.info(`find file: ${JSON.stringify(fileKey)}`);
         }
         const channelNames = Object.keys(this._lookupSwarmConnections);
         channelNames.forEach(channelName => {
             const lookupSwarmConnection = this._lookupSwarmConnections[channelName];
-            const x = lookupSwarmConnection.findFile({fileKey, timeoutMsec});
+            const x = lookupSwarmConnection.findFileOrLiveFeed({fileKey, timeoutMsec});
             findOutputs.push(x);
             x.onFound(result => {
                 if (isFinished) return;
@@ -164,6 +180,16 @@ class Daemon {
         const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
         return await swarmConnection.downloadFile({primaryNodeId, fileKey, fileSize, opts});
     }
+    _getLiveFeedSignedMessages = async ({primaryNodeId, swarmName, feedId, subfeedName, position, waitMsec, opts}) => {
+        if (this._verbose >= 1) {
+            console.info(`getLiveFeedSignedMessages: ${primaryNodeId} ${swarmName} ${feedId} ${subfeedName} ${position}`);
+        }
+        if (!(swarmName in this._secondaryFileTransferSwarmConnections)) {
+            await this._joinSecondaryFileTransferSwarm({swarmName, primaryNodeId});
+        }
+        const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
+        return await swarmConnection.getLiveFeedSignedMessages({primaryNodeId, feedId, subfeedName, position, waitMsec, opts});
+    }
     _joinSecondaryFileTransferSwarm = async ({swarmName, primaryNodeId}) => {
         if (swarmName in this._secondaryFileTransferSwarmConnections) {
             throw Error(`Cannot join file transfer swarm. Already joined: ${swarmName}`);
@@ -188,7 +214,7 @@ class Daemon {
         return state;
     }
     async _start() {
-        this._primaryFileTransferSwarmConnection = new PrimaryFileTransferSwarmConnection({keyPair: this._keyPair, nodeId: this._nodeId, swarmName: this._nodeId, verbose: this._verbose});
+        this._primaryFileTransferSwarmConnection = new PrimaryFileTransferSwarmConnection({keyPair: this._keyPair, nodeId: this._nodeId, swarmName: this._nodeId, verbose: this._verbose, feedManager: this._feedManager});
         await this._primaryFileTransferSwarmConnection.join();
         const config = await this._readConfigFile();
         const channels = config['channels'] || [];
@@ -217,10 +243,6 @@ class Daemon {
     }
     _writeConfigFile = async (config) => {
         await writeJsonFile(this._configDir + '/config.json', config);
-    }
-    _subscribeToRemoteFeed = feedId => {
-        console.log('Subscribe-to-remote-feed not yet implemented');
-        return {};
     }
 }
 

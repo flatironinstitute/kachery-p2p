@@ -215,7 +215,7 @@ export default class ApiServer {
         const {
             feedId, subfeedName
         } = reqData;
-        const info = await this._daemon.feedManager().getInfo({feedId, subfeedName});
+        const info = await this._daemon.feedManager().getSubfeedInfo({feedId, subfeedName});
         res.json({ success: true, info });
     }
     async _errorResponse(req, res, code, errstr) {

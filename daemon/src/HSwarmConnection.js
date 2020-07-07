@@ -5,7 +5,7 @@ import HPeerConnection from './HPeerConnection.js';
 import { randomString, sleepMsec } from './util.js';
 import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from './crypto_util.js';
 
-const PROTOCOL_VERSION = 'kachery-p2p-daemon-0.2.2'
+const PROTOCOL_VERSION = 'kachery-p2p-daemon-0.2.3'
 
 class HSwarmConnection {
     constructor({keyPair, nodeId, swarmName, verbose}) {
@@ -43,12 +43,19 @@ class HSwarmConnection {
                     this._requestIdsHandled[requestId] = true;
                     this.sendMessageToNode(fromNodeId, {type: 'requestToNodeReceived', requestId});
                     this._onRequestCallbacks.forEach(cb => {
-                        cb(fromNodeId, msg.requestBody, responseBody => {
-                            this.sendMessageToNode(fromNodeId, {type: 'requestToNodeResponse', requestId, responseBody});
-                        }, errorString => {
-                            this.sendMessageToNode(fromNodeId, {type: 'requestToNodeError', requestId, errorString})
-                        }, () => {
-                            this.sendMessageToNode(fromNodeId, {type: 'requestToNodeFinished', requestId});
+                        cb({
+                            fromNodeId,
+                            requestId,
+                            requestBody: msg.requestBody,
+                            onResponse: responseBody => {
+                                this.sendMessageToNode(fromNodeId, {type: 'requestToNodeResponse', requestId, responseBody});
+                            },
+                            onError: errorString => {
+                                this.sendMessageToNode(fromNodeId, {type: 'requestToNodeError', requestId, errorString})
+                            },
+                            onFinished: () => {
+                                this.sendMessageToNode(fromNodeId, {type: 'requestToNodeFinished', requestId});
+                            }
                         })
                     })
                 }
@@ -391,6 +398,7 @@ class HSwarmConnection {
             }
         });
         return {
+            requestId,
             onResponse: cb => onResponseCallbacks.push(cb),
             onError: cb => onErrorCallbacks.push(cb),
             onFinished: cb => onFinishedCallbacks.push(cb),

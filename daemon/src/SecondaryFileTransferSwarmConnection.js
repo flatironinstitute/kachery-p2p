@@ -141,6 +141,37 @@ class SecondaryFileTransferSwarmConnection {
             cancel: _handleCancel
         }
     }
+    getLiveFeedSignedMessages = async ({primaryNodeId, feedId, subfeedName, position, waitMsec, opts}) => {
+        return new Promise((resolve, reject) => {
+            const requestBody = {
+                type: 'getLiveFeedSignedMessages',
+                feedId,
+                subfeedName,
+                position,
+                waitMsec
+            };
+            let finished = false;
+            const signedMessages = []
+            const req = this._swarmConnection.makeRequestToNode(primaryNodeId, requestBody, {timeout: 10000});
+            req.onResponse(responseBody => {
+                if (finished) return;
+                for (let signedMessage of (responseBody.signedMessages || [])) {
+                    signedMessages.push(signedMessage);
+                }
+            });
+            req.onError(errorString => {
+                if (finished) return;
+                finished = true;
+                reject(Error(errorString));
+                return;
+            })
+            req.onFinished(() => {
+                if (finished) return;
+                finished = true;
+                resolve(signedMessages);
+            });
+        });
+    }
     async _start() {
         while (true) {
             //maintenance goes here

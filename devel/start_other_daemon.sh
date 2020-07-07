@@ -6,4 +6,4 @@ export KACHERY_STORAGE_DIR=$DIRECTORY/kachery-storage-other
 export KACHERY_P2P_CONFIG_DIR=$KACHERY_STORAGE_DIR
 mkdir -p $KACHERY_STORAGE_DIR
 
-$DIRECTORY/../daemon/bin/kachery-p2p-daemon start --channel test1 "$@"
+kachery-p2p-start-daemon --channel test1 --method dev "$@"

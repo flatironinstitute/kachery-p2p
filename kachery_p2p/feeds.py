@@ -1,3 +1,4 @@
+import time
 from .core import _api_port
 from .core import _http_post_json
 
@@ -24,22 +25,54 @@ class _Feed:
         if not x['success']:
             return None
         return x['numMessages']
-    def get_messages(self, *, max_num_messages=None, wait_msec=None):
-        position = self._position
-        port = _api_port()
-        url = f'http://localhost:{port}/feed/getMessages'
-        x = _http_post_json(url, dict(
-            feedId=self._feed_id,
-            subfeedName=self._subfeed_name,
-            position=position,
-            maxNumMessages=max_num_messages,
-            waitMsec=wait_msec
-        ))
-        if not x['success']:
-            return None
-        messages = x['messages']
-        self._position = position + len(messages)
-        return messages
+    def get_messages(self, *, max_num_messages=None, wait_msec=None, live=False):
+
+        class custom_iterator:
+            def __init__(self, parent):
+                self._parent = parent
+                self._messages = []
+                self._relative_position = 0
+                self._load_messages()
+            
+            def _load_messages(self):
+                wait_msec_0 = wait_msec
+                if (wait_msec_0 is None) and (live):
+                    wait_msec_0 = 5000
+                port = _api_port()
+                url = f'http://localhost:{port}/feed/getMessages'
+                x = _http_post_json(url, dict(
+                    feedId=self._parent._feed_id,
+                    subfeedName=self._parent._subfeed_name,
+                    position=self._parent._position,
+                    maxNumMessages=max_num_messages,
+                    waitMsec=wait_msec_0
+                ))
+                if not x['success']:
+                    return None
+                for msg in x['messages']:
+                    self._messages.append(msg)
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                if live:
+                    while self._relative_position >= len(self._messages):
+                        self._load_messages()
+                        if self._relative_position >= len(self._messages):
+                            time.sleep(0.05)
+                else:
+                    if self._relative_position >= len(self._messages):
+                        raise StopIteration
+                self._parent._position = self._parent._position + 1
+                self._relative_position = self._relative_position + 1
+                return self._messages[self._relative_position - 1]
+                
+        return custom_iterator(parent=self)
+
+    def append_message(self, message):
+        self.append_messages([message])
+
     def append_messages(self, messages):
         port = _api_port()
         url = f'http://localhost:{port}/feed/appendMessages'

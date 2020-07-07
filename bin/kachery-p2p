@@ -65,9 +65,11 @@ def cat_file(path):
     
 
 @click.command(help="Start the daemon.")
+@click.option('--channel', multiple=True, help='Channel to join')
+@click.option('--verbose', default=0, help='Verbosity level')
 @click.option('--method', default='npx', help='Method for starting daemon: npx (default), dev')
-def start_daemon(method):
-    kp.start_daemon(method=method)
+def start_daemon(method, channel, verbose):
+    kp.start_daemon(method=method, channels=channel, verbose=verbose)
 
 @click.command(help="Stop the daemon.")
 def stop_daemon():

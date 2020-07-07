@@ -10,12 +10,12 @@ class FeedManager {
         this._storageDir = kacheryStorageDir() + '/feeds';
         this._feedsConfig = null;
         this._subfeeds = {};
+        this._remoteFeedManager = new RemoteFeedManager(this._daemon);
     }
     async createFeed({ feedName }) {
         const config = await this._loadFeedsConfig();
         const {publicKey, privateKey} = createKeyPair();
         const feedId = publicKeyToHex(publicKey);
-        await _createFeedDirectory(feedId);
         config['feeds'][feedId] = {
             publicKey: publicKeyToHex(publicKey),
             privateKey: privateKeyToHex(privateKey)
@@ -34,6 +34,11 @@ class FeedManager {
         }
         return feedId;
     }
+    async hasWriteableFeed({ feedId, subfeedName}) {
+        const privateKey = this._getPrivateKeyForFeed(feedId);
+        if (!privateKey) return;
+        return fs.existsSync(_feedDirectory(feedId));
+    }
     async appendMessages({ feedId, subfeedName, messages}) {
         const subfeed = await this._loadSubfeed(feedId, subfeedName);
         if (!subfeed.isWriteable()) {
@@ -41,9 +46,17 @@ class FeedManager {
         }
         await subfeed.appendMessages(messages);
     }
-    async getMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
+    async appendSignedMessages({ feedId, subfeedName, signedMessages}) {
         const subfeed = await this._loadSubfeed(feedId, subfeedName);
-        return await subfeed.getMessages({ position, maxNumMessages, waitMsec });
+        await subfeed.appendSignedMessages(signedMessages);
+    }
+    async getMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
+        const signedMessages = await this.getSignedMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec})
+        return signedMessages.map(sm => (sm.body.message));
+    }
+    async getSignedMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
+        const subfeed = await this._loadSubfeed(feedId, subfeedName);
+        return await subfeed.getSignedMessages({ position, maxNumMessages, waitMsec });
     }
     async getNumMessages({ feedId, subfeedName }) {
         const subfeed = await this._loadSubfeed(feedId, subfeedName);
@@ -52,7 +65,7 @@ class FeedManager {
         }
         return subfeed.getNumMessages();
     }
-    async getInfo({ feedId, subfeedName }) {
+    async getSubfeedInfo({ feedId, subfeedName }) {
         const subfeed = await this._loadSubfeed(feedId, subfeedName);
         return {
             numMessages: subfeed.getNumMessages(),
@@ -75,21 +88,19 @@ class FeedManager {
         await writeJsonFile(configDir + '/feeds.json', this._feedsConfig);
     }
     async _getPrivateKeyForFeed(feedId) {
-        if (feedId in this._feedsConfig.feeds) {
-            return this._feedsConfig.feeds[feedId].privateKey || null;
+        const config = await this._loadFeedsConfig();
+        if (feedId in config.feeds) {
+            return config.feeds[feedId].privateKey || null;
         }
         else {
             return null;
         }
     }
     async _loadSubfeed(feedId, subfeedName) {
-        const privateKey = this._getPrivateKeyForFeed;
-        if (feedId in this._feedsConfig.feeds) {
-            privateKey = this._feedsConfig.feeds[feedId].privateKey || null;
-        }
+        const privateKey = await this._getPrivateKeyForFeed(feedId);
         const k = feedId + ':' + subfeedName;
         if (!this._subfeeds[k]) {
-            const sf = new Subfeed({ daemon: this._daemon, feedId, subfeedName, privateKey });
+            const sf = new Subfeed({ daemon: this._daemon, remoteFeedManager: this._remoteFeedManager, feedId, subfeedName, privateKey });
             await sf.initialize();
             this._subfeeds[k] = sf;
         }
@@ -97,20 +108,57 @@ class FeedManager {
     }
 }
 
+class RemoteFeedManager {
+    constructor(daemon) {
+        this._daemon = daemon;
+        this._liveFeedInfos = {};
+    }
+    async getSignedMessages({feedId, subfeedName, position, waitMsec}) {
+        const liveFeedInfo = await this._findLiveFeedInfo({feedId});
+        if (!liveFeedInfo) return;
+        const signedMessages = await this._daemon._getLiveFeedSignedMessages({
+            primaryNodeId: liveFeedInfo.primaryNodeId,
+            swarmName: liveFeedInfo.swarmName,
+            feedId,
+            subfeedName,
+            position,
+            waitMsec,
+            opts: {}
+        });
+        return signedMessages;
+    }
+    async _findLiveFeedInfo({feedId}) {
+        if (!(feedId in this._liveFeedInfos)) {
+            const asyncHelper = async () => {
+                const x = this._daemon.findLiveFeed({feedId});
+                x.onFound(result => {
+                   this._liveFeedInfos[feedId] = result; 
+                   x.cancel();
+                });
+                x.onFinished(() => {
+                })
+            }
+            await asyncHelper();
+        }
+        return this._liveFeedInfos[feedId] || null;
+    }
+}
+
 class Subfeed {
-    constructor({ daemon, feedId, subfeedName, privateKey }) {
+    constructor({ daemon, remoteFeedManager, feedId, subfeedName, privateKey }) {
         this._daemon = daemon;
         this._feedId = feedId;
         this._publicKey = hexToPublicKey(this._feedId);
         this._privateKey = privateKey;
         this._subfeedName = subfeedName;
         this._feedPath = _feedDirectory(feedId);
-        this._subfeedPath = this._feedPath + '/subfeeds/' + this._subfeeds;
+        this._subfeedPath = this._feedPath + '/subfeeds/' + (this._subfeedName || 'default');
         this._signedMessages = null;
-        this._remoteSubscription = null;
+        this._remoteFeedManager = remoteFeedManager;
+        this._updatingFromRemoteFeed = false;
     }
     async initialize() {
-        const existsLocally = fs.existsSync(this._feedDirectory(this._feedId));
+        const existsLocally = fs.existsSync(_feedDirectory(this._feedId));
         if (existsLocally) {
             const messages = await readMessagesFile(this._subfeedPath);
             let previousSignature = null;
@@ -130,7 +178,7 @@ class Subfeed {
         }
         else {
             this._signedMessages = [];
-            this._remoteSubscription = this._daemon.subscribeToRemoteFeed(this._feedId);
+            await this.getSignedMessages({position: 0, maxNumMessages: 10, waitMsec: 0});
         }
     }
     getNumMessages() {
@@ -139,28 +187,37 @@ class Subfeed {
     isWriteable() {
         return this._privateKey ? true : false;
     }
-    async getMessages({position, maxNumMessages, waitMsec=null}) {
-        const messages = [];
+    async getSignedMessages({position, maxNumMessages, waitMsec=null}) {
+        const signedMessages = [];
         if (position < this._signedMessages.length) {
             for (let i = position; i < this._signedMessages.length; i++) {
-                messages.push(this._signedMessages[i].body.message);
+                signedMessages.push(this._signedMessages[i]);
                 if (maxNumMessages) {
-                    if (messages.length >= maxNumMessages)
+                    if (signedMessages.length >= maxNumMessages)
                         break;  
                 }
             }
         }
         else if (position === this._signedMessages.length) {
-            if ((!this.isWriteable()) && (!this._remoteSubscription)) {
-                this._remoteSubscription = this._daemon.subscribeToRemoteFeed(this._feedId);
+            if (!this.isWriteable()) {
+                const remoteSignedMessages = await this._remoteFeedManager.getSignedMessages({
+                    feedId: this._feedId,
+                    subfeedName: this._subfeedName,
+                    position: this._signedMessages.length,
+                    waitMsec
+                });
+                if ((remoteSignedMessages) && (remoteSignedMessages.length > 0)) {
+                    this.appendSignedMessages(remoteSignedMessages);
+                    return this.getSignedMessages({position, maxNumMessages});
+                }
             }
-            if ((waitMsec) && (waitMsec > 0)) {
+            else if ((waitMsec) && (waitMsec > 0)) {
                 const timer = new Date();
                 while (true) {
-                    // todo: use callback strategy intead (call directly from appendMessages)
+                    // todo: use callback strategy intead (call directly from appendSignedMessages)
                     await sleepMsec(100);
                     if (position < this._signedMessages.length) {
-                        return this.getMessages({position, maxNumMessages});
+                        return this.getSignedMessages({position, maxNumMessages});
                     }
                     const elapsed = (new Date()) - timer;
                     if (elapsed > waitMsec) {
@@ -169,7 +226,7 @@ class Subfeed {
                 }
             }
         }
-        return messages;
+        return signedMessages;
     }
     async appendMessages(messages) {
         if (!this._privateKey) {
@@ -214,6 +271,7 @@ class Subfeed {
             this._signedMessages.push(signedMessage);
             textLinesToAppend.push(JSON.stringify(signedMessage));
         }
+        await _createFeedDirectoryIfNeeded(this._feedId);
         await fs.promises.appendFile(this._subfeedPath, textLinesToAppend.join('\n') + '\n', {encoding: 'utf8'});
     }
 }
@@ -247,13 +305,15 @@ const readMessagesFile = async (path) => {
     return messages;
 }
 
-const _createFeedDirectory = async (feedId) => {
+const _createFeedDirectoryIfNeeded = async (feedId) => {
     const path = _feedDirectory(feedId);
-    if (fs.existsSync(path)) {
-        throw Error(`Feed directory already exists: ${path}`);
+    if (!fs.existsSync(path)) {
+        await fs.promises.mkdir(path, {recursive: true});
     }
-    await fs.promises.mkdir(path, {recursive: true});
-    await fs.promises.mkdir(path + '/subfeeds');
+    if (!fs.existsSync(path + '/subfeeds')) {
+        await fs.promises.mkdir(path + '/subfeeds', {recursive: true});
+    }
+    
 }
 
 const _feedDirectory = (feedId) => {

@@ -7,15 +7,16 @@ import { isNumber } from 'util';
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
 class PrimaryFileTransferSwarmConnection {
-    constructor({keyPair, nodeId, swarmName, verbose}) {
+    constructor({keyPair, nodeId, swarmName, verbose, feedManager}) {
         this._keyPair = keyPair;
         this._nodeId = nodeId;
         this._verbose = verbose;
+        this._feedManager = feedManager;
         this._swarmName = swarmName;
         const swarmName0 = 'file-transfer:' + this._swarmName;
         this._swarmConnection = new HSwarmConnection({keyPair: this._keyPair, nodeId, swarmName: swarmName0, verbose});
         this._swarmConnection.onMessage((fromNodeId, msg) => {this._handleMessage(fromNodeId, msg)});
-        this._swarmConnection.onRequest((fromNodeId, requestBody, onResponse, onError, onFinished) => {this._handleRequest(fromNodeId, requestBody, onResponse, onError, onFinished)})
+        this._swarmConnection.onRequest(({fromNodeId, requestId, requestBody, onResponse, onError, onFinished}) => {this._handleRequest({fromNodeId, requestId, requestBody, onResponse, onError, onFinished})})
 
         this._start();
     }
@@ -30,7 +31,7 @@ class PrimaryFileTransferSwarmConnection {
     }
     _handleMessage = async (fromNodeId, msg) => {
     }
-    _handleRequest = async (fromNodeId, requestBody, onResponse, onError, onFinished) => {
+    _handleRequest = async ({fromNodeId, requestId, requestBody, onResponse, onError, onFinished}) => {
         if (requestBody.type === 'downloadFile') {
             const fileInfo = await getLocalFileInfo({fileKey: requestBody.fileKey});
             const startByte = requestBody.startByte;
@@ -63,6 +64,24 @@ class PrimaryFileTransferSwarmConnection {
             else {
                 onError('Unable to find file.');
             }
+        }
+        else if (requestBody.type === 'getLiveFeedSignedMessages') {
+            const {feedId, subfeedName, position, waitMsec} = requestBody;
+            let signedMessages;
+            try {
+                signedMessages = await this._feedManager.getSignedMessages({
+                    feedId, subfeedName, position, maxNumMessages: 10, waitMsec
+                });
+            }
+            catch(err) {
+                console.warn(err);
+                onError(`Error getting signed messages: ${err.message}`);
+                return;
+            }
+            onResponse({
+                signedMessages
+            });
+            onFinished();
         }
     }
     async _start() {

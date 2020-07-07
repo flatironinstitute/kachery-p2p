@@ -82,7 +82,7 @@ def _probe_daemon():
         return False
     return x.get('success')
 
-def start_daemon(method='npx'):
+def start_daemon(method='npx', channels=[], verbose=0):
     from kachery_p2p import __version__
 
     if _probe_daemon():
@@ -90,6 +90,11 @@ def start_daemon(method='npx'):
 
     api_port = _api_port()
     config_dir = os.getenv('KACHERY_P2P_CONFIG_DIR', f'{pathlib.Path.home()}/.kachery-p2p')
+
+    start_args = []
+    for ch in channels:
+        start_args.append(f'--channel {ch}')
+    start_args.append(f'--verbose {verbose}')
 
     if method == 'npx':
         try:
@@ -103,7 +108,7 @@ def start_daemon(method='npx'):
 
         export KACHERY_P2P_API_PORT="{api_port}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-        exec npx kachery-p2p-daemon@0.2 start
+        exec npx kachery-p2p-daemon@0.2 start {' '.join(start_args)}
         ''')
         ss.start()
         try:
@@ -120,7 +125,7 @@ def start_daemon(method='npx'):
 
         export KACHERY_P2P_API_PORT="{api_port}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-        {thisdir}/../daemon/src/cli.js start
+        {thisdir}/../daemon/src/cli.js start {' '.join(start_args)}
         ''')
         ss.start()
         try:

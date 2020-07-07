@@ -4,7 +4,7 @@ import { getLocalFileInfo } from './kachery.js';
 import HSwarmConnection from './HSwarmConnection.js';
 
 class LookupSwarmConnection {
-    constructor({keyPair, nodeId, channelName, fileTransferSwarmName, verbose}) {
+    constructor({keyPair, nodeId, channelName, fileTransferSwarmName, verbose, feedManager}) {
         this._keyPair = keyPair;
         this._nodeId = nodeId;
         this._channelName = channelName;
@@ -14,6 +14,7 @@ class LookupSwarmConnection {
         this._swarmConnection = new HSwarmConnection({keyPair: this._keyPair, nodeId, swarmName, verbose});
         this._swarmConnection.onMessage((fromNodeId, msg) => {this._handleMessage(fromNodeId, msg)});
         this._nodeIdsInSwarm = {[nodeId]: true};
+        this._feedManager = feedManager;
 
         this._start();
     }
@@ -36,18 +37,31 @@ class LookupSwarmConnection {
     _handleMessage = async (fromNodeId, msg) => {
         if (msg.type === 'seeking') {
             const fileKey = msg.fileKey;
-            const fileInfo = await getLocalFileInfo({fileKey});
-            if (fileInfo) {
-                if ('path' in fileInfo)
-                    delete fileInfo['path'];
-                // Question: do we want to send this only to the node seeking, or to all?
-                this._swarmConnection.broadcastMessage({
-                    type: 'providing',
-                    fileKey: fileKey,
-                    primaryNodeId: this._nodeId,
-                    swarmName: this._fileTransferSwarmName,
-                    fileInfo
-                });
+            if (fileKey.sha1) {
+                const fileInfo = await getLocalFileInfo({fileKey});
+                if (fileInfo) {
+                    if ('path' in fileInfo)
+                        delete fileInfo['path'];
+                    // Question: do we want to send this only to the node seeking, or to all?
+                    this._swarmConnection.broadcastMessage({
+                        type: 'providing',
+                        fileKey,
+                        primaryNodeId: this._nodeId,
+                        swarmName: this._fileTransferSwarmName,
+                        fileInfo
+                    });
+                }
+            }
+            else if (fileKey.feedId) {
+                if (this._feedManager.hasWriteableFeed({feedId: fileKey.feedId})) {
+                    // Question: do we want to send this only to the node seeking, or to all?
+                    this._swarmConnection.broadcastMessage({
+                        type: 'providing',
+                        fileKey,
+                        primaryNodeId: this._nodeId,
+                        swarmName: this._fileTransferSwarmName
+                    });
+                }
             }
         }
         else if (msg.type === 'joining') {
@@ -65,7 +79,7 @@ class LookupSwarmConnection {
             }
         }
     }
-    findFile = ({fileKey, timeoutMsec=4000}) => {
+    findFileOrLiveFeed = ({fileKey, timeoutMsec=4000}) => {
         const onFoundCallbacks = [];
         const onFinishedCallbacks = [];
         let isFinished = false;
@@ -120,7 +134,12 @@ const fileKeysMatch = (k1, k2) => {
     if (k1.sha1) {
         return k1.sha1 === k2.sha1;
     }
-    return false;
+    else if (k1.type === 'liveFeed') {
+        return ((k1.type === k2.type) && (k1.feedId === k2.feedId));
+    }
+    else {
+        return false;
+    }
 }
 
 export default LookupSwarmConnection;
