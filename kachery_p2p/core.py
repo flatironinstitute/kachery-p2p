@@ -148,7 +148,7 @@ def start_daemon(method='npx', channels=[], verbose=0):
 
         export KACHERY_P2P_API_PORT="{api_port}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-        exec npx kachery-p2p-daemon@0.2.4 start {' '.join(start_args)}
+        exec npx kachery-p2p-daemon@0.2.5 start {' '.join(start_args)}
         ''')
         ss.start()
         try:
