@@ -165,7 +165,7 @@ def start_daemon(method='npx', channels=[], verbose=0):
 
         export KACHERY_P2P_API_PORT="{api_port}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-        {thisdir}/../daemon/src/cli.js start {' '.join(start_args)}
+        node --experimental-modules {thisdir}/../daemon/src/cli.js start {' '.join(start_args)}
         ''')
         ss.start()
         try:
