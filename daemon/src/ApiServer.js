@@ -142,15 +142,6 @@ export default class ApiServer {
                 res.status(500).send('Error getting feed info.');
             }
         });
-        this._app.post('/feed/getSubfeedInfo', async (req, res) => {
-            try {
-                await this._feedApiGetSubfeedInfo(req, res)
-            }
-            catch(err) {
-                console.error(err);
-                res.status(500).send('Error getting subfeed info.');
-            }
-        });
         this._app.post('/feed/getAccessRules', async (req, res) => {
             try {
                 await this._feedApiGetAccessRules(req, res)
@@ -275,14 +266,6 @@ export default class ApiServer {
             feedId
         } = reqData;
         const info = await this._daemon.feedManager().getFeedInfo({feedId});
-        res.json({ success: true, info });
-    }
-    async _feedApiGetSubfeedInfo(req, res) {
-        const reqData = req.body;
-        const {
-            feedId, subfeedName
-        } = reqData;
-        const info = await this._daemon.feedManager().getSubfeedInfo({feedId, subfeedName});
         res.json({ success: true, info });
     }
     async _feedApiGetAccessRules(req, res) {

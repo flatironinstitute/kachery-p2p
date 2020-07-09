@@ -34,18 +34,9 @@ class Subfeed:
         self._is_writeable = feed._is_writeable
         self._subfeed_name = subfeed_name
         self._position = position
-        self._subfeed_info = None
         self._initialize()
     def _initialize(self):
-        port = _api_port()
-        url = f'http://localhost:{port}/feed/getSubfeedInfo'
-        x = _http_post_json(url, dict(
-            feedId=self._feed_id,
-            subfeedName=self._subfeed_name
-        ))
-        if not x['success']:
-            raise Exception('Unable to initialize subfeed.')
-        self._subfeed_info = x['info']
+        pass
     def get_uri(self):
         return f'feed://{self._feed_id}/{quote(self._subfeed_name)}'
     def get_position(self):
@@ -161,6 +152,8 @@ class Subfeed:
             raise Exception('Unable to submit messages.')
 
     def set_access_rules(self, rules):
+        if not self._is_writeable:
+            raise Exception('Cannot set access rules for non-writeable feed')
         port = _api_port()
         url = f'http://localhost:{port}/feed/setAccessRules'
         x = _http_post_json(url, dict(
@@ -172,6 +165,8 @@ class Subfeed:
             raise Exception('Unable to set access rules.')
     
     def get_access_rules(self):
+        if not self._is_writeable:
+            raise Exception('Cannot get access rules for non-writeable feed')
         port = _api_port()
         url = f'http://localhost:{port}/feed/getAccessRules'
         x = _http_post_json(url, dict(

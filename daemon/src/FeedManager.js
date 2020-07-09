@@ -3,19 +3,27 @@ import fs from 'fs';
 import { sleepMsec } from './util.js';
 import { kacheryStorageDir } from './kachery.js';
 import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSignature, hexToPublicKey, hexToPrivateKey, sha1sum } from './crypto_util.js'
+import { exception } from 'console';
 
 class FeedManager {
+    // Manages the local feeds and access to the remote feeds in the p2p network
+
     constructor(daemon) {
-        this._daemon = daemon;
-        this._storageDir = kacheryStorageDir() + '/feeds';
-        this._feedsConfig = null;
-        this._subfeeds = {};
-        this._remoteFeedManager = new RemoteFeedManager(this._daemon);
+        this._daemon = daemon; // The kachery-p2p daemon
+        this._storageDir = kacheryStorageDir() + '/feeds'; // Where we store the feed data (subdir of the kachery storage dir)
+        this._feedsConfig = null; // The config will be loaded from disk as need. Contains all the private keys for the feeds and the local name/ID associations.
+        this._subfeeds = {}; // The subfeed instances (Subfeed()) that have been loaded into memory
+        this._remoteFeedManager = new RemoteFeedManager(this._daemon); // Manages the interaction with feeds on remote nodes
     }
     async createFeed({ feedName }) {
-        const config = await this._loadFeedsConfig();
+        // Create a new writeable feed on this node and return the ID of the new feed
+
+        // Generate the crypto keypair. The publicKey determines the new feed ID
         const {publicKey, privateKey} = createKeyPair();
         const feedId = publicKeyToHex(publicKey);
+
+        // Load and modify the config (which contains the private keys and associates names to feed IDs)
+        const config = await this._loadFeedsConfig();
         config['feeds'][feedId] = {
             publicKey: publicKeyToHex(publicKey),
             privateKey: privateKeyToHex(privateKey)
@@ -23,53 +31,84 @@ class FeedManager {
         if (feedName)
             config['feedIdsByName'][feedName] = feedId;
         await this._saveFeedsConfig(config);
+
+        // Create the feed directory for the actual feed
         await _createFeedDirectoryIfNeeded(feedId);
+
+        // Return the feed ID
         return feedId;
     }
     async getFeedId({ feedName }) {
+        // Look up the feed ID for a particular feed name by consulting the config file
         const config = await this._loadFeedsConfig();
         const feedId = config['feedIdsByName'][feedName] || null;
         if (feedId) {
+            // Return null if we don't actually have the feed directory
             if (!fs.existsSync(_feedDirectory(feedId))) {
                 return null;
             }
         }
         return feedId;
     }
-    async hasWriteableFeed({ feedId, subfeedName}) {
+    async hasWriteableFeed({ feedId }) {
+        // Check whether this node has a writeable feed.
+        // We do this by ensuring that we have the associated private key and that the feed directory exists
         const privateKey = this._getPrivateKeyForFeed(feedId);
         if (!privateKey) return;
+        // Returns true if we have the writeable feed
         return fs.existsSync(_feedDirectory(feedId));
     }
     async appendMessages({ feedId, subfeedName, messages}) {
+        // Append messages to a subfeed (must be in a writeable feed on this node)
+
+        // Load the subfeed and make sure it is writeable
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
         if (!subfeed.isWriteable()) {
             throw Error(`Subfeed is not writeable: ${feedId} ${subfeedName}`);
         }
+
+        // Append the messages
         await subfeed.appendMessages(messages);
     }
     async submitMessages({ feedId, subfeedName, messages}) {
+        // Same as appendMessages, except if we don't have a writeable feed, we submit it to the p2p network
+        // and then, on success, it will append the messages on the node where the feed is writeable
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
         if (subfeed.isWriteable()) {
+            // If writeable, let's just append the messages
             await this.appendMessages({feedId, subfeedName, messages});
             return;
             // throw Error(`Cannot submit messages. Subfeed is writeable: ${feedId} ${subfeedName}`);
         }
+        // Submit the messages to the p2p network
         await this._remoteFeedManager.submitMessages({feedId, subfeedName, messages});
     }
     async appendSignedMessages({ feedId, subfeedName, signedMessages}) {
+        // Append signed messages to the local version of a feed.
+        // This feed does not need to be writeable on this node. If the signatures
+        // are correct, then we know that they are valid. These will typically come from a remote node.
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
         await subfeed.appendSignedMessages(signedMessages);
     }
     async getMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
+        // Load messages from a subfeed.
+        // If there are no messages available locally, and waitMsec > 0, then we will search
+        // for the messages on the p2p network
+
+        // Get the signed messages
         const signedMessages = await this.getSignedMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec})
+
+        // Return just the messages (not the signed messages)
         return signedMessages.map(sm => (sm.body.message));
     }
     async getSignedMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
+        // Same as getMessages() except we return the signed messages. This is also called by getMessages().
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
         return await subfeed.getSignedMessages({ position, maxNumMessages, waitMsec });
     }
     async getNumMessages({ feedId, subfeedName }) {
+        // Get the total number of messages in the local feed only
+        // TODO: we may want to optionally do a p2p search, and retrieve the number of messages without retrieving the actual messages
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
         if (!subfeed) {
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedName}`);
@@ -77,6 +116,10 @@ class FeedManager {
         return subfeed.getNumMessages();
     }
     async getFeedInfo({ feedId }) {
+        // Get the p2p information about the feed
+        // If this is a local and writeable, just return {isWriteable: true}
+        // Otherwise we search the p2p network for the feed and if it is found we return {isWriteable: false}
+        // Otherwise, if not found, throws an exception
         const privateKey = await this._getPrivateKeyForFeed(feedId);
         if (privateKey) {
             return {
@@ -84,41 +127,59 @@ class FeedManager {
             }
         }
         else {
+            // Get the liveFeedInfo. If not found, this will throw an error.
             const liveFeedInfo = await this._remoteFeedManager.findLiveFeedInfo({feedId});
-            if (!liveFeedInfo) {
-                throw Error(`Unable to get info for feed: ${feedId}`);
-            }
             return {
-                isWriteable: false
+                isWriteable: false,
+                liveFeedInfo
             }
         }
     }
-    async getSubfeedInfo({ feedId, subfeedName }) {
-        const subfeed = await this._loadSubfeed({feedId, subfeedName});
-        return {
-            numMessages: subfeed.getNumMessages(),
-            writeable: subfeed.isWriteable()
-        };
-    }
     async getAccessRules({ feedId, subfeedName }) {
+        // Get the access rules for a local writeable subfeed
+        // These determine which remote nodes have permission to submit messages
+        // to this subfeed.
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
+        if (!subfeed.isWriteable) {
+            throw Error('Cannot get access rules for subfeed that is not writeable')
+        }
         return await subfeed.getAccessRules();
     }
     async setAccessRules({ feedId, subfeedName, rules }) {
+        // Set the access rules for a local writeable subfeed
+        // These determine which remote nodes have permission to submit messages to this subfeed
+        // to this subfeed.
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
+        if (!subfeed.isWriteable) {
+            throw Error('Cannot set access rules for subfeed that is not writeable')
+        }
         await subfeed.setAccessRules(rules);
     }
     async _submitMessagesToLiveFeedFromRemoteNode({fromNodeId, feedId, subfeedName, messages}) {
-        if (!(await this.hasWriteableFeed({ feedId, subfeedName }))) {
-            throw Error(`Does not have writeable feed: ${feedId} ${subfeedName}`);
+        // Some messages have been submitted from a remote node
+        // Determine whether they can been written, and if so, append them
+
+        // Check whether we have that writeable feed
+        if (!(await this.hasWriteableFeed({ feedId }))) {
+            throw Error(`Does not have writeable feed: ${feedId}`);
         }
+
+        // Load the subfeed
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
+
+        // Check whether the sending node has write access to the subfeed
         if (!(await subfeed.remoteNodeHasWriteAccess(fromNodeId))) {
             throw Error(`Write access not allowed for node: ${feedId} ${subfeedName} ${fromNodeId}`);
         }
+
+        // If so, append the messages. We also provide the sending node ID in the meta data for the messages
         await subfeed.appendMessages(messages, {metaData: {submittedByNodeId: fromNodeId}});
     }
     async _loadFeedsConfig() {
+        // Load the configuration for all feeds, if not already loaded
+        // This contains all the private keys for the feeds as well as the local name/ID associations for feed
+
+        // Only load if not already in memory
         if (!this._feedsConfig) {
             const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
             const x = await readJsonFile(configDir + '/feeds.json', {});
@@ -129,11 +190,15 @@ class FeedManager {
         return this._feedsConfig;
     }
     async _saveFeedsConfig(config) {
+        // Store the configuration for all feeds
+        // This contains all the private keys for the feeds as well as the local name/ID associations for feed
+
         this._feedsConfig = config;
         const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
         await writeJsonFile(configDir + '/feeds.json', this._feedsConfig);
     }
     async _getPrivateKeyForFeed(feedId) {
+        // Consult the config to get the private key associated with a particular feed ID
         const config = await this._loadFeedsConfig();
         if (feedId in config.feeds) {
             return config.feeds[feedId].privateKey || null;
@@ -143,25 +208,47 @@ class FeedManager {
         }
     }
     async _loadSubfeed({feedId, subfeedName}) {
-        const privateKey = await this._getPrivateKeyForFeed(feedId);
+        // Load a subfeed (Subfeed() instance
+
+        // If we have already loaded it into memory, the do not reload
         const k = feedId + ':' + subfeedName;
         if (!this._subfeeds[k]) {
+            // Load private key if this is writeable (otherwise, privateKey will be null)
+            const privateKey = await this._getPrivateKeyForFeed(feedId);
+
+            // Instantiate and initialize the subfeed
             const sf = new Subfeed({ daemon: this._daemon, remoteFeedManager: this._remoteFeedManager, feedId, subfeedName, privateKey });
             await sf.initialize();
+
+            // Store in memory for future access
             this._subfeeds[k] = sf;
         }
+
+        // Return the subfeed instance
         return this._subfeeds[k];
     }
 }
 
 class RemoteFeedManager {
+    // Manages interactions with feeds on remote nodes within the p2p network
     constructor(daemon) {
-        this._daemon = daemon;
-        this._liveFeedInfos = {};
+        this._daemon = daemon; // The kachery-p2p daemon
+        this._liveFeedInfos = {}; // Information about the live feeds (cached in memory)
     }
     async getSignedMessages({feedId, subfeedName, position, waitMsec}) {
-        const liveFeedInfo = await this.findLiveFeedInfo({feedId});
-        if (!liveFeedInfo) return;
+        // Get signed messages from a remote feed
+
+        // Search and find the info for the feed (swarmName and primaryNodeId)
+        // If not found, return null
+        let liveFeedInfo;
+        try {
+            liveFeedInfo = await this.findLiveFeedInfo({feedId});
+        }
+        catch(err) {
+            return null;
+        }
+
+        // Now that we know the swarmName and primaryNodeId, we can get the messages from the data transfer swarm
         const signedMessages = await this._daemon._getLiveFeedSignedMessages({
             primaryNodeId: liveFeedInfo.primaryNodeId,
             swarmName: liveFeedInfo.swarmName,
@@ -171,13 +258,23 @@ class RemoteFeedManager {
             waitMsec,
             opts: {}
         });
+
+        // Return the retrieved messages
         return signedMessages;
     }
     async submitMessages({feedId, subfeedName, messages}) {
+        // Submit messages to a subfeed on a remote node
+        // This requires write permissions
+
+        // Search and find the info for the feed (swarmName and primaryNodeId)
         const liveFeedInfo = await this.findLiveFeedInfo({feedId});
+
+        // If we did not find it, then throw exception
         if (!liveFeedInfo) {
             throw Error(`Cannot find live feed: ${feedId}`);
         }
+
+        // Now that we know the swarmName and primaryNodeId, we can submit the messages to the data transfer swarm
         await this._daemon._submitMessagesToLiveFeed({
             primaryNodeId: liveFeedInfo.primaryNodeId,
             swarmName: liveFeedInfo.swarmName,
@@ -187,41 +284,73 @@ class RemoteFeedManager {
         });
     }
     async findLiveFeedInfo({feedId}) {
-        if (!(feedId in this._liveFeedInfos)) {
-            const asyncHelper = async () => {
+        // Find the swarmName and primaryNodeId for a feed that is owned by a remote node on the p2p network
+        // If not found, throws an error.
+
+        // First check if we have the information in the memory cache
+        if (feedId in this._liveFeedInfos) {
+            return this._liveFeedInfos[feedId];
+        }
+        const asyncHelper = async () => {
+            return new Promise((resolve, reject) => {
+                // Find the live feed (this could in theory return multiple results, but ideally it should only return one)
                 const x = this._daemon.findLiveFeed({feedId});
+                let resolved = false;
                 x.onFound(result => {
-                   this._liveFeedInfos[feedId] = result; 
-                   x.cancel();
+                    if (resolved) return;
+
+                    // We found it! The result will contain swarmName and primaryNodeId.
+                    resolved = true;
+                    resolve(result);
+
+                    // Cancel the request because we have what we need
+                    x.cancel();
                 });
                 x.onFinished(() => {
+                    if (resolved) return;
+                    // I guess we finished without finding anything. Throw an exception
+                    reject(Error(`Unable to find live feed info for feed: ${feedId}`));
                 })
-            }
-            await asyncHelper();
+            });
         }
-        return this._liveFeedInfos[feedId] || null;
+        const result = await asyncHelper();
+
+        // Store in memory cache
+        this._liveFeedInfos[feedId] = result;
+
+        // Return the result. The result will contain swarmName and primaryNodeId.
+        return result; 
     }
 }
 
 class Subfeed {
+    // Represents a subfeed, which may or may not be writeable on this node
+
     constructor({ daemon, remoteFeedManager, feedId, subfeedName, privateKey }) {
-        this._daemon = daemon;
-        this._feedId = feedId;
-        this._publicKey = hexToPublicKey(this._feedId);
-        this._privateKey = privateKey;
-        this._subfeedName = subfeedName;
-        this._feedDir = _feedDirectory(feedId);
-        this._subfeedDir = _subfeedDirectory(feedId, subfeedName);
-        this._subfeedMessagesPath = this._subfeedDir + '/messages';
-        this._signedMessages = null;
-        this._remoteFeedManager = remoteFeedManager;
-        this._accessRules = null;
+        this._daemon = daemon; // The kachery-p2p daemon
+        this._feedId = feedId; // The ID of the feed
+        this._publicKey = hexToPublicKey(this._feedId); // The public key of the feed (which is determined by the feed ID)
+        this._privateKey = privateKey; // The private key (or null if this is not writeable on the local node)
+        this._subfeedName = subfeedName; // The name of the subfeed
+        this._feedDir = _feedDirectory(feedId); // The directory of the feed data
+        this._subfeedDir = _subfeedDirectory(feedId, subfeedName); // The directory of the subfeed data
+        this._subfeedMessagesPath = this._subfeedDir + '/messages'; // The text file containing the actual messages (JSON strings on lines of text)
+        this._signedMessages = null; // The signed messages loaded from the messages file (in-memory cache)
+        this._remoteFeedManager = remoteFeedManager; // The remote feed manager, allowing us to retrieve data from remote nodes
+        this._accessRules = null; // Access rules for this subfeed -- like which nodes on the p2p network have permission to submit messages
     }
     async initialize() {
+        // Check whether we have the feed locally (may or may not be locally writeable)
         const existsLocally = fs.existsSync(_feedDirectory(this._feedId));
         if (existsLocally) {
+            // If feed exists. We create the subfeed directory (note: the subfeed directory is nested inside the feed directory)
             await _createSubfeedDirectoryIfNeeded(this._feedId, this._subfeedName);
+            // Read the messages file -- load these into memory
             const messages = await readMessagesFile(this._subfeedMessagesPath);
+
+            // Verify the integrity of the messages
+
+            // The first message has a previousSignature of null
             let previousSignature = null;
             for (let msg of messages) {
                 if (!verifySignature(msg.body, msg.signature, this._publicKey)) {
@@ -235,32 +364,43 @@ class Subfeed {
                 }
                 previousSignature = msg.signature;
             }
+            // We are good ... load into memory
             this._signedMessages = messages;
+
+            // If this is a writeable feed, we also load the access rules into memory
             if (this.isWriteable()) {
                 this._accessRules = await readJsonFile(this._subfeedDir + '/access', {rules: []});
             }
         }
         else {
+            // Otherwise, we don't have it locally -- so let's just initialize things
             this._signedMessages = [];
             this._accessRules = null;
+
+            // Let's try to load messages from remote nodes on the p2p network
             await this.getSignedMessages({position: 0, maxNumMessages: 10, waitMsec: 0});
         }
     }
     getNumMessages() {
+        // Return the number of messages that are currently loaded into memory
         return this._signedMessages.length;
     }
     isWriteable() {
+        // Whether this subfeed is writeable. That depends on whether we have a private key
         return this._privateKey ? true : false;
     }
     async remoteNodeHasWriteAccess(remoteNodeId) {
+        // Check whether a remote node has permission to submit messages to this subfeed
         if (!this._accessRules) return false;
         if (!this._accessRules.rules) return false;
         const a = this._accessRules.rules.filter(r => ((r.nodeId === remoteNodeId) && (r.write)));
         return (a.length > 0);
     }
     async getSignedMessages({position, maxNumMessages, waitMsec=null}) {
+        // Get some signed messages starting at position
         const signedMessages = [];
         if (position < this._signedMessages.length) {
+            // If we have some messages loaded into memory, let's return those!
             for (let i = position; i < this._signedMessages.length; i++) {
                 signedMessages.push(this._signedMessages[i]);
                 if (maxNumMessages) {
@@ -271,7 +411,9 @@ class Subfeed {
             }
         }
         else if (position === this._signedMessages.length) {
+            // We don't have any new messages in memory
             if (!this.isWriteable()) {
+                // If it's not locally writeable, then we should try to load messages from a remote node
                 const remoteSignedMessages = await this._remoteFeedManager.getSignedMessages({
                     feedId: this._feedId,
                     subfeedName: this._subfeedName,
@@ -279,16 +421,20 @@ class Subfeed {
                     waitMsec
                 });
                 if ((remoteSignedMessages) && (remoteSignedMessages.length > 0)) {
+                    // We found them! So we append them to local feed, and then call getSignedMessages() again. We should then return the appropriate number of signed messages.
                     this.appendSignedMessages(remoteSignedMessages);
                     return this.getSignedMessages({position, maxNumMessages});
                 }
             }
             else if ((waitMsec) && (waitMsec > 0)) {
+                // If this is a writeable subfeed, and we have been instructed to wait, then let's just wait for a bit and maybe some new messages will arrive.
+
                 const timer = new Date();
                 while (true) {
                     // todo: use callback strategy instead (call directly from appendSignedMessages)
                     await sleepMsec(100);
                     if (position < this._signedMessages.length) {
+                        // We have new messages! Call getSignedMessages again to retrieve them.
                         return this.getSignedMessages({position, maxNumMessages});
                     }
                     const elapsed = (new Date()) - timer;
@@ -298,6 +444,7 @@ class Subfeed {
                 }
             }
         }
+        // Finally, return the signed messages that have been accumulated above.
         return signedMessages;
     }
     async appendMessages(messages, opts) {
@@ -327,6 +474,9 @@ class Subfeed {
         await this.appendSignedMessages(signedMessages);
     }
     async appendSignedMessages(signedMessages) {
+        if (signedMessages.length === 0)
+            return;
+        await _createSubfeedDirectoryIfNeeded(this._feedId, this._subfeedName);
         let previousSignature = null;
         if (this._signedMessages.length > 0) {
             previousSignature = this._signedMessages[this._signedMessages.length - 1].signature;
