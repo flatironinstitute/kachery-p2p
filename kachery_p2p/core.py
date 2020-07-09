@@ -1,5 +1,6 @@
 from typing import Tuple, Union
 from types import SimpleNamespace
+import numpy as np
 import subprocess
 import time
 import os
@@ -63,6 +64,9 @@ def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str]:
     return protocol, algorithm, hash0, additional_path
 
 def load_file(uri: str, dest: Union[str, None]=None):
+    local_path = ka.load_file(uri, dest=dest)
+    if local_path is not None:
+        return local_path
     for r in find_file(uri):
         timer = time.time()
         a = _load_file_helper(primary_node_id=r['primaryNodeId'], swarm_name=r['swarmName'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
@@ -73,6 +77,36 @@ def load_file(uri: str, dest: Union[str, None]=None):
             print(f'Downloaded {size} bytes in {elapsed} sec ({rate} MB/sec)')
             return a
     return None
+
+def load_object(uri: str):
+    local_path = load_file(uri)
+    if local_path is None:
+        return None
+    return ka.load_object(uri)
+
+def load_text(uri: str):
+    local_path = load_file(uri)
+    if local_path is None:
+        return None
+    return ka.load_text(uri)
+
+def load_npy(uri: str):
+    local_path = load_file(uri)
+    if local_path is None:
+        return None
+    return ka.load_npy(uri)
+
+def store_file(path: str, basename: Union[str, None]=None):
+    return ka.store_file(path, basename=basename)
+
+def store_object(object: dict, basename: Union[str, None]=None):
+    return ka.store_object(object)
+
+def store_text(text: str, basename: Union[str, None]=None):
+    return ka.store_text(text, basename=basename)
+
+def store_npy(array: np.ndarray, basename: Union[str, None]=None):
+    return ka.store_npy(array, basename=basename)
 
 def get_node_id():
     x = _probe_daemon()

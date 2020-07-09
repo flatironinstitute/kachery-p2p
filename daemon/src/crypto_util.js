@@ -26,11 +26,11 @@ export const verifySignature = (obj, signature, publicKey) => {
     }
 }
 
-// const sha1sum = (txt) => {
-//     var shasum = crypto.createHash('sha1')
-//     shasum.update(txt)
-//     return shasum.digest('hex')
-// }
+export const sha1sum = (txt) => {
+    var shasum = crypto.createHash('sha1')
+    shasum.update(txt)
+    return shasum.digest('hex')
+}
 
 export const publicKeyToHex = (publicKey) => {
     const x = publicKey.split('\n');

@@ -215,7 +215,7 @@ export default class ApiServer {
     }
     async _feedApiCreateFeed(req, res) {
         const reqData = req.body;
-        const feedName = reqData.feedName;
+        const feedName = reqData.feedName || null;
         const feedId = await this._daemon.feedManager().createFeed({feedName});
         res.json({ success: true, feedId });
     }

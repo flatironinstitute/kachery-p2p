@@ -2,6 +2,7 @@ from os import wait
 import time
 from .core import _api_port
 from .core import _http_post_json
+from urllib.parse import quote, unquote
 
 class Feed:
     def __init__(self, *, feed_id):
@@ -46,7 +47,7 @@ class Subfeed:
             raise Exception('Unable to initialize subfeed.')
         self._subfeed_info = x['info']
     def get_uri(self):
-        return f'feed://{self._feed_id}/{self._subfeed_name}'
+        return f'feed://{self._feed_id}/{quote(self._subfeed_name)}'
     def get_position(self):
         return self._position
     def set_position(self, position):
@@ -60,8 +61,6 @@ class Subfeed:
         ))
         assert x['success'], f'Unable to get num. messages for feed: {self._feed_id}'
         return x['numMessages']
-    def get_signed_messages(self, *, max_num_messages=None, wait_msec=None):
-        return self.get_messages(max_num_messages=max_num_messages, signed=True)
     
     def get_next_messages(self, *, wait_msec, signed=False, max_num_messages=10, advance_position=True):
         port = _api_port()
@@ -97,7 +96,7 @@ class Subfeed:
             return None
         return messages[0]
     
-    def message_stream(self, *, max_num_messages=None, signed=False):
+    def message_stream(self, *, signed=False):
         class custom_iterator:
             def __init__(self, parent):
                 self._parent = parent
@@ -130,7 +129,7 @@ class Subfeed:
             print(msg)
     
     def print_signed_messages(self):
-        for msg in self.get_signed_messages():
+        for msg in self.message_stream(signed=True):
             print(msg)
 
     def append_message(self, message):
@@ -214,7 +213,7 @@ class Subfeed:
         if changed:
             self.set_access_rules(rules)
 
-def create_feed(feed_name):
+def create_feed(feed_name=None):
     port = _api_port()
     url = f'http://localhost:{port}/feed/createFeed'
     x = _http_post_json(url, dict(
@@ -222,7 +221,7 @@ def create_feed(feed_name):
     ))
     if not x['success']:
         raise Exception(f'Unable to create feed: {feed_name}')
-    return load_feed(feed_name)
+    return load_feed('feed://' + x['feedId'])
 
 def load_feed(feed_name_or_uri, *, create=False):
     if feed_name_or_uri.startswith('feed://'):
@@ -233,7 +232,7 @@ def load_feed(feed_name_or_uri, *, create=False):
         if subfeed_name is None:
             return Feed(feed_id=feed_id)
         else:
-            return Subfeed(feed_id=feed_id, subfeed_name=subfeed_name, position=position)
+            return Feed(feed_id=feed_id).get_subfeed(subfeed_name=subfeed_name, position=position)
     else:
         feed_name = feed_name_or_uri
         port = _api_port()
@@ -259,6 +258,10 @@ def _parse_feed_uri(uri):
     feed_id = list0[2]
     if len(list0) >= 3:
         subfeed_name = '/'.join(list0[3:])
-    if not subfeed_name:
+    else:
+        subfeed_name = None
+    if subfeed_name:
+        subfeed_name = unquote(subfeed_name)
+    else:
         subfeed_name = None
     return feed_id, subfeed_name, 0

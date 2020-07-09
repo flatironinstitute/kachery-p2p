@@ -2,7 +2,7 @@ import os from 'os';
 import fs from 'fs';
 import { sleepMsec } from './util.js';
 import { kacheryStorageDir } from './kachery.js';
-import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSignature, hexToPublicKey, hexToPrivateKey } from './crypto_util.js'
+import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSignature, hexToPublicKey, hexToPrivateKey, sha1sum } from './crypto_util.js'
 
 class FeedManager {
     constructor(daemon) {
@@ -20,7 +20,8 @@ class FeedManager {
             publicKey: publicKeyToHex(publicKey),
             privateKey: privateKeyToHex(privateKey)
         };
-        config['feedIdsByName'][feedName] = feedId;
+        if (feedName)
+            config['feedIdsByName'][feedName] = feedId;
         await this._saveFeedsConfig(config);
         await _createFeedDirectoryIfNeeded(feedId);
         return feedId;
@@ -50,7 +51,9 @@ class FeedManager {
     async submitMessages({ feedId, subfeedName, messages}) {
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
         if (subfeed.isWriteable()) {
-            throw Error(`Cannot submit messages. Subfeed is writeable: ${feedId} ${subfeedName}`);
+            await this.appendMessages({feedId, subfeedName, messages});
+            return;
+            // throw Error(`Cannot submit messages. Subfeed is writeable: ${feedId} ${subfeedName}`);
         }
         await this._remoteFeedManager.submitMessages({feedId, subfeedName, messages});
     }
@@ -208,7 +211,8 @@ class Subfeed {
         this._privateKey = privateKey;
         this._subfeedName = subfeedName;
         this._feedDir = _feedDirectory(feedId);
-        this._subfeedFilePath = this._feedDir + '/subfeeds/' + (this._subfeedName || 'default');
+        this._subfeedDir = _subfeedDirectory(feedId, subfeedName);
+        this._subfeedMessagesPath = this._subfeedDir + '/messages';
         this._signedMessages = null;
         this._remoteFeedManager = remoteFeedManager;
         this._accessRules = null;
@@ -216,7 +220,8 @@ class Subfeed {
     async initialize() {
         const existsLocally = fs.existsSync(_feedDirectory(this._feedId));
         if (existsLocally) {
-            const messages = await readMessagesFile(this._subfeedFilePath);
+            await _createSubfeedDirectoryIfNeeded(this._feedId, this._subfeedName);
+            const messages = await readMessagesFile(this._subfeedMessagesPath);
             let previousSignature = null;
             for (let msg of messages) {
                 if (!verifySignature(msg.body, msg.signature, this._publicKey)) {
@@ -232,7 +237,7 @@ class Subfeed {
             }
             this._signedMessages = messages;
             if (this.isWriteable()) {
-                this._accessRules = await readJsonFile(this._subfeedFilePath + '.access', {rules: []});
+                this._accessRules = await readJsonFile(this._subfeedDir + '/access', {rules: []});
             }
         }
         else {
@@ -343,8 +348,7 @@ class Subfeed {
             this._signedMessages.push(signedMessage);
             textLinesToAppend.push(JSON.stringify(signedMessage));
         }
-        await _createFeedDirectoryIfNeeded(this._feedId);
-        await fs.promises.appendFile(this._subfeedFilePath, textLinesToAppend.join('\n') + '\n', {encoding: 'utf8'});
+        await fs.promises.appendFile(this._subfeedMessagesPath, textLinesToAppend.join('\n') + '\n', {encoding: 'utf8'});
     }
     async getAccessRules() {
         return this._accessRules;
@@ -353,7 +357,7 @@ class Subfeed {
         if (!this.isWriteable()) {
             throw Error(`Cannot set access rules for not writeable subfeed.`);
         }
-        await writeJsonFile(this._subfeedFilePath + '.access', rules);
+        await writeJsonFile(this._subfeedDir + '/access', rules);
         this._accessRules = rules;
     }
 }
@@ -416,6 +420,13 @@ const readAcc = async (path) => {
     return messages;
 }
 
+const _createSubfeedDirectoryIfNeeded = async (feedId, subfeedName) => {
+    const path = _subfeedDirectory(feedId, subfeedName);
+    if (!fs.existsSync(path)) {
+        await fs.promises.mkdir(path, {recursive: true});
+    }
+}
+
 const _createFeedDirectoryIfNeeded = async (feedId) => {
     const path = _feedDirectory(feedId);
     if (!fs.existsSync(path)) {
@@ -424,11 +435,16 @@ const _createFeedDirectoryIfNeeded = async (feedId) => {
     if (!fs.existsSync(path + '/subfeeds')) {
         await fs.promises.mkdir(path + '/subfeeds', {recursive: true});
     }
-    
 }
 
 const _feedDirectory = (feedId) => {
     return kacheryStorageDir() + `/feeds/${feedId[0]}${feedId[1]}/${feedId[2]}${feedId[3]}/${feedId[4]}${feedId[5]}/${feedId}`;
+}
+
+const _subfeedDirectory = (feedId, subfeedName) => {
+    const feedDir = _feedDirectory(feedId);
+    const subfeedHash = sha1sum(subfeedName);
+    return `${feedDir}/subfeeds/${subfeedHash[0]}${subfeedHash[1]}/${subfeedHash[2]}${subfeedHash[3]}/${subfeedHash[4]}${subfeedHash[5]}/${subfeedHash}`
 }
 
 const readJsonFile = async (path, defaultVal) => {

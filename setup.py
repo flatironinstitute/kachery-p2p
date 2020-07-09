@@ -36,7 +36,8 @@ setuptools.setup(
         "bin/kachery-p2p-leave-channel",
         "bin/kachery-p2p-load",
         "bin/kachery-p2p-start-daemon",
-        "bin/kachery-p2p-stop-daemon"
+        "bin/kachery-p2p-stop-daemon",
+        "bin/kachery-p2p-node-info"
     ],
     install_requires=[
         "kachery>=0.6.3"

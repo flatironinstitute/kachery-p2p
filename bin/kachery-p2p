@@ -75,6 +75,11 @@ def start_daemon(method, channel, verbose):
 def stop_daemon():
     kp.stop_daemon()
 
+@click.command(help="Print information about this node.")
+def node_info():
+    node_id = kp.get_node_id()
+    print(f'Node ID: {node_id}')
+
 @click.command(help="Display kachery_p2p version and exit.")
 def version():
     click.echo(f"This is kachery_p2p version {kp.__version__}.")
@@ -86,9 +91,10 @@ cli.add_command(leave_channel)
 cli.add_command(find_file)
 cli.add_command(load_file)
 cli.add_command(cat_file)
-cli.add_command(version)
 cli.add_command(start_daemon)
 cli.add_command(stop_daemon)
+cli.add_command(node_info)
+cli.add_command(version)
 
 if __name__ == "__main__":
     cli()
