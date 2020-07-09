@@ -3,7 +3,6 @@ import fs from 'fs';
 import { sleepMsec } from './util.js';
 import { kacheryStorageDir } from './kachery.js';
 import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSignature, hexToPublicKey, hexToPrivateKey, sha1sum } from './crypto_util.js'
-import { exception } from 'console';
 
 class FeedManager {
     // Manages the local feeds and access to the remote feeds in the p2p network
