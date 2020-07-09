@@ -31,6 +31,7 @@ class Daemon {
     ******************************************************************************/
     
     // channels (aka lookup swarms)
+    nodeId = () => (this._nodeId);
     halt = async () => await this._halt();
     joinChannel = async (channelName, opts) => await this._joinChannel(channelName, opts);
     leaveChannel = async (channelName, opts) => await this._leaveChannel(channelName, opts);
@@ -51,7 +52,7 @@ class Daemon {
     //   onFound()
     //   onFinished()
     //   cancel()
-    findLiveFeed = ({feedId, subfeedName}) => (this._findLiveFeed({feedId, subfeedName}));
+    findLiveFeed = ({feedId}) => (this._findLiveFeed({feedId}));
 
     /*****************************************************************************
     IMPLEMENTATION
@@ -190,6 +191,16 @@ class Daemon {
         const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
         return await swarmConnection.getLiveFeedSignedMessages({primaryNodeId, feedId, subfeedName, position, waitMsec, opts});
     }
+    _submitMessagesToLiveFeed = async ({primaryNodeId, swarmName, feedId, subfeedName, messages}) => {
+        if (this._verbose >= 1) {
+            console.info(`submitMessagesToLiveFeed: ${primaryNodeId} ${swarmName} ${feedId} ${subfeedName} ${messages.length}`);
+        }
+        if (!(swarmName in this._secondaryFileTransferSwarmConnections)) {
+            await this._joinSecondaryFileTransferSwarm({swarmName, primaryNodeId});
+        }
+        const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
+        await swarmConnection.submitMessagesToLiveFeed({primaryNodeId, feedId, subfeedName, messages});
+    }
     _joinSecondaryFileTransferSwarm = async ({swarmName, primaryNodeId}) => {
         if (swarmName in this._secondaryFileTransferSwarmConnections) {
             throw Error(`Cannot join file transfer swarm. Already joined: ${swarmName}`);
@@ -266,7 +277,7 @@ const _loadKeypair = (configDir) => {
     }
     const publicKeyPath = `${configDir}/public.pem`;
     const privateKeyPath = `${configDir}/private.pem`;
-    if ((fs.existsSync(publicKeyPath)) && (false)) {
+    if (fs.existsSync(publicKeyPath)) {
         if (!fs.existsSync(privateKeyPath)) {
             throw Error(`Public key file exists, but secret key file does not.`);
         }

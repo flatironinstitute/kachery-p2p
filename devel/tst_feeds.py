@@ -4,7 +4,7 @@ import kachery_p2p as kp
 import random
 
 x = kp.load_feed('testfeed2', create=True)
-print(x.get_path())
+print(x.get_uri())
 
 msg = {'rand': random.random()}
 x.append_messages([msg])

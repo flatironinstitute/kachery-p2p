@@ -87,10 +87,10 @@ class HSwarmConnection {
             forget: {
                 // how long to wait before forgetting that a peer
                 // has become unresponsive
-                unresponsive: 3,
+                unresponsive: 20,
                 // how long to wait before fogetting that a peer
                 // has been banned
-                banned: 3
+                banned: 60
             },
             multiplex: true
         });

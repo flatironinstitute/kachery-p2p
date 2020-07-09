@@ -1,15 +1,51 @@
+from os import wait
 import time
 from .core import _api_port
 from .core import _http_post_json
 
-class _Feed:
-    def __init__(self, *, feed_id, subfeed_name, position):
+class Feed:
+    def __init__(self, *, feed_id):
         self._feed_id = feed_id
+        self._feed_info = None
+        self._is_writeable = None
+        self._initialize()
+    def _initialize(self):
+        port = _api_port()
+        url = f'http://localhost:{port}/feed/getFeedInfo'
+        x = _http_post_json(url, dict(
+            feedId=self._feed_id
+        ))
+
+        assert x['success'], f'Unable to initialize feed: {self._feed_id}. {x["error"]}'
+        self._feed_info = x['info']
+        self._is_writeable = x['info']['isWriteable']
+    def is_writeable(self):
+        return self._is_writeable
+    def get_uri(self):
+        return f'feed://{self._feed_id}'
+    def get_subfeed(self, subfeed_name, position=0):
+        return Subfeed(feed=self, subfeed_name=subfeed_name, position=position)
+
+class Subfeed:
+    def __init__(self, *, feed, subfeed_name, position):
+        self._feed = feed
+        self._feed_id = feed._feed_id
+        self._is_writeable = feed._is_writeable
         self._subfeed_name = subfeed_name
         self._position = position
-        self._info = None
+        self._subfeed_info = None
         self._initialize()
-    def get_path(self):
+    def _initialize(self):
+        port = _api_port()
+        url = f'http://localhost:{port}/feed/getSubfeedInfo'
+        x = _http_post_json(url, dict(
+            feedId=self._feed_id,
+            subfeedName=self._subfeed_name
+        ))
+        if not x['success']:
+            raise Exception('Unable to initialize subfeed.')
+        self._subfeed_info = x['info']
+    def get_uri(self):
         return f'feed://{self._feed_id}/{self._subfeed_name}'
     def get_position(self):
         return self._position
@@ -22,11 +58,46 @@ class _Feed:
             feedId=self._feed_id,
             subfeedName=self._subfeed_name,
         ))
+        assert x['success'], f'Unable to get num. messages for feed: {self._feed_id}'
+        return x['numMessages']
+    def get_signed_messages(self, *, max_num_messages=None, wait_msec=None):
+        return self.get_messages(max_num_messages=max_num_messages, signed=True)
+    
+    def get_next_messages(self, *, wait_msec, signed=False, max_num_messages=10, advance_position=True):
+        port = _api_port()
+        if signed:
+            url = f'http://localhost:{port}/feed/getSignedMessages'
+        else:
+            url = f'http://localhost:{port}/feed/getMessages'
+        x = _http_post_json(url, dict(
+            feedId=self._feed_id,
+            subfeedName=self._subfeed_name,
+            position=self._position,
+            maxNumMessages=max_num_messages,
+            waitMsec=wait_msec
+        ))
         if not x['success']:
             return None
-        return x['numMessages']
-    def get_messages(self, *, max_num_messages=None, wait_msec=None, live=False):
+        messages = []
+        if signed:
+            for msg in x['signedMessages']:
+                messages.append(msg)
+        else:
+            for msg in x['messages']:
+                messages.append(msg)
+        if advance_position:
+            self._position = self._position + len(messages)
+        return messages
 
+    def get_next_message(self, *, wait_msec, signed=False, advance_position=True):
+        messages = self.get_next_messages(wait_msec=wait_msec, signed=signed, max_num_messages=1, advance_position=advance_position)
+        if messages is None:
+            return None
+        if len(messages) == 0:
+            return None
+        return messages[0]
+    
+    def message_stream(self, *, max_num_messages=None, signed=False):
         class custom_iterator:
             def __init__(self, parent):
                 self._parent = parent
@@ -35,40 +106,32 @@ class _Feed:
                 self._load_messages()
             
             def _load_messages(self):
-                wait_msec_0 = wait_msec
-                if (wait_msec_0 is None) and (live):
-                    wait_msec_0 = 5000
-                port = _api_port()
-                url = f'http://localhost:{port}/feed/getMessages'
-                x = _http_post_json(url, dict(
-                    feedId=self._parent._feed_id,
-                    subfeedName=self._parent._subfeed_name,
-                    position=self._parent._position,
-                    maxNumMessages=max_num_messages,
-                    waitMsec=wait_msec_0
-                ))
-                if not x['success']:
-                    return None
-                for msg in x['messages']:
+                messages = self._parent.get_next_messages(wait_msec=5000, signed=signed, advance_position=False)
+                if messages is None:
+                    return
+                for msg in messages:
                     self._messages.append(msg)
 
             def __iter__(self):
                 return self
 
             def __next__(self):
-                if live:
-                    while self._relative_position >= len(self._messages):
-                        self._load_messages()
-                        if self._relative_position >= len(self._messages):
-                            time.sleep(0.05)
-                else:
+                while self._relative_position >= len(self._messages):
+                    self._load_messages()
                     if self._relative_position >= len(self._messages):
-                        raise StopIteration
+                        time.sleep(0.05)
                 self._parent._position = self._parent._position + 1
                 self._relative_position = self._relative_position + 1
                 return self._messages[self._relative_position - 1]
-                
         return custom_iterator(parent=self)
+
+    def print_messages(self):
+        for msg in self.message_stream():
+            print(msg)
+    
+    def print_signed_messages(self):
+        for msg in self.get_signed_messages():
+            print(msg)
 
     def append_message(self, message):
         self.append_messages([message])
@@ -83,21 +146,73 @@ class _Feed:
         ))
         if not x['success']:
             raise Exception('Unable to append messages.')
-    # def submit_message(self, message)
-    def get_subfeed(self, subfeed_name):
-        if self._subfeed_name is not None:
-            raise Exception('Cannot load subfeed of a subfeed.')
-        return _Feed(feed_id=self._feed_id, subfeed_name=subfeed_name, position=0)
-    def _initialize(self):
+    
+    def submit_message(self, message):
+        self.submit_messages([message])
+
+    def submit_messages(self, messages):
         port = _api_port()
-        url = f'http://localhost:{port}/feed/getInfo'
+        url = f'http://localhost:{port}/feed/submitMessages'
+        x = _http_post_json(url, dict(
+            feedId=self._feed_id,
+            subfeedName=self._subfeed_name,
+            messages=messages
+        ))
+        if not x['success']:
+            raise Exception('Unable to submit messages.')
+
+    def set_access_rules(self, rules):
+        port = _api_port()
+        url = f'http://localhost:{port}/feed/setAccessRules'
+        x = _http_post_json(url, dict(
+            feedId=self._feed_id,
+            subfeedName=self._subfeed_name,
+            rules=rules
+        ))
+        if not x['success']:
+            raise Exception('Unable to set access rules.')
+    
+    def get_access_rules(self):
+        port = _api_port()
+        url = f'http://localhost:{port}/feed/getAccessRules'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
             subfeedName=self._subfeed_name
         ))
         if not x['success']:
-            raise Exception('Unable to initialize feed.')
-        self._info = x['info']
+            raise Exception('Unable to get access rules.')
+        print(x)
+        return x['rules']
+    
+    def grant_write_access(self, *, node_id):
+        rules = self.get_access_rules()
+        changed = False
+        found = False
+        for r in rules['rules']:
+            if r.get('nodeId', None) == node_id:
+                if r.get('write', None) is not True:
+                    changed = True
+                    r['write'] = True
+                found = True
+        if not found:
+            rules['rules'].append(dict(
+                nodeId=node_id,
+                write=True
+            ))
+            changed = True
+        if changed:
+            self.set_access_rules(rules)
+    
+    def revoke_write_access(self, *, node_id):
+        rules = self.get_access_rules()
+        changed = False
+        for r in rules['rules']:
+            if r.get('nodeId', None) == node_id:
+                if r.get('write', None) is True:
+                    changed = True
+                    r['write'] = False
+        if changed:
+            self.set_access_rules(rules)
 
 def create_feed(feed_name):
     port = _api_port()
@@ -109,15 +224,18 @@ def create_feed(feed_name):
         raise Exception(f'Unable to create feed: {feed_name}')
     return load_feed(feed_name)
 
-def load_feed(feed_name_or_path, create=False):
-    if feed_name_or_path.startswith('feed://'):
+def load_feed(feed_name_or_uri, *, create=False):
+    if feed_name_or_uri.startswith('feed://'):
         if create is True:
             raise Exception('Cannot use create=True when feed ID is specified.')
-        feed_path = feed_name_or_path
-        feed_id, subfeed_name, position = _parse_feed_path(feed_path)
-        return _Feed(feed_id=feed_id, subfeed_name=subfeed_name, position=position)
+        feed_uri = feed_name_or_uri
+        feed_id, subfeed_name, position = _parse_feed_uri(feed_uri)
+        if subfeed_name is None:
+            return Feed(feed_id=feed_id)
+        else:
+            return Subfeed(feed_id=feed_id, subfeed_name=subfeed_name, position=position)
     else:
-        feed_name = feed_name_or_path
+        feed_name = feed_name_or_uri
         port = _api_port()
         url = f'http://localhost:{port}/feed/getFeedId'
         x = _http_post_json(url, dict(
@@ -131,8 +249,8 @@ def load_feed(feed_name_or_path, create=False):
         feed_id = x['feedId']
         return load_feed(f'feed://{feed_id}')
 
-def _parse_feed_path(path):
-    listA = path.split('?')
+def _parse_feed_uri(uri):
+    listA = uri.split('?')
     assert len(listA) >= 1
     list0 = listA[0].split('/')
     assert len(list0) >= 3
@@ -141,6 +259,6 @@ def _parse_feed_path(path):
     feed_id = list0[2]
     if len(list0) >= 3:
         subfeed_name = '/'.join(list0[3:])
-    else:
-        subfeed_name = 'default'
+    if not subfeed_name:
+        subfeed_name = None
     return feed_id, subfeed_name, 0

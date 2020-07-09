@@ -28,10 +28,10 @@ export const kacheryStoreWithHardLink = async (path) => {
     return true;
 }
 
-export const kacheryLoadFile = async (kacheryPath) => {
+export const kacheryLoadFile = async (kacheryUri) => {
     let json;
     try {
-        json = await executeAndGetStdout(`kachery-info ${kacheryPath}`);
+        json = await executeAndGetStdout(`kachery-info ${kacheryUri}`);
     }
     catch(err) {
         return null;
@@ -47,10 +47,10 @@ export const kacheryLoadFile = async (kacheryPath) => {
     return await readFile(obj.path);
 }
 
-export const kacheryInfo = async (kacheryPath) => {
+export const kacheryInfo = async (kacheryUri) => {
     let json;
     try {
-        json = await executeAndGetStdout(`kachery-info ${kacheryPath}`);
+        json = await executeAndGetStdout(`kachery-info ${kacheryUri}`);
     }
     catch(err) {
         return null;
@@ -91,10 +91,10 @@ const executeAndGetStdout = async (command) => {
 // }
 
 export const getLocalFileInfo = async ({fileKey}) => {
-    const kacheryPath = kacheryPathFromFileKey(fileKey);
-    return await kacheryInfo(kacheryPath);
+    const kacheryUri = kacheryUriFromFileKey(fileKey);
+    return await kacheryInfo(kacheryUri);
 }
 
-const kacheryPathFromFileKey = (fileKey) => {
+const kacheryUriFromFileKey = (fileKey) => {
     return `sha1://${fileKey.sha1}`;
 }

@@ -36,18 +36,19 @@ def leave_channel(channel_name):
     if not resp['success']:
         raise Exception(resp['error'])
 
-def find_file(path):
+def find_file(uri):
     port = _api_port()
     url = f'http://localhost:{port}/findFile'
-    protocol, algorithm, hash0, additional_path = _parse_kachery_path(path)
+    protocol, algorithm, hash0, additional_path = _parse_kachery_uri(uri)
     assert algorithm == 'sha1'
     file_key = dict(
         sha1=hash0
     )
     return _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
 
-def _parse_kachery_path(url: str) -> Tuple[str, str, str, str]:
-    list0 = url.split('/')
+def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str]:
+    listA = uri.split('?')
+    list0 = listA[0].split('/')
     protocol = list0[0].replace(':', '')
     hash0 = list0[2]
     if '.' in hash0:
@@ -61,8 +62,8 @@ def _parse_kachery_path(url: str) -> Tuple[str, str, str, str]:
         raise Exception('Unexpected protocol: {}'.format(protocol))
     return protocol, algorithm, hash0, additional_path
 
-def load_file(path: str, dest: Union[str, None]=None):
-    for r in find_file(path):
+def load_file(uri: str, dest: Union[str, None]=None):
+    for r in find_file(uri):
         timer = time.time()
         a = _load_file_helper(primary_node_id=r['primaryNodeId'], swarm_name=r['swarmName'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
         if a is not None:
@@ -73,19 +74,24 @@ def load_file(path: str, dest: Union[str, None]=None):
             return a
     return None
 
+def get_node_id():
+    x = _probe_daemon()
+    assert x is not None, 'Unable to connect to daemon.'
+    return x['nodeId']
+
 def _probe_daemon():
     port = _api_port()
     url = f'http://localhost:{port}/probe'
     try:
         x = _http_get_json(url)
     except:
-        return False
-    return x.get('success')
+        return None
+    return x
 
 def start_daemon(method='npx', channels=[], verbose=0):
     from kachery_p2p import __version__
 
-    if _probe_daemon():
+    if _probe_daemon() is not None:
         raise Exception('Cannot start daemon. Already running.')
 
     api_port = _api_port()
@@ -149,7 +155,7 @@ def stop_daemon():
 def _load_file_helper(primary_node_id, swarm_name, file_key, file_info, dest):
     port = _api_port()
     url = f'http://localhost:{port}/downloadFile'
-    path = _get_kachery_path_from_file_key(file_key)
+    uri = _get_kachery_uri_from_file_key(file_key)
     with TemporaryDirectory() as tmpdir:
         fname = tmpdir + '/download.dat'
         _http_post_download_file(url, dict(primaryNodeId=primary_node_id, swarmName=swarm_name, fileKey=file_key, fileSize=file_info['size']), total_size=file_info['size'], dest_path=fname)
@@ -160,9 +166,9 @@ def _load_file_helper(primary_node_id, swarm_name, file_key, file_info, dest):
                 print(f'Unexpected: hashes do not match: {expected_hash} <> {hash0}')
                 return None
             ka.store_file(fname)
-            return ka.load_file(path, dest=dest)
+            return ka.load_file(uri, dest=dest)
 
-def _get_kachery_path_from_file_key(file_key):
+def _get_kachery_uri_from_file_key(file_key):
     return f'sha1://{file_key["sha1"]}'
 
 def _http_post_download_file(url: str, data: dict, total_size: int, dest_path: str):

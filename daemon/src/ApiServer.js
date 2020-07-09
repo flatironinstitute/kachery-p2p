@@ -16,7 +16,6 @@ export default class ApiServer {
         this._app.use(express.json());
 
         this._app.get('/probe', async (req, res) => {
-            await waitMsec(100);
             try {
                 await this._apiProbe(req, res) 
             }
@@ -100,12 +99,29 @@ export default class ApiServer {
                 res.status(500).send('Error appending messages.');
             }
         });
+        this._app.post('/feed/submitMessages', async (req, res) => {
+            try {
+                await this._feedApiSubmitMessages(req, res)
+            }
+            catch(err) {
+                console.warn(err);
+                res.status(500).send('Error appending messages.');
+            }
+        });
         this._app.post('/feed/getMessages', async (req, res) => {
             try {
                 await this._feedApiGetMessages(req, res)
             }
             catch(err) {
                 res.status(500).send('Error getting messages.');
+            }
+        });
+        this._app.post('/feed/getSignedMessages', async (req, res) => {
+            try {
+                await this._feedApiGetSignedMessages(req, res)
+            }
+            catch(err) {
+                res.status(500).send('Error getting signed messages.');
             }
         });
         this._app.post('/feed/getNumMessages', async (req, res) => {
@@ -117,18 +133,45 @@ export default class ApiServer {
                 res.status(500).send('Error getting num. messages.');
             }
         });
-        this._app.post('/feed/getInfo', async (req, res) => {
+        this._app.post('/feed/getFeedInfo', async (req, res) => {
             try {
-                await this._feedApiGetInfo(req, res)
+                await this._feedApiGetFeedInfo(req, res)
             }
             catch(err) {
                 console.error(err);
-                res.status(500).send('Error getting info.');
+                res.status(500).send('Error getting feed info.');
+            }
+        });
+        this._app.post('/feed/getSubfeedInfo', async (req, res) => {
+            try {
+                await this._feedApiGetSubfeedInfo(req, res)
+            }
+            catch(err) {
+                console.error(err);
+                res.status(500).send('Error getting subfeed info.');
+            }
+        });
+        this._app.post('/feed/getAccessRules', async (req, res) => {
+            try {
+                await this._feedApiGetAccessRules(req, res)
+            }
+            catch(err) {
+                console.error(err);
+                res.status(500).send('Error getting access rules.');
+            }
+        });
+        this._app.post('/feed/setAccessRules', async (req, res) => {
+            try {
+                await this._feedApiSetAccessRules(req, res)
+            }
+            catch(err) {
+                console.error(err);
+                res.status(500).send('Error setting access rules.');
             }
         });
     }
     async _apiProbe(req, res) {
-        res.json({ success: true });
+        res.json({ success: true, nodeId: this._daemon.nodeId() });
     }
     async _apiHalt(req, res) {
         await this._daemon.halt();
@@ -194,6 +237,14 @@ export default class ApiServer {
         await this._daemon.feedManager().appendMessages({feedId, subfeedName, messages});
         res.json({ success: true })
     }
+    async _feedApiSubmitMessages(req, res) {
+        const reqData = req.body;
+        const {
+            feedId, subfeedName, messages
+        } = reqData;
+        await this._daemon.feedManager().submitMessages({feedId, subfeedName, messages});
+        res.json({ success: true })
+    }
     async _feedApiGetMessages(req, res) {
         const reqData = req.body;
         const {
@@ -201,6 +252,14 @@ export default class ApiServer {
         } = reqData;
         const messages = await this._daemon.feedManager().getMessages({feedId, subfeedName, position, maxNumMessages, waitMsec});
         res.json({ success: true, messages });
+    }
+    async _feedApiGetSignedMessages(req, res) {
+        const reqData = req.body;
+        const {
+            feedId, subfeedName, position, maxNumMessages, waitMsec
+        } = reqData;
+        const signedMessages = await this._daemon.feedManager().getSignedMessages({feedId, subfeedName, position, maxNumMessages, waitMsec});
+        res.json({ success: true, signedMessages });
     }
     async _feedApiGetNumMessages(req, res) {
         const reqData = req.body;
@@ -210,13 +269,37 @@ export default class ApiServer {
         const numMessages = await this._daemon.feedManager().getNumMessages({feedId, subfeedName});
         res.json({ success: true, numMessages });
     }
-    async _feedApiGetInfo(req, res) {
+    async _feedApiGetFeedInfo(req, res) {
+        const reqData = req.body;
+        const {
+            feedId
+        } = reqData;
+        const info = await this._daemon.feedManager().getFeedInfo({feedId});
+        res.json({ success: true, info });
+    }
+    async _feedApiGetSubfeedInfo(req, res) {
         const reqData = req.body;
         const {
             feedId, subfeedName
         } = reqData;
         const info = await this._daemon.feedManager().getSubfeedInfo({feedId, subfeedName});
         res.json({ success: true, info });
+    }
+    async _feedApiGetAccessRules(req, res) {
+        const reqData = req.body;
+        const {
+            feedId, subfeedName
+        } = reqData;
+        const rules = await this._daemon.feedManager().getAccessRules({feedId, subfeedName});
+        res.json({ success: true, rules });
+    }
+    async _feedApiSetAccessRules(req, res) {
+        const reqData = req.body;
+        const {
+            feedId, subfeedName, rules
+        } = reqData;
+        await this._daemon.feedManager().setAccessRules({feedId, subfeedName, rules});
+        res.json({ success: true });
     }
     async _errorResponse(req, res, code, errstr) {
         console.info(`Responding with error: ${code} ${errstr}`);

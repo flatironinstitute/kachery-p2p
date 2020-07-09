@@ -83,14 +83,14 @@ def test_1():
                 a = n['a']
                 with KPEnv(d):
                     import kachery as ka
-                    path = ka.store_object(dict(a=a, x=[j for j in range(1000000)]))
-                    n['path'] = path
+                    uri = ka.store_object(dict(a=a, x=[j for j in range(1000000)]))
+                    n['uri'] = uri
             with KPEnv(test_nodes[0]['daemon']):
                 import kachery_p2p as kp
                 for i in range(1, len(test_nodes)):
                     n = test_nodes[i]
-                    path = n['path']
-                    x = kp.load_file(path)
+                    uri = n['uri']
+                    x = kp.load_file(uri)
                     assert x is not None
         finally:
             with PreventKeyboardInterrupt():

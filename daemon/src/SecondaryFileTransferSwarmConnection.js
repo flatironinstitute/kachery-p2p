@@ -172,6 +172,33 @@ class SecondaryFileTransferSwarmConnection {
             });
         });
     }
+    submitMessagesToLiveFeed = async ({primaryNodeId, feedId, subfeedName, messages}) => {
+        return new Promise((resolve, reject) => {
+            const requestBody = {
+                type: 'submitMessagesToLiveFeed',
+                feedId,
+                subfeedName,
+                messages
+            };
+            let finished = false;
+            const req = this._swarmConnection.makeRequestToNode(primaryNodeId, requestBody, {timeout: 10000});
+            req.onResponse(responseBody => {
+                if (finished) return;
+                // not expecting a response
+            });
+            req.onError(errorString => {
+                if (finished) return;
+                finished = true;
+                reject(Error(errorString));
+                return;
+            })
+            req.onFinished(() => {
+                if (finished) return;
+                finished = true;
+                resolve();
+            });
+        });
+    }
     async _start() {
         while (true) {
             //maintenance goes here

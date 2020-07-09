@@ -53,7 +53,7 @@ class LookupSwarmConnection {
                 }
             }
             else if (fileKey.feedId) {
-                if (this._feedManager.hasWriteableFeed({feedId: fileKey.feedId})) {
+                if (await this._feedManager.hasWriteableFeed({feedId: fileKey.feedId})) {
                     // Question: do we want to send this only to the node seeking, or to all?
                     this._swarmConnection.broadcastMessage({
                         type: 'providing',

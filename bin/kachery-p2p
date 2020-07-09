@@ -32,26 +32,26 @@ def leave_channel(channel_name):
     kp.leave_channel(channel_name)
 
 @click.command(help="Find a file.")
-@click.argument('path')
-def find_file(path):
-    infos = kp.find_file(path)
+@click.argument('uri')
+def find_file(uri):
+    infos = kp.find_file(uri)
     for info in infos:
         print(json.dumps(info, indent=4))
 
 @click.command(help="Download a file.")
-@click.argument('path')
-@click.option('--dest', default=None, help='Optional destination file.')
-def load_file(path, dest):
-    x = kp.load_file(path, dest=dest)
+@click.argument('uri')
+@click.option('--dest', default=None, help='Optional local path of destination file.')
+def load_file(uri, dest):
+    x = kp.load_file(uri, dest=dest)
     print(x)
 
 @click.command(help="Download a file and write the content to stdout.")
-@click.argument('path')
-def cat_file(path):
+@click.argument('uri')
+def cat_file(uri):
     old_stdout = sys.stdout
     sys.stdout = sys.stderr
 
-    path1 = kp.load_file(path)
+    path1 = kp.load_file(uri)
     if not path1:
         raise Exception('Error loading file.')
 

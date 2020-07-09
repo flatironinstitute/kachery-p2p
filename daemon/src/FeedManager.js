@@ -41,14 +41,21 @@ class FeedManager {
         return fs.existsSync(_feedDirectory(feedId));
     }
     async appendMessages({ feedId, subfeedName, messages}) {
-        const subfeed = await this._loadSubfeed(feedId, subfeedName);
+        const subfeed = await this._loadSubfeed({feedId, subfeedName});
         if (!subfeed.isWriteable()) {
             throw Error(`Subfeed is not writeable: ${feedId} ${subfeedName}`);
         }
         await subfeed.appendMessages(messages);
     }
+    async submitMessages({ feedId, subfeedName, messages}) {
+        const subfeed = await this._loadSubfeed({feedId, subfeedName});
+        if (subfeed.isWriteable()) {
+            throw Error(`Cannot submit messages. Subfeed is writeable: ${feedId} ${subfeedName}`);
+        }
+        await this._remoteFeedManager.submitMessages({feedId, subfeedName, messages});
+    }
     async appendSignedMessages({ feedId, subfeedName, signedMessages}) {
-        const subfeed = await this._loadSubfeed(feedId, subfeedName);
+        const subfeed = await this._loadSubfeed({feedId, subfeedName});
         await subfeed.appendSignedMessages(signedMessages);
     }
     async getMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
@@ -56,27 +63,62 @@ class FeedManager {
         return signedMessages.map(sm => (sm.body.message));
     }
     async getSignedMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
-        const subfeed = await this._loadSubfeed(feedId, subfeedName);
+        const subfeed = await this._loadSubfeed({feedId, subfeedName});
         return await subfeed.getSignedMessages({ position, maxNumMessages, waitMsec });
     }
     async getNumMessages({ feedId, subfeedName }) {
-        const subfeed = await this._loadSubfeed(feedId, subfeedName);
+        const subfeed = await this._loadSubfeed({feedId, subfeedName});
         if (!subfeed) {
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedName}`);
         }
         return subfeed.getNumMessages();
     }
+    async getFeedInfo({ feedId }) {
+        const privateKey = await this._getPrivateKeyForFeed(feedId);
+        if (privateKey) {
+            return {
+                isWriteable: true
+            }
+        }
+        else {
+            const liveFeedInfo = await this._remoteFeedManager.findLiveFeedInfo({feedId});
+            if (!liveFeedInfo) {
+                throw Error(`Unable to get info for feed: ${feedId}`);
+            }
+            return {
+                isWriteable: false
+            }
+        }
+    }
     async getSubfeedInfo({ feedId, subfeedName }) {
-        const subfeed = await this._loadSubfeed(feedId, subfeedName);
+        const subfeed = await this._loadSubfeed({feedId, subfeedName});
         return {
             numMessages: subfeed.getNumMessages(),
-            writeable: subfeed.isWriteable
+            writeable: subfeed.isWriteable()
         };
+    }
+    async getAccessRules({ feedId, subfeedName }) {
+        const subfeed = await this._loadSubfeed({feedId, subfeedName});
+        return await subfeed.getAccessRules();
+    }
+    async setAccessRules({ feedId, subfeedName, rules }) {
+        const subfeed = await this._loadSubfeed({feedId, subfeedName});
+        await subfeed.setAccessRules(rules);
+    }
+    async _submitMessagesToLiveFeedFromRemoteNode({fromNodeId, feedId, subfeedName, messages}) {
+        if (!(await this.hasWriteableFeed({ feedId, subfeedName }))) {
+            throw Error(`Does not have writeable feed: ${feedId} ${subfeedName}`);
+        }
+        const subfeed = await this._loadSubfeed({feedId, subfeedName});
+        if (!(await subfeed.remoteNodeHasWriteAccess(fromNodeId))) {
+            throw Error(`Write access not allowed for node: ${feedId} ${subfeedName} ${fromNodeId}`);
+        }
+        await subfeed.appendMessages(messages, {metaData: {submittedByNodeId: fromNodeId}});
     }
     async _loadFeedsConfig() {
         if (!this._feedsConfig) {
             const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
-            const x = await readJsonFile(configDir + '/feeds.json') || {};
+            const x = await readJsonFile(configDir + '/feeds.json', {});
             x.feeds = x.feeds || {};
             x.feedIdsByName = x.feedIdsByName || {};
             this._feedsConfig = x;
@@ -97,7 +139,7 @@ class FeedManager {
             return null;
         }
     }
-    async _loadSubfeed(feedId, subfeedName) {
+    async _loadSubfeed({feedId, subfeedName}) {
         const privateKey = await this._getPrivateKeyForFeed(feedId);
         const k = feedId + ':' + subfeedName;
         if (!this._subfeeds[k]) {
@@ -115,7 +157,7 @@ class RemoteFeedManager {
         this._liveFeedInfos = {};
     }
     async getSignedMessages({feedId, subfeedName, position, waitMsec}) {
-        const liveFeedInfo = await this._findLiveFeedInfo({feedId});
+        const liveFeedInfo = await this.findLiveFeedInfo({feedId});
         if (!liveFeedInfo) return;
         const signedMessages = await this._daemon._getLiveFeedSignedMessages({
             primaryNodeId: liveFeedInfo.primaryNodeId,
@@ -128,7 +170,20 @@ class RemoteFeedManager {
         });
         return signedMessages;
     }
-    async _findLiveFeedInfo({feedId}) {
+    async submitMessages({feedId, subfeedName, messages}) {
+        const liveFeedInfo = await this.findLiveFeedInfo({feedId});
+        if (!liveFeedInfo) {
+            throw Error(`Cannot find live feed: ${feedId}`);
+        }
+        await this._daemon._submitMessagesToLiveFeed({
+            primaryNodeId: liveFeedInfo.primaryNodeId,
+            swarmName: liveFeedInfo.swarmName,
+            feedId,
+            subfeedName,
+            messages
+        });
+    }
+    async findLiveFeedInfo({feedId}) {
         if (!(feedId in this._liveFeedInfos)) {
             const asyncHelper = async () => {
                 const x = this._daemon.findLiveFeed({feedId});
@@ -152,33 +207,37 @@ class Subfeed {
         this._publicKey = hexToPublicKey(this._feedId);
         this._privateKey = privateKey;
         this._subfeedName = subfeedName;
-        this._feedPath = _feedDirectory(feedId);
-        this._subfeedPath = this._feedPath + '/subfeeds/' + (this._subfeedName || 'default');
+        this._feedDir = _feedDirectory(feedId);
+        this._subfeedFilePath = this._feedDir + '/subfeeds/' + (this._subfeedName || 'default');
         this._signedMessages = null;
         this._remoteFeedManager = remoteFeedManager;
-        this._updatingFromRemoteFeed = false;
+        this._accessRules = null;
     }
     async initialize() {
         const existsLocally = fs.existsSync(_feedDirectory(this._feedId));
         if (existsLocally) {
-            const messages = await readMessagesFile(this._subfeedPath);
+            const messages = await readMessagesFile(this._subfeedFilePath);
             let previousSignature = null;
             for (let msg of messages) {
                 if (!verifySignature(msg.body, msg.signature, this._publicKey)) {
                     console.warn(msg.body);
                     console.warn(msg.signedMessage);
                     console.warn(this._publicKey);
-                    throw Error(`Unable to verify signature of message in feed: ${this._feedPath} ${msg.signature}`)
+                    throw Error(`Unable to verify signature of message in feed: ${this._feedDir} ${msg.signature}`)
                 }
                 if (previousSignature !== (msg.body.previousSignature || null)) {
-                    throw Error(`Inconsistent previousSignature of message in feed: ${this._feedPath} ${previousSignature} ${msg.body.previousSignature}`);
+                    throw Error(`Inconsistent previousSignature of message in feed: ${this._feedDir} ${previousSignature} ${msg.body.previousSignature}`);
                 }
                 previousSignature = msg.signature;
             }
             this._signedMessages = messages;
+            if (this.isWriteable()) {
+                this._accessRules = await readJsonFile(this._subfeedFilePath + '.access', {rules: []});
+            }
         }
         else {
             this._signedMessages = [];
+            this._accessRules = null;
             await this.getSignedMessages({position: 0, maxNumMessages: 10, waitMsec: 0});
         }
     }
@@ -188,14 +247,21 @@ class Subfeed {
     isWriteable() {
         return this._privateKey ? true : false;
     }
+    async remoteNodeHasWriteAccess(remoteNodeId) {
+        if (!this._accessRules) return false;
+        if (!this._accessRules.rules) return false;
+        const a = this._accessRules.rules.filter(r => ((r.nodeId === remoteNodeId) && (r.write)));
+        return (a.length > 0);
+    }
     async getSignedMessages({position, maxNumMessages, waitMsec=null}) {
         const signedMessages = [];
         if (position < this._signedMessages.length) {
             for (let i = position; i < this._signedMessages.length; i++) {
                 signedMessages.push(this._signedMessages[i]);
                 if (maxNumMessages) {
-                    if (signedMessages.length >= maxNumMessages)
-                        break;  
+                    if (signedMessages.length >= maxNumMessages) {
+                        break;
+                    }
                 }
             }
         }
@@ -215,7 +281,7 @@ class Subfeed {
             else if ((waitMsec) && (waitMsec > 0)) {
                 const timer = new Date();
                 while (true) {
-                    // todo: use callback strategy intead (call directly from appendSignedMessages)
+                    // todo: use callback strategy instead (call directly from appendSignedMessages)
                     await sleepMsec(100);
                     if (position < this._signedMessages.length) {
                         return this.getSignedMessages({position, maxNumMessages});
@@ -229,7 +295,8 @@ class Subfeed {
         }
         return signedMessages;
     }
-    async appendMessages(messages) {
+    async appendMessages(messages, opts) {
+        opts = opts || {};
         if (!this._privateKey) {
             throw Error(`Cannot write to feed without private key: ${this._privateKey}`);
         }
@@ -239,10 +306,13 @@ class Subfeed {
         }
         const signedMessages = [];
         for (let msg of messages) {
-            const body = {
+            let body = {
                 message: msg,
                 previousSignature
             };
+            if (opts.metaData) {
+                body.metaData = opts.metaData;
+            }
             const signedMessage = {
                 body,
                 signature: getSignature(body, {publicKey: this._publicKey, privateKey: hexToPrivateKey(this._privateKey)})
@@ -269,15 +339,55 @@ class Subfeed {
             if ((body.previousSignature || null) !== (previousSignature || null)) {
                 throw Error(`Error in previousSignature when appending signed message for: ${this._feedId} ${this._subfeedName} ${body.previousSignature} ${previousSignature}`);
             }
+            previousSignature = signedMessage.signature;
             this._signedMessages.push(signedMessage);
             textLinesToAppend.push(JSON.stringify(signedMessage));
         }
         await _createFeedDirectoryIfNeeded(this._feedId);
-        await fs.promises.appendFile(this._subfeedPath, textLinesToAppend.join('\n') + '\n', {encoding: 'utf8'});
+        await fs.promises.appendFile(this._subfeedFilePath, textLinesToAppend.join('\n') + '\n', {encoding: 'utf8'});
+    }
+    async getAccessRules() {
+        return this._accessRules;
+    }
+    async setAccessRules(rules) {
+        if (!this.isWriteable()) {
+            throw Error(`Cannot set access rules for not writeable subfeed.`);
+        }
+        await writeJsonFile(this._subfeedFilePath + '.access', rules);
+        this._accessRules = rules;
     }
 }
 
 const readMessagesFile = async (path) => {
+    let txt;
+    try {
+        txt = await fs.promises.readFile(path, {encoding: 'utf8'});
+    }
+    catch(err) {
+        return [];
+    }
+    if (typeof(txt) !== 'string') {
+        console.error(txt);
+        throw Error('Unexpected: txt is not a string.');
+    }
+    let messages = [];
+    const lines = txt.split('\n');
+    for (let line of lines) {
+        if (line) {
+            try {
+                messages.push(JSON.parse(line));
+            }
+            catch(err) {
+                console.error(line);
+                console.warn(`Problem parsing JSON from file: ${path}`);
+                return [];
+            }
+        }
+    }
+    return messages;
+}
+
+const readAcc = async (path) => {
     let txt;
     try {
         txt = await fs.promises.readFile(path, {encoding: 'utf8'});
@@ -321,13 +431,13 @@ const _feedDirectory = (feedId) => {
     return kacheryStorageDir() + `/feeds/${feedId[0]}${feedId[1]}/${feedId[2]}${feedId[3]}/${feedId[4]}${feedId[5]}/${feedId}`;
 }
 
-const readJsonFile = async (path) => {
+const readJsonFile = async (path, defaultVal) => {
     try {
         const txt = await fs.promises.readFile(path);
         return JSON.parse(txt);
     }
     catch(err) {
-        return null;
+        return defaultVal;
     }
 }
 

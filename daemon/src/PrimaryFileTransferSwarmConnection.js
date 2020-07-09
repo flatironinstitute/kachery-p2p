@@ -83,6 +83,21 @@ class PrimaryFileTransferSwarmConnection {
             });
             onFinished();
         }
+        else if (requestBody.type === 'submitMessagesToLiveFeed') {
+            const {feedId, subfeedName, messages} = requestBody;
+            try {
+                await this._feedManager._submitMessagesToLiveFeedFromRemoteNode({
+                    fromNodeId, feedId, subfeedName, messages
+                });
+            }
+            catch(err) {
+                console.warn(err);
+                onError(`Error submitting messages: ${err.message}`);
+                return;
+            }
+            // mo response needed
+            onFinished();
+        }
     }
     async _start() {
         while (true) {
