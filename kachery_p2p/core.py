@@ -153,10 +153,9 @@ def start_daemon(method='npx', channels=[], verbose=0):
         ss.start()
         try:
             ss.wait()
-        except:
+        finally:
             ss.stop()
             ss.kill()
-            raise
     elif method == 'dev':
         thisdir = os.path.dirname(os.path.realpath(__file__))
         ss = ShellScript(f'''
@@ -165,15 +164,14 @@ def start_daemon(method='npx', channels=[], verbose=0):
 
         export KACHERY_P2P_API_PORT="{api_port}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-        node --experimental-modules {thisdir}/../daemon/src/cli.js start {' '.join(start_args)}
+        exec node --experimental-modules {thisdir}/../daemon/src/cli.js start {' '.join(start_args)}
         ''')
         ss.start()
         try:
             ss.wait()
-        except:
+        finally:
             ss.stop()
             ss.kill()
-            raise
     else:
         raise Exception(f'Invalid method for starting daemon: {method}')
 

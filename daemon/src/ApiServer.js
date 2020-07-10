@@ -6,8 +6,13 @@ import JsonSocket from 'json-socket';
 import { sleepMsec } from './util.js';
 
 export default class ApiServer {
+    // This is the API server for the local daemon
+    // The local Python code communicates with the daemon
+    // via this API
     constructor(daemon) {
-        this._daemon = daemon;
+        this._daemon = daemon; // The kachery-p2p daemon
+
+        this._stopper_callbacks = [];
 
         this._app = express(); // the express app
 
@@ -15,6 +20,7 @@ export default class ApiServer {
         // this._app.use(cors()); // in the future, if we want to do this
         this._app.use(express.json());
 
+        // /probe - check whether the daemon is up and running and return info such as the node ID
         this._app.get('/probe', async (req, res) => {
             try {
                 await this._apiProbe(req, res) 
@@ -23,6 +29,7 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
+        // /halt - halt the kachery-p2p daemon (stops the server process)
         this._app.get('/halt', async (req, res) => {
             await waitMsec(100);
             try {
@@ -34,6 +41,7 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
+        // /getState - return the state of the daemon, with information about the channels and peers
         this._app.post('/getState', async (req, res) => {
             try {
                 await this._apiGetState(req, res)
@@ -42,6 +50,7 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
+        // /joinChannel - join a channel for lookups
         this._app.post('/joinChannel', async (req, res) => {
             try {
                 await this._apiJoinChannel(req, res)
@@ -50,6 +59,7 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
+        // /leaveChannel - leave a previously-joined channel
         this._app.post('/leaveChannel', async (req, res) => {
             try {
                 await this._apiLeaveChannel(req, res)
@@ -58,6 +68,7 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
+        // /findFile - find a file (or feed) in the remote nodes. May return more than one.
         this._app.post('/findFile', async (req, res) => {
             try {
                 await this._apiFindFile(req, res)
@@ -66,6 +77,7 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
+        // /downloadFile - download a previously-found file from a remote node
         this._app.post('/downloadFile', async (req, res) => {
             try {
                 await this._apiDownloadFile(req, res)
@@ -74,6 +86,7 @@ export default class ApiServer {
                 res.status(500).send('Error downloading file.');
             }
         });
+        // /feed/createFeed - create a new writeable feed on this node
         this._app.post('/feed/createFeed', async (req, res) => {
             try {
                 await this._feedApiCreateFeed(req, res)
@@ -82,6 +95,7 @@ export default class ApiServer {
                 res.status(500).send('Error creating feed.');
             }
         });
+        // /feed/getFeedId - lookup the ID of a local feed based on its name
         this._app.post('/feed/getFeedId', async (req, res) => {
             try {
                 await this._feedApiGetFeedId(req, res)
@@ -90,6 +104,7 @@ export default class ApiServer {
                 res.status(500).send('Error getting feed id.');
             }
         });
+        // /feed/appendMessages - append messages to a local writeable subfeed
         this._app.post('/feed/appendMessages', async (req, res) => {
             try {
                 await this._feedApiAppendMessages(req, res)
@@ -99,6 +114,7 @@ export default class ApiServer {
                 res.status(500).send('Error appending messages.');
             }
         });
+        // /feed/submitMessages - submit messages to a remote live subfeed (must have permission)
         this._app.post('/feed/submitMessages', async (req, res) => {
             try {
                 await this._feedApiSubmitMessages(req, res)
@@ -108,6 +124,7 @@ export default class ApiServer {
                 res.status(500).send('Error appending messages.');
             }
         });
+        // /feed/getMessages - get messages from a local or remote subfeed
         this._app.post('/feed/getMessages', async (req, res) => {
             try {
                 await this._feedApiGetMessages(req, res)
@@ -116,6 +133,7 @@ export default class ApiServer {
                 res.status(500).send('Error getting messages.');
             }
         });
+        // /feed/getSignedMessages - get signed messages from a local or remote subfeed
         this._app.post('/feed/getSignedMessages', async (req, res) => {
             try {
                 await this._feedApiGetSignedMessages(req, res)
@@ -124,6 +142,7 @@ export default class ApiServer {
                 res.status(500).send('Error getting signed messages.');
             }
         });
+        // /feed/getNumMessages - get number of messages in a subfeed
         this._app.post('/feed/getNumMessages', async (req, res) => {
             try {
                 await this._feedApiGetNumMessages(req, res)
@@ -133,6 +152,7 @@ export default class ApiServer {
                 res.status(500).send('Error getting num. messages.');
             }
         });
+        // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
         this._app.post('/feed/getFeedInfo', async (req, res) => {
             try {
                 await this._feedApiGetFeedInfo(req, res)
@@ -142,6 +162,7 @@ export default class ApiServer {
                 res.status(500).send('Error getting feed info.');
             }
         });
+        // /feed/getAccessRules - get access rules for a local writeable subfeed
         this._app.post('/feed/getAccessRules', async (req, res) => {
             try {
                 await this._feedApiGetAccessRules(req, res)
@@ -151,6 +172,7 @@ export default class ApiServer {
                 res.status(500).send('Error getting access rules.');
             }
         });
+        // /feed/setAccessRules - set access rules for a local writeable subfeed
         this._app.post('/feed/setAccessRules', async (req, res) => {
             try {
                 await this._feedApiSetAccessRules(req, res)
@@ -161,55 +183,81 @@ export default class ApiServer {
             }
         });
     }
+    // /probe - check whether the daemon is up and running and return info such as the node ID
     async _apiProbe(req, res) {
         res.json({ success: true, nodeId: this._daemon.nodeId() });
     }
+    // /halt - halt the kachery-p2p daemon (stops the server process)
     async _apiHalt(req, res) {
         await this._daemon.halt();
+        this._stopper_callbacks.forEach(cb => {cb();});
         res.json({ success: true });
     }
+    // /getState - return the state of the daemon, with information about the channels and peers
     async _apiGetState(req, res) {
         const state = this._daemon.getState();
         res.json({ success: true, state });
     }
+    // /joinChannel - join a channel for lookups
     async _apiJoinChannel(req, res) {
         const reqData = req.body;
         const channelName = reqData.channelName;
         await this._daemon.joinChannel(channelName);
         res.json({ success: true });
     }
+    // /leaveChannel - leave a previously-joined channel
     async _apiLeaveChannel(req, res) {
         const reqData = req.body;
         const channelName = reqData.channelName;
         await this._daemon.leaveChannel(channelName);
         res.json({ success: true });
     }
+    // /findFile - find a file (or feed) in the remote nodes. May return more than one.
     async _apiFindFile(req, res) {
         const reqData = req.body;
+        // Returns the find request
         const x = this._daemon.findFile({fileKey: reqData.fileKey, timeoutMsec: reqData.timeoutMsec});
         const jsonSocket = new JsonSocket(res);
+        let isDone = false;
         x.onFound(result => {
+            if (isDone) return;
+            // may return more than one result
+            // we send them one-by-one
             jsonSocket.sendMessage(result);
         });
         x.onFinished(() => {
+            if (isDone) return;
+            // we are done
+            isDone = true;
             res.end();
         })
         req.on('close', () => {
+            // if the request socket is closed, we cancel the find request
+            isDone = true;
             x.cancel();
         });
     }
+    // /downloadFile - download a previously-found file from a remote node
     async _apiDownloadFile(req, res) {
         const reqData = req.body;
-        const {stream, cancel} = await this._daemon.downloadFile({primaryNodeId: reqData.primaryNodeId, swarmName: reqData.swarmName, fileKey: reqData.fileKey, fileSize: reqData.fileSize, opts: reqData.opts || {}});
+        const {stream, cancel} = await this._daemon.downloadFile({
+            primaryNodeId: reqData.primaryNodeId,
+            swarmName: reqData.swarmName,
+            fileKey: reqData.fileKey,
+            fileSize: reqData.fileSize,
+            opts: reqData.opts || {}
+        });
         // todo: cancel on connection closed
         stream.pipe(res);
     }
+    // /feed/createFeed - create a new writeable feed on this node
     async _feedApiCreateFeed(req, res) {
         const reqData = req.body;
         const feedName = reqData.feedName || null;
         const feedId = await this._daemon.feedManager().createFeed({feedName});
         res.json({ success: true, feedId });
     }
+    // /feed/getFeedId - lookup the ID of a local feed based on its name
     async _feedApiGetFeedId(req, res) {
         const reqData = req.body;
         const feedName = reqData.feedName;
@@ -220,14 +268,18 @@ export default class ApiServer {
         }
         res.json({ success: true, feedId });
     }
+    // /feed/appendMessages - append messages to a local writeable subfeed
     async _feedApiAppendMessages(req, res) {
         const reqData = req.body;
         const {
             feedId, subfeedName, messages
         } = reqData;
-        await this._daemon.feedManager().appendMessages({feedId, subfeedName, messages});
+        await this._daemon.feedManager().appendMessages({
+            feedId, subfeedName, messages
+        });
         res.json({ success: true })
     }
+    // /feed/submitMessages - submit messages to a remote live subfeed (must have permission)
     async _feedApiSubmitMessages(req, res) {
         const reqData = req.body;
         const {
@@ -236,30 +288,40 @@ export default class ApiServer {
         await this._daemon.feedManager().submitMessages({feedId, subfeedName, messages});
         res.json({ success: true })
     }
+    // /feed/getMessages - get messages from a local or remote subfeed
     async _feedApiGetMessages(req, res) {
         const reqData = req.body;
         const {
             feedId, subfeedName, position, maxNumMessages, waitMsec
         } = reqData;
-        const messages = await this._daemon.feedManager().getMessages({feedId, subfeedName, position, maxNumMessages, waitMsec});
+        const messages = await this._daemon.feedManager().getMessages({
+            feedId, subfeedName, position, maxNumMessages, waitMsec
+        });
         res.json({ success: true, messages });
     }
+    // /feed/getSignedMessages - get signed messages from a local or remote subfeed
     async _feedApiGetSignedMessages(req, res) {
         const reqData = req.body;
         const {
             feedId, subfeedName, position, maxNumMessages, waitMsec
         } = reqData;
-        const signedMessages = await this._daemon.feedManager().getSignedMessages({feedId, subfeedName, position, maxNumMessages, waitMsec});
+        const signedMessages = await this._daemon.feedManager().getSignedMessages({
+            feedId, subfeedName, position, maxNumMessages, waitMsec
+        });
         res.json({ success: true, signedMessages });
     }
+    // /feed/getNumMessages - get number of messages in a subfeed
     async _feedApiGetNumMessages(req, res) {
         const reqData = req.body;
         const {
             feedId, subfeedName
         } = reqData;
-        const numMessages = await this._daemon.feedManager().getNumMessages({feedId, subfeedName});
+        const numMessages = await this._daemon.feedManager().getNumMessages({
+            feedId, subfeedName
+        });
         res.json({ success: true, numMessages });
     }
+    // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
     async _feedApiGetFeedInfo(req, res) {
         const reqData = req.body;
         const {
@@ -268,6 +330,7 @@ export default class ApiServer {
         const info = await this._daemon.feedManager().getFeedInfo({feedId});
         res.json({ success: true, info });
     }
+    // /feed/getAccessRules - get access rules for a local writeable subfeed
     async _feedApiGetAccessRules(req, res) {
         const reqData = req.body;
         const {
@@ -276,6 +339,7 @@ export default class ApiServer {
         const rules = await this._daemon.feedManager().getAccessRules({feedId, subfeedName});
         res.json({ success: true, rules });
     }
+    // /feed/setAccessRules - set access rules for a local writeable subfeed
     async _feedApiSetAccessRules(req, res) {
         const reqData = req.body;
         const {
@@ -284,6 +348,7 @@ export default class ApiServer {
         await this._daemon.feedManager().setAccessRules({feedId, subfeedName, rules});
         res.json({ success: true });
     }
+    // Helper function for returning http request with an error response
     async _errorResponse(req, res, code, errstr) {
         console.info(`Responding with error: ${code} ${errstr}`);
         try {
@@ -300,8 +365,14 @@ export default class ApiServer {
             console.warn(`Problem destroying connection: ${err.message}`);
         }
     }
+    // Start listening via http/https
     async listen(port) {
-        await start_http_server(this._app, port);
+        const stopper = {
+            onStop: cb => {
+                this._stopper_callbacks.push(cb);
+            }
+        }
+        await start_http_server(this._app, port, stopper);
     }
 }
 
@@ -309,7 +380,8 @@ function waitMsec(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function start_http_server(app, listen_port) {
+async function start_http_server(app, listen_port, stopper) {
+    // convenient for starting either as http or https depending on the port
     app.port = listen_port;
     if (process.env.SSL != null ? process.env.SSL : listen_port % 1000 == 443) {
         // The port number ends with 443, so we are using https
@@ -330,6 +402,9 @@ async function start_http_server(app, listen_port) {
         // Create the http server and start listening
         app.server = http.createServer(app);
     }
+    stopper.onStop(() => {
+        app.server.close();
+    });
     await app.server.listen(listen_port);
     console.info(`API server is running ${app.protocol} on port ${app.port}`);
 }
