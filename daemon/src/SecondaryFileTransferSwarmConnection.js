@@ -26,9 +26,11 @@ class SecondaryFileTransferSwarmConnection {
     _handleMessage = async (fromNodeId, msg) => {
     }
     // returns {stream, cancel}
-    downloadFile = async ({fileKey, primaryNodeId, fileSize, opts}) => {
+    downloadFile = async ({fileKey, primaryNodeId, startByte, endByte, opts}) => {
+        const numBytes = endByte - startByte;
+
         const chunkSize = 4000000;
-        const numChunks = Math.ceil(fileSize / chunkSize);
+        const numChunks = Math.ceil(numBytes / chunkSize);
         let sha1_sum = crypto.createHash('sha1');
 
         const streamState = {
@@ -66,13 +68,13 @@ class SecondaryFileTransferSwarmConnection {
 
         const downloadChunk = async (chunkNum) => {
             return new Promise((resolve, reject) => {
-                const startByte = chunkNum * chunkSize;
-                const endByte = Math.min(startByte + chunkSize, fileSize);
+                const chunkStartByte = startByte + chunkNum * chunkSize;
+                const chunkEndByte = Math.min(chunkStartByte + chunkSize, endByte);
                 const requestBody = {
                     type: 'downloadFile',
                     fileKey: fileKey,
-                    startByte,
-                    endByte
+                    startByte: chunkStartByte,
+                    endByte: chunkEndByte
                 };
                 let finished = false;
                 let bytesDownloadedThisChunk = 0;
@@ -109,8 +111,8 @@ class SecondaryFileTransferSwarmConnection {
                 req.onFinished(() => {
                     if (finished) return;
                     finished = true;
-                    if (bytesDownloadedThisChunk != endByte - startByte) {
-                        reject(`Unexpected number of bytes for this chunk: ${bytesDownloadedThisChunk} <> ${endByte - startByte}`);
+                    if (bytesDownloadedThisChunk != chunkEndByte - chunkStartByte) {
+                        reject(`Unexpected number of bytes for this chunk: ${bytesDownloadedThisChunk} <> ${chunkEndByte - chunkStartByte}`);
                         return;
                     }
                     resolve();

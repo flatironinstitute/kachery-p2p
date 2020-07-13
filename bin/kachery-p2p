@@ -47,22 +47,32 @@ def load_file(uri, dest):
 
 @click.command(help="Download a file and write the content to stdout.")
 @click.argument('uri')
-def cat_file(uri):
+@click.option('--start', help='The start byte (optional)', default=None)
+@click.option('--end', help='The end byte non-inclusive (optional)', default=None)
+def cat_file(uri, start, end):
     old_stdout = sys.stdout
     sys.stdout = sys.stderr
 
-    path1 = kp.load_file(uri)
-    if not path1:
-        raise Exception('Error loading file.')
-
-    sys.stdout = old_stdout
-    with open(path1, 'rb') as f:
-        while True:
-            data = os.read(f.fileno(), 4096)
-            if len(data) == 0:
-                break
-            os.write(sys.stdout.fileno(), data)
-    
+    if start is None and end is None:
+        path1 = kp.load_file(uri)
+        if not path1:
+            raise Exception('Error loading file.')
+        sys.stdout = old_stdout
+        with open(path1, 'rb') as f:
+            while True:
+                data = os.read(f.fileno(), 4096)
+                if len(data) == 0:
+                    break
+                os.write(sys.stdout.fileno(), data)
+    else:
+        assert start is not None and end is not None
+        start = int(start)
+        end = int(end)
+        assert start <= end
+        if start == end:
+            return
+        sys.stdout = old_stdout
+        kp.load_bytes(uri=uri, start=start, end=end, write_to_stdout=True)
 
 @click.command(help="Start the daemon.")
 @click.option('--channel', multiple=True, help='Channel to join')

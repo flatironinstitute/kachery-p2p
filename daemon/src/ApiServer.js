@@ -9,7 +9,7 @@ export default class ApiServer {
     // This is the API server for the local daemon
     // The local Python code communicates with the daemon
     // via this API
-    constructor(daemon) {
+    constructor(daemon, {verbose}) {
         this._daemon = daemon; // The kachery-p2p daemon
 
         this._stopper_callbacks = [];
@@ -22,6 +22,9 @@ export default class ApiServer {
 
         // /probe - check whether the daemon is up and running and return info such as the node ID
         this._app.get('/probe', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/probe');
+            }
             try {
                 await this._apiProbe(req, res) 
             }
@@ -31,6 +34,9 @@ export default class ApiServer {
         });
         // /halt - halt the kachery-p2p daemon (stops the server process)
         this._app.get('/halt', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/halt');
+            }
             await waitMsec(100);
             try {
                 await this._apiHalt(req, res)
@@ -43,6 +49,9 @@ export default class ApiServer {
         });
         // /getState - return the state of the daemon, with information about the channels and peers
         this._app.post('/getState', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/getState');
+            }
             try {
                 await this._apiGetState(req, res)
             }
@@ -52,6 +61,9 @@ export default class ApiServer {
         });
         // /joinChannel - join a channel for lookups
         this._app.post('/joinChannel', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/joinChannel');
+            }
             try {
                 await this._apiJoinChannel(req, res)
             }
@@ -61,6 +73,9 @@ export default class ApiServer {
         });
         // /leaveChannel - leave a previously-joined channel
         this._app.post('/leaveChannel', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/leaveChannel');
+            }
             try {
                 await this._apiLeaveChannel(req, res)
             }
@@ -70,6 +85,9 @@ export default class ApiServer {
         });
         // /findFile - find a file (or feed) in the remote nodes. May return more than one.
         this._app.post('/findFile', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/findFile');
+            }
             try {
                 await this._apiFindFile(req, res)
             }
@@ -79,6 +97,9 @@ export default class ApiServer {
         });
         // /downloadFile - download a previously-found file from a remote node
         this._app.post('/downloadFile', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/downloadFile');
+            }
             try {
                 await this._apiDownloadFile(req, res)
             }
@@ -86,8 +107,23 @@ export default class ApiServer {
                 res.status(500).send('Error downloading file.');
             }
         });
+        // /downloadFile - download a chunk of a previously-found file from a remote node
+        this._app.post('/downloadFileBytes', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/downloadFileBytes');
+            }
+            try {
+                await this._apiDownloadFileBytes(req, res)
+            }
+            catch(err) {
+                res.status(500).send('Error downloading file block.');
+            }
+        });
         // /feed/createFeed - create a new writeable feed on this node
         this._app.post('/feed/createFeed', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/createFeed');
+            }
             try {
                 await this._feedApiCreateFeed(req, res)
             }
@@ -97,6 +133,9 @@ export default class ApiServer {
         });
         // /feed/getFeedId - lookup the ID of a local feed based on its name
         this._app.post('/feed/getFeedId', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/getFeedId');
+            }
             try {
                 await this._feedApiGetFeedId(req, res)
             }
@@ -106,6 +145,9 @@ export default class ApiServer {
         });
         // /feed/appendMessages - append messages to a local writeable subfeed
         this._app.post('/feed/appendMessages', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/appendMessages');
+            }
             try {
                 await this._feedApiAppendMessages(req, res)
             }
@@ -116,6 +158,9 @@ export default class ApiServer {
         });
         // /feed/submitMessages - submit messages to a remote live subfeed (must have permission)
         this._app.post('/feed/submitMessages', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/submitMessages');
+            }
             try {
                 await this._feedApiSubmitMessages(req, res)
             }
@@ -126,6 +171,9 @@ export default class ApiServer {
         });
         // /feed/getMessages - get messages from a local or remote subfeed
         this._app.post('/feed/getMessages', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/getMessages');
+            }
             try {
                 await this._feedApiGetMessages(req, res)
             }
@@ -135,6 +183,9 @@ export default class ApiServer {
         });
         // /feed/getSignedMessages - get signed messages from a local or remote subfeed
         this._app.post('/feed/getSignedMessages', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/getSignedMessages');
+            }
             try {
                 await this._feedApiGetSignedMessages(req, res)
             }
@@ -144,6 +195,9 @@ export default class ApiServer {
         });
         // /feed/getNumMessages - get number of messages in a subfeed
         this._app.post('/feed/getNumMessages', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/getNumMessages');
+            }
             try {
                 await this._feedApiGetNumMessages(req, res)
             }
@@ -154,6 +208,9 @@ export default class ApiServer {
         });
         // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
         this._app.post('/feed/getFeedInfo', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/getFeedInfo');
+            }
             try {
                 await this._feedApiGetFeedInfo(req, res)
             }
@@ -164,6 +221,9 @@ export default class ApiServer {
         });
         // /feed/getAccessRules - get access rules for a local writeable subfeed
         this._app.post('/feed/getAccessRules', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/getAccessRules');
+            }
             try {
                 await this._feedApiGetAccessRules(req, res)
             }
@@ -174,6 +234,9 @@ export default class ApiServer {
         });
         // /feed/setAccessRules - set access rules for a local writeable subfeed
         this._app.post('/feed/setAccessRules', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/setAccessRules');
+            }
             try {
                 await this._feedApiSetAccessRules(req, res)
             }
@@ -245,6 +308,20 @@ export default class ApiServer {
             swarmName: reqData.swarmName,
             fileKey: reqData.fileKey,
             fileSize: reqData.fileSize,
+            opts: reqData.opts || {}
+        });
+        // todo: cancel on connection closed
+        stream.pipe(res);
+    }
+    // /downloadFile - download a previously-found file from a remote node
+    async _apiDownloadFileBytes(req, res) {
+        const reqData = req.body;
+        const {stream, cancel} = await this._daemon.downloadFileBytes({
+            primaryNodeId: reqData.primaryNodeId,
+            swarmName: reqData.swarmName,
+            fileKey: reqData.fileKey,
+            startByte: reqData.startByte,
+            endByte: reqData.endByte,
             opts: reqData.opts || {}
         });
         // todo: cancel on connection closed

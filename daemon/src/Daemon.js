@@ -47,6 +47,7 @@ class Daemon {
     findFile = ({fileKey, timeoutMsec}) => (this._findFile({fileKey, timeoutMsec}));
     // returns {stream, cancel}
     downloadFile = async ({swarmName, primaryNodeId, fileKey, fileSize, opts}) => (await this._downloadFile({swarmName, primaryNodeId, fileKey, fileSize, opts}));
+    downloadFileBytes = async ({swarmName, primaryNodeId, fileKey, startByte, endByte, opts}) => (await this._downloadFileBytes({swarmName, primaryNodeId, fileKey, startByte, endByte, opts}));
     // Find a live feed
     // returns an object with:
     //   onFound()
@@ -179,7 +180,18 @@ class Daemon {
             await this._joinSecondaryFileTransferSwarm({swarmName, primaryNodeId});
         }
         const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
-        return await swarmConnection.downloadFile({primaryNodeId, fileKey, fileSize, opts});
+        return await swarmConnection.downloadFile({primaryNodeId, fileKey, startByte: 0, endByte: fileSize, opts});
+    }
+    // returns {stream, cancel}
+    _downloadFileBytes = async ({primaryNodeId, swarmName, fileKey, startByte, endByte, opts}) => {
+        if (this._verbose >= 1) {
+            console.info(`downloadFileBytes: ${primaryNodeId} ${swarmName} ${JSON.stringify(fileKey)} ${startByte} ${endByte}`);
+        }
+        if (!(swarmName in this._secondaryFileTransferSwarmConnections)) {
+            await this._joinSecondaryFileTransferSwarm({swarmName, primaryNodeId});
+        }
+        const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
+        return await swarmConnection.downloadFile({primaryNodeId, fileKey, startByte, endByte, opts});
     }
     _getLiveFeedSignedMessages = async ({primaryNodeId, swarmName, feedId, subfeedName, position, waitMsec, opts}) => {
         if (this._verbose >= 1) {

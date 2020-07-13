@@ -54,7 +54,7 @@ const apiPort = process.env.KACHERY_P2P_API_PORT || 20431;
 const startDaemon = async ({ channelNames, configDir, verbose }) => {
   const daemon = new Daemon({configDir, verbose});
 
-  const apiServer = new ApiServer(daemon);
+  const apiServer = new ApiServer(daemon, {verbose});
   apiServer.listen(apiPort);
 
   for (let channelName of channelNames) {

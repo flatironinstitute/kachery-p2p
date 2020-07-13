@@ -4,6 +4,7 @@ import numpy as np
 import subprocess
 import time
 import os
+import sys
 import pathlib
 import json
 import time
@@ -78,6 +79,42 @@ def load_file(uri: str, dest: Union[str, None]=None):
             return a
     return None
 
+def load_bytes(uri: str, start: Union[int, None]=None, end: Union[int, None]=None, write_to_stdout=False) -> Union[bytes, None]:
+    local_path = ka.load_file(uri)
+    if local_path is not None:
+        return ka.load_bytes(path=local_path, start=start, end=end, write_to_stdout=write_to_stdout)
+    for r in find_file(uri):
+        timer = time.time()
+        a = _load_bytes_helper(
+            primary_node_id=r['primaryNodeId'],
+            swarm_name=r['swarmName'],
+            file_key=r['fileKey'],
+            file_info=r['fileInfo'],
+            start=start,
+            end=end
+        )
+        if a is not None:
+            if write_to_stdout:
+                sys.stdout.buffer.write(a)
+                return None
+            else:
+                return a
+
+def _load_bytes_helper(primary_node_id, swarm_name, file_key, file_info, start, end):
+    port = _api_port()
+    url = f'http://localhost:{port}/downloadFileBytes'
+    return _http_post_download_file_data(
+        url,
+        dict(
+            primaryNodeId=primary_node_id,
+            swarmName=swarm_name,
+            fileKey=file_key,
+            startByte=start,
+            endByte=end
+        ),
+        content_size=end - start
+    )
+        
 def load_object(uri: str):
     local_path = load_file(uri)
     if local_path is None:
@@ -148,7 +185,7 @@ def start_daemon(method='npx', channels=[], verbose=0):
 
         export KACHERY_P2P_API_PORT="{api_port}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-        exec npx kachery-p2p-daemon@0.2.6 start {' '.join(start_args)}
+        exec npx kachery-p2p-daemon@0.2.7 start {' '.join(start_args)}
         ''')
         ss.start()
         try:
@@ -190,7 +227,17 @@ def _load_file_helper(primary_node_id, swarm_name, file_key, file_info, dest):
     uri = _get_kachery_uri_from_file_key(file_key)
     with TemporaryDirectory() as tmpdir:
         fname = tmpdir + '/download.dat'
-        _http_post_download_file(url, dict(primaryNodeId=primary_node_id, swarmName=swarm_name, fileKey=file_key, fileSize=file_info['size']), total_size=file_info['size'], dest_path=fname)
+        _http_post_download_file(
+            url,
+            dict(
+                primaryNodeId=primary_node_id,
+                swarmName=swarm_name,
+                fileKey=file_key,
+                fileSize=file_info['size']
+            ),
+            total_size=file_info['size'],
+            dest_path=fname
+        )
         with ka.config(use_hard_links=True):
             expected_hash = file_key['sha1']
             hash0 = ka.get_file_hash(fname)
@@ -221,6 +268,21 @@ def _http_post_download_file(url: str, data: dict, total_size: int, dest_path: s
                     timer = time.time()
                     print(f'Downloaded {bytes_downloaded} of {total_size} bytes')
                 f.write(chunk)
+
+def _http_post_download_file_data(url: str, data: dict, content_size: int):
+    try:
+        import requests
+    except:
+        raise Exception('Error importing requests *')
+
+    chunks = []
+    with requests.post(url, json=data, stream=True) as r:
+        r.raise_for_status()
+        bytes_downloaded = 0
+        for chunk in r.iter_content(chunk_size=8192): 
+            bytes_downloaded = bytes_downloaded + len(chunk)
+            chunks.append(chunk)
+    return b''.join(chunks)
 
 def _http_get_json(url: str, verbose: Optional[bool] = None) -> dict:
     timer = time.time()
