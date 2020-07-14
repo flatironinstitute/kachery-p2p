@@ -67,7 +67,7 @@ class FeedManager {
         }
 
         // Append the messages
-        await subfeed.appendMessages(messages);
+        subfeed.appendMessages(messages);
     }
     async submitMessages({ feedId, subfeedName, messages}) {
         // Same as appendMessages, except if we don't have a writeable feed, we submit it to the p2p network
@@ -87,7 +87,7 @@ class FeedManager {
         // This feed does not need to be writeable on this node. If the signatures
         // are correct, then we know that they are valid. These will typically come from a remote node.
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
-        await subfeed.appendSignedMessages(signedMessages);
+        subfeed.appendSignedMessages(signedMessages);
     }
     async getMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
         // Load messages from a subfeed.
@@ -172,7 +172,7 @@ class FeedManager {
         }
 
         // If so, append the messages. We also provide the sending node ID in the meta data for the messages
-        await subfeed.appendMessages(messages, {metaData: {submittedByNodeId: fromNodeId}});
+        subfeed.appendMessages(messages, {metaData: {submittedByNodeId: fromNodeId}});
     }
     async _loadFeedsConfig() {
         // Load the configuration for all feeds, if not already loaded
@@ -343,7 +343,6 @@ class Subfeed {
         const existsLocally = fs.existsSync(_feedDirectory(this._feedId));
         if (existsLocally) {
             // If feed exists. We create the subfeed directory (note: the subfeed directory is nested inside the feed directory)
-            await _createSubfeedDirectoryIfNeeded(this._feedId, this._subfeedName);
             // Read the messages file -- load these into memory
             const messages = await readMessagesFile(this._subfeedMessagesPath);
 
@@ -384,6 +383,7 @@ class Subfeed {
             // Let's try to load messages from remote nodes on the p2p network
             await this.getSignedMessages({position: 0, maxNumMessages: 10, waitMsec: 0});
         }
+        await _createSubfeedDirectoryIfNeeded(this._feedId, this._subfeedName);
     }
     getNumMessages() {
         // Return the number of messages that are currently loaded into memory
@@ -425,9 +425,21 @@ class Subfeed {
                     waitMsec
                 });
                 if ((remoteSignedMessages) && (remoteSignedMessages.length > 0)) {
-                    // We found them! So we append them to local feed, and then call getSignedMessages() again. We should then return the appropriate number of signed messages.
-                    this.appendSignedMessages(remoteSignedMessages);
-                    return this.getSignedMessages({position, maxNumMessages});
+                    // We found them! Let's first make sure that our position is still equal to this._signedMessages.length
+                    if (position === this._signedMessages.length) {
+                        // We found them! So we append them to local feed, and then call getSignedMessages() again. We should then return the appropriate number of signed messages.
+                        this.appendSignedMessages(remoteSignedMessages);
+                        return this.getSignedMessages({position, maxNumMessages});
+                    }
+                    else {
+                        if (position < this._signedMessages.length) {
+                            // we somehow got more signed messages. So let's go with those!
+                            return this.getSignedMessages({position, maxNumMessages});
+                        }
+                        else {
+                            throw Error('Unexpected problem. Position is now greater than signedMessages.length.')
+                        }
+                    }
                 }
             }
             else if ((waitMsec) && (waitMsec > 0)) {
@@ -451,7 +463,8 @@ class Subfeed {
         // Finally, return the signed messages that have been accumulated above.
         return signedMessages;
     }
-    async appendMessages(messages, opts) {
+    // important that this is synchronous
+    appendMessages(messages, opts) {
         opts = opts || {};
         if (!this._privateKey) {
             throw Error(`Cannot write to feed without private key: ${this._privateKey}`);
@@ -479,12 +492,12 @@ class Subfeed {
             previousSignature = signedMessage.signature;
             messageNumber ++;
         }
-        await this.appendSignedMessages(signedMessages);
+        this.appendSignedMessages(signedMessages);
     }
-    async appendSignedMessages(signedMessages) {
+    // important that this is synchronous!
+    appendSignedMessages(signedMessages) {
         if (signedMessages.length === 0)
             return;
-        await _createSubfeedDirectoryIfNeeded(this._feedId, this._subfeedName);
         let previousSignature = null;
         if (this._signedMessages.length > 0) {
             previousSignature = this._signedMessages[this._signedMessages.length - 1].signature;
@@ -511,7 +524,7 @@ class Subfeed {
             this._signedMessages.push(signedMessage);
             textLinesToAppend.push(JSON.stringify(signedMessage));
         }
-        await fs.promises.appendFile(this._subfeedMessagesPath, textLinesToAppend.join('\n') + '\n', {encoding: 'utf8'});
+        fs.appendFileSync(this._subfeedMessagesPath, textLinesToAppend.join('\n') + '\n', {encoding: 'utf8'});
     }
     async getAccessRules() {
         return this._accessRules;
