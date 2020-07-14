@@ -216,18 +216,21 @@ class FeedManager {
 
         // If we have already loaded it into memory, the do not reload
         const k = feedId + ':' + subfeedName;
-        if (!this._subfeeds[k]) {
+        const subfeed = this._subfeeds[k] || null;
+        if (subfeed) {
+            await subfeed.waitUntilInitialized();
+        }
+        else {
             // Load private key if this is writeable (otherwise, privateKey will be null)
             const privateKey = await this._getPrivateKeyForFeed(feedId);
 
             // Instantiate and initialize the subfeed
             const sf = new Subfeed({ daemon: this._daemon, remoteFeedManager: this._remoteFeedManager, feedId, subfeedName, privateKey });
-            await sf.initialize();
-
             // Store in memory for future access
             this._subfeeds[k] = sf;
+            await sf.initialize();
         }
-
+        
         // Return the subfeed instance
         return this._subfeeds[k];
     }
@@ -385,8 +388,17 @@ class Subfeed {
         this._signedMessages = null; // The signed messages loaded from the messages file (in-memory cache)
         this._remoteFeedManager = remoteFeedManager; // The remote feed manager, allowing us to retrieve data from remote nodes
         this._accessRules = null; // Access rules for this subfeed -- like which nodes on the p2p network have permission to submit messages
+        this._initialized = false;
+        this._initializing = false;
+        this._onInitializedCallbacks = [];
     }
     async initialize() {
+        if (this._initialized) return;
+        if (this._initializing) {
+            await this.waitUntilInitialized();
+            return;
+        }
+        this._initializing = true;
         // Check whether we have the feed locally (may or may not be locally writeable)
         const existsLocally = fs.existsSync(_feedDirectory(this._feedId));
         if (existsLocally) {
@@ -435,6 +447,18 @@ class Subfeed {
             // Let's try to load messages from remote nodes on the p2p network
             await this.getSignedMessages({position: 0, maxNumMessages: 10, waitMsec: 0});
         }
+        this._initializing = false;
+        this._initialized = true;
+        for (let cb of this._onInitializedCallbacks)
+            cb();
+    }
+    async waitUntilInitialized() {
+        if (this._initialized) return;
+        return new Promise((resolve, reject) => {
+            this._onInitializedCallbacks.push(() => {
+                resolve();
+            });
+        });
     }
     getNumMessages() {
         // Return the number of messages that are currently loaded into memory
