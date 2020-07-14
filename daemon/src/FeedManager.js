@@ -355,16 +355,17 @@ class Subfeed {
             for (let msg of messages) {
                 if (!verifySignature(msg.body, msg.signature, this._publicKey)) {
                     console.warn(msg.body);
-                    console.warn(msg.signedMessage);
+                    console.warn(msg.signature);
                     console.warn(this._publicKey);
                     throw Error(`Unable to verify signature of message in feed: ${this._feedDir} ${msg.signature}`)
                 }
                 if (previousSignature !== (msg.body.previousSignature || null)) {
-                    throw Error(`Inconsistent previousSignature of message in feed: ${this._feedDir} ${previousSignature} ${msg.body.previousSignature}`);
+                    throw Error(`Inconsistent previousSignature of message in feed when reading messages from file: ${this._feedDir} ${previousSignature} ${msg.body.previousSignature}`);
                 }
                 if (previousMessageNumber + 1 !== msg.body.messageNumber) {
-                    throw Error(`Incorrect message number for message in feed: ${this._feedDir} ${previousMessageNumber + 1} ${msg.body.previousMessageNumber}`);
+                    throw Error(`Incorrect message number for message in feed when reading messages from file: ${this._feedDir} ${previousMessageNumber + 1} ${msg.body.previousMessageNumber}`);
                 }
+                previousSignature = msg.signature;
                 previousMessageNumber = msg.body.messageNumber;
             }
             // We are good ... load into memory
