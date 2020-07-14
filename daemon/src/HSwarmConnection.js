@@ -5,7 +5,7 @@ import HPeerConnection from './HPeerConnection.js';
 import { randomString, sleepMsec } from './util.js';
 import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from './crypto_util.js';
 
-const PROTOCOL_VERSION = 'kachery-p2p-daemon-0.2.3'
+const PROTOCOL_VERSION = 'kachery-p2p-daemon-0.2.8'
 
 class HSwarmConnection {
     constructor({keyPair, nodeId, swarmName, verbose}) {

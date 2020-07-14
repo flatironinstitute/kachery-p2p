@@ -351,6 +351,7 @@ class Subfeed {
 
             // The first message has a previousSignature of null
             let previousSignature = null;
+            let previousMessageNumber = -1;
             for (let msg of messages) {
                 if (!verifySignature(msg.body, msg.signature, this._publicKey)) {
                     console.warn(msg.body);
@@ -361,7 +362,10 @@ class Subfeed {
                 if (previousSignature !== (msg.body.previousSignature || null)) {
                     throw Error(`Inconsistent previousSignature of message in feed: ${this._feedDir} ${previousSignature} ${msg.body.previousSignature}`);
                 }
-                previousSignature = msg.signature;
+                if (previousMessageNumber + 1 !== msg.body.messageNumber) {
+                    throw Error(`Incorrect message number for message in feed: ${this._feedDir} ${previousMessageNumber + 1} ${msg.body.previousMessageNumber}`);
+                }
+                previousMessageNumber = msg.body.messageNumber;
             }
             // We are good ... load into memory
             this._signedMessages = messages;
@@ -455,11 +459,13 @@ class Subfeed {
         if (this._signedMessages.length > 0) {
             previousSignature = this._signedMessages[this._signedMessages.length - 1].signature;
         }
+        let messageNumber = this._signedMessages.length;
         const signedMessages = [];
         for (let msg of messages) {
             let body = {
                 message: msg,
-                previousSignature
+                previousSignature,
+                messageNumber
             };
             if (opts.metaData) {
                 body.metaData = opts.metaData;
@@ -469,6 +475,8 @@ class Subfeed {
                 signature: getSignature(body, {publicKey: this._publicKey, privateKey: hexToPrivateKey(this._privateKey)})
             };
             signedMessages.push(signedMessage);
+            previousSignature = signedMessage.signature;
+            messageNumber ++;
         }
         await this.appendSignedMessages(signedMessages);
     }
@@ -480,6 +488,7 @@ class Subfeed {
         if (this._signedMessages.length > 0) {
             previousSignature = this._signedMessages[this._signedMessages.length - 1].signature;
         }
+        let messageNumber = this._signedMessages.length;
         const textLinesToAppend = [];
         for (let signedMessage of signedMessages) {
             const body = signedMessage.body;
@@ -491,9 +500,13 @@ class Subfeed {
                 throw Error(`Error verifying signature when appending signed message for: ${this._feedId} ${this._subfeedName} ${signature}`);
             }
             if ((body.previousSignature || null) !== (previousSignature || null)) {
-                throw Error(`Error in previousSignature when appending signed message for: ${this._feedId} ${this._subfeedName} ${body.previousSignature} ${previousSignature}`);
+                throw Error(`Error in previousSignature when appending signed message for: ${this._feedId} ${this._subfeedName} ${body.previousSignature} <> ${previousSignature}`);
+            }
+            if (body.messageNumber !== messageNumber) {
+                throw Error(`Error in messageNumber when appending signed message for: ${this._feedId} ${this._subfeedName} ${body.messageNumber} <> ${messageNumber}`);
             }
             previousSignature = signedMessage.signature;
+            messageNumber ++;
             this._signedMessages.push(signedMessage);
             textLinesToAppend.push(JSON.stringify(signedMessage));
         }
