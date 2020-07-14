@@ -145,6 +145,9 @@ class SecondaryFileTransferSwarmConnection {
     }
     getLiveFeedSignedMessages = async ({primaryNodeId, feedId, subfeedName, position, waitMsec, opts}) => {
         return new Promise((resolve, reject) => {
+            if (this._verbose >= 200) {
+                console.info('getLiveFeedSignedMessages 1');
+            }
             const requestBody = {
                 type: 'getLiveFeedSignedMessages',
                 feedId,
@@ -154,20 +157,32 @@ class SecondaryFileTransferSwarmConnection {
             };
             let finished = false;
             const signedMessages = []
-            const req = this._swarmConnection.makeRequestToNode(primaryNodeId, requestBody, {timeout: 10000});
+            const req = this._swarmConnection.makeRequestToNode(primaryNodeId, requestBody, {timeout: waitMsec + 10000});
+            if (this._verbose >= 200) {
+                console.info('getLiveFeedSignedMessages 2');
+            }
             req.onResponse(responseBody => {
+                if (this._verbose >= 200) {
+                    console.info('getLiveFeedSignedMessages 3');
+                }
                 if (finished) return;
                 for (let signedMessage of (responseBody.signedMessages || [])) {
                     signedMessages.push(signedMessage);
                 }
             });
             req.onError(errorString => {
+                if (this._verbose >= 200) {
+                    console.info('getLiveFeedSignedMessages 4');
+                }
                 if (finished) return;
                 finished = true;
                 reject(Error(errorString));
                 return;
             })
             req.onFinished(() => {
+                if (this._verbose >= 200) {
+                    console.info('getLiveFeedSignedMessages 5');
+                }
                 if (finished) return;
                 finished = true;
                 resolve(signedMessages);

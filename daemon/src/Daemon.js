@@ -19,7 +19,7 @@ class Daemon {
         this._verbose = verbose;
         this._halted = false;
 
-        this._feedManager = new FeedManager(this);
+        this._feedManager = new FeedManager(this, {verbose: this._verbose});
 
         console.info(`Verbose level: ${verbose}`);
 
@@ -201,7 +201,8 @@ class Daemon {
             await this._joinSecondaryFileTransferSwarm({swarmName, primaryNodeId});
         }
         const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
-        return await swarmConnection.getLiveFeedSignedMessages({primaryNodeId, feedId, subfeedName, position, waitMsec, opts});
+        const signedMessages = await swarmConnection.getLiveFeedSignedMessages({primaryNodeId, feedId, subfeedName, position, waitMsec, opts});
+        return signedMessages;
     }
     _submitMessagesToLiveFeed = async ({primaryNodeId, swarmName, feedId, subfeedName, messages}) => {
         if (this._verbose >= 1) {

@@ -7,12 +7,13 @@ import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSig
 class FeedManager {
     // Manages the local feeds and access to the remote feeds in the p2p network
 
-    constructor(daemon) {
+    constructor(daemon, {verbose}) {
         this._daemon = daemon; // The kachery-p2p daemon
         this._storageDir = kacheryStorageDir() + '/feeds'; // Where we store the feed data (subdir of the kachery storage dir)
         this._feedsConfig = null; // The config will be loaded from disk as need. Contains all the private keys for the feeds and the local name/ID associations.
         this._subfeeds = {}; // The subfeed instances (Subfeed()) that have been loaded into memory
-        this._remoteFeedManager = new RemoteFeedManager(this._daemon); // Manages the interaction with feeds on remote nodes
+        this._verbose = verbose;
+        this._remoteFeedManager = new RemoteFeedManager(this._daemon, {verbose: this._verbose}); // Manages the interaction with feeds on remote nodes
     }
     async createFeed({ feedName }) {
         // Create a new writeable feed on this node and return the ID of the new feed
@@ -230,12 +231,16 @@ class FeedManager {
 
 class RemoteFeedManager {
     // Manages interactions with feeds on remote nodes within the p2p network
-    constructor(daemon) {
+    constructor(daemon, {verbose}) {
         this._daemon = daemon; // The kachery-p2p daemon
         this._liveFeedInfos = {}; // Information about the live feeds (cached in memory)
+        this._verbose = verbose;
     }
     async getSignedMessages({feedId, subfeedName, position, waitMsec}) {
         // Get signed messages from a remote feed
+        if (this._verbose >= 200) {
+            console.log('getSignedMessages', feedId, subfeedName, position, waitMsec);
+        }
 
         // Search and find the info for the feed (swarmName and primaryNodeId)
         // If not found, return null
@@ -252,6 +257,9 @@ class RemoteFeedManager {
                     waitMsec -= 1000;   
                 }
                 else {
+                    if (this._verbose >= 200) {
+                        console.info('Unable to get signed messages (cannot find live feed info)');
+                    }
                     return null;
                 }
             }
@@ -267,6 +275,10 @@ class RemoteFeedManager {
             waitMsec,
             opts: {}
         });
+
+        if (this._verbose >= 200) {
+            console.info(`Got ${signedMessages.length} signed messages.`);
+        }
 
         // Return the retrieved messages
         return signedMessages;
