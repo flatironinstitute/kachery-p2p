@@ -102,12 +102,12 @@ class FeedManager {
         return signedMessages.map(sm => (sm.body.message));
     }
     async getSignedMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
-        console.log('------------------- getSignedMessages A', feedId.slice(5), subfeedName, position);
+        console.log('--- FeedManager:getSignedMessages A', feedId.slice(0, 5), subfeedName, position);
         // Same as getMessages() except we return the signed messages. This is also called by getMessages().
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
-        console.log('------------------- getSignedMessages B', feedId.slice(5), subfeedName, position);
+        console.log('--- FeedManager:getSignedMessages B', feedId.slice(0, 5), subfeedName, position);
         const signedMessages = await subfeed.getSignedMessages({ position, maxNumMessages, waitMsec });
-        console.log('------------------- getSignedMessages C', feedId.slice(5), subfeedName, position);
+        console.log('--- FeedManager:getSignedMessages C', feedId.slice(0, 5), subfeedName, position, signedMessages.length);
         return signedMessages;
     }
     async getNumMessages({ feedId, subfeedName }) {
@@ -241,7 +241,7 @@ class RemoteFeedManager {
         this._verbose = verbose;
     }
     async getSignedMessages({feedId, subfeedName, position, waitMsec}) {
-        console.log('------------------- RemoteFeedManager:getSignedMessages A', feedId.slice(5), subfeedName, position);
+        console.log('--- RemoteFeedManager:getSignedMessages A', feedId.slice(0, 5), subfeedName, position);
         // Get signed messages from a remote feed
         if (this._verbose >= 200) {
             console.log('getSignedMessages', feedId, subfeedName, position, waitMsec);
@@ -270,7 +270,7 @@ class RemoteFeedManager {
             }
         }
 
-        console.log('------------------- RemoteFeedManager:getSignedMessages B', feedId.slice(5), subfeedName, position);
+        console.log('--- RemoteFeedManager:getSignedMessages B', feedId.slice(0, 5), subfeedName, position);
 
         // Now that we know the swarmName and primaryNodeId, we can get the messages from the data transfer swarm
         const signedMessages = await this._daemon._getLiveFeedSignedMessages({
@@ -283,7 +283,7 @@ class RemoteFeedManager {
             opts: {}
         });
 
-        console.log('------------------- RemoteFeedManager:getSignedMessages C', feedId.slice(5), subfeedName, position);
+        console.log('--- RemoteFeedManager:getSignedMessages C', feedId.slice(0, 5), subfeedName, position);
 
         if (this._verbose >= 200) {
             console.info(`Got ${signedMessages.length} signed messages.`);
