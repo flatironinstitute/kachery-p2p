@@ -65,11 +65,6 @@ class HPeerConnection {
     }
     // safe
     async _handleMessage(msg) {
-        if (this._verbose >= 100) {
-            if (msg.type !== 'keepAlive') {
-                console.info('handlemessage', msg.type, JSON.stringify(msg).length);
-            }
-        }
         this._timestampLastIncomingMessage = new Date();
         if (msg.type === 'keepAlive') {
             //
@@ -151,11 +146,6 @@ class HPeerConnection {
     }
     // safe
     sendMessage = (msg) => {
-        if (this._verbose >= 100) {
-            if (msg.type !== 'keepAlive') {
-                console.info('sendMessage', msg.type, JSON.stringify(msg).length);
-            }
-        }
         this._timestampLastOutgoingMessage = new Date();
         if (msg.type === 'keepAlive') {
             //

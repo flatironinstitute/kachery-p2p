@@ -66,22 +66,41 @@ class PrimaryFileTransferSwarmConnection {
             }
         }
         else if (requestBody.type === 'getLiveFeedSignedMessages') {
+            if (this._verbose >= 200) {
+                console.info('Primary: getLiveFeedSignedMessages 1');
+            }
             const {feedId, subfeedName, position, waitMsec} = requestBody;
             let signedMessages;
             try {
+                if (this._verbose >= 200) {
+                    console.info('Primary: getLiveFeedSignedMessages 2');
+                }
                 signedMessages = await this._feedManager.getSignedMessages({
                     feedId, subfeedName, position, maxNumMessages: 10, waitMsec
                 });
+                if (this._verbose >= 200) {
+                    console.info('Primary: getLiveFeedSignedMessages 3');
+                }
             }
             catch(err) {
+                console.info('Primary: getLiveFeedSignedMessages 4');
                 console.warn(err);
                 onError(`Error getting signed messages: ${err.message}`);
                 return;
             }
+            if (this._verbose >= 200) {
+                console.info('Primary: getLiveFeedSignedMessages 5');
+            }
             onResponse({
                 signedMessages
             });
+            if (this._verbose >= 200) {
+                console.info('Primary: getLiveFeedSignedMessages 6');
+            }
             onFinished();
+            if (this._verbose >= 200) {
+                console.info('Primary: getLiveFeedSignedMessages 7');
+            }
         }
         else if (requestBody.type === 'submitMessagesToLiveFeed') {
             const {feedId, subfeedName, messages} = requestBody;
