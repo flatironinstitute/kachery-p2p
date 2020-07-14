@@ -39,6 +39,10 @@ def leave_channel(channel_name):
         raise Exception(resp['error'])
 
 def find_file(uri):
+    if uri.startswith('sha1dir://'):
+        uri = _resolve_file_uri_from_dir_uri(uri)
+        if uri is None:
+            raise Exception('Unable to find file.')
     port = _api_port()
     url = f'http://localhost:{port}/findFile'
     protocol, algorithm, hash0, additional_path = _parse_kachery_uri(uri)
@@ -65,6 +69,10 @@ def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str]:
     return protocol, algorithm, hash0, additional_path
 
 def load_file(uri: str, dest: Union[str, None]=None):
+    if uri.startswith('sha1dir://'):
+        uri = _resolve_file_uri_from_dir_uri(uri)
+        if uri is None:
+            return None
     local_path = ka.load_file(uri, dest=dest)
     if local_path is not None:
         return local_path
@@ -80,6 +88,10 @@ def load_file(uri: str, dest: Union[str, None]=None):
     return None
 
 def load_bytes(uri: str, start: Union[int, None]=None, end: Union[int, None]=None, write_to_stdout=False) -> Union[bytes, None]:
+    if uri.startswith('sha1dir://'):
+        uri = _resolve_file_uri_from_dir_uri(uri)
+        if uri is None:
+            return None
     local_path = ka.load_file(uri)
     if local_path is not None:
         return ka.load_bytes(path=local_path, start=start, end=end, write_to_stdout=write_to_stdout)
@@ -114,6 +126,14 @@ def _load_bytes_helper(primary_node_id, swarm_name, file_key, file_info, start, 
         ),
         content_size=end - start
     )
+
+def read_dir(uri: str):
+    protocol, algorithm, hash0, additional_path = _parse_kachery_uri(uri)
+    assert protocol == algorithm + 'dir'
+    dd = load_object(algorithm + '://' + hash0)
+    if dd is None:
+        return None
+    return ka.read_dir(uri)
         
 def load_object(uri: str):
     local_path = load_file(uri)
@@ -220,6 +240,39 @@ def stop_daemon():
     except:
         return False
     return x.get('success')
+
+def _resolve_file_uri_from_dir_uri(dir_uri):
+    protocol, algorithm, hash0, additional_path = _parse_kachery_uri(dir_uri)
+    assert protocol == algorithm + 'dir'
+    dd = load_object(algorithm + '://' + hash0)
+    if dd is None:
+        return None
+    if additional_path:
+        list0 = additional_path.split('/')
+    else:
+        list0 = []
+    ii = 0
+    while ii < len(list0):
+        assert dd is not None
+        name0 = list0[ii]
+        if name0 in dd['dirs']:
+            dd = dd['dirs'][name0]
+        elif name0 in dd['files']:
+            if ii + 1 == len(list0):
+                hash1 = None
+                algorithm1 = None
+                for alg in ['sha1', 'md5']:
+                    if alg in dd['files'][name0]:
+                        hash1 = dd['files'][name0][alg]
+                        algorithm1 = alg
+                return algorithm1 + '://' + hash1
+            else:
+                return None
+        else:
+            return None
+        ii = ii + 1
+    return None
+    
 
 def _load_file_helper(primary_node_id, swarm_name, file_key, file_info, dest):
     port = _api_port()
