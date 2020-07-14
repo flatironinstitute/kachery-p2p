@@ -343,6 +343,8 @@ class Subfeed {
         const existsLocally = fs.existsSync(_feedDirectory(this._feedId));
         if (existsLocally) {
             // If feed exists. We create the subfeed directory (note: the subfeed directory is nested inside the feed directory)
+            await _createSubfeedDirectoryIfNeeded(this._feedId, this._subfeedName);
+
             // Read the messages file -- load these into memory
             const messages = await readMessagesFile(this._subfeedMessagesPath);
 
@@ -377,13 +379,14 @@ class Subfeed {
         }
         else {
             // Otherwise, we don't have it locally -- so let's just initialize things
+            await _createSubfeedDirectoryIfNeeded(this._feedId, this._subfeedName);
+            
             this._signedMessages = [];
             this._accessRules = null;
 
             // Let's try to load messages from remote nodes on the p2p network
             await this.getSignedMessages({position: 0, maxNumMessages: 10, waitMsec: 0});
         }
-        await _createSubfeedDirectoryIfNeeded(this._feedId, this._subfeedName);
     }
     getNumMessages() {
         // Return the number of messages that are currently loaded into memory
