@@ -102,12 +102,12 @@ class FeedManager {
         return signedMessages.map(sm => (sm.body.message));
     }
     async getSignedMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
-        console.log('--- FeedManager:getSignedMessages A', feedId.slice(0, 5), subfeedName, position);
+        if (subfeedName != 'job_handler_registry') console.log('--- FeedManager:getSignedMessages A', feedId.slice(0, 5), subfeedName, position);
         // Same as getMessages() except we return the signed messages. This is also called by getMessages().
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
-        console.log('--- FeedManager:getSignedMessages B', feedId.slice(0, 5), subfeedName, position);
+        if (subfeedName != 'job_handler_registry') console.log('--- FeedManager:getSignedMessages B', feedId.slice(0, 5), subfeedName, position);
         const signedMessages = await subfeed.getSignedMessages({ position, maxNumMessages, waitMsec });
-        console.log('--- FeedManager:getSignedMessages C', feedId.slice(0, 5), subfeedName, position, signedMessages.length);
+        if (subfeedName != 'job_handler_registry') console.log('--- FeedManager:getSignedMessages C', feedId.slice(0, 5), subfeedName, position, signedMessages.length);
         return signedMessages;
     }
     async getNumMessages({ feedId, subfeedName }) {
