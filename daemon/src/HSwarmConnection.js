@@ -92,7 +92,8 @@ class HSwarmConnection {
                 // has been banned
                 banned: 60
             },
-            multiplex: true
+            multiplex: true,
+            preferredPort: 44500
         });
         this._hyperswarm.join(this._topic, {
             lookup: true, // find & connect to peers
