@@ -102,12 +102,12 @@ class FeedManager {
         return signedMessages.map(sm => (sm.body.message));
     }
     async getSignedMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
-        if (subfeedName != 'job_handler_registry') console.log('--- FeedManager:getSignedMessages A', feedId.slice(0, 5), subfeedName, position);
+        if (subfeedName.startsWith('feed://')) console.log('--- FeedManager:getSignedMessages A', feedId.slice(0, 5), subfeedName, position);
         // Same as getMessages() except we return the signed messages. This is also called by getMessages().
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
-        if (subfeedName != 'job_handler_registry') console.log('--- FeedManager:getSignedMessages B', feedId.slice(0, 5), subfeedName, position);
+        if (subfeedName.startsWith('feed://')) console.log('--- FeedManager:getSignedMessages B', feedId.slice(0, 5), subfeedName, position);
         const signedMessages = await subfeed.getSignedMessages({ position, maxNumMessages, waitMsec });
-        if (subfeedName != 'job_handler_registry') console.log('--- FeedManager:getSignedMessages C', feedId.slice(0, 5), subfeedName, position, signedMessages.length);
+        if (subfeedName.startsWith('feed://')) console.log('--- FeedManager:getSignedMessages C', feedId.slice(0, 5), subfeedName, position, signedMessages.length);
         return signedMessages;
     }
     async getNumMessages({ feedId, subfeedName }) {
@@ -241,7 +241,7 @@ class RemoteFeedManager {
         this._verbose = verbose;
     }
     async getSignedMessages({feedId, subfeedName, position, waitMsec}) {
-        console.log('--- RemoteFeedManager:getSignedMessages A', feedId.slice(0, 5), subfeedName, position);
+        if (subfeedName.startsWith('feed://')) console.log('--- RemoteFeedManager:getSignedMessages A', feedId.slice(0, 5), subfeedName, position);
         // Get signed messages from a remote feed
         if (this._verbose >= 200) {
             console.log('getSignedMessages', feedId, subfeedName, position, waitMsec);
@@ -270,7 +270,7 @@ class RemoteFeedManager {
             }
         }
 
-        console.log('--- RemoteFeedManager:getSignedMessages B', feedId.slice(0, 5), subfeedName, position);
+        if (subfeedName.startsWith('feed://')) console.log('--- RemoteFeedManager:getSignedMessages B', feedId.slice(0, 5), subfeedName, position);
 
         // Now that we know the swarmName and primaryNodeId, we can get the messages from the data transfer swarm
         const signedMessages = await this._daemon._getLiveFeedSignedMessages({
@@ -283,7 +283,7 @@ class RemoteFeedManager {
             opts: {}
         });
 
-        console.log('--- RemoteFeedManager:getSignedMessages C', feedId.slice(0, 5), subfeedName, position);
+        if (subfeedName.startsWith('feed://')) console.log('--- RemoteFeedManager:getSignedMessages C', feedId.slice(0, 5), subfeedName, position);
 
         if (this._verbose >= 200) {
             console.info(`Got ${signedMessages.length} signed messages.`);
@@ -454,7 +454,9 @@ class Subfeed {
     async getSignedMessages({position, maxNumMessages, waitMsec=null}) {
         // Get some signed messages starting at position
         const signedMessages = [];
+        if (this._subfeedName.startsWith('feed://')) console.log('--- Subfeed:getSignedMessages A', this._feedId.slice(0, 5), this._subfeedName, position);
         if (position < this._signedMessages.length) {
+            if (this._subfeedName.startsWith('feed://')) console.log('--- Subfeed:getSignedMessages B', this._feedId.slice(0, 5), this._subfeedName, position);
             // If we have some messages loaded into memory, let's return those!
             for (let i = position; i < this._signedMessages.length; i++) {
                 signedMessages.push(this._signedMessages[i]);
@@ -464,10 +466,13 @@ class Subfeed {
                     }
                 }
             }
+            if (this._subfeedName.startsWith('feed://')) console.log('--- Subfeed:getSignedMessages C', this._feedId.slice(0, 5), this._subfeedName, position);
         }
         else if (position === this._signedMessages.length) {
+            if (this._subfeedName.startsWith('feed://')) console.log('--- Subfeed:getSignedMessages D', this._feedId.slice(0, 5), this._subfeedName, position);
             // We don't have any new messages in memory
             if (!this.isWriteable()) {
+                if (this._subfeedName.startsWith('feed://')) console.log('--- Subfeed:getSignedMessages E', this._feedId.slice(0, 5), this._subfeedName, position);
                 // If it's not locally writeable, then we should try to load messages from a remote node
                 const remoteSignedMessages = await this._remoteFeedManager.getSignedMessages({
                     feedId: this._feedId,
@@ -492,8 +497,10 @@ class Subfeed {
                         }
                     }
                 }
+                if (this._subfeedName.startsWith('feed://')) console.log('--- Subfeed:getSignedMessages F', this._feedId.slice(0, 5), this._subfeedName, position);
             }
             else if ((waitMsec) && (waitMsec > 0)) {
+                if (this._subfeedName.startsWith('feed://')) console.log('--- Subfeed:getSignedMessages G', this._feedId.slice(0, 5), this._subfeedName, position);
                 // If this is a writeable subfeed, and we have been instructed to wait, then let's just wait for a bit and maybe some new messages will arrive.
 
                 const timer = new Date();
@@ -509,9 +516,11 @@ class Subfeed {
                         break;
                     }
                 }
+                if (this._subfeedName.startsWith('feed://')) console.log('--- Subfeed:getSignedMessages H', this._feedId.slice(0, 5), this._subfeedName, position);
             }
         }
         // Finally, return the signed messages that have been accumulated above.
+        if (this._subfeedName.startsWith('feed://')) console.log('--- Subfeed:getSignedMessages I', this._feedId.slice(0, 5), this._subfeedName, position, signedMessages.length);
         return signedMessages;
     }
     // important that this is synchronous
