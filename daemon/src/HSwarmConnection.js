@@ -84,14 +84,6 @@ class HSwarmConnection {
             console.info(`joining hyperswarm: ${this._swarmName} ${this._topicHex}`)
         }
         this._hyperswarm = hyperswarm({
-            bootstrap: [
-                '52.9.11.30:44500',
-                '52.9.11.30:44501',
-                '52.9.11.30:44502',
-                'bootstrap1.hyperdht.org:49737',
-                'bootstrap2.hyperdht.org:49737',
-                'bootstrap3.hyperdht.org:49737'
-            ],
             forget: {
                 // how long to wait before forgetting that a peer
                 // has become unresponsive
