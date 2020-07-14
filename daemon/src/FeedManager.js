@@ -239,12 +239,22 @@ class RemoteFeedManager {
 
         // Search and find the info for the feed (swarmName and primaryNodeId)
         // If not found, return null
-        let liveFeedInfo;
-        try {
-            liveFeedInfo = await this.findLiveFeedInfo({feedId});
-        }
-        catch(err) {
-            return null;
+        let liveFeedInfo = null;
+        while (true) {
+            try {
+                liveFeedInfo = await this.findLiveFeedInfo({feedId});
+                break;
+            }
+            catch(err) {
+                if (waitMsec >= 1000) {
+                    // Let's wait a second and try again
+                    await sleepMsec(1000);
+                    waitMsec -= 1000;   
+                }
+                else {
+                    return null;
+                }
+            }
         }
 
         // Now that we know the swarmName and primaryNodeId, we can get the messages from the data transfer swarm
@@ -266,7 +276,24 @@ class RemoteFeedManager {
         // This requires write permissions
 
         // Search and find the info for the feed (swarmName and primaryNodeId)
-        const liveFeedInfo = await this.findLiveFeedInfo({feedId});
+        let waitMsec = 2000;
+        let liveFeedInfo = null;
+        while (true) {
+            try {
+                liveFeedInfo = await this.findLiveFeedInfo({feedId});
+                break;
+            }
+            catch(err) {
+                if (waitMsec >= 2000) {
+                    // wait and try again
+                    await sleepMsec(2000);
+                    waitMsec -= 2000;
+                }
+                else {
+                    break;
+                }
+            }
+        }
 
         // If we did not find it, then throw exception
         if (!liveFeedInfo) {
@@ -380,7 +407,7 @@ class Subfeed {
         else {
             // Otherwise, we don't have it locally -- so let's just initialize things
             await _createSubfeedDirectoryIfNeeded(this._feedId, this._subfeedName);
-            
+
             this._signedMessages = [];
             this._accessRules = null;
 
