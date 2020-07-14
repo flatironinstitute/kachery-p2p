@@ -158,31 +158,19 @@ class SecondaryFileTransferSwarmConnection {
             let finished = false;
             const signedMessages = []
             const req = this._swarmConnection.makeRequestToNode(primaryNodeId, requestBody, {timeout: waitMsec + 10000});
-            if (this._verbose >= 200) {
-                console.info('Secondary: getLiveFeedSignedMessages 2');
-            }
             req.onResponse(responseBody => {
-                if (this._verbose >= 200) {
-                    console.info('Secondary: getLiveFeedSignedMessages 3');
-                }
                 if (finished) return;
                 for (let signedMessage of (responseBody.signedMessages || [])) {
                     signedMessages.push(signedMessage);
                 }
             });
             req.onError(errorString => {
-                if (this._verbose >= 200) {
-                    console.info('Secondary: getLiveFeedSignedMessages 4');
-                }
                 if (finished) return;
                 finished = true;
                 reject(Error(errorString));
                 return;
             })
             req.onFinished(() => {
-                if (this._verbose >= 200) {
-                    console.info('Secondary: getLiveFeedSignedMessages 5');
-                }
                 if (finished) return;
                 finished = true;
                 resolve(signedMessages);
