@@ -69,14 +69,11 @@ class PrimaryFileTransferSwarmConnection {
             const {feedId, subfeedName, position, waitMsec} = requestBody;
             let signedMessages;
             try {
-                console.log('--- Primary: getLiveFeedSignedMessages A', requestId, feedId.slice(0, 5), subfeedName, position);
                 signedMessages = await this._feedManager.getSignedMessages({
                     feedId, subfeedName, position, maxNumMessages: 10, waitMsec
                 });
-                console.log('--- Primary: getLiveFeedSignedMessages B', requestId, feedId.slice(0, 5), subfeedName, position);
             }
             catch(err) {
-                console.log('--- Primary: getLiveFeedSignedMessages C', requestId, feedId.slice(0, 5), subfeedName, position);
                 console.warn(err);
                 onError(`Error getting signed messages: ${err.message}`);
                 return;
