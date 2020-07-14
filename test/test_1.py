@@ -37,7 +37,7 @@ class Daemon:
         export KACHERY_STORAGE_DIR={self._storage_dir}
         export KACHERY_P2P_API_PORT={self._api_port}
         export KACHERY_P2P_CONFIG_DIR=$KACHERY_STORAGE_DIR
-        exec node {thisdir}/../daemon/src/cli.js start
+        exec node {thisdir}/../daemon/src/cli.js start --verbose 50
         ''')
         self._script.start()
         
@@ -62,7 +62,8 @@ class Daemon:
     
 
 def test_1():
-    with TemporaryDirectory() as tmpdir:
+    with TemporaryDirectory() as tmpdir2:
+        tmpdir = '/tmp/testing1'
         test_nodes = []
         try:
             for a in range(1, 6):
@@ -91,7 +92,7 @@ def test_1():
                     n = test_nodes[i]
                     uri = n['uri']
                     x = kp.load_file(uri)
-                    assert x is not None
+                    assert x is not None, f'Problem loading on node {n["a"]}: {uri}'
         finally:
             with PreventKeyboardInterrupt():
                 for n in test_nodes:
