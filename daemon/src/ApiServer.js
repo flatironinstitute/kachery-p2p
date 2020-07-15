@@ -245,6 +245,18 @@ export default class ApiServer {
                 res.status(500).send('Error setting access rules.');
             }
         });
+        // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
+        this._app.post('/feed/watchForNewMessages', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/watchForNewMessages');
+            }
+            try {
+                await this._feedApiWatchForNewMessages(req, res)
+            }
+            catch(err) {
+                res.status(500).send('Error watching for new messages.');
+            }
+        });
     }
     // /probe - check whether the daemon is up and running and return info such as the node ID
     async _apiProbe(req, res) {
@@ -441,6 +453,17 @@ export default class ApiServer {
         catch(err) {
             console.warn(`Problem destroying connection: ${err.message}`);
         }
+    }
+    // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
+    async _feedApiWatchForNewMessages(req, res) {
+        const reqData = req.body;
+        const {
+            subfeedWatches, waitMsec
+        } = reqData;
+        const messages = await this._daemon.feedManager().watchForNewMessages({
+            subfeedWatches, waitMsec
+        });
+        res.json({ success: true, messages });
     }
     // Start listening via http/https
     async listen(port) {

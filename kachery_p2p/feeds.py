@@ -50,7 +50,7 @@ class Subfeed:
             feedId=self._feed_id,
             subfeedName=self._subfeed_name,
         ))
-        assert x['success'], f'Unable to get num. messages for feed: {self._feed_id}'
+        assert x['success'], f'Unable to get num. messages for subfeed: {self._feed_id} {self._subfeed_name}'
         return x['numMessages']
     
     def get_next_messages(self, *, wait_msec, signed=False, max_num_messages=10, advance_position=True):
@@ -218,6 +218,20 @@ def create_feed(feed_name=None):
         raise Exception(f'Unable to create feed: {feed_name}')
     return load_feed('feed://' + x['feedId'])
 
+def get_feed_id(feed_name, *, create=False):
+    port = _api_port()
+    url = f'http://localhost:{port}/feed/getFeedId'
+    x = _http_post_json(url, dict(
+        feedName=feed_name
+    ))
+    if not x['success']:
+        if create:
+            return create_feed(feed_name)
+        else:
+            raise Exception('Unable to load feed.')
+    feed_id = x['feedId']
+    return feed_id
+
 def load_feed(feed_name_or_uri, *, create=False):
     if feed_name_or_uri.startswith('feed://'):
         if create is True:
@@ -230,18 +244,19 @@ def load_feed(feed_name_or_uri, *, create=False):
             return Feed(feed_id=feed_id).get_subfeed(subfeed_name=subfeed_name, position=position)
     else:
         feed_name = feed_name_or_uri
-        port = _api_port()
-        url = f'http://localhost:{port}/feed/getFeedId'
-        x = _http_post_json(url, dict(
-            feedName=feed_name
-        ))
-        if not x['success']:
-            if create:
-                return create_feed(feed_name)
-            else:
-                raise Exception('Unable to load feed.')
-        feed_id = x['feedId']
+        feed_id = get_feed_id(feed_name, create=create)
         return load_feed(f'feed://{feed_id}')
+
+def watch_for_new_messages(subfeed_watches, *, wait_msec):
+    port = _api_port()
+    url = f'http://localhost:{port}/feed/watchForNewMessages'
+    x = _http_post_json(url, dict(
+        subfeedWatches=subfeed_watches,
+        waitMsec=wait_msec
+    ))
+    if not x['success']:
+        raise Exception(f'Unable to watch for new messages.')
+    return x['messages']
 
 def _parse_feed_uri(uri):
     listA = uri.split('?')

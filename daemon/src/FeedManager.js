@@ -156,6 +156,41 @@ class FeedManager {
         }
         await subfeed.setAccessRules(rules);
     }
+    async watchForNewMessages({ subfeedWatches, waitMsec, maxNumMessages=0 }) {
+        return new Promise((resolve, reject) => {
+            // Wait until new messages are received on one or more subfeeds, and return information on which watches were triggered
+
+            const watchNames = Object.keys(subfeedWatches);
+            let finished = false;
+
+            const messages = {};
+
+            const doFinish = async () => {
+                if (finished) return;
+                finished = true;
+                // in case we have other messages coming in at the same time
+                // TODO: only do this if we have results that have not come in yet
+                await sleepMsec(30);
+                resolve(messages);
+            }
+
+            watchNames.forEach(watchName => {
+                (async () => {
+                    const w = subfeedWatches[watchName];
+                    const subfeed = await this._loadSubfeed({feedId: w.feedId, subfeedName: w.subfeedName});
+                    const messages0 = await subfeed.getSignedMessages({position: w.position, maxNumMessages, waitMsec});
+                    if (messages0.length > 0) {
+                        messages[watchName] = messages0.map(m => m.body.message);
+                        if (!finished) doFinish();
+                    }
+                })();
+            });
+
+            setTimeout(() => {
+                if (!finished) doFinish();
+            }, waitMsec);
+        });
+    }
     async _submitMessagesToLiveFeedFromRemoteNode({fromNodeId, feedId, subfeedName, messages}) {
         // Some messages have been submitted from a remote node
         // Determine whether they can been written, and if so, append them
@@ -212,7 +247,7 @@ class FeedManager {
         // Load a subfeed (Subfeed() instance
 
         // If we have already loaded it into memory, the do not reload
-        const k = feedId + ':' + subfeedName;
+        const k = feedId + ':' + _subfeedHash(subfeedName);
         const subfeed = this._subfeeds[k] || null;
         if (subfeed) {
             await subfeed.waitUntilInitialized();
@@ -684,9 +719,18 @@ const _feedDirectory = (feedId) => {
     return kacheryStorageDir() + `/feeds/${feedId[0]}${feedId[1]}/${feedId[2]}${feedId[3]}/${feedId[4]}${feedId[5]}/${feedId}`;
 }
 
+const _subfeedHash = (subfeedName) => {
+    if (typeof(subfeedName) == 'string') {
+        return sha1sum(subfeedName);
+    }
+    else {
+        return sha1sum(JSON.stringify(subfeedName));
+    }
+}
+
 const _subfeedDirectory = (feedId, subfeedName) => {
     const feedDir = _feedDirectory(feedId);
-    const subfeedHash = sha1sum(subfeedName);
+    const subfeedHash = _subfeedHash(subfeedName);
     return `${feedDir}/subfeeds/${subfeedHash[0]}${subfeedHash[1]}/${subfeedHash[2]}${subfeedHash[3]}/${subfeedHash[4]}${subfeedHash[5]}/${subfeedHash}`
 }
 
