@@ -85,6 +85,7 @@ class HSwarmConnection {
         this._hyperswarm = new AbstractHyperswarm(this._topic);
         
         this._hyperswarm.onConnection((jsonSocket, details) => {
+            const peer = details.peer;
             console.log('---- connected.');
             jsonSocket.sendMessage({type: 'initial', from: details.client ? 'server' : 'client', nodeId: this._nodeId, protocolVersion: PROTOCOL_VERSION});
             let receivedInitialMessage = false;

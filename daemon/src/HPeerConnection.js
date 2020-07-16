@@ -38,6 +38,7 @@ class HPeerConnection {
         this._incomingJsonSocket.on('message', msg => {
             // safe
             if (!this._verifyMessageFromPeer(msg)) {
+                console.warn(msg);
                 console.warn('Error verifying message. Disconnecting peer.');
                 this.disconnect();
                 return;
@@ -98,6 +99,7 @@ class HPeerConnection {
         this._outgoingJsonSocket = jsonSocket;
         this._outgoingJsonSocket.on('message', msg => {
             if (!this._verifyMessageFromPeer(msg)) {
+                console.warn(msg);
                 console.warn('Error verifying message. Disconnecting peer.');
                 this.disconnect();
                 return;
