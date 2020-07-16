@@ -68,14 +68,17 @@ def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str]:
         raise Exception('Unexpected protocol: {}'.format(protocol))
     return protocol, algorithm, hash0, additional_path
 
-def load_file(uri: str, dest: Union[str, None]=None):
+def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
     if uri.startswith('sha1dir://'):
-        uri = _resolve_file_uri_from_dir_uri(uri)
-        if uri is None:
+        uri0 = _resolve_file_uri_from_dir_uri(uri)
+        if uri0 is None:
             return None
+        uri = uri0
     local_path = ka.load_file(uri, dest=dest)
     if local_path is not None:
         return local_path
+    if not p2p:
+        return None
     for r in find_file(uri):
         timer = time.time()
         a = _load_file_helper(primary_node_id=r['primaryNodeId'], swarm_name=r['swarmName'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
@@ -87,14 +90,17 @@ def load_file(uri: str, dest: Union[str, None]=None):
             return a
     return None
 
-def load_bytes(uri: str, start: Union[int, None]=None, end: Union[int, None]=None, write_to_stdout=False) -> Union[bytes, None]:
+def load_bytes(uri: str, start: Union[int, None]=None, end: Union[int, None]=None, write_to_stdout=False, p2p: bool=True) -> Union[bytes, None]:
     if uri.startswith('sha1dir://'):
-        uri = _resolve_file_uri_from_dir_uri(uri)
-        if uri is None:
+        uri0 = _resolve_file_uri_from_dir_uri(uri, p2p=p2p)
+        if uri0 is None:
             return None
+        uri = uri0
     local_path = ka.load_file(uri)
     if local_path is not None:
         return ka.load_bytes(path=local_path, start=start, end=end, write_to_stdout=write_to_stdout)
+    if not p2p:
+        return None
     for r in find_file(uri):
         timer = time.time()
         a = _load_bytes_helper(
@@ -127,28 +133,28 @@ def _load_bytes_helper(primary_node_id, swarm_name, file_key, file_info, start, 
         content_size=end - start
     )
 
-def read_dir(uri: str):
+def read_dir(uri: str, p2p: bool=True):
     protocol, algorithm, hash0, additional_path = _parse_kachery_uri(uri)
     assert protocol == algorithm + 'dir'
-    dd = load_object(algorithm + '://' + hash0)
+    dd = load_object(algorithm + '://' + hash0, p2p=p2p)
     if dd is None:
         return None
     return ka.read_dir(uri)
         
-def load_object(uri: str):
-    local_path = load_file(uri)
+def load_object(uri: str, p2p: bool=True):
+    local_path = load_file(uri, p2p=p2p)
     if local_path is None:
         return None
     return ka.load_object(uri)
 
-def load_text(uri: str):
-    local_path = load_file(uri)
+def load_text(uri: str, p2p: bool=True):
+    local_path = load_file(uri, p2p=p2p)
     if local_path is None:
         return None
     return ka.load_text(uri)
 
-def load_npy(uri: str):
-    local_path = load_file(uri)
+def load_npy(uri: str, p2p: bool=True):
+    local_path = load_file(uri, p2p=p2p)
     if local_path is None:
         return None
     return ka.load_npy(uri)
@@ -205,7 +211,7 @@ def start_daemon(method='npx', channels=[], verbose=0):
 
         export KACHERY_P2P_API_PORT="{api_port}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-        exec npx kachery-p2p-daemon@0.2.9 start {' '.join(start_args)}
+        exec npx kachery-p2p-daemon@0.2.10 start {' '.join(start_args)}
         ''')
         ss.start()
         try:
@@ -241,10 +247,10 @@ def stop_daemon():
         return False
     return x.get('success')
 
-def _resolve_file_uri_from_dir_uri(dir_uri):
+def _resolve_file_uri_from_dir_uri(dir_uri, p2p: bool=True):
     protocol, algorithm, hash0, additional_path = _parse_kachery_uri(dir_uri)
     assert protocol == algorithm + 'dir'
-    dd = load_object(algorithm + '://' + hash0)
+    dd = load_object(algorithm + '://' + hash0, p2p=p2p)
     if dd is None:
         return None
     if additional_path:

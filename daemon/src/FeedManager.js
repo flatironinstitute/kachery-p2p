@@ -38,6 +38,21 @@ class FeedManager {
         // Return the feed ID
         return feedId;
     }
+    async deleteFeed({ feedId }) {
+        const dirPath = _feedDirectory(feedId);
+        await fs.promises.rmdir(dirPath, {recursive: true});
+
+        const config = await this._loadFeedsConfig();
+        if (feedId in config['feeds']) {
+            delete config['feeds'][feedId];
+        }
+        for (let feedName in config['feedIdsByName']) {
+            if (config['feedIdsByName'][feedName] === feedId) {
+                delete config['feedIdsByName'][feedName]
+            }
+        }
+        await this._saveFeedsConfig(config);
+    }
     async getFeedId({ feedName }) {
         // Look up the feed ID for a particular feed name by consulting the config file
         const config = await this._loadFeedsConfig();
@@ -724,8 +739,17 @@ const _subfeedHash = (subfeedName) => {
         return sha1sum(subfeedName);
     }
     else {
-        return sha1sum(JSON.stringify(subfeedName));
+        return sha1sum(JSONstringifyOrder(subfeedName));
     }
+}
+
+// Thanks: https://stackoverflow.com/questions/16167581/sort-object-properties-and-json-stringify
+function JSONstringifyOrder( obj, space )
+{
+    var allKeys = [];
+    JSON.stringify( obj, function( key, value ){ allKeys.push( key ); return value; } )
+    allKeys.sort();
+    return JSON.stringify( obj, allKeys, space );
 }
 
 const _subfeedDirectory = (feedId, subfeedName) => {

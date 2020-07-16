@@ -131,6 +131,18 @@ export default class ApiServer {
                 res.status(500).send('Error creating feed.');
             }
         });
+        // /feed/deleteFeed - delete feed on this node
+        this._app.post('/feed/deleteFeed', async (req, res) => {
+            if (verbose >= 10) {
+                console.info('/feed/deleteFeed');
+            }
+            try {
+                await this._feedApiDeleteFeed(req, res)
+            }
+            catch(err) {
+                res.status(500).send(`Error deleting feed: ${err.message}`);
+            }
+        });
         // /feed/getFeedId - lookup the ID of a local feed based on its name
         this._app.post('/feed/getFeedId', async (req, res) => {
             if (verbose >= 10) {
@@ -345,6 +357,13 @@ export default class ApiServer {
         const feedName = reqData.feedName || null;
         const feedId = await this._daemon.feedManager().createFeed({feedName});
         res.json({ success: true, feedId });
+    }
+    // /feed/deleteFeed - delete feed on this node
+    async _feedApiDeleteFeed(req, res) {
+        const reqData = req.body;
+        const feedId = reqData.feedId || null;
+        await this._daemon.feedManager().deleteFeed({feedId});
+        res.json({ success: true });
     }
     // /feed/getFeedId - lookup the ID of a local feed based on its name
     async _feedApiGetFeedId(req, res) {
