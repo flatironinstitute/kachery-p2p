@@ -1,4 +1,4 @@
-import { sleepMsec } from './util.js'
+import { sleepMsec, randomString } from './util.js'
 import WebSocket from 'ws';
 
 class Hub {
@@ -6,7 +6,6 @@ class Hub {
         this._configDir = configDir;
         this._verbose = verbose
 
-        const { publicKey, privateKey } = _loadKeypair(configDir);
         this._nodeConnections = {};
         this._swarmMemberships = {};
 
@@ -21,15 +20,15 @@ class Hub {
         }
     }
     _initializeNodeConnection(nodeConnection) {
-        const nodeId = nodeConnection.nodeId();
+        const nodeHubId = nodeConnection.nodeHubId();
         const _handleJoinSwarm = (topic) => {
             if (!this._swarmMemberships[topic]) {
                 this._swarmMemberships[topic] = {};
             }
-            if (!(nodeId in this._swarmMemberships[topic])) {
-                this._swarmMemberships[topic][nodeId] = true;
+            if (!(nodeHubId in this._swarmMemberships[topic])) {
+                this._swarmMemberships[topic][nodeHubId] = true;
                 for (let ni in this._swarmMemberships[topic]) {
-                    if (ni !== nodeId) {
+                    if (ni !== nodeHubId) {
                         const nc = this._nodeConnections[ni];
                         if (nc) {
                             nc.addPeer(topic, nodeConnection);
@@ -41,7 +40,7 @@ class Hub {
         const _handleLeaveSwarm = (topic) => {
             if (topic in this._swarmMemberships) {
                 for (let ni in this._swarmMemberships[topic]) {
-                    if (ni !== nodeId) {
+                    if (ni !== nodeHubId) {
                         const nc = this._nodeConnections[ni];
                         if (nc) {
                             nc.removePeer(topic, nodeConnection);
@@ -49,8 +48,8 @@ class Hub {
                     }
                 }
                 if (this._swarmMemberships[topic]) {
-                    if (this._swarmMemberships[topic][nodeId]) {
-                        delete this._swarmMemberships[topic][nodeId];
+                    if (this._swarmMemberships[topic][nodeHubId]) {
+                        delete this._swarmMemberships[topic][nodeHubId];
                     }
                 }
             }
@@ -62,15 +61,15 @@ class Hub {
             for (let topic of swarmTopics) {
                 _handleLeaveSwarm(topic);
             }
-            if (nodeId in this._nodeConnections) {
-                delete this._nodeConnections[nodeId];
+            if (nodeHubId in this._nodeConnections) {
+                delete this._nodeConnections[nodeHubId];
             }
         });
     }
     async listen(port) {
         const hubServer = new HubServer();
         hubServer.onNodeConnection(nodeConnection => {
-            this._nodeConnections[nodeConnection.nodeId] = nodeConnection;
+            this._nodeConnections[nodeConnection.nodeHubId] = nodeConnection;
             this._initializeNodeConnection(nodeConnection);
         });
         await hubServer.listen(port);
@@ -78,8 +77,8 @@ class Hub {
 }
 
 class NodeConnection {
-    constructor(nodeId, websocketConnection) {
-        this._nodeId = nodeId;
+    constructor(websocketConnection) {
+        this._nodeHubId = randomString(10);
         this._websocketConnection = websocketConnection;
 
         this._swarms = {};
@@ -90,8 +89,8 @@ class NodeConnection {
         websocketConnection.onDisconnect(() => this._handleDisconnect());
         websocketConnection.onMessage(msg => this._handleMessage(msg));
     }
-    nodeId() {
-        return this._nodeId;
+    nodeHubId() {
+        return this._nodeHubId;
     }
     onJoinSwarm(cb) {
         this._onJoinSwarmCallbacks.push(cb);
@@ -110,18 +109,18 @@ class NodeConnection {
             console.warn(`Unexpected addPeer for topic: ${topic}`);
             return;
         }
-        this._swarms[topic].peers[peerConnection.nodeId()] = peerConnection;
+        this._swarms[topic].peers[peerConnection.nodeHubId()] = peerConnection;
     }
     removePeer(topic, peerConnection) {
         if (!(topic in this._swarms)) {
             console.warn(`Unexpected removePeer for topic (no swarm): ${topic}`);
             return;
         }
-        if (!(peerConnection.nodeId() in this._swarms[topic].peers)) {
+        if (!(peerConnection.nodeHubId() in this._swarms[topic].peers)) {
             console.warn(`Unexpected removePeer for topic (no peer): ${topic}`);
             return;
         }
-        delete this._swarms[topic].peers[peerConnection.nodeId()];
+        delete this._swarms[topic].peers[peerConnection.nodeHubId()];
     }
     processMessageFromPeer(swarmTopic, peerId, message) {
         this._websocketConnection.sendMessage({
@@ -134,19 +133,14 @@ class NodeConnection {
         });
     }
     _handleMessage(msg) {
-        if (msg.type === 'sendMessageToPeer') {
+        if (msg.type === 'sendMessageToPeers') {
             const swarmTopic = msg.body.swarmTopic;
-            const peerId = msg.body.peerId;
+            const peerIds = msg.body.peerIds;
             const message = msg.body.message;
-            if (peerId in this._swarms[swarmTopic].peers) {
-                this._swarms[swarmTopic].peers[peerId].processMessageFromPeer(swarmTopic, this._nodeId, message);
-            }
-        }
-        else if (msg.type === 'sendMessageToSwarm') {
-            const swarmTopic = msg.body.swarmTopic;
-            const message = msg.body.message;
-            for (peerId in this._swarms[swarmTopic].peers) {
-                this._swarms[swarmTopic].peers[peerId].processMessageFromPeer(swarmTopic, this._nodeId, message);
+            for (let peerId of peerIds) {
+                if (peerId in this._swarms[swarmTopic].peers) {
+                    this._swarms[swarmTopic].peers[peerId].processMessageFromPeer(swarmTopic, this._nodeHubId, message);
+                }
             }
         }
     }
@@ -165,19 +159,16 @@ class HubServer {
     async listen(port) {
         ///////////////////////////////////////////////////////////////////////////////
         const websocketServer = new WebSocket.Server({ port });
-        let webSocketConnections = {};
-        let last_connection_id = 1;
         websocketServer.on('connection', (ws) => {
-            let id = last_connection_id + 1;
             let X = new IncomingWebSocketConnection(ws);
             let initialized = false;
             X.onMessage(msg => {
                 if (initialized) return;
-                if ((msg.type === 'initial') && (msg.body) && (msg.body.nodeId)) {
-                    // todo: use signature here to verify nodeId
+                if (msg.type === 'initial') {
+                    // todo: verify the hub protocol version here
+                    // todo: get the public ip and port here as well... to facilitate direct communication
                     initialized = true;
-                    const nodeId = msg.body.nodeId;
-                    const nodeConnection = new NodeConnection(nodeId, X);
+                    const nodeConnection = new NodeConnection(X);
                     this._onNodeConnectionCallbacks.forEach(cb => {
                         cb(nodeConnection);
                     });
