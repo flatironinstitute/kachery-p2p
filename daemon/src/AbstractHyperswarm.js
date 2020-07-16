@@ -58,7 +58,6 @@ class AbstractHyperswarm {
             })
         });
         this._hyperswarm.on('disconnection', (socket, info) => {
-            console.log('---------------- disconnection');
             // safe
             const peer = info.peer;
             if (peer) {

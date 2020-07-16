@@ -86,11 +86,9 @@ class HSwarmConnection {
         
         this._hyperswarm.onConnection((jsonSocket, socket, details) => {
             const peer = details.peer;
-            console.log('---- connected.');
             jsonSocket.sendMessage({type: 'initial', from: details.client ? 'server' : 'client', nodeId: this._nodeId, protocolVersion: PROTOCOL_VERSION});
             let receivedInitialMessage = false;
             jsonSocket.on('message', msg => {
-                console.log('---- message', msg.type, (msg.body || {}).type);
                 // safe
                 if (receivedInitialMessage) return;
                 receivedInitialMessage = true;
@@ -118,7 +116,6 @@ class HSwarmConnection {
                 if (!this._peerConnections[msg.nodeId]) {
                     let peerConnection;
                     try {
-                        console.log('----------------- creating new peer connection', msg.nodeId);
                         peerConnection = new HPeerConnection({keyPair: this._keyPair, nodeId: this._nodeId, swarmName: this._swarmName, peerId: msg.nodeId, verbose: this._verbose});
                     }
                     catch(err) {

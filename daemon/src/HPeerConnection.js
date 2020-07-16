@@ -66,7 +66,6 @@ class HPeerConnection {
     }
     // safe
     async _handleMessage(msg) {
-        console.log('---- handling message from peer', msg.type);
         this._timestampLastIncomingMessage = new Date();
         if (msg.type === 'keepAlive') {
             //
