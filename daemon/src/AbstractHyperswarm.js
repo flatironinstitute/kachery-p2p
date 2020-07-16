@@ -54,7 +54,7 @@ class AbstractHyperswarm {
             }
 
             this._onConnectionCallbacks.forEach(cb => {
-                cb(jsonSocket, details);
+                cb(jsonSocket, socket, details);
             })
         });
         this._hyperswarm.on('disconnection', (socket, info) => {
