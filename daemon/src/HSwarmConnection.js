@@ -1,9 +1,8 @@
 import crypto from 'crypto';
-import hyperswarm from 'hyperswarm';
-import JsonSocket from 'json-socket';
 import HPeerConnection from './HPeerConnection.js';
 import { randomString, sleepMsec } from './util.js';
 import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from './crypto_util.js';
+import AbstractHyperswarm from './AbstractHyperswarm.js';
 
 const PROTOCOL_VERSION = 'kachery-p2p-daemon-0.2.8'
 
@@ -83,55 +82,14 @@ class HSwarmConnection {
         if (this._verbose >= 1) {
             console.info(`joining hyperswarm: ${this._swarmName} ${this._topicHex}`)
         }
-        this._hyperswarm = hyperswarm({
-            forget: {
-                // how long to wait before forgetting that a peer
-                // has become unresponsive
-                unresponsive: 20,
-                // how long to wait before fogetting that a peer
-                // has been banned
-                banned: 60
-            },
-            multiplex: true,
-            preferredPort: 44500
-        });
-        this._hyperswarm.join(this._topic, {
-            lookup: true, // find & connect to peers
-            announce: true // announce self as a connection target
-        })
-        // this._hyperswarm.on('peer', peer => {
-        //     console.info(`${this._swarmName}: Peer discovered: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`)
-        // });
-        this._hyperswarm.on('peer-rejected', peer => {
-            if (this._verbose >= 0) {
-                console.info(`${this._swarmName}: Peer rejected: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`)
-            }
-        });
-        this._hyperswarm.on('connection', (socket, details) => {
-            // safe
-            let jsonSocket;
-            try {
-                jsonSocket = new JsonSocket(socket);
-            }
-            catch(err) {
-                console.warn(err);
-                console.warn('Problem creating JsonSocket. Closing socket.');
-                socket.destroy();
-                return;
-            }
-            jsonSocket._socket = socket;
-            const peer = details.peer;
-            if (peer) {
-                if (this._verbose >= 0) {
-                    console.info(`${this._swarmName}: Connecting to peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`);
-                }
-                // const pc = new PeerConnection(peer, jsonSocket);
-                // this._peerConnections[peerId] = pc;
-            }
-
+        this._hyperswarm = new AbstractHyperswarm(this._topic);
+        
+        this._hyperswarm.onConnection((jsonSocket, details) => {
+            console.log('---- connected.');
             jsonSocket.sendMessage({type: 'initial', from: details.client ? 'server' : 'client', nodeId: this._nodeId, protocolVersion: PROTOCOL_VERSION});
             let receivedInitialMessage = false;
             jsonSocket.on('message', msg => {
+                console.log('---- message', msg.type, (msg.body || {}).type);
                 // safe
                 if (receivedInitialMessage) return;
                 receivedInitialMessage = true;
@@ -159,6 +117,7 @@ class HSwarmConnection {
                 if (!this._peerConnections[msg.nodeId]) {
                     let peerConnection;
                     try {
+                        console.log('----------------- creating new peer connection', msg.nodeId);
                         peerConnection = new HPeerConnection({keyPair: this._keyPair, nodeId: this._nodeId, swarmName: this._swarmName, peerId: msg.nodeId, verbose: this._verbose});
                     }
                     catch(err) {
@@ -228,20 +187,11 @@ class HSwarmConnection {
 
                 this.printInfo();
             });
-        });
-        this._hyperswarm.on('disconnection', (socket, info) => {
-            // safe
-            const peer = info.peer;
-            if (peer) {
-                if (this._verbose >= 0) {
-                    console.info(`${this._swarmName}: Disconnecting from peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`);
-                }
-            }
         })
         this.printInfo();
     }
     async leave() {
-        this._hyperswarm.leave(this._topic);
+        this._hyperswarm.leave();
     }
     peerIds() {
         return Object.keys(this._peerConnections);

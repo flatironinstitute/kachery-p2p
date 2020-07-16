@@ -4,6 +4,7 @@ import os from 'os';
 import fs from 'fs';
 import yargs from 'yargs';
 import Daemon from './Daemon.js';
+import Hub from './Hub.js';
 import ApiServer from './ApiServer.js';
 import { createKeyPair, publicKeyToHex, privateKeyToHex } from './crypto_util.js';
 
@@ -42,6 +43,29 @@ function main() {
         startDaemon({ configDir, channelNames, verbose: argv.verbose });
       }
     })
+    .command({
+      command: 'start-hub',
+      desc: 'Start a hub',
+      builder: (yargs) => {
+        yargs.option('port', {
+          describe: 'Port to listen on',
+          type: 'number',
+        })
+        yargs.option('verbose', {
+          describe: 'Verbosity level.',
+          type: 'number',
+          default: 0
+        })
+      },
+      handler: (argv) => {
+        let port = argv.port || 8080;
+        const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
+        if (!fs.existsSync(configDir)) {
+          fs.mkdirSync(configDir);
+        }
+        startHub({ configDir, port, verbose: argv.verbose });
+      }
+    })
     .demandCommand()
     .strict()
     .help()
@@ -60,6 +84,12 @@ const startDaemon = async ({ channelNames, configDir, verbose }) => {
   for (let channelName of channelNames) {
     await daemon.joinChannel(channelName);
   }
+}
+
+const startHub = async ({ port, configDir, verbose }) => {
+  const hub = new Hub({configDir, verbose});
+
+  hub.listen(port);
 }
 
 main();
