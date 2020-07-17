@@ -81,7 +81,7 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
         return None
     for r in find_file(uri):
         timer = time.time()
-        a = _load_file_helper(primary_node_id=r['primaryNodeId'], swarm_name=r['swarmName'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
+        a = _load_file_helper(node_id=r['nodeId'], channel=r['channel'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
         if a is not None:
             elapsed = time.time() - timer
             size = r["fileInfo"]["size"]
@@ -104,8 +104,8 @@ def load_bytes(uri: str, start: Union[int, None]=None, end: Union[int, None]=Non
     for r in find_file(uri):
         timer = time.time()
         a = _load_bytes_helper(
-            primary_node_id=r['primaryNodeId'],
-            swarm_name=r['swarmName'],
+            channel=r['channel'],
+            node_id=r['nodeId'],
             file_key=r['fileKey'],
             file_info=r['fileInfo'],
             start=start,
@@ -118,14 +118,14 @@ def load_bytes(uri: str, start: Union[int, None]=None, end: Union[int, None]=Non
             else:
                 return a
 
-def _load_bytes_helper(primary_node_id, swarm_name, file_key, file_info, start, end):
+def _load_bytes_helper(channel, node_id, file_key, file_info, start, end):
     port = _api_port()
     url = f'http://localhost:{port}/downloadFileBytes'
     return _http_post_download_file_data(
         url,
         dict(
-            primaryNodeId=primary_node_id,
-            swarmName=swarm_name,
+            channel=channel,
+            nodeId=node_id,
             fileKey=file_key,
             startByte=start,
             endByte=end
@@ -185,7 +185,7 @@ def _probe_daemon():
         return None
     return x
 
-def start_daemon(method='npx', channels=[], verbose=0):
+def start_daemon(*, port, method='npx', channels=[], verbose=0, host=''):
     from kachery_p2p import __version__
 
     if _probe_daemon() is not None:
@@ -198,6 +198,9 @@ def start_daemon(method='npx', channels=[], verbose=0):
     for ch in channels:
         start_args.append(f'--channel {ch}')
     start_args.append(f'--verbose {verbose}')
+    if host:
+        start_args.append(f'--host {host}')
+    start_args.append(f'--port {port}')
 
     if method == 'npx':
         try:
@@ -280,7 +283,7 @@ def _resolve_file_uri_from_dir_uri(dir_uri, p2p: bool=True):
     return None
     
 
-def _load_file_helper(primary_node_id, swarm_name, file_key, file_info, dest):
+def _load_file_helper(channel, node_id, file_key, file_info, dest):
     port = _api_port()
     url = f'http://localhost:{port}/downloadFile'
     uri = _get_kachery_uri_from_file_key(file_key)
@@ -289,8 +292,8 @@ def _load_file_helper(primary_node_id, swarm_name, file_key, file_info, dest):
         _http_post_download_file(
             url,
             dict(
-                primaryNodeId=primary_node_id,
-                swarmName=swarm_name,
+                channel=channel,
+                nodeId=node_id,
                 fileKey=file_key,
                 fileSize=file_info['size']
             ),

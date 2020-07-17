@@ -328,8 +328,8 @@ export default class ApiServer {
     async _apiDownloadFile(req, res) {
         const reqData = req.body;
         const {stream, cancel} = await this._daemon.downloadFile({
-            primaryNodeId: reqData.primaryNodeId,
-            swarmName: reqData.swarmName,
+            channel: reqData.channel,
+            nodeId: reqData.nodeId,
             fileKey: reqData.fileKey,
             fileSize: reqData.fileSize,
             opts: reqData.opts || {}
@@ -341,8 +341,8 @@ export default class ApiServer {
     async _apiDownloadFileBytes(req, res) {
         const reqData = req.body;
         const {stream, cancel} = await this._daemon.downloadFileBytes({
-            primaryNodeId: reqData.primaryNodeId,
-            swarmName: reqData.swarmName,
+            channel: reqData.channel,
+            nodeId: reqData.nodeId,
             fileKey: reqData.fileKey,
             startByte: reqData.startByte,
             endByte: reqData.endByte,

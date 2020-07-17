@@ -78,8 +78,10 @@ def cat_file(uri, start, end):
 @click.option('--channel', multiple=True, help='Channel to join')
 @click.option('--verbose', default=0, help='Verbosity level')
 @click.option('--method', default='npx', help='Method for starting daemon: npx (default), dev')
-def start_daemon(method, channel, verbose):
-    kp.start_daemon(method=method, channels=channel, verbose=verbose)
+@click.option('--host', default='', help='IP for connecting to this daemon')
+@click.option('--port', help='Port to listen on')
+def start_daemon(method, channel, verbose, host, port):
+    kp.start_daemon(method=method, channels=channel, verbose=verbose, host=host, port=port)
 
 @click.command(help="Stop the daemon.")
 def stop_daemon():

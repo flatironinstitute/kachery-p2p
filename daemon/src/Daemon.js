@@ -1,27 +1,56 @@
 import fs from 'fs'
 import { randomString, sleepMsec } from './util.js'
-import PrimaryFileTransferSwarmConnection from './PrimaryFileTransferSwarmConnection.js';
-import SecondaryFileTransferSwarmConnection from './SecondaryFileTransferSwarmConnection.js';
-import LookupSwarmConnection from './LookupSwarmConnection.js';
+import KacherySwarmConnection from './KacherySwarmConnection.js';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './crypto_util.js';
 import FeedManager from './FeedManager.js';
+import WebsocketServer from './WebsocketServer.js';
 
 class Daemon {
-    constructor({ configDir, verbose }) {
+    constructor({ configDir, listenHost, listenPort, proxyHost, proxyPort, verbose }) {
         this._configDir = configDir;
+        this._listenHost = listenHost;
+        this._listenPort = listenPort;
+        this._proxyHost = proxyHost;
+        this._proxyPort = proxyPort;
         
         const { publicKey, privateKey } = _loadKeypair(configDir);
         this._keyPair = {publicKey, privateKey};
         this._nodeId = publicKeyToHex(this._keyPair.publicKey);
-        this._lookupSwarmConnections = {};
-        this._primaryFileTransferSwarmConnection = null;
-        this._secondaryFileTransferSwarmConnections = {};
+        this._swarmConnections = {};
         this._verbose = verbose;
         this._halted = false;
+
+        this._nodeInfo = {
+            nodeId: this._nodeId,
+            listenHost,
+            listenPort,
+            proxyHost,
+            proxyPort
+        };
 
         this._feedManager = new FeedManager(this, {verbose: this._verbose});
 
         console.info(`Verbose level: ${verbose}`);
+
+        if (!this._listenPort) {
+            throw Error('Listen port is empty.');
+        }
+        this._websocketServer = new WebsocketServer();
+        this._websocketServer.onConnection((connection, initialInfo) => {
+            const {channel, nodeId} = initialInfo;
+            if (!(channel in this._swarmConnections)) {
+                console.warn(`Disconnecting incoming connection. Bad channel: ${channel}`);
+                connection.disconnect();
+                return;
+            }
+            if (!nodeId) {
+                console.warn(`Disconnecting incoming connection. Empty nodeId.`);
+                connection.disconnect();
+                return;
+            }
+            this._swarmConnections[channel].setIncomingPeerConnection(nodeId, connection);
+        });
+        this._websocketServer.listen(listenPort);
 
         this._start();
     }
@@ -46,8 +75,8 @@ class Daemon {
     //    cancel()
     findFile = ({fileKey, timeoutMsec}) => (this._findFile({fileKey, timeoutMsec}));
     // returns {stream, cancel}
-    downloadFile = async ({swarmName, primaryNodeId, fileKey, fileSize, opts}) => (await this._downloadFile({swarmName, primaryNodeId, fileKey, fileSize, opts}));
-    downloadFileBytes = async ({swarmName, primaryNodeId, fileKey, startByte, endByte, opts}) => (await this._downloadFileBytes({swarmName, primaryNodeId, fileKey, startByte, endByte, opts}));
+    downloadFile = async ({channel, nodeId, fileKey, fileSize, opts}) => (await this._downloadFile({channel, nodeId, fileKey, fileSize, opts}));
+    downloadFileBytes = async ({channel, nodeId, fileKey, startByte, endByte, opts}) => (await this._downloadFileBytes({channel, nodeId, fileKey, startByte, endByte, opts}));
     // Find a live feed
     // returns an object with:
     //   onFound()
@@ -64,25 +93,27 @@ class Daemon {
         for (let channelName of this.joinedChannelNames()) {
             await this._leaveChannel(channelName);
         }
-        for (let id in this._secondaryFileTransferSwarmConnections) {
-            const c = this._secondaryFileTransferSwarmConnections[id];
-            await c.leave();
-        }
-        await this._primaryFileTransferSwarmConnection.leave();
     }
     _joinChannel = async (channelName, opts) => {
         try {
             opts = opts || {};
-            if (channelName in this._lookupSwarmConnections) {
+            if (channelName in this._swarmConnections) {
                 console.warn(`Cannot join channel. Already joined: ${channelName}`);
                 return;
             }
             if (this._verbose >= 0) {
                 console.info(`Joining channel: ${channelName}`);
             }
-            const x = new LookupSwarmConnection({keyPair: this._keyPair, nodeId: this._nodeId, channelName, fileTransferSwarmName: this._nodeId, verbose: this._verbose, feedManager: this._feedManager});
+            const x = new KacherySwarmConnection({
+                keyPair: this._keyPair,
+                nodeId: this._nodeId,
+                channelName,
+                verbose: this._verbose,
+                feedManager: this._feedManager,
+                nodeInfo: this._nodeInfo
+            });
             await x.join();
-            this._lookupSwarmConnections[channelName] = x;
+            this._swarmConnections[channelName] = x;
             if (!opts._skipUpdateConfig) {
                 await this._updateConfigFile();
             }
@@ -95,15 +126,15 @@ class Daemon {
     _leaveChannel = async (channelName, opts) => {
         try {
             opts = opts || {};
-            if (!(channelName in this._lookupSwarmConnections)) {
+            if (!(channelName in this._swarmConnections)) {
                 console.warn(`Cannot leave channel. Not joined: ${channelName}`);
                 return;
             }
             if (this._verbose >= 0) {
                 console.info(`Leaving channel: ${channelName}`);
             }
-            await this._lookupSwarmConnections[channelName].leave();
-            delete this._lookupSwarmConnections[channelName];
+            await this._swarmConnections[channelName].leave();
+            delete this._swarmConnections[channelName];
             if (!opts._skipUpdateConfig) {
                 await this._updateConfigFile();
             }
@@ -148,10 +179,10 @@ class Daemon {
             else
                 console.info(`find file: ${JSON.stringify(fileKey)}`);
         }
-        const channelNames = Object.keys(this._lookupSwarmConnections);
+        const channelNames = Object.keys(this._swarmConnections);
         channelNames.forEach(channelName => {
-            const lookupSwarmConnection = this._lookupSwarmConnections[channelName];
-            const x = lookupSwarmConnection.findFileOrLiveFeed({fileKey, timeoutMsec});
+            const swarmConnection = this._swarmConnections[channelName];
+            const x = swarmConnection.findFileOrLiveFeed({fileKey, timeoutMsec});
             findOutputs.push(x);
             x.onFound(result => {
                 if (isFinished) return;
@@ -172,74 +203,61 @@ class Daemon {
     }
 
     // returns {stream, cancel}
-    _downloadFile = async ({primaryNodeId, swarmName, fileKey, fileSize, opts}) => {
+    _downloadFile = async ({channel, nodeId, fileKey, fileSize, opts}) => {
         if (this._verbose >= 1) {
-            console.info(`downloadFile: ${primaryNodeId} ${swarmName} ${JSON.stringify(fileKey)} ${fileSize}`);
+            console.info(`downloadFile: ${channel} ${nodeId.slice(0, 8)} ${JSON.stringify(fileKey)} ${fileSize}`);
         }
-        if (!(swarmName in this._secondaryFileTransferSwarmConnections)) {
-            await this._joinSecondaryFileTransferSwarm({swarmName, primaryNodeId});
+        if (!(channel in this._swarmConnections)) {
+            throw Error(`Cannot download file... not joined to channel: ${channel}`)
         }
-        const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
-        return await swarmConnection.downloadFile({primaryNodeId, fileKey, startByte: 0, endByte: fileSize, opts});
+        const swarmConnection = this._swarmConnections[channel];
+        return await swarmConnection.downloadFile({nodeId, fileKey, startByte: 0, endByte: fileSize, opts});
     }
     // returns {stream, cancel}
-    _downloadFileBytes = async ({primaryNodeId, swarmName, fileKey, startByte, endByte, opts}) => {
+    _downloadFileBytes = async ({channel, nodeId, fileKey, startByte, endByte, opts}) => {
         if (this._verbose >= 1) {
-            console.info(`downloadFileBytes: ${primaryNodeId} ${swarmName} ${JSON.stringify(fileKey)} ${startByte} ${endByte}`);
+            console.info(`downloadFileBytes: ${channel} ${nodeId.slice(0, 8)} ${JSON.stringify(fileKey)} ${startByte} ${endByte}`);
         }
-        if (!(swarmName in this._secondaryFileTransferSwarmConnections)) {
-            await this._joinSecondaryFileTransferSwarm({swarmName, primaryNodeId});
+        if (!(channel in this._swarmConnections)) {
+            throw Error(`Cannot download file bytes... not joined to channel: ${channel}`)
         }
-        const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
-        return await swarmConnection.downloadFile({primaryNodeId, fileKey, startByte, endByte, opts});
+        const swarmConnection = this._swarmConnections[channel];
+        return await swarmConnection.downloadFile({nodeId, fileKey, startByte, endByte, opts});
     }
-    _getLiveFeedSignedMessages = async ({primaryNodeId, swarmName, feedId, subfeedName, position, waitMsec, opts}) => {
+    _getLiveFeedSignedMessages = async ({channel, nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
         if (this._verbose >= 1) {
-            console.info(`getLiveFeedSignedMessages: ${primaryNodeId} ${swarmName} ${feedId} ${subfeedName} ${position}`);
+            console.info(`getLiveFeedSignedMessages: ${channel} ${nodeId.slice(0, 8)} ${feedId.slice(0, 8)} ${subfeedName} ${position}`);
         }
-        if (!(swarmName in this._secondaryFileTransferSwarmConnections)) {
-            await this._joinSecondaryFileTransferSwarm({swarmName, primaryNodeId});
+        if (!(channel in this._swarmConnections)) {
+            throw Error(`Cannot get live feed signed messages... not joined to channel: ${channel}`)
         }
-        const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
-        const signedMessages = await swarmConnection.getLiveFeedSignedMessages({primaryNodeId, feedId, subfeedName, position, waitMsec, opts});
+        const swarmConnection = this._swarmConnections[channel];
+        const signedMessages = await swarmConnection.getLiveFeedSignedMessages({nodeId, feedId, subfeedName, position, waitMsec, opts});
         return signedMessages;
     }
-    _submitMessagesToLiveFeed = async ({primaryNodeId, swarmName, feedId, subfeedName, messages}) => {
+    _submitMessagesToLiveFeed = async ({channel, nodeId, feedId, subfeedName, messages}) => {
         if (this._verbose >= 1) {
-            console.info(`submitMessagesToLiveFeed: ${primaryNodeId} ${swarmName} ${feedId} ${subfeedName} ${messages.length}`);
+            console.info(`submitMessagesToLiveFeed: ${channel} ${nodeId.slice(0, 8)} ${feedId.slice(0, 8)} ${subfeedName} ${messages.length}`);
         }
-        if (!(swarmName in this._secondaryFileTransferSwarmConnections)) {
-            await this._joinSecondaryFileTransferSwarm({swarmName, primaryNodeId});
+        if (!(channel in this._swarmConnections)) {
+            throw Error(`Cannot submit messages to live feed... not joined to channel: ${channel}`)
         }
-        const swarmConnection = this._secondaryFileTransferSwarmConnections[swarmName];
-        await swarmConnection.submitMessagesToLiveFeed({primaryNodeId, feedId, subfeedName, messages});
-    }
-    _joinSecondaryFileTransferSwarm = async ({swarmName, primaryNodeId}) => {
-        if (swarmName in this._secondaryFileTransferSwarmConnections) {
-            throw Error(`Cannot join file transfer swarm. Already joined: ${swarmName}`);
-        }
-        if (this._verbose >= 0) {
-            console.info(`Joining file transfer: ${swarmName}`);
-        }
-        const x = new SecondaryFileTransferSwarmConnection({keyPair: this._keyPair, swarmName, primaryNodeId, nodeId: this._nodeId, verbose: this._verbose});
-        await x.join();
-        this._secondaryFileTransferSwarmConnections[swarmName] = x
+        const swarmConnection = this._swarmConnections[channel];
+        await swarmConnection.submitMessagesToLiveFeed({nodeId, feedId, subfeedName, messages});
     }
     _getState = () => {
         const state = {};
         state.channels = [];
-        for (let channelName in this._lookupSwarmConnections) {
-            const lookupSwarmConnection = this._lookupSwarmConnections[channelName];
+        for (let channelName in this._swarmConnections) {
+            const swarmConnection = this._swarmConnections[channelName];
             state.channels.push({
                 name: channelName,
-                numPeers: lookupSwarmConnection._swarmConnection.numPeers()
+                numPeers: swarmConnection.numPeers()
             });
         }
         return state;
     }
     async _start() {
-        this._primaryFileTransferSwarmConnection = new PrimaryFileTransferSwarmConnection({keyPair: this._keyPair, nodeId: this._nodeId, swarmName: this._nodeId, verbose: this._verbose, feedManager: this._feedManager});
-        await this._primaryFileTransferSwarmConnection.join();
         const config = await this._readConfigFile();
         const channels = config['channels'] || [];
         for (let ch of channels) {
@@ -248,14 +266,13 @@ class Daemon {
         while (true) {
             if (this._halted) return;
             // maintenance goes here
-            // for example, managing the secondary file transfer swarms that we belong to
             await sleepMsec(100);
         }
     }
     _updateConfigFile = async () => {
         const config = await this._readConfigFile() || [];
         config.channels = [];
-        for (let channelName in this._lookupSwarmConnections) {
+        for (let channelName in this._swarmConnections) {
             config.channels.push({
                 name: channelName
             })

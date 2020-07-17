@@ -1,7 +1,7 @@
 import { randomString } from './util.js';
 import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from './crypto_util.js';
 
-class HPeerConnection {
+class HyperswarmPeerConnection {
     constructor({keyPair, nodeId, swarmName, peerId, verbose}) {
         this._keyPair = keyPair;
         this._nodeId = nodeId;
@@ -10,6 +10,7 @@ class HPeerConnection {
         }
         this._swarmName = swarmName;
         this._peerId = peerId;
+        this._isLocal = null;
         this._verbose = verbose;
 
         this._incomingJsonSocket = null;
@@ -63,6 +64,13 @@ class HPeerConnection {
             console.warn('Could not send message. Disconnecting.');
             this.disconnect();
         }
+    }
+    // todo: set this
+    setIsLocal(val) {
+        this._isLocal = val;
+    }
+    isLocal() {
+        return this._isLocal;
     }
     // safe
     async _handleMessage(msg) {
@@ -208,4 +216,4 @@ class HPeerConnection {
     }
 }
 
-export default HPeerConnection;
+export default HyperswarmPeerConnection;

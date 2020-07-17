@@ -296,7 +296,7 @@ class RemoteFeedManager {
             console.log('getSignedMessages', feedId, subfeedName, position, waitMsec);
         }
 
-        // Search and find the info for the feed (swarmName and primaryNodeId)
+        // Search and find the info for the feed (channel and node id)
         // If not found, return null
         let liveFeedInfo = null;
         while (true) {
@@ -319,10 +319,10 @@ class RemoteFeedManager {
             }
         }
 
-        // Now that we know the swarmName and primaryNodeId, we can get the messages from the data transfer swarm
+        // Now that we know the channel and nodeId, we can get the messages from the swarm
         const signedMessages = await this._daemon._getLiveFeedSignedMessages({
-            primaryNodeId: liveFeedInfo.primaryNodeId,
-            swarmName: liveFeedInfo.swarmName,
+            channel: liveFeedInfo.channel,
+            nodeId: liveFeedInfo.nodeId,
             feedId,
             subfeedName,
             position,
@@ -341,7 +341,7 @@ class RemoteFeedManager {
         // Submit messages to a subfeed on a remote node
         // This requires write permissions
 
-        // Search and find the info for the feed (swarmName and primaryNodeId)
+        // Search and find the info for the feed (channel and nodeId)
         let waitMsec = 2000;
         let liveFeedInfo = null;
         while (true) {
@@ -366,17 +366,17 @@ class RemoteFeedManager {
             throw Error(`Cannot find live feed: ${feedId}`);
         }
 
-        // Now that we know the swarmName and primaryNodeId, we can submit the messages to the data transfer swarm
+        // Now that we know the channel and nodeId, we can submit the messages via the swarm
         await this._daemon._submitMessagesToLiveFeed({
-            primaryNodeId: liveFeedInfo.primaryNodeId,
-            swarmName: liveFeedInfo.swarmName,
+            channel: liveFeedInfo.channel,
+            nodeId: liveFeedInfo.nodeId,
             feedId,
             subfeedName,
             messages
         });
     }
     async findLiveFeedInfo({feedId}) {
-        // Find the swarmName and primaryNodeId for a feed that is owned by a remote node on the p2p network
+        // Find the channel and nodeId for a feed that is owned by a remote node on the p2p network
         // If not found, throws an error.
 
         // First check if we have the information in the memory cache
@@ -391,7 +391,7 @@ class RemoteFeedManager {
                 x.onFound(result => {
                     if (resolved) return;
 
-                    // We found it! The result will contain swarmName and primaryNodeId.
+                    // We found it! The result will contain channel and nodeId
                     resolved = true;
                     resolve(result);
 
@@ -410,7 +410,7 @@ class RemoteFeedManager {
         // Store in memory cache
         this._liveFeedInfos[feedId] = result;
 
-        // Return the result. The result will contain swarmName and primaryNodeId.
+        // Return the result. The result will contain channel and nodeId.
         return result; 
     }
 }

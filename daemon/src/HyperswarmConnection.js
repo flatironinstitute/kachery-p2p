@@ -1,12 +1,12 @@
 import crypto from 'crypto';
-import HPeerConnection from './HPeerConnection.js';
+import HyperswarmPeerConnection from './HyperswarmPeerConnection.js';
 import { randomString, sleepMsec } from './util.js';
 import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from './crypto_util.js';
 import AbstractHyperswarm from './AbstractHyperswarm.js';
 
-const PROTOCOL_VERSION = 'kachery-p2p-daemon-0.2.8'
+const PROTOCOL_VERSION = 'kachery-p2p-daemon-0.3.0'
 
-class HSwarmConnection {
+class HyperswarmConnection {
     constructor({keyPair, nodeId, swarmName, verbose}) {
         this._keyPair = keyPair;
         this._nodeId = nodeId;
@@ -32,9 +32,14 @@ class HSwarmConnection {
         this._requestIdsHandled = {};
         this._onMessageCallbacks = [];
         this._onRequestCallbacks = [];
+        this._onPeerConnectionCallbacks = [];
         this._messageListeners = {};
 
         this.onMessage((fromNodeId, msg) => {
+            if (!this._peerConnections[fromNodeId]) {
+                console.warn(`Got message, but no peer connection found: ${fromNodeId}`);
+                return;
+            }
             if (msg.type === 'requestToNode') {
                 if (msg.toNodeId === this._nodeId) {
                     const requestId = msg.requestId;
@@ -62,7 +67,7 @@ class HSwarmConnection {
             else if (msg.type === 'messageToNode') {
                 if (msg.toNodeId === this._nodeId) {
                     this._onMessageCallbacks.forEach(cb => {
-                        cb(fromNodeId, msg.messageBody);
+                        cb(fromNodeId, msg.messageBody, this._peerConnections[fromNodeId].isLocal());
                     })
                 }
             }
@@ -85,6 +90,8 @@ class HSwarmConnection {
         this._hyperswarm = new AbstractHyperswarm(this._topic);
         
         this._hyperswarm.onConnection((jsonSocket, socket, details) => {
+            // todo: provide an AbstractHyperswarmConnection here
+            // *** then implement the hub connection
             const peer = details.peer;
             jsonSocket.sendMessage({type: 'initial', from: details.client ? 'server' : 'client', nodeId: this._nodeId, protocolVersion: PROTOCOL_VERSION});
             let receivedInitialMessage = false;
@@ -116,7 +123,7 @@ class HSwarmConnection {
                 if (!this._peerConnections[msg.nodeId]) {
                     let peerConnection;
                     try {
-                        peerConnection = new HPeerConnection({keyPair: this._keyPair, nodeId: this._nodeId, swarmName: this._swarmName, peerId: msg.nodeId, verbose: this._verbose});
+                        peerConnection = new HyperswarmPeerConnection({keyPair: this._keyPair, nodeId: this._nodeId, swarmName: this._swarmName, peerId: msg.nodeId, verbose: this._verbose});
                     }
                     catch(err) {
                         console.warn(err);
@@ -125,6 +132,7 @@ class HSwarmConnection {
                         return;
                     }
                     this._peerConnections[msg.nodeId] = peerConnection;
+                    this._onPeerConnectionCallbacks.forEach(cb => cb(msg.nodeId));
                     peerConnection.onMessage((msg2, details) => {
                         try {
                             this._handleMessageFromPeer(msg.nodeId, msg2);
@@ -190,6 +198,9 @@ class HSwarmConnection {
     }
     async leave() {
         this._hyperswarm.leave();
+    }
+    onPeerConnection(cb) {
+        this._onPeerConnectionCallbacks.push(cb);
     }
     peerIds() {
         return Object.keys(this._peerConnections);
@@ -423,4 +434,4 @@ const validatePeerNodeId = (nodeId) => {
     return ((nodeId) && (typeof(nodeId) == 'string') && (nodeId.length <= 256));
 }
 
-export default HSwarmConnection;
+export default HyperswarmConnection;

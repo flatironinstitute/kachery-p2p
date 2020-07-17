@@ -33,6 +33,15 @@ function main() {
           type: 'number',
           default: 0
         })
+        yargs.option('host', {
+          describe: 'IP of this daemon.',
+          type: 'string',
+          default: ''
+        })
+        yargs.option('port', {
+          describe: 'Port to listen on.',
+          type: 'string'
+        })
       },
       handler: (argv) => {
         let channelNames = argv.channel || [];
@@ -40,7 +49,9 @@ function main() {
         if (!fs.existsSync(configDir)) {
           fs.mkdirSync(configDir);
         }
-        startDaemon({ configDir, channelNames, verbose: argv.verbose });
+        const listenHost = argv.host;
+        const listenPort = argv.port;
+        startDaemon({ configDir, channelNames, listenHost, listenPort, proxyHost: null, proxyPort: null, verbose: argv.verbose });
       }
     })
     .command({
@@ -75,8 +86,8 @@ function main() {
 
 const apiPort = process.env.KACHERY_P2P_API_PORT || 20431;
 
-const startDaemon = async ({ channelNames, configDir, verbose }) => {
-  const daemon = new Daemon({configDir, verbose});
+const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, proxyHost, proxyPort, verbose }) => {
+  const daemon = new Daemon({configDir, verbose, listenHost, listenPort, proxyHost, proxyPort});
 
   const apiServer = new ApiServer(daemon, {verbose});
   apiServer.listen(apiPort);
