@@ -6,7 +6,7 @@ const ed25519PrivateKeyPrefix = "302e020100300506032b657004220420";
 // safe
 export const getSignature = (obj, keyPair) => {
     try {
-        return crypto.sign(null, Buffer.from(JSON.stringify(obj), 'utf-8'), keyPair.privateKey).toString('hex');
+        return crypto.sign(null, Buffer.from(JSONStringifyDeterministic(obj), 'utf-8'), keyPair.privateKey).toString('hex');
     }
     catch(err) {
         console.warn(err);
@@ -17,7 +17,7 @@ export const getSignature = (obj, keyPair) => {
 
 export const verifySignature = (obj, signature, publicKey) => {
     try {
-        return crypto.verify(null, Buffer.from(JSON.stringify(obj), 'utf-8'), publicKey, Buffer.from(signature, 'hex'));
+        return crypto.verify(null, Buffer.from(JSONStringifyDeterministic(obj), 'utf-8'), publicKey, Buffer.from(signature, 'hex'));
     }
     catch(err) {
         console.warn(err);
@@ -90,4 +90,13 @@ export const createKeyPair = () => {
             // passphrase: 'top secret'
         }
     });
+}
+
+// Thanks: https://stackoverflow.com/questions/16167581/sort-object-properties-and-json-stringify
+function JSONStringifyDeterministic( obj, space )
+{
+    var allKeys = [];
+    JSON.stringify( obj, function( key, value ){ allKeys.push( key ); return value; } )
+    allKeys.sort();
+    return JSON.stringify( obj, allKeys, space );
 }

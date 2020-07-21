@@ -1,5 +1,6 @@
 import fs from 'fs'
 import { sleepMsec } from './common/util.js'
+import { JSONStringifyDeterministic } from './common/crypto_util.js';
 import KacheryChannelConnection from './KacheryChannelConnection.js';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util.js';
 import FeedManager from './FeedManager.js';
@@ -8,6 +9,7 @@ import swarm from 'hyperswarm';
 
 class Daemon {
     constructor({ configDir, listenHost, listenPort, proxyHost, proxyPort, verbose, discoveryVerbose }) {
+        // Directory where 
         this._configDir = configDir;
         this._listenHost = listenHost;
         this._listenPort = listenPort;
@@ -181,9 +183,9 @@ class Daemon {
         };
         if (this._verbose >= 1) {
             if (fileKey.type === 'liveFeed')
-                console.info(`find live feed: ${JSON.stringify(fileKey)}`);
+                console.info(`find live feed: ${JSONStringifyDeterministic(fileKey)}`);
             else
-                console.info(`find file: ${JSON.stringify(fileKey)}`);
+                console.info(`find file: ${JSONStringifyDeterministic(fileKey)}`);
         }
         const channelNames = Object.keys(this._kacheryChannelConnections);
         channelNames.forEach(channelName => {
@@ -211,7 +213,7 @@ class Daemon {
     // returns {stream, cancel}
     _downloadFile = async ({channel, nodeId, fileKey, fileSize, opts}) => {
         if (this._verbose >= 1) {
-            console.info(`downloadFile: ${channel} ${nodeId.slice(0, 8)} ${JSON.stringify(fileKey)} ${fileSize}`);
+            console.info(`downloadFile: ${channel} ${nodeId.slice(0, 8)} ${JSONStringifyDeterministic(fileKey)} ${fileSize}`);
         }
         if (!(channel in this._kacheryChannelConnections)) {
             throw Error(`Cannot download file... not joined to channel: ${channel}`)
@@ -222,7 +224,7 @@ class Daemon {
     // returns {stream, cancel}
     _downloadFileBytes = async ({channel, nodeId, fileKey, startByte, endByte, opts}) => {
         if (this._verbose >= 1) {
-            console.info(`downloadFileBytes: ${channel} ${nodeId.slice(0, 8)} ${JSON.stringify(fileKey)} ${startByte} ${endByte}`);
+            console.info(`downloadFileBytes: ${channel} ${nodeId.slice(0, 8)} ${JSONStringifyDeterministic(fileKey)} ${startByte} ${endByte}`);
         }
         if (!(channel in this._kacheryChannelConnections)) {
             throw Error(`Cannot download file bytes... not joined to channel: ${channel}`)
@@ -304,7 +306,7 @@ const readJsonFile = async (path) => {
 }
 
 const writeJsonFile = async (path, obj) => {
-    await fs.promises.writeFile(path, JSON.stringify(obj, null, 4));
+    await fs.promises.writeFile(path, JSONStringifyDeterministic(obj, null, 4));
 }
 
 const _loadKeypair = (configDir) => {

@@ -5,37 +5,75 @@ import { getLocalFileInfo } from './kachery.js';
 import Stream from 'stream';
 import { sleepMsec } from './common/util.js';
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
+const PROTOCOL_VERSION = 'kachery-p2p-5'
 
 class KacheryChannelConnection {
     constructor({keyPair, nodeId, channelName, verbose, discoveryVerbose, nodeInfo, feedManager}) {
-        this._nodeId = nodeId;
-        this._channelName = channelName;
-        this._feedManager = feedManager;
-        this._halt = false;
+        this._keyPair = keyPair; // The keypair used for signing message, the public key agrees with the node id
+        this._nodeId = nodeId; // The node id, determined by the public key in the keypair
+        this._channelName = channelName; // Name of the channel (related to the swarmName)
+        this._feedManager = feedManager; // The feed manager (feeds are collections of append-only logs)
+        this._halt = false; // Whether we have left this channel (see .leave())
 
+        // Create the swarm connection
         const swarmName = 'kachery:' + this._channelName;
         this._swarmConnection = new SwarmConnection({
-            keyPair, nodeId, swarmName, verbose, discoveryVerbose, nodeInfo
+            keyPair, nodeId, swarmName, verbose, discoveryVerbose, nodeInfo, protocolVersion: PROTOCOL_VERSION
         });
 
+        // Listen for seeking messages (when a peer is seeking a file or feed)
         this._swarmConnection.createPeerMessageListener(
-            (fromNodeId, msg) => {console.log('--- debug-check', msg.type); return (msg.type === 'seeking');}
+            (fromNodeId, msg) => {return (msg.type === 'seeking');}
         ).onMessage((fromNodeId, msg) => {
-            console.log('--- debug-seek', msg.type);
             this._handlePeerSeeking(fromNodeId, msg);
         });
+
+        // Listen for peer requests
         this._swarmConnection.onPeerRequest(({fromNodeId, requestBody, onResponse, onError, onFinished}) => {
             this._handlePeerRequest({fromNodeId, requestBody, onResponse, onError, onFinished});
         });
+
+        // Start the loop
         this._start();
     }
+    // Set an incoming websocket connection for a peer
     setIncomingPeerWebsocketConnection(peerId, connection) {
         this._swarmConnection.setIncomingPeerWebsocketConnection(peerId, connection);
     }
+    // The number of peers
     numPeers = () => {
         return this._swarmConnection.peerIds().length;
     }
+    // Sorted list of peer ids
+    peerIds = () => {
+        return this._swarmConnection.peerIds();
+    }
+    // Send a request to the swarm to find a file or a live feed
+    // Returns: {onFound, onFinished, cancel}
     findFileOrLiveFeed = ({fileKey, timeoutMsec=4000}) => {
+        return this._findFileOrLiveFeed({fileKey, timeoutMsec});
+    }
+    // Download a file (or part of a file) from a particular node in the swarm
+    // returns {stream, cancel}
+    downloadFile = async ({nodeId, fileKey, startByte, endByte, opts}) => {
+        return await _downloadFile({nodeId, fileKey, startByte, endByte, opts});
+    }
+    // Get live feed signed messages
+    // Returns list of signed messages
+    getLiveFeedSignedMessages = async ({nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
+        return await _getLiveFeedSignedMessages({nodeId, feedId, subfeedName, position, waitMsec, opts});
+    }
+    // Submit messages to a live feed on a remote node
+    submitMessagesToLiveFeed = async ({nodeId, feedId, subfeedName, messages}) => {
+        return await _submitMessagesToLiveFeed({nodeId, feedId, subfeedName, messages});
+    }
+    async leave() {
+        this._halt = true;
+        await this._swarmConnection.leave();
+    }
+
+    // IMPLEMENTATION ///////////////////////////////////////////////////
+    _findFileOrLiveFeed = ({fileKey, timeoutMsec=4000}) => {
         const onFoundCallbacks = [];
         const onFinishedCallbacks = [];
         let isFinished = false;
@@ -83,8 +121,7 @@ class KacheryChannelConnection {
         })
         return ret;
     }
-    // returns {stream, cancel}
-    downloadFile = async ({nodeId, fileKey, startByte, endByte, opts}) => {
+    _downloadFile = async ({nodeId, fileKey, startByte, endByte, opts}) => {
         const numBytes = endByte - startByte;
 
         const chunkSize = 4000000;
@@ -201,7 +238,7 @@ class KacheryChannelConnection {
             cancel: _handleCancel
         }
     }
-    getLiveFeedSignedMessages = async ({nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
+    _getLiveFeedSignedMessages = async ({nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
         return new Promise((resolve, reject) => {
             if (this._verbose >= 200) {
                 console.info(':getLiveFeedSignedMessages:');
@@ -235,7 +272,40 @@ class KacheryChannelConnection {
             });
         });
     }
-    submitMessagesToLiveFeed = async ({nodeId, feedId, subfeedName, messages}) => {
+    async _handlePeerSeeking(fromNodeId, msg) {
+        const fileKey = msg.fileKey;
+        if (fileKey.sha1) {
+            const fileInfo = await getLocalFileInfo({fileKey});
+            if (fileInfo) {
+                if ('path' in fileInfo)
+                    delete fileInfo['path'];
+                this._swarmConnection.sendMessageToPeer(
+                    fromNodeId,
+                    {
+                        type: 'providing',
+                        channel: this._channelName,
+                        nodeId: this._nodeId,
+                        fileKey,
+                        fileInfo
+                    }
+                )
+            }
+        }
+        else if (fileKey.feedId) {
+            if (await this._feedManager.hasWriteableFeed({feedId: fileKey.feedId})) {
+                this._swarmConnection.sendMessageToPeer(
+                    fromNodeId,
+                    {
+                        type: 'providing',
+                        channel: this._channelName,
+                        nodeId: this._nodeId,
+                        fileKey
+                    }
+                )
+            }
+        }
+    }
+    _submitMessagesToLiveFeed = async ({nodeId, feedId, subfeedName, messages}) => {
         return new Promise((resolve, reject) => {
             const requestBody = {
                 type: 'submitMessagesToLiveFeed',
@@ -261,46 +331,6 @@ class KacheryChannelConnection {
                 resolve();
             });
         });
-    }
-    async leave() {
-        this._halt = true;
-        await this._swarmConnection.leave();
-    }
-    async _handlePeerSeeking(fromNodeId, msg) {
-        console.log('--- handlePeerSeeking', fromNodeId, msg);
-        const fileKey = msg.fileKey;
-        if (fileKey.sha1) {
-            const fileInfo = await getLocalFileInfo({fileKey});
-            if (fileInfo) {
-                if ('path' in fileInfo)
-                    delete fileInfo['path'];
-                this._swarmConnection.sendMessageToPeer(
-                    fromNodeId,
-                    {
-                        type: 'providing',
-                        channel: this._channelName,
-                        nodeId: this._nodeId,
-                        fileKey,
-                        fileInfo
-                    }
-                )
-            }
-        }
-        else if (fileKey.feedId) {
-            console.log('---- debug 1', fromNodeId, fileKey.feedId);
-            if (await this._feedManager.hasWriteableFeed({feedId: fileKey.feedId})) {
-                console.log('---- debug 2', fromNodeId);
-                this._swarmConnection.sendMessageToPeer(
-                    fromNodeId,
-                    {
-                        type: 'providing',
-                        channel: this._channelName,
-                        nodeId: this._nodeId,
-                        fileKey
-                    }
-                )
-            }
-        }
     }
     async _handlePeerRequest({fromNodeId, requestBody, onResponse, onError, onFinished}) {
         if (requestBody.type === 'downloadFile') {
@@ -376,7 +406,7 @@ class KacheryChannelConnection {
         const peerIds = this._swarmConnection.peerIds();
         for (let peerId of peerIds) {
             const p = this._swarmConnection.peerConnection(peerId);
-            const ci = p.peerConnectInfo() || {};
+            const ci = p.peerNodeInfo() || {};
             const hasIn = p.hasIncomingWebsocketConnection();
             const hasOut = p.hasOutgoingWebsocketConnection();
             const numRoutes = Object.keys(p.routes()).length;

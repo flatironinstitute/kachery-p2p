@@ -1,6 +1,7 @@
 import os from 'os';
 import fs from 'fs';
 import { sleepMsec } from './common/util.js';
+import { JSONStringifyDeterministic } from './common/crypto_util.js';
 import { kacheryStorageDir } from './kachery.js';
 import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSignature, hexToPublicKey, hexToPrivateKey, sha1sum } from './common/crypto_util.js'
 
@@ -639,7 +640,7 @@ class Subfeed {
             previousSignature = signedMessage.signature;
             messageNumber ++;
             this._signedMessages.push(signedMessage);
-            textLinesToAppend.push(JSON.stringify(signedMessage));
+            textLinesToAppend.push(JSONStringifyDeterministic(signedMessage));
         }
         fs.appendFileSync(this._subfeedMessagesPath, textLinesToAppend.join('\n') + '\n', {encoding: 'utf8'});
     }
@@ -743,15 +744,6 @@ const _subfeedHash = (subfeedName) => {
     }
 }
 
-// Thanks: https://stackoverflow.com/questions/16167581/sort-object-properties-and-json-stringify
-function JSONstringifyOrder( obj, space )
-{
-    var allKeys = [];
-    JSON.stringify( obj, function( key, value ){ allKeys.push( key ); return value; } )
-    allKeys.sort();
-    return JSON.stringify( obj, allKeys, space );
-}
-
 const _subfeedDirectory = (feedId, subfeedName) => {
     const feedDir = _feedDirectory(feedId);
     const subfeedHash = _subfeedHash(subfeedName);
@@ -769,7 +761,7 @@ const readJsonFile = async (path, defaultVal) => {
 }
 
 const writeJsonFile = async (path, obj) => {
-    const txt = JSON.stringify(obj, null, 4);
+    const txt = JSONStringifyDeterministic(obj, null, 4);
     await fs.promises.writeFile(path, txt);
 }
 

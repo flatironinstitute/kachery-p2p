@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import { JSONStringifyDeterministic } from '../common/crypto_util.js';
 
 class WebsocketConnection {
     constructor({ host, port }) {
@@ -50,7 +51,7 @@ class WebsocketConnection {
                 console.warn('Cannot send message. Websocket is closed.');
                 return;
             }
-            this._ws.send(JSON.stringify(msg));
+            this._ws.send(JSONStringifyDeterministic(msg));
         }
         else {
             this._queuedMessages.push(msg);

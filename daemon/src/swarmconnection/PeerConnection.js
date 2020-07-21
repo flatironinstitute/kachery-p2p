@@ -1,5 +1,6 @@
 import WebsocketConnection from './WebsocketConnection.js';
 import { sleepMsec } from '../common/util.js';
+import { JSONStringifyDeterministic } from '../common/crypto_util.js'
 
 class PeerConnection {
     constructor({ keyPair, swarmName, nodeId, peerId, verbose }) {
@@ -8,9 +9,10 @@ class PeerConnection {
         this._nodeId = nodeId;
         this._peerId = peerId;
         this._verbose = verbose;
+        this._peerNodeInfo = null;
         this._incomingWebsocketConnection = null;
         this._outgoingWebsocketConnection = null;
-        this._outgoingWebsocketConnectionLastTryTimestamp = 0;
+        this._scheduleOutgoingWebsocketConnection = false;
         this._onSignedMessageCallbacks = [];
         this._onWebsocketConnectionCallbacks = [];
         this._routes = {};
@@ -28,19 +30,19 @@ class PeerConnection {
     hasWebsocketConnection() {
         return this.hasIncomingWebsocketConnection() || this.hasOutgoingWebsocketConnection();
     }
-    setPeerConnectInfo(peerConnectInfo) {
-        if ((this._peerConnectInfo) && (JSON.stringify(peerConnectInfo) === JSON.stringify(this._peerConnectInfo))) {
+    setPeerNodeInfo(peerNodeInfo) {
+        if ((this._peerNodeInfo) && (JSONStringifyDeterministic(peerNodeInfo) === JSONStringifyDeterministic(this._peerNodeInfo))) {
             // not a change
             return;
         }
         if (this._verbose >= 50) {
-            console.info(`SWARM:: Setting peer connect info for ${this._peerId}: ${JSON.stringify(peerConnectInfo)}`);
+            console.info(`SWARM:: Setting peer node info for ${this._peerId}: ${JSONStringifyDeterministic(peerNodeInfo)}`);
         }
-        this._peerConnectInfo = peerConnectInfo;
-        this._outgoingWebsocketConnectionLastTryTimestamp = 0; // try right away
+        this._peerNodeInfo = peerNodeInfo;
+        this._scheduleOutgoingWebsocketConnection = true;
     }
-    peerConnectInfo() {
-        return this._peerConnectInfo;
+    peerNodeInfo() {
+        return this._peerNodeInfo;
     }
     routes() {
         return this._routes;
@@ -110,11 +112,11 @@ class PeerConnection {
     //     });
     // }
     async _tryOutgoingWebsocketConnection() {
-        const peerConnectInfo = this._peerConnectInfo;
-        if ((peerConnectInfo) && (peerConnectInfo.port)) {
-            let host = peerConnectInfo.host;
-            let port = peerConnectInfo.port;
-            if (peerConnectInfo.local) {
+        const peerNodeInfo = this._peerNodeInfo;
+        if ((peerNodeInfo) && (peerNodeInfo.port)) {
+            let host = peerNodeInfo.host;
+            let port = peerNodeInfo.port;
+            if (peerNodeInfo.local) {
                 host = 'localhost';
             }
             if (!host) return;
@@ -157,15 +159,15 @@ class PeerConnection {
         }
     }
     async _start() {
+        let timeLastOutgoingWebsocketTry = new Date();
         while (true) {
             if (this._halt) return;
-            if (!this._outgoingWebsocketConnection) {
-                const elapsedSinceLastTry = (new Date()) - this._outgoingWebsocketConnectionLastTryTimestamp;
-                if (elapsedSinceLastTry > 5000) {
-                    if ((this._peerConnectInfo) && (this._peerConnectInfo.port)) {
-                        await this._tryOutgoingWebsocketConnection();
-                        this._outgoingWebsocketConnectionLastTryTimestamp = new Date();
-                    }
+            if ((!this._outgoingWebsocketConnection) && (this._peerNodeInfo)) {
+                const elapsed = (new Date()) - timeLastOutgoingWebsocketTry;
+                if ((this._scheduleOutgoingWebsocketConnection) || (elapsed > 5000)) {
+                    timeLastOutgoingWebsocketTry = new Date();
+                    this._scheduleOutgoingWebsocketConnection = false;
+                    await this._tryOutgoingWebsocketConnection();
                 }
             }
             await sleepMsec(100);

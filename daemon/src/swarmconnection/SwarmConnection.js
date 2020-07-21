@@ -1,30 +1,40 @@
 import PeerDiscoveryEngine from './peerdiscovery/PeerDiscoveryEngine.js';
 import PeerConnection from './PeerConnection.js';
 import { randomAlphaString, sleepMsec } from '../common/util.js';
+import { JSONStringifyDeterministic } from '../common/crypto_util.js'
 import { getSignature, hexToPublicKey, verifySignature } from '../common/crypto_util.js';
 
 class SwarmConnection {
-    constructor({keyPair, nodeId, swarmName, verbose, discoveryVerbose, nodeInfo}) {
-        this._keyPair = keyPair;
-        this._nodeId = nodeId;
-        this._swarmName = swarmName;
-        this._verbose = verbose;
-        this._peerDiscoveryEngine = new PeerDiscoveryEngine({
-            keyPair, swarmName, nodeId, host: nodeInfo.host, port: nodeInfo.port, verbose: discoveryVerbose
-        });
-        this._nodeInfo = nodeInfo;
-        this._peerConnections = {};
-        this._peerMessageListeners = {};
-        this._onPeerRequestCallbacks = [];
+    constructor({keyPair, nodeId, swarmName, verbose, discoveryVerbose, nodeInfo, protocolVersion}) {
+        this._keyPair = keyPair; // the keypair for signing messages (public key is same as node id)
+        this._nodeId = nodeId; // The id of the node, determined by the public key in the keypair
+        this._swarmName = swarmName; // The name of the swarm (related to the channel name)
+        this._verbose = verbose; // Verbosity level
+        this._nodeInfo = nodeInfo; // Info about this node, like host and port
+        this._peerConnections = {}; // Peer connections
+        this._peerMessageListeners = {}; // listeners for messages coming in from peers
+        this._onPeerRequestCallbacks = []; // callbacks for requests coming in from peers
         this._halt = false;
 
-        this._peerDiscoveryEngine.onPeerAnnounce(({peerId, host, port, local}) => {
-            this._handlePeerAnnounce({peerId, host, port, local});
+        // the discovery engine!
+        this._peerDiscoveryEngine = new PeerDiscoveryEngine({
+            keyPair,
+            swarmName,
+            nodeId,
+            nodeInfo,
+            verbose: discoveryVerbose, // verbosity for just the discovery/hyperswarm part
+            protocolVersion // version of the kachery-p2p protocol
+        });
+        // Listen for new nodes in the swarm announcing their node info
+        this._peerDiscoveryEngine.onPeerNodeInfoChanged(({peerId, nodeInfo}) => {
+            this._handlePeerAnnounce({peerId, peerNodeInfo});
         });
 
+        // Start the loop
         this._start();
     }
 
+    // Leave this swarm/channel
     async leave() {
         this.sendMessageToAllPeers({
             type: 'leaving'
@@ -32,34 +42,47 @@ class SwarmConnection {
         this._halt = true;
         this._peerDiscoveryEngine.leave();
     }
+    // A sorted list of the peer ids
     peerIds = () => {
         return Object.keys(this._peerConnections).sort();
     }
+    // Return a peer connection
     peerConnection = (peerId) => {
         return this._peerConnections[peerId];
     }
+    // number of peers
     numPeers = () => {
-        return Object.keys(this._peerConnections).length;
+        return this.peerIds().length;
     }
+    // Print some info about this node and peers
     printInfo() {
         const numPeers = this.numPeers();
         console.info(`${numPeers} ${numPeers === 1 ? "peer" : "peers"}`);
     }
+    // Set an incoming peer websocket connection
     setIncomingPeerWebsocketConnection(peerId, connection) {
+        // Create the connection if needed
         if (!(peerId in this._peerConnections)) {
             this._createPeerConnection(peerId);
         }
+
         if (peerId in this._peerConnections) {
             if (this._verbose >= 50) {
                 console.info(`SWARM:: Setting incoming websocket connection for peer ${peerId}`);
             }
+            // set the incoming connection
             this._peerConnections[peerId].setIncomingWebsocketConnection(connection); // todo: implement    
             return;
         }
         else {
+            // we couldn't create it, so let's disconnect
             connection.disconnect();
         }
     }
+    // Create a new listener for messages coming from a peer
+    // if testFunction(fromNodeId, msg) returns true, it will call
+    // the callbacks registered in ret.onMessage(...)
+    // Cancel the listener via ret.cancel()
     createPeerMessageListener(testFunction, opts) {
         opts = opts || {};
         const x = {
@@ -75,12 +98,31 @@ class SwarmConnection {
             }
         };
     }
+    // Send a message to all peers
     sendMessageToAllPeers(msg) {
         for (let peerId in this._peerConnections) {
             this.sendMessageToPeer(peerId, msg);
         }
     }
+    // Send a message to a peer
     sendMessageToPeer(peerId, msg) {
+        this._sendMessageToPeer(peerId, msg);
+    }
+    // Listen for requests and send responses
+    // Note: it is possible to send more than one response before calling onFinished
+    // .onPeerRequest(({fromNodeId, requestBody, onResponse, onError, onFinished})) => {...});
+    onPeerRequest(cb) {
+        this._onPeerRequestCallbacks.push(cb);
+    }
+    // Make a request to a peer and listen for responses
+    // returns {onResponse, onError, onFinished, cancel}
+    // You can use opts.timeout (milliseconds)
+    makeRequestToPeer = (nodeId, requestBody, opts) => {
+        return this._makeRequestToPeer(nodeId, requestBody, opts);
+    }
+
+    // IMPLEMENTATION /////////////////////////////////////////////////////////////
+    _sendMessageToPeer(peerId, msg) {
         if (!(peerId in this._peerConnections)) {
             console.warn(`Unable to send message ... no peer connection to ${peerId}`);
             return false;
@@ -88,6 +130,7 @@ class SwarmConnection {
         if (this._verbose >= 100) {
             console.info(`Sending message to peer ${peerId.slice(0, 6)} ${msg.type}`);
         }
+        // Form the signed message (which may need to get routed through other nodes in the swarm)
         const body = {
             fromNodeId: this._nodeId,
             toNodeId: peerId,
@@ -96,7 +139,7 @@ class SwarmConnection {
         const signature = getSignature(body, this._keyPair);
         const signedMessage = {
             body,
-            avoid: {[this._nodeId]: true},
+            avoid: {[this._nodeId]: true}, // Nodes to avoid (case of routing)
             signature
         }
         this._sendSignedMessage(signedMessage);
@@ -119,93 +162,7 @@ class SwarmConnection {
         }
         return false;
     }
-    onPeerRequest(cb) {
-        this._onPeerRequestCallbacks.push(cb);
-    }
-    // returns {onResponse, onError, onFinished, cancel}
-    makeRequestToPeer = (nodeId, requestBody, opts) => {
-        // Send a request to node
-        const requestId = opts.requestId || randomAlphaString(10);
-        const onResponseCallbacks = [];
-        const onErrorCallbacks = [];
-        const onFinishedCallbacks = [];
-        
-        const message = {
-            type: 'requestToNode', // todo: make sure we handle this
-            toNodeId: nodeId,
-            requestId,
-            requestBody
-        }
-        this.sendMessageToPeer(nodeId, message);
-        const listener = this.createPeerMessageListener((fromNodeId, msg) => {
-            if (fromNodeId !== nodeId) return false;
-            return ((
-                (msg.type === 'requestToNodeResponse') ||
-                (msg.type === 'requestToNodeError') ||
-                (msg.type === 'requestToNodeFinished') ||
-                (msg.type === 'requestToNodeReceived')
-            ) && (msg.requestId === requestId));
-        });
-        let isFinished = false;
-        let requestReceived = false;
-        let timestampLastResponse = new Date();
-        const handleReceived = () => {
-            requestReceived = true;
-        }
-        const handleFinished = () => {
-            if (isFinished) return;
-            onFinishedCallbacks.forEach(cb => cb());
-            isFinished = true;
-            listener.cancel();
-        }
-        const handleResponse = (responseBody) => {
-            if (isFinished) return;
-            timestampLastResponse = new Date();
-            onResponseCallbacks.forEach(cb => cb(responseBody));
-        }
-        const handleError = (errorString) => {
-            if (isFinished) return;
-            onErrorCallbacks.forEach(cb => cb(errorString));
-            isFinished = true;
-            listener.cancel();
-        }
-
-        if (opts.timeout) {
-            const monitorTimeout = async () => {
-                while (!isFinished) {
-                    const elapsedSinceResponse = (new Date()) - timestampLastResponse;
-                    if (elapsedSinceResponse > opts.timeout) {
-                        handleError('Timeout while waiting for response.');
-                    }
-                    await sleepMsec(1000);
-                }
-            }
-            monitorTimeout();
-        }
-
-        listener.onMessage((fromNodeId, msg) => {
-            if (msg.type === 'requestToNodeReceived') {
-                handleReceived();
-            }
-            else if (msg.type === 'requestToNodeResponse') {
-                handleResponse(msg.responseBody);
-            }
-            else if (msg.type === 'requestToNodeError') {
-                handleError(msg.errorString);
-            }
-            else if (msg.type === 'requestToNodeFinished') {
-                handleFinished();
-            }
-        });
-        return {
-            requestId,
-            onResponse: cb => onResponseCallbacks.push(cb),
-            onError: cb => onErrorCallbacks.push(cb),
-            onFinished: cb => onFinishedCallbacks.push(cb),
-            // todo: think about doing more here - send out a cancel message to node
-            cancel: () => {handleFinished(); listener.cancel();}
-        }
-    }
+    
 
     _createPeerConnection(peerId) {
         if (peerId in this._peerConnections) return;
@@ -214,7 +171,10 @@ class SwarmConnection {
         }
         const x = new PeerConnection({
             keyPair: this._keyPair,
-            swarmName: this._swarmName, nodeId: this._nodeId, peerId, verbose: this._verbose
+            swarmName: this._swarmName,
+            nodeId: this._nodeId,
+            peerId,
+            verbose: this._verbose
         });
         x.onSignedMessage(msg => {
             this._handleSignedMessageFromPeer(msg);
@@ -225,13 +185,13 @@ class SwarmConnection {
         });
     }
 
-    _handlePeerAnnounce({peerId, host, port, local}) {
+    _handlePeerAnnounce({peerId, peerNodeInfo}) {
         if (!(peerId in this._peerConnections)) {
             this._createPeerConnection(peerId);
         }
         if (peerId in this._peerConnections) {
-            this._peerConnections[peerId].setPeerConnectInfo({
-                host, port, local
+            this._peerConnections[peerId].setPeerNodeInfo({
+                peerNodeInfo
             });
         }
     }
@@ -357,6 +317,89 @@ class SwarmConnection {
             }
         }
     }
+    _makeRequestToPeer = (nodeId, requestBody, opts) => {
+        // Send a request to node
+        const requestId = opts.requestId || randomAlphaString(10);
+        const onResponseCallbacks = [];
+        const onErrorCallbacks = [];
+        const onFinishedCallbacks = [];
+        
+        const message = {
+            type: 'requestToNode', // todo: make sure we handle this
+            toNodeId: nodeId,
+            requestId,
+            requestBody
+        }
+        this.sendMessageToPeer(nodeId, message);
+        const listener = this.createPeerMessageListener((fromNodeId, msg) => {
+            if (fromNodeId !== nodeId) return false;
+            return ((
+                (msg.type === 'requestToNodeResponse') ||
+                (msg.type === 'requestToNodeError') ||
+                (msg.type === 'requestToNodeFinished') ||
+                (msg.type === 'requestToNodeReceived')
+            ) && (msg.requestId === requestId));
+        });
+        let isFinished = false;
+        let requestReceived = false;
+        let timestampLastResponse = new Date();
+        const handleReceived = () => {
+            requestReceived = true;
+        }
+        const handleFinished = () => {
+            if (isFinished) return;
+            onFinishedCallbacks.forEach(cb => cb());
+            isFinished = true;
+            listener.cancel();
+        }
+        const handleResponse = (responseBody) => {
+            if (isFinished) return;
+            timestampLastResponse = new Date();
+            onResponseCallbacks.forEach(cb => cb(responseBody));
+        }
+        const handleError = (errorString) => {
+            if (isFinished) return;
+            onErrorCallbacks.forEach(cb => cb(errorString));
+            isFinished = true;
+            listener.cancel();
+        }
+
+        if (opts.timeout) {
+            const monitorTimeout = async () => {
+                while (!isFinished) {
+                    const elapsedSinceResponse = (new Date()) - timestampLastResponse;
+                    if (elapsedSinceResponse > opts.timeout) {
+                        handleError('Timeout while waiting for response.');
+                    }
+                    await sleepMsec(1000);
+                }
+            }
+            monitorTimeout();
+        }
+
+        listener.onMessage((fromNodeId, msg) => {
+            if (msg.type === 'requestToNodeReceived') {
+                handleReceived();
+            }
+            else if (msg.type === 'requestToNodeResponse') {
+                handleResponse(msg.responseBody);
+            }
+            else if (msg.type === 'requestToNodeError') {
+                handleError(msg.errorString);
+            }
+            else if (msg.type === 'requestToNodeFinished') {
+                handleFinished();
+            }
+        });
+        return {
+            requestId,
+            onResponse: cb => onResponseCallbacks.push(cb),
+            onError: cb => onErrorCallbacks.push(cb),
+            onFinished: cb => onFinishedCallbacks.push(cb),
+            // todo: think about doing more here - send out a cancel message to node
+            cancel: () => {handleFinished(); listener.cancel();}
+        }
+    }
     async _start() {
         let lastReportedRoutes = {};
         await sleepMsec(100);
@@ -364,7 +407,7 @@ class SwarmConnection {
             if (this._halt) return;
             
             const routes = this._getRoutes();
-            if (JSON.stringify(routes) !== JSON.stringify(lastReportedRoutes)) {
+            if (JSONStringifyDeterministic(routes) !== JSONStringifyDeterministic(lastReportedRoutes)) {
                 this._updateReportRoutes();
                 lastReportedRoutes = routes;
             }

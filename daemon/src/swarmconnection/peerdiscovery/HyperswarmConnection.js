@@ -1,13 +1,11 @@
 import crypto from 'crypto';
 import HyperswarmPeerConnection from './HyperswarmPeerConnection.js';
 import { randomAlphaString, sleepMsec } from '../../common/util.js';
-import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from '../../common/crypto_util.js';
+import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey, JSONStringifyDeterministic } from '../../common/crypto_util.js';
 import AbstractHyperswarm from './AbstractHyperswarm.js';
 
-const PROTOCOL_VERSION = 'kachery-p2p-4'
-
 class HyperswarmConnection {
-    constructor({keyPair, nodeId, swarmName, verbose}) {
+    constructor({keyPair, nodeId, swarmName, protocolVersion, verbose}) {
         this._keyPair = keyPair;
         this._nodeId = nodeId;
         if (this._nodeId !== publicKeyToHex(this._keyPair.publicKey.toString('hex'))) {
@@ -16,14 +14,14 @@ class HyperswarmConnection {
         this._swarmName = swarmName;
         this._verbose = verbose;
         const topicKey = {
-            protocolVersion: PROTOCOL_VERSION,
+            protocolVersion: protocolVersion,
             swarmName: swarmName
         };
         this._topic = crypto.createHash('sha256')
-            .update(JSON.stringify(topicKey))
+            .update(JSONStringifyDeterministic(topicKey))
             .digest()
         this._topicHex = crypto.createHash('sha256')
-            .update(JSON.stringify(topicKey))
+            .update(JSONStringifyDeterministic(topicKey))
             .digest('hex');
         this._hyperswarm = null;
         this._peerConnections = {};

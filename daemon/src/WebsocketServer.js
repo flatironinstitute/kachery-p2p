@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import { JSONStringifyDeterministic } from './common/crypto_util.js'
 
 class WebsocketServer {
     constructor() {
@@ -61,7 +62,7 @@ class IncomingWebSocketConnection {
         this._onDisconnectCallbacks.push(cb);
     }
     sendMessage(msg) {
-        this._webSocket.send(JSON.stringify(msg));
+        this._webSocket.send(JSONStringifyDeterministic(msg));
     }
     disconnect() {
         this._webSocket.close();
