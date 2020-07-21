@@ -1,6 +1,6 @@
 import fs from 'fs'
-import { randomString, sleepMsec } from './util.js'
-import KacherySwarmConnection from './KacherySwarmConnection.js';
+import { sleepMsec } from './common/util.js'
+import KacherySwarmConnection from './kacheryswarm/KacherySwarmConnection.js';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './crypto_util.js';
 import FeedManager from './FeedManager.js';
 import WebsocketServer from './WebsocketServer.js';
@@ -22,10 +22,8 @@ class Daemon {
 
         this._nodeInfo = {
             nodeId: this._nodeId,
-            listenHost,
-            listenPort,
-            proxyHost,
-            proxyPort
+            host: listenHost,
+            port: listenPort
         };
 
         this._feedManager = new FeedManager(this, {verbose: this._verbose});

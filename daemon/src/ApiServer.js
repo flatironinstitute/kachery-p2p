@@ -3,7 +3,7 @@ import https from 'https';
 import http from 'http';
 import fs from 'fs';
 import JsonSocket from 'json-socket';
-import { sleepMsec } from './util.js';
+import { sleepMsec } from './common/util.js';
 
 export default class ApiServer {
     // This is the API server for the local daemon

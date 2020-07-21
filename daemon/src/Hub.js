@@ -1,4 +1,4 @@
-import { sleepMsec, randomString } from './util.js'
+import { sleepMsec, randomString } from './common/util.js'
 import WebSocket from 'ws';
 
 class Hub {

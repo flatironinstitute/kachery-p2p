@@ -1,4 +1,4 @@
-import { randomString } from './util.js';
+import { randomString } from '../../util.js';
 import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from './crypto_util.js';
 
 class HyperswarmPeerConnection {
@@ -10,7 +10,6 @@ class HyperswarmPeerConnection {
         }
         this._swarmName = swarmName;
         this._peerId = peerId;
-        this._isLocal = null;
         this._verbose = verbose;
 
         this._incomingJsonSocket = null;
@@ -65,12 +64,8 @@ class HyperswarmPeerConnection {
             this.disconnect();
         }
     }
-    // todo: set this
-    setIsLocal(val) {
-        this._isLocal = val;
-    }
-    isLocal() {
-        return this._isLocal;
+    peerIsLocal() {
+        return this._connectionInfo.local;
     }
     // safe
     async _handleMessage(msg) {
