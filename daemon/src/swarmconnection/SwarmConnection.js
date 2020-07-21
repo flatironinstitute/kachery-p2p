@@ -250,7 +250,7 @@ class SwarmConnection {
             // todo: figure out which to use
             const id0 = ids[0];
             if (this._verbose >= 50) {
-                console.info('Forwarding signed message from peer', msg.body.fromNodeId, msg.body.toNodeId, msg.body.type, id0);
+                console.info('Forwarding signed message from peer', msg.body.fromNodeId, msg.body.toNodeId, msg.body.message.type, id0);
             }
             this._peerConnections[id0].sendSignedMessage({
                 body: msg.body,
