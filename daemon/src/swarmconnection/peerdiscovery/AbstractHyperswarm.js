@@ -26,7 +26,7 @@ class AbstractHyperswarm {
         //     console.info(`${this._swarmName}: Peer discovered: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`)
         // });
         this._hyperswarm.on('peer-rejected', peer => {
-            if (this._verbose >= 0) {
+            if (this._verbose >= 1) {
                 console.info(`${this._swarmName}: Peer rejected: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`)
             }
         });
@@ -38,15 +38,17 @@ class AbstractHyperswarm {
                 jsonSocket = new JsonSocket(socket);
             }
             catch(err) {
-                console.warn(err);
-                console.warn('Problem creating JsonSocket. Closing socket.');
+                if (this._verbose >= 1) {
+                    console.warn(err);
+                    console.warn('Problem creating JsonSocket. Closing socket.');
+                }
                 socket.destroy();
                 return;
             }
             jsonSocket._socket = socket;
             const peer = details.peer;
             if (peer) {
-                if (this._verbose >= 0) {
+                if (this._verbose >= 1) {
                     console.info(`${this._swarmName}: Connecting to peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`);
                 }
                 // const pc = new PeerConnection(peer, jsonSocket);
@@ -61,7 +63,7 @@ class AbstractHyperswarm {
             // safe
             const peer = info.peer;
             if (peer) {
-                if (this._verbose >= 0) {
+                if (this._verbose >= 1) {
                     console.info(`${this._swarmName}: Disconnecting from peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`);
                 }
             }

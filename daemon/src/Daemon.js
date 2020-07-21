@@ -7,7 +7,7 @@ import WebsocketServer from './WebsocketServer.js';
 import swarm from 'hyperswarm';
 
 class Daemon {
-    constructor({ configDir, listenHost, listenPort, proxyHost, proxyPort, verbose }) {
+    constructor({ configDir, listenHost, listenPort, proxyHost, proxyPort, verbose, discoveryVerbose }) {
         this._configDir = configDir;
         this._listenHost = listenHost;
         this._listenPort = listenPort;
@@ -19,6 +19,7 @@ class Daemon {
         this._nodeId = publicKeyToHex(this._keyPair.publicKey);
         this._kacheryChannelConnections = {};
         this._verbose = verbose;
+        this._discoveryVerbose = discoveryVerbose;
         this._halted = false;
 
         this._nodeInfo = {
@@ -114,6 +115,7 @@ class Daemon {
                 nodeId: this._nodeId,
                 channelName,
                 verbose: this._verbose,
+                discoveryVerbose: this._discoveryVerbose,
                 feedManager: this._feedManager,
                 nodeInfo: this._nodeInfo
             });

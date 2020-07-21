@@ -4,13 +4,13 @@ import { randomString, sleepMsec } from '../common/util.js';
 import { getSignature, hexToPublicKey, verifySignature } from '../common/crypto_util.js';
 
 class SwarmConnection {
-    constructor({keyPair, nodeId, swarmName, verbose, nodeInfo}) {
+    constructor({keyPair, nodeId, swarmName, verbose, discoveryVerbose, nodeInfo}) {
         this._keyPair = keyPair;
         this._nodeId = nodeId;
         this._swarmName = swarmName;
         this._verbose = verbose;
         this._peerDiscoveryEngine = new PeerDiscoveryEngine({
-            keyPair, swarmName, nodeId, host: nodeInfo.host, port: nodeInfo.port, verbose
+            keyPair, swarmName, nodeId, host: nodeInfo.host, port: nodeInfo.port, verbose: discoveryVerbose
         });
         this._nodeInfo = nodeInfo;
         this._peerConnections = {};

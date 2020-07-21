@@ -32,6 +32,11 @@ function main() {
           type: 'number',
           default: 0
         })
+        yargs.option('dverbose', {
+          describe: 'Verbosity level for hyperswarm discovery.',
+          type: 'number',
+          default: 0
+        })
         yargs.option('host', {
           describe: 'IP of this daemon.',
           type: 'string',
@@ -50,7 +55,16 @@ function main() {
         }
         const listenHost = argv.host;
         const listenPort = argv.port;
-        startDaemon({ configDir, channelNames, listenHost, listenPort, proxyHost: null, proxyPort: null, verbose: argv.verbose });
+        startDaemon({
+          configDir,
+          channelNames,
+          listenHost,
+          listenPort,
+          proxyHost: null,
+          proxyPort: null,
+          verbose: argv.verbose,
+          discoveryVerbose: argv.dverbose,
+        });
       }
     })
     .command({
@@ -85,8 +99,8 @@ function main() {
 
 const apiPort = process.env.KACHERY_P2P_API_PORT || 20431;
 
-const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, proxyHost, proxyPort, verbose }) => {
-  const daemon = new Daemon({configDir, verbose, listenHost, listenPort, proxyHost, proxyPort});
+const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, proxyHost, proxyPort, verbose, discoveryVerbose }) => {
+  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, proxyHost, proxyPort});
 
   const apiServer = new ApiServer(daemon, {verbose});
   apiServer.listen(apiPort);

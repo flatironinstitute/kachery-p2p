@@ -7,7 +7,7 @@ import { sleepMsec } from './common/util.js';
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
 class KacheryChannelConnection {
-    constructor({keyPair, nodeId, channelName, verbose, nodeInfo, feedManager}) {
+    constructor({keyPair, nodeId, channelName, verbose, discoveryVerbose, nodeInfo, feedManager}) {
         this._nodeId = nodeId;
         this._channelName = channelName;
         this._feedManager = feedManager;
@@ -15,7 +15,7 @@ class KacheryChannelConnection {
 
         const swarmName = 'kachery:' + this._channelName;
         this._swarmConnection = new SwarmConnection({
-            keyPair, nodeId, swarmName, verbose, nodeInfo
+            keyPair, nodeId, swarmName, verbose, discoveryVerbose, nodeInfo
         });
 
         this._swarmConnection.createPeerMessageListener(

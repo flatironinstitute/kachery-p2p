@@ -16,7 +16,7 @@ class PeerDiscoveryEngine {
         this._hyperswarmConnection.onMessage((fromNodeId, msg) => {
             if (msg.type === 'announce') {
                 if (msg.nodeId !== fromNodeId) {
-                    console.warn('Unexpected: msg.nodeId <> fromNodeId', msg.nodeId, fromNodeId);
+                    console.warn('DISCOVERY: Unexpected: msg.nodeId <> fromNodeId', msg.nodeId, fromNodeId);
                     return;
                 }
                 this._onPeerAnnounceCallbacks.forEach(cb => {

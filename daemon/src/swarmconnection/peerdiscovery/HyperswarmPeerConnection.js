@@ -38,8 +38,10 @@ class HyperswarmPeerConnection {
         this._incomingJsonSocket.on('message', msg => {
             // safe
             if (!this._verifyMessageFromPeer(msg)) {
-                console.warn(msg);
-                console.warn('Error verifying message. Disconnecting peer.');
+                if (this._verbose >= 1) {
+                    console.warn(msg);
+                    console.warn('Error verifying message. Disconnecting peer.');
+                }
                 this.disconnect();
                 return;
             }
@@ -59,8 +61,10 @@ class HyperswarmPeerConnection {
             this._incomingJsonSocket.sendMessage(this._signMessage({type: 'ready'}));
         }
         catch(err) {
-            console.warn(err);
-            console.warn('Could not send message. Disconnecting.');
+            if (this._verbose >= 1) {
+                console.warn(err);
+                console.warn('Could not send message. Disconnecting.');
+            }
             this.disconnect();
         }
     }
@@ -101,8 +105,10 @@ class HyperswarmPeerConnection {
         this._outgoingJsonSocket = jsonSocket;
         this._outgoingJsonSocket.on('message', msg => {
             if (!this._verifyMessageFromPeer(msg)) {
-                console.warn(msg);
-                console.warn('Error verifying message. Disconnecting peer.');
+                if (this._verbose >= 1) {
+                    console.warn(msg);
+                    console.warn('Error verifying message. Disconnecting peer.');
+                }
                 this.disconnect();
                 return;
             }
@@ -145,8 +151,10 @@ class HyperswarmPeerConnection {
             socket.sendMessage(this._signMessage(msg));
         }
         catch(err) {
-            console.warn(err);
-            console.warn('Error sending message')
+            if (this._verbose >= 1) {
+                console.warn(err);
+                console.warn('Error sending message')
+            }
         }
     }
     // safe
@@ -202,8 +210,10 @@ class HyperswarmPeerConnection {
             peerPublicKey = hexToPublicKey(this._peerId, 'hex');
         }
         catch(err) {
-            console.warn(err);
-            console.warn('Problem converting peer ID to public key.')
+            if (this._verbose >= 1) {
+                console.warn(err);
+                console.warn('Problem converting peer ID to public key.')
+            }
             return false;
         }
         // safe
