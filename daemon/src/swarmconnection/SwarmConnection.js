@@ -85,6 +85,9 @@ class SwarmConnection {
             console.warn(`Unable to send message ... no peer connection to ${peerId}`);
             return false;
         }
+        if (this._verbose >= 100) {
+            console.info(`Sending message to peer ${peerId.slice(0, 6)} ${msg.type}`);
+        }
         if (this._peerConnections[peerId].hasWebsocketConnection()) {
             this._peerConnections[peerId].sendMessage(msg);
             return true;
