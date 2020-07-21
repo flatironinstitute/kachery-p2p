@@ -31,6 +31,9 @@ class KacheryChannelConnection {
     setIncomingPeerWebsocketConnection(peerId, connection) {
         this._swarmConnection.setIncomingPeerWebsocketConnection(peerId, connection);
     }
+    numPeers = () => {
+        return this._swarmConnection.peerIds().length;
+    }
     findFileOrLiveFeed = ({fileKey, timeoutMsec=4000}) => {
         const onFoundCallbacks = [];
         const onFinishedCallbacks = [];

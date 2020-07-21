@@ -26,7 +26,7 @@ class SwarmConnection {
     }
 
     async leave() {
-        this.sendMessageToPeers({
+        this.sendMessageToAllPeers({
             type: 'leaving'
         });
         this._halt = true;
