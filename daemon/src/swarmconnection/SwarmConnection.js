@@ -1,6 +1,7 @@
 import PeerDiscoveryEngine from './peerdiscovery/PeerDiscoveryEngine.js';
 import PeerConnection from './PeerConnection.js';
 import { randomString, sleepMsec } from '../common/util.js';
+import { getSignature, hexToPublicKey, verifySignature } from '../common/crypto_util.js';
 
 class SwarmConnection {
     constructor({keyPair, nodeId, swarmName, verbose, nodeInfo}) {
@@ -78,9 +79,7 @@ class SwarmConnection {
             this.sendMessageToPeer(peerId, msg);
         }
     }
-    sendMessageToPeer(peerId, msg, opts) {
-        opts = opts || {};
-        let _routeToPeerAvoidNodeIds = opts._routeToPeerAvoidNodeIds || [];
+    sendMessageToPeer(peerId, msg) {
         if (!(peerId in this._peerConnections)) {
             console.warn(`Unable to send message ... no peer connection to ${peerId}`);
             return false;
@@ -88,23 +87,32 @@ class SwarmConnection {
         if (this._verbose >= 100) {
             console.info(`Sending message to peer ${peerId.slice(0, 6)} ${msg.type}`);
         }
-        if (this._peerConnections[peerId].hasWebsocketConnection()) {
-            this._peerConnections[peerId].sendMessage(msg);
+        const body = {
+            fromNodeId: this._nodeId,
+            toNodeId: peerId,
+            message: msg
+        };
+        const signature = getSignature(body, this._keyPair);
+        const signedMessage = {
+            body,
+            avoid: {[this._nodeId]: true},
+            signature
+        }
+        this._sendSignedMessage(signedMessage);
+    }
+    _sendSignedMessage(signedMessage) {
+        const {avoid, body, signature} = signedMessage;
+        const {fromNodeId, toNodeId, message} = body;
+        if (this._peerConnections[toNodeId].hasWebsocketConnection()) {
+            this._peerConnections[toNodeId].sendSignedMessage(signedMessage);
             return true;
         }
         else {
-            let avoidNodeIds = _routeToPeerAvoidNodeIds;
-            avoidNodeIds.push(this._nodeInfo); // avoid cycles
-            const peerIds2 = this._findPeersWithRouteTo(peerId, avoidNodeIds);
+            avoid[this._nodeId] = true; // avoid cycles
+            const peerIds2 = this._findPeersWithRouteTo(peerId, avoid);
             if (peerIds2.length > 0) {
                 const peerId2 = peerIds2[0]; // todo: think about which one to use
-                this.sendMessageToPeer(peerId2, {
-                    type: 'routeToPeer',
-                    from: this._nodeInfo,
-                    to: peerId,
-                    avoidNodeIds: avoidNodeIds,
-                    message: msg
-                });
+                this._peerConnections[peerId2].sendSignedMessage(signedMessage);
                 return true;
             }
         }
@@ -207,8 +215,8 @@ class SwarmConnection {
             keyPair: this._keyPair,
             swarmName: this._swarmName, nodeId: this._nodeId, peerId, verbose: this._verbose
         });
-        x.onMessage(msg => {
-            this._handleMessageFromPeer(peerId, msg);
+        x.onSignedMessage(msg => {
+            this._handleSignedMessageFromPeer(msg);
         });
         this._peerConnections[peerId] = x;
         x.onWebsocketConnection(() => {
@@ -225,6 +233,30 @@ class SwarmConnection {
                 host, port, local
             });
         }
+    }
+    _handleSignedMessageFromPeer = async (msg) => {
+        if (!verifySignature(msg.body, msg.signature, hexToPublicKey(msg.body.fromNodeId))) {
+            console.warn(`SWARM:: Unable to verify message from ${msg.body.fromNodeId}`);
+            return;
+        }
+        if (msg.body.toNodeId === this._nodeId) {
+            this._handleMessageFromPeer(msg.body.fromNodeId, msg.body.message);
+            return;
+        }
+        const ids = this._findPeersWithRouteTo(msg.body.toNodeId, msg.avoid);
+        let avoid2 = msg.avoid || {};
+        avoid2[this._nodeId] = true; // avoid cycles
+        if (ids.length > 0) {
+            // todo: figure out which to use
+            const id0 = ids[0];
+            this._peerConnections[id0].sendSignedMessage({
+                body: msg.body,
+                signature: msg.signature,
+                avoid: avoid2
+            });
+            return;
+        }
+        console.warn(`Unable to forward message from ${msg.body.fromNodeId} to ${msg.body.toNodeId}`);
     }
     _handleMessageFromPeer = async (fromNodeId, msg) => {
         if (this._verbose >= 100) {
@@ -252,20 +284,15 @@ class SwarmConnection {
                 });
             }
         }
-        else if (msg.type === 'routeToPeer') {
-            const { from, to, message, avoidNodeIds } = msg;
-            if (to === this._nodeInfo) {
-                // todo: we need to get an original signature somehow
-                this._handleMessageFromPeer(from, message);
-            }
-            else {
-                this.sendMessageToPeer(to, message, {_routeToPeerAvoidNodeIds: avoidNodeIds});
-            }
-        }
         else if (msg.type === 'leaving') {
             if (fromNodeId in this._peerConnections) {
-                this._peerConnections[fromNodeId].destroy(); // todo: implement
+                this._peerConnections[fromNodeId].disconnect();
                 delete this._peerConnections[fromNodeId];
+            }
+        }
+        else if (msg.type === 'reportRoutes') {
+            if (fromNodeId in this._peerConnections) {
+                this._peerConnections[fromNodeId].setRoutes(msg.routes);
             }
         }
         else {
@@ -277,10 +304,10 @@ class SwarmConnection {
             }
         }
     }
-    _findPeersWithRouteTo(peerId, avoidNodeIds) {
+    _findPeersWithRouteTo(peerId, avoid) {
         let ret = [];
         for (let peerId2 in this._peerConnections) {
-            if (avoidNodeIds.indexOf(peerId2) < 0) {
+            if (!avoid[peerId2]) {
                 const pc = this._peerConnections[peerId2];
                 if (pc.hasRouteTo(peerId)) {
                     ret.push(peerId2);
@@ -310,7 +337,12 @@ class SwarmConnection {
         let routes = this._getRoutes();
         for (let peerId in this._peerConnections) {
             let pc = this._peerConnections[peerId];
-            pc.reportRoutes(routes);
+            if (pc.hasWebsocketConnection()) {
+                this.sendMessageToPeer(peerId, {
+                    type: 'reportRoutes',
+                    routes
+                });
+            }
         }
     }
     async _start() {

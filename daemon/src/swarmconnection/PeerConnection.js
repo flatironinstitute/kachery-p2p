@@ -1,6 +1,5 @@
 import WebsocketConnection from './WebsocketConnection.js';
 import { sleepMsec } from '../common/util.js';
-import { verifySignature, hexToPublicKey, getSignature } from '../common/crypto_util.js';
 
 class PeerConnection {
     constructor({ keyPair, swarmName, nodeId, peerId, verbose }) {
@@ -12,16 +11,11 @@ class PeerConnection {
         this._incomingWebsocketConnection = null;
         this._outgoingWebsocketConnection = null;
         this._outgoingWebsocketConnectionLastTryTimestamp = 0;
-        this._onMessageCallbacks = [];
+        this._onSignedMessageCallbacks = [];
         this._onWebsocketConnectionCallbacks = [];
         this._routes = {};
+        this._halt = false;
         // this._queuedMessages = [];
-
-        this.onMessage(msg => {
-            if (msg.type === 'reportRoutes') {
-                this._routes = msg.routes;
-            }
-        })
 
         this._start();
     }
@@ -51,18 +45,13 @@ class PeerConnection {
     routes() {
         return this._routes;
     }
+    setRoutes(routes) {
+        this._routes = routes;
+    }
     hasRouteTo(nodeId) {
         if (!this.hasWebsocketConnection()) return false;
         if (nodeId === this._peerId) return true;
         return this._routes[nodeId] || false;
-    }
-    reportRoutes(routes) {
-        if (this.hasWebsocketConnection()) {
-            this.sendMessage({
-                type: 'reportRoutes',
-                routes
-            });
-        }
     }
     setIncomingWebsocketConnection(connection) {
         if (this._verbose >= 100) {
@@ -83,25 +72,18 @@ class PeerConnection {
         this._onWebsocketConnectionCallbacks.forEach(cb => cb());
         // this._sendQueuedMessages();
     }
-    onMessage(cb) {
-        this._onMessageCallbacks.push(cb);
+    onSignedMessage(cb) {
+        this._onSignedMessageCallbacks.push(cb);
     }
     onWebsocketConnection(cb) {
         this._onWebsocketConnectionCallbacks.push(cb);
     }
-    sendMessage(msg) {
-        const body = {
-            fromNodeId: this._nodeId,
-            toNodeId: this._peerId,
-            message: msg
-        };
-        const signature = getSignature(body, this._keyPair);
-        const msg2 = {body, signature};
+    sendSignedMessage(msg) {
         if (this._incomingWebsocketConnection) {
-            this._incomingWebsocketConnection.sendMessage(msg2);
+            this._incomingWebsocketConnection.sendMessage(msg);
         }
         else if (this._outgoingWebsocketConnection) {
-            this._outgoingWebsocketConnection.sendMessage(msg2);
+            this._outgoingWebsocketConnection.sendMessage(msg);
         }
         else {
             throw Error('Unable to send message to peer. No connections available.')
@@ -115,21 +97,10 @@ class PeerConnection {
         if (this._outgoingWebsocketConnection) {
             this._outgoingWebsocketConnection.disconnect();
         }
+        this._halt = true;
     }
     _handleMessage = (msg) => {
-        if (msg.body.toNodeId !== this._nodeId) {
-            console.warn(`HYPERSWARM:: incorrect toNodeId in incoming message. ${msg.body.toNodeId} <> ${this._nodeId}`);
-            return;
-        }
-        if (msg.body.fromNodeId !== this._peerId) {
-            console.warn(`HYPERSWARM:: incorrect fromNode in incoming message. ${msg.body.fromNodeId} <> ${this._peerId}`);
-            return;
-        }
-        if (!verifySignature(msg.body, msg.signature, hexToPublicKey(msg.body.fromNodeId))) {
-            console.warn(`HYPERSWARM:: Unable to verify message from ${msg.fromNodeId}`);
-            return;
-        }
-        this._onMessageCallbacks.forEach(cb => cb(msg.body.message));
+        this._onSignedMessageCallbacks.forEach(cb => cb(msg));
     }
     // _sendQueuedMessages = () => {
     //     const qm = this._queuedMessages;
@@ -187,6 +158,7 @@ class PeerConnection {
     }
     async _start() {
         while (true) {
+            if (this._halt) return;
             if (!this._outgoingWebsocketConnection) {
                 const elapsedSinceLastTry = (new Date()) - this._outgoingWebsocketConnectionLastTryTimestamp;
                 if (elapsedSinceLastTry > 5000) {
