@@ -285,7 +285,7 @@ class KacheryChannelConnection {
             if (fileInfo) {
                 if ('path' in fileInfo)
                     delete fileInfo['path'];
-                this._swarmConnection.sendMessageToPeer(
+                await this._swarmConnection.sendMessageToPeer(
                     fromNodeId,
                     {
                         type: 'providing',
@@ -299,7 +299,7 @@ class KacheryChannelConnection {
         }
         else if (fileKey.feedId) {
             if (await this._feedManager.hasWriteableFeed({feedId: fileKey.feedId})) {
-                this._swarmConnection.sendMessageToPeer(
+                await this._swarmConnection.sendMessageToPeer(
                     fromNodeId,
                     {
                         type: 'providing',

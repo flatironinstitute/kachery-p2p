@@ -3,6 +3,7 @@ import PeerConnection from './PeerConnection.js';
 import { randomAlphaString, sleepMsec } from '../common/util.js';
 import { JSONStringifyDeterministic } from '../common/crypto_util.js'
 import { getSignature, hexToPublicKey, verifySignature } from '../common/crypto_util.js';
+import SmartySwarmConnection from './SmartySwarmConnection.js';
 
 class SwarmConnection {
     constructor({keyPair, nodeId, swarmName, verbose, discoveryVerbose, nodeInfo, protocolVersion}) {
@@ -15,6 +16,7 @@ class SwarmConnection {
         this._peerMessageListeners = {}; // listeners for messages coming in from peers
         this._onPeerRequestCallbacks = []; // callbacks for requests coming in from peers
         this._halt = false;
+        this._smarty = new SmartySwarmConnection(this);
 
         // the discovery engine!
         this._peerDiscoveryEngine = new PeerDiscoveryEngine({
@@ -34,6 +36,10 @@ class SwarmConnection {
         this._start();
     }
 
+    // This node id
+    nodeId() {
+        return this._nodeId;
+    }
     // Leave this swarm/channel
     async leave() {
         this.sendMessageToAllPeers({
@@ -101,12 +107,13 @@ class SwarmConnection {
     // Send a message to all peers
     sendMessageToAllPeers(msg) {
         for (let peerId in this._peerConnections) {
+            // do not await... send them simultaneously
             this.sendMessageToPeer(peerId, msg);
         }
     }
     // Send a message to a peer
-    sendMessageToPeer(peerId, msg) {
-        this._sendMessageToPeer(peerId, msg);
+    async sendMessageToPeer(peerId, msg) {
+        await this._sendMessageToPeer(peerId, msg);
     }
     // Listen for requests and send responses
     // Note: it is possible to send more than one response before calling onFinished
@@ -122,7 +129,7 @@ class SwarmConnection {
     }
 
     // IMPLEMENTATION /////////////////////////////////////////////////////////////
-    _sendMessageToPeer(peerId, msg) {
+    async _sendMessageToPeer(peerId, msg) {
         if (!(peerId in this._peerConnections)) {
             console.warn(`Unable to send message ... no peer connection to ${peerId}`);
             return false;
@@ -142,25 +149,69 @@ class SwarmConnection {
             avoid: {[this._nodeId]: true}, // Nodes to avoid (case of routing)
             signature
         }
-        this._sendSignedMessage(signedMessage);
+        await this._sendSignedMessage(signedMessage);
     }
-    _sendSignedMessage(signedMessage) {
-        const {avoid, body, signature} = signedMessage;
+    async _sendSignedMessage(signedMessage) {
+        const {body, signature} = signedMessage;
         const {fromNodeId, toNodeId, message} = body;
-        if (this._peerConnections[toNodeId].hasWebsocketConnection()) {
+        if (signedMessage.route) {
+            let index = signedMessage.route.indexOf(this._nodeInfo);
+            if (index < 0) {
+                if (this._verbose >= 0) {
+                    console.warn(`Unexpected this node ${this._nodeId} is not found in route ${signedMessage.route.join(",")}`);
+                }
+                return false;
+            }
+            if (index === (signedMessage.route.length - 1)) {
+                // I guess it's us!
+                if (this._nodeId !== signedMessage.toNodeId) {
+                    if (this._verbose >= 0) {
+                        console.warn(`Unexpected the final node in the route is not the toNodeId.`);
+                    }
+                    return false;
+                }
+                this._handleSignedMessageFromPeer({
+                    body: signedMessage.body,
+                    signature: signedMessage.signature
+                });
+                return true;
+            }
+            const nextNodeId = signedMessage.route[index + 1];
+            if (!(nextNodeId in this._peerConnections)) {
+                if (this._verbose >= 0) {
+                    console.warn(`Unexpected no node that is the next item in route: ${nextNodeId}`);
+                }
+                return false;
+            }
+            if (!(this._peerConnections[nextNodeId].hasWebsocketConnection())) {
+                if (this._verbose >= 0) {
+                    console.warn(`Unexpected no websocket connection to next item in route: ${nextNodeId}`);
+                }
+                return false;
+            }
+            this._peerConnections[nextNodeId].sendSignedMessage(signedMessage);
+            return true;
+        }
+        else if (this._peerConnections[toNodeId].hasWebsocketConnection()) {
             this._peerConnections[toNodeId].sendSignedMessage(signedMessage);
             return true;
         }
         else {
-            avoid[this._nodeId] = true; // avoid cycles
-            const peerIds2 = this._findPeersWithRouteTo(toNodeId, avoid);
-            if (peerIds2.length > 0) {
-                const peerId2 = peerIds2[0]; // todo: think about which one to use
-                this._peerConnections[peerId2].sendSignedMessage(signedMessage);
+            const route = await this._smarty.which_route_should_i_use_to_send_a_message_to_this_peer(toNodeId, {calculateIfNeeded: true});
+            if (!route) {
+                return false;
+            }
+            const peerId0 = route[0];
+            if ((peerId0 in this._peerConnections) && (this._peerConnections[peerId0].hasWebsocketConnection())) {
+                this._peerConnections[peerId0].sendSignedMessage({
+                    body: body,
+                    signature: signedMessage.signature,
+                    route
+                });
                 return true;
             }
+            else return false;
         }
-        return false;
     }
     
 
@@ -180,9 +231,6 @@ class SwarmConnection {
             this._handleSignedMessageFromPeer(msg);
         });
         this._peerConnections[peerId] = x;
-        x.onWebsocketConnection(() => {
-            this._updateReportRoutes();
-        });
     }
 
     _handlePeerAnnounce({peerId, peerNodeInfo}) {
@@ -198,27 +246,17 @@ class SwarmConnection {
             console.warn(`SWARM:: Unable to verify message from ${msg.body.fromNodeId}`);
             return;
         }
+        if (msg.route) {
+            await this._sendSignedMessage(msg);
+            return;
+        }
         if (msg.body.toNodeId === this._nodeId) {
             this._handleMessageFromPeer(msg.body.fromNodeId, msg.body.message);
             return;
         }
-        const ids = this._findPeersWithRouteTo(msg.body.toNodeId, msg.avoid);
-        let avoid2 = msg.avoid || {};
-        avoid2[this._nodeId] = true; // avoid cycles
-        if (ids.length > 0) {
-            // todo: figure out which to use
-            const id0 = ids[0];
-            if (this._verbose >= 50) {
-                console.info('Forwarding signed message from peer', msg.body.fromNodeId, msg.body.toNodeId, msg.body.message.type, id0);
-            }
-            this._peerConnections[id0].sendSignedMessage({
-                body: msg.body,
-                signature: msg.signature,
-                avoid: avoid2
-            });
-            return;
+        if (this._verbose >= 0) {
+            console.warn(`Unexpected: message does not have route, and the toNodeId does not equal this one. ${msg.body.toNodeId} <> ${this._nodeId}`);
         }
-        console.warn(`Unable to forward message from ${msg.body.fromNodeId} to ${msg.body.toNodeId}`);
     }
     _handleMessageFromPeer = async (fromNodeId, msg) => {
         if (this._verbose >= 100) {
@@ -252,11 +290,6 @@ class SwarmConnection {
                 delete this._peerConnections[fromNodeId];
             }
         }
-        else if (msg.type === 'reportRoutes') {
-            if (fromNodeId in this._peerConnections) {
-                this._peerConnections[fromNodeId].setRoutes(msg.routes);
-            }
-        }
         else {
             for (let id in this._peerMessageListeners) {
                 const x = this._peerMessageListeners[id];
@@ -271,47 +304,6 @@ class SwarmConnection {
                         }
                     });
                 }
-            }
-        }
-    }
-    _findPeersWithRouteTo(peerId, avoid) {
-        let ret = [];
-        for (let peerId2 in this._peerConnections) {
-            if (!avoid[peerId2]) {
-                const pc = this._peerConnections[peerId2];
-                if (pc.hasRouteTo(peerId)) {
-                    ret.push(peerId2);
-                }
-            }
-        }
-        return ret;
-    }
-    _getRoutes() {
-        let peerIds = this.peerIds();
-        let ret = {};
-        for (let peerId of peerIds) {
-            const pc = this._peerConnections[peerId];
-            const routes0 = pc.routes();
-            for (let id in routes0) {
-                if (id !== this._nodeId) {
-                    ret[id] = true;
-                }
-            }
-            if (pc.hasWebsocketConnection()) {
-                ret[peerId] = true;
-            }
-        }
-        return ret;
-    }
-    _updateReportRoutes() {
-        let routes = this._getRoutes();
-        for (let peerId in this._peerConnections) {
-            let pc = this._peerConnections[peerId];
-            if (pc.hasWebsocketConnection()) {
-                this.sendMessageToPeer(peerId, {
-                    type: 'reportRoutes',
-                    routes
-                });
             }
         }
     }
@@ -399,16 +391,11 @@ class SwarmConnection {
         }
     }
     async _start() {
-        let lastReportedRoutes = {};
         await sleepMsec(100);
         while (true) {
             if (this._halt) return;
-            
-            const routes = this._getRoutes();
-            if (JSONStringifyDeterministic(routes) !== JSONStringifyDeterministic(lastReportedRoutes)) {
-                this._updateReportRoutes();
-                lastReportedRoutes = routes;
-            }
+
+            // do stuff here
 
             await sleepMsec(1000);
         }
