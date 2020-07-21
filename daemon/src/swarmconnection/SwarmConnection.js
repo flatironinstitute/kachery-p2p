@@ -249,6 +249,7 @@ class SwarmConnection {
         if (ids.length > 0) {
             // todo: figure out which to use
             const id0 = ids[0];
+            console.log('Forwarding signed message from peer', msg.body.fromNodeId, msg.body.toNodeId, msg.type, id0);
             this._peerConnections[id0].sendSignedMessage({
                 body: msg.body,
                 signature: msg.signature,
@@ -347,6 +348,7 @@ class SwarmConnection {
     }
     async _start() {
         let lastReportedRoutes = {};
+        await sleepMsec(100);
         while (true) {
             if (this._halt) return;
             
@@ -356,7 +358,7 @@ class SwarmConnection {
                 lastReportedRoutes = routes;
             }
 
-            await sleepMsec(100);
+            await sleepMsec(1000);
         }
     }
 }

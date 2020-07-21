@@ -19,8 +19,9 @@ class KacheryChannelConnection {
         });
 
         this._swarmConnection.createPeerMessageListener(
-            (fromNodeId, msg) => {return (msg.type === 'seeking');}
+            (fromNodeId, msg) => {console.log('--- debug-check', msg.type); return (msg.type === 'seeking');}
         ).onMessage((fromNodeId, msg) => {
+            console.log('--- debug-seek', msg.type);
             this._handlePeerSeeking(fromNodeId, msg);
         });
         this._swarmConnection.onPeerRequest(({fromNodeId, requestBody, onResponse, onError, onFinished}) => {
@@ -266,6 +267,7 @@ class KacheryChannelConnection {
         await this._swarmConnection.leave();
     }
     async _handlePeerSeeking(fromNodeId, msg) {
+        console.log('--- handlePeerSeeking', fromNodeId, msg);
         const fileKey = msg.fileKey;
         if (fileKey.sha1) {
             const fileInfo = await getLocalFileInfo({fileKey});
@@ -285,7 +287,9 @@ class KacheryChannelConnection {
             }
         }
         else if (fileKey.feedId) {
+            console.log('---- debug 1', fromNodeId, fileKey.feedId);
             if (await this._feedManager.hasWriteableFeed({feedId: fileKey.feedId})) {
+                console.log('---- debug 2', fromNodeId);
                 this._swarmConnection.sendMessageToPeer(
                     fromNodeId,
                     {
