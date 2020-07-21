@@ -367,7 +367,13 @@ class KacheryChannelConnection {
             const ci = p.peerConnectInfo() || {};
             const hasIn = p.hasIncomingWebsocketConnection();
             const hasOut = p.hasOutgoingWebsocketConnection();
-            lines.push(`Peer ${peerId.slice(0, 6)}...: ${ci.host || ""}:${ci.port || ""} ${ci.local ? "(local)" : ""} ${hasIn ? "in" : ""} ${hasOut ? "out" : ""}`);
+            const numRoutes = Object.keys(p.routes()).length;
+            let numRoutesTo = 0;
+            for (let id2 of peerIds) {
+                const p2 = this._swarmConnection.peerConnection(id2);
+                if (p2.hasRouteTo(peerId)) numRoutesTo ++;
+            }
+            lines.push(`Peer ${peerId.slice(0, 6)}...: ${ci.host || ""}:${ci.port || ""} ${ci.local ? "(local)" : ""} ${hasIn ? "in" : ""} ${hasOut ? "out" : ""} [${numRoutes}] [${numRoutesTo}]`);
         }
         return lines.join('\n');
     }

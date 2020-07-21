@@ -78,12 +78,32 @@ class SwarmConnection {
             this.sendMessageToPeer(peerId, msg);
         }
     }
-    sendMessageToPeer(peerId, msg) {
+    sendMessageToPeer(peerId, msg, {_routeToPeerAvoidNodeIds=[]}) {
         if (!(peerId in this._peerConnections)) {
             console.warn(`Unable to send message ... no peer connection to ${peerId}`);
-            return;
+            return false;
         }
-        this._peerConnections[peerId].sendMessage(msg);
+        if (this._peerConnections[peerId].hasWebsocketConnection()) {
+            this._peerConnections[peerId].sendMessage(msg);
+            return true;
+        }
+        else {
+            let avoidNodeIds = _routeToPeerAvoidNodeIds;
+            avoidNodeIds.push(this._nodeInfo); // avoid cycles
+            const peerIds2 = this._findPeersWithRouteTo(peerId, avoidNodeIds);
+            if (peerIds2.length > 0) {
+                const peerId2 = peerIds2[0]; // todo: think about which one to use
+                this.sendMessageToPeer(peerId2, {
+                    type: 'routeToPeer',
+                    from: this._nodeInfo,
+                    to: peerId,
+                    avoidNodeIds: avoidNodeIds,
+                    message: msg
+                });
+                return true;
+            }
+        }
+        return false;
     }
     onPeerRequest(cb) {
         this._onPeerRequestCallbacks.push(cb);
@@ -186,6 +206,9 @@ class SwarmConnection {
             this._handleMessageFromPeer(peerId, msg);
         });
         this._peerConnections[peerId] = x;
+        x.onWebsocketConnection(() => {
+            this._updateReportRoutes();
+        });
     }
 
     _handlePeerAnnounce({peerId, host, port, local}) {
@@ -224,6 +247,16 @@ class SwarmConnection {
                 });
             }
         }
+        else if (msg.type === 'routeToPeer') {
+            const { from, to, message, avoidNodeIds } = msg;
+            if (to === this._nodeInfo) {
+                // todo: we need to get an original signature somehow
+                this._handleMessageFromPeer(from, message);
+            }
+            else {
+                this.sendMessageToPeer(to, message, {_routeToPeerAvoidNodeIds: avoidNodeIds});
+            }
+        }
         else if (msg.type === 'leaving') {
             if (fromNodeId in this._peerConnections) {
                 this._peerConnections[fromNodeId].destroy(); // todo: implement
@@ -239,10 +272,53 @@ class SwarmConnection {
             }
         }
     }
+    _findPeersWithRouteTo(peerId, avoidNodeIds) {
+        let ret = [];
+        for (let peerId2 in this._peerConnections) {
+            if (avoidNodeIds.indexOf(peerId2) < 0) {
+                const pc = this._peerConnections[peerId2];
+                if (pc.hasRouteTo(peerId)) {
+                    ret.push(peerId2);
+                }
+            }
+        }
+        return ret;
+    }
+    _getRoutes() {
+        let peerIds = this.peerIds();
+        let ret = {};
+        for (let peerId of peerIds) {
+            const pc = this._peerConnections[peerId];
+            const routes0 = pc.routes();
+            for (let id in routes0) {
+                if (id !== this._nodeId) {
+                    ret[id] = true;
+                }
+            }
+            if (pc.hasWebsocketConnection()) {
+                ret[peerId] = true;
+            }
+        }
+        return ret;
+    }
+    _updateReportRoutes() {
+        let routes = this._getRoutes();
+        for (let peerId in this._peerConnections) {
+            let pc = this._peerConnections[peerId];
+            pc.reportRoutes(routes);
+        }
+    }
     async _start() {
+        let lastReportedRoutes = {};
         while (true) {
             if (this._halt) return;
-            //maintenance goes here
+            
+            const routes = this._getRoutes();
+            if (JSON.stringify(routes) !== JSON.stringify(lastReportedRoutes)) {
+                this._updateReportRoutes();
+                lastReportedRoutes = routes;
+            }
+
             await sleepMsec(100);
         }
     }

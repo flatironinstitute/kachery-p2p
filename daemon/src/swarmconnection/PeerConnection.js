@@ -13,7 +13,15 @@ class PeerConnection {
         this._outgoingWebsocketConnection = null;
         this._outgoingWebsocketConnectionLastTryTimestamp = 0;
         this._onMessageCallbacks = [];
-        this._queuedMessages = [];
+        this._onWebsocketConnectionCallbacks = [];
+        this._routes = {};
+        // this._queuedMessages = [];
+
+        this.onMessage(msg => {
+            if (msg.type === 'reportRoutes') {
+                this._routes = msg.routes;
+            }
+        })
 
         this._start();
     }
@@ -22,6 +30,9 @@ class PeerConnection {
     }
     hasOutgoingWebsocketConnection() {
         return this._outgoingWebsocketConnection ? true : false;
+    }
+    hasWebsocketConnection() {
+        return this.hasIncomingWebsocketConnection() || this.hasOutgoingWebsocketConnection();
     }
     setPeerConnectInfo(peerConnectInfo) {
         if ((this._peerConnectInfo) && (JSON.stringify(peerConnectInfo) === JSON.stringify(this._peerConnectInfo))) {
@@ -36,6 +47,22 @@ class PeerConnection {
     }
     peerConnectInfo() {
         return this._peerConnectInfo;
+    }
+    routes() {
+        return this._routes;
+    }
+    hasRouteTo(nodeId) {
+        if (!this.hasWebsocketConnection()) return false;
+        if (nodeId === this._peerId) return true;
+        return this._routes[nodeId] || false;
+    }
+    reportRoutes(routes) {
+        if (this.hasWebsocketConnection()) {
+            this.sendMessage({
+                type: 'reportRoutes',
+                routes
+            });
+        }
     }
     setIncomingWebsocketConnection(connection) {
         if (this._verbose >= 100) {
@@ -53,10 +80,14 @@ class PeerConnection {
                 this._incomingWebsocketConnection = null;
             }
         });
-        this._sendQueuedMessages();
+        this._onWebsocketConnectionCallbacks.forEach(cb => cb());
+        // this._sendQueuedMessages();
     }
     onMessage(cb) {
         this._onMessageCallbacks.push(cb);
+    }
+    onWebsocketConnection(cb) {
+        this._onWebsocketConnectionCallbacks.push(cb);
     }
     sendMessage(msg) {
         const body = {
@@ -73,7 +104,8 @@ class PeerConnection {
             this._outgoingWebsocketConnection.sendMessage(msg2);
         }
         else {
-            this._queuedMessages.push(msg);
+            throw Error('Unable to send message to peer. No connections available.')
+            // this._queuedMessages.push(msg);
         }
     }
     disconnect() {
@@ -99,13 +131,13 @@ class PeerConnection {
         }
         this._onMessageCallbacks.forEach(cb => cb(msg.body.message));
     }
-    _sendQueuedMessages = () => {
-        const qm = this._queuedMessages;
-        this._queuedMessages = [];
-        qm.forEach(msg => {
-            this.sendMessage(msg);
-        });
-    }
+    // _sendQueuedMessages = () => {
+    //     const qm = this._queuedMessages;
+    //     this._queuedMessages = [];
+    //     qm.forEach(msg => {
+    //         this.sendMessage(msg);
+    //     });
+    // }
     async _tryOutgoingWebsocketConnection() {
         const peerConnectInfo = this._peerConnectInfo;
         if ((peerConnectInfo) && (peerConnectInfo.port)) {
@@ -147,7 +179,8 @@ class PeerConnection {
                     }
                 });
                 this._outgoingWebsocketConnection = C;
-                this._sendQueuedMessages();
+                this._onWebsocketConnectionCallbacks.forEach(cb => cb());
+                // this._sendQueuedMessages();
             });
         }
     }
