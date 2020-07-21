@@ -1,5 +1,6 @@
 import PeerDiscoveryEngine from './peerdiscovery/PeerDiscoveryEngine.js';
 import PeerConnection from './PeerConnection.js';
+import { randomString, sleepMsec } from '../common/util.js';
 
 class SwarmConnection {
     constructor({keyPair, nodeId, swarmName, verbose, nodeInfo}) {
@@ -30,6 +31,12 @@ class SwarmConnection {
         this._halt = true;
         this._peerDiscoveryEngine.leave();
     }
+    peerIds = () => {
+        return Object.keys(this._peerConnections).sort();
+    }
+    peerConnection = (peerId) => {
+        return this._peerConnections[peerId];
+    }
     numPeers = () => {
         return Object.keys(this._peerConnections).length;
     }
@@ -42,6 +49,9 @@ class SwarmConnection {
             this._createPeerConnection(peerId);
         }
         if (peerId in this._peerConnections) {
+            if (this._verbose >= 50) {
+                console.info(`SWARM:: Setting incoming websocket connection for peer ${peerId}`);
+            }
             this._peerConnections[peerId].setIncomingWebsocketConnection(connection); // todo: implement    
             return;
         }
@@ -165,13 +175,23 @@ class SwarmConnection {
 
     _createPeerConnection(peerId) {
         if (peerId in this._peerConnections) return;
+        if (this._verbose >= 50) {
+            console.info(`SWARM:: Creating peer connection: ${peerId}`);
+        }
         const x = new PeerConnection({
+            keyPair: this._keyPair,
             swarmName: this._swarmName, nodeId: this._nodeId, peerId, verbose: this._verbose
+        });
+        x.onMessage(msg => {
+            this._handleMessageFromPeer(peerId, msg);
         });
         this._peerConnections[peerId] = x;
     }
 
     _handlePeerAnnounce({peerId, host, port, local}) {
+        if (!(peerId in this._peerConnections)) {
+            this._createPeerConnection(peerId);
+        }
         if (peerId in this._peerConnections) {
             this._peerConnections[peerId].setPeerConnectInfo({
                 host, port, local
@@ -179,11 +199,14 @@ class SwarmConnection {
         }
     }
     _handleMessageFromPeer = async (fromNodeId, msg) => {
+        if (this._verbose >= 100) {
+            console.info(`SWARM:: message from peer: ${fromNodeId.slice(0, 6)} ${msg.type}`);
+        }
         if (msg.type === 'requestToNode') {
             if (msg.toNodeId === this._nodeId) {
                 const requestId = msg.requestId;
                 this.sendMessageToPeer(fromNodeId, {type: 'requestToNodeReceived', requestId});
-                this._onPeerRequestCallbacks(cb => {
+                this._onPeerRequestCallbacks.forEach(cb => {
                     cb({
                         fromNodeId,
                         requestId,

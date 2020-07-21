@@ -1,8 +1,10 @@
 import WebsocketConnection from './WebsocketConnection.js';
 import { sleepMsec } from '../common/util.js';
+import { verifySignature, hexToPublicKey, getSignature } from '../common/crypto_util.js';
 
 class PeerConnection {
-    constructor({ swarmName, nodeId, peerId, verbose }) {
+    constructor({ keyPair, swarmName, nodeId, peerId, verbose }) {
+        this._keyPair = keyPair;
         this._swarmName = swarmName;
         this._nodeId = nodeId;
         this._peerId = peerId;
@@ -15,10 +17,19 @@ class PeerConnection {
 
         this._start();
     }
+    hasIncomingWebsocketConnection() {
+        return this._incomingWebsocketConnection ? true : false;
+    }
+    hasOutgoingWebsocketConnection() {
+        return this._outgoingWebsocketConnection ? true : false;
+    }
     setPeerConnectInfo(peerConnectInfo) {
         if ((this._peerConnectInfo) && (JSON.stringify(peerConnectInfo) === JSON.stringify(this._peerConnectInfo))) {
             // not a change
             return;
+        }
+        if (this._verbose >= 50) {
+            console.info(`SWARM:: Setting peer connect info for ${this._peerId}: ${JSON.stringify(peerConnectInfo)}`);
         }
         this._peerConnectInfo = peerConnectInfo;
         this._outgoingWebsocketConnectionLastTryTimestamp = 0; // try right away
@@ -48,11 +59,18 @@ class PeerConnection {
         this._onMessageCallbacks.push(cb);
     }
     sendMessage(msg) {
+        const body = {
+            fromNodeId: this._nodeId,
+            toNodeId: this._peerId,
+            message: msg
+        };
+        const signature = getSignature(body, this._keyPair);
+        const msg2 = {body, signature};
         if (this._incomingWebsocketConnection) {
-            this._incomingWebsocketConnection.sendMessage(msg);
+            this._incomingWebsocketConnection.sendMessage(msg2);
         }
         else if (this._outgoingWebsocketConnection) {
-            this._outgoingWebsocketConnection.sendMessage(msg);
+            this._outgoingWebsocketConnection.sendMessage(msg2);
         }
         else {
             this._queuedMessages.push(msg);
@@ -67,7 +85,19 @@ class PeerConnection {
         }
     }
     _handleMessage = (msg) => {
-        this._onMessageCallbacks.forEach(cb => cb(msg));
+        if (msg.body.toNodeId !== this._nodeId) {
+            console.warn(`HYPERSWARM:: incorrect toNodeId in incoming message. ${msg.body.toNodeId} <> ${this._nodeId}`);
+            return;
+        }
+        if (msg.body.fromNodeId !== this._peerId) {
+            console.warn(`HYPERSWARM:: incorrect fromNode in incoming message. ${msg.body.fromNodeId} <> ${this._peerId}`);
+            return;
+        }
+        if (!verifySignature(msg.body, msg.signature, hexToPublicKey(msg.body.fromNodeId))) {
+            console.warn(`HYPERSWARM:: Unable to verify message from ${msg.fromNodeId}`);
+            return;
+        }
+        this._onMessageCallbacks.forEach(cb => cb(msg.body.message));
     }
     _sendQueuedMessages = () => {
         const qm = this._queuedMessages;
@@ -126,8 +156,10 @@ class PeerConnection {
             if (!this._outgoingWebsocketConnection) {
                 const elapsedSinceLastTry = (new Date()) - this._outgoingWebsocketConnectionLastTryTimestamp;
                 if (elapsedSinceLastTry > 5000) {
-                    await this._tryOutgoingWebsocketConnection();
-                    this._outgoingWebsocketConnectionLastTryTimestamp = new Date();
+                    if ((this._peerConnectInfo) && (this._peerConnectInfo.port)) {
+                        await this._tryOutgoingWebsocketConnection();
+                        this._outgoingWebsocketConnectionLastTryTimestamp = new Date();
+                    }
                 }
             }
             await sleepMsec(100);

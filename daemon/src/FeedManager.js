@@ -2,7 +2,7 @@ import os from 'os';
 import fs from 'fs';
 import { sleepMsec } from './common/util.js';
 import { kacheryStorageDir } from './kachery.js';
-import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSignature, hexToPublicKey, hexToPrivateKey, sha1sum } from './crypto_util.js'
+import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSignature, hexToPublicKey, hexToPrivateKey, sha1sum } from './common/crypto_util.js'
 
 class FeedManager {
     // Manages the local feeds and access to the remote feeds in the p2p network

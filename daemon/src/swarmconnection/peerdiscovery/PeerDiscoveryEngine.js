@@ -1,15 +1,15 @@
-import HyperswarmConnection from './HyperswarmConnection';
-import { sleepMsec } from '../util';
+import HyperswarmConnection from './HyperswarmConnection.js';
+import { sleepMsec } from '../../common/util.js';
 
 class PeerDiscoveryEngine {
-    constructor({keypair, swarmName, nodeId, host, port, verbose}) {
-        this._keypair = keypair;
+    constructor({keyPair, swarmName, nodeId, host, port, verbose}) {
+        this._keyPair = keyPair;
         this._swarmName = swarmName;
         this._nodeId = nodeId;
         this._host = host;
         this._port = port;
         this._verbose = verbose;
-        this._hyperswarmConnection = new HyperswarmConnection({keypair, swarmName, nodeId, verbose});
+        this._hyperswarmConnection = new HyperswarmConnection({keyPair, swarmName, nodeId, verbose});
         this._onPeerAnnounceCallbacks = [];
         this._halt = false;
 
@@ -24,6 +24,7 @@ class PeerDiscoveryEngine {
                 });
             }
         });
+        this._hyperswarmConnection.join();
 
         this._start();
     }
@@ -35,7 +36,7 @@ class PeerDiscoveryEngine {
         this._halt = true;
     }
     async _start() {
-        await sleepMsec(1000);
+        await sleepMsec(200);
         while (true) {
             if (this._halt) return;
             this._hyperswarmConnection.broadcastMessage({

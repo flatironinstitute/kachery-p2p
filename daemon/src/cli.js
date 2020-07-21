@@ -6,7 +6,6 @@ import yargs from 'yargs';
 import Daemon from './Daemon.js';
 import Hub from './Hub.js';
 import ApiServer from './ApiServer.js';
-import { createKeyPair, publicKeyToHex, privateKeyToHex } from './crypto_util.js';
 
 function main() {
   // for (let i=0; i<10; i++) {

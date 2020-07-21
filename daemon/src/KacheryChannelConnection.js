@@ -3,26 +3,32 @@ import fs from 'fs';
 import SwarmConnection from './swarmconnection/SwarmConnection.js';
 import { getLocalFileInfo } from './kachery.js';
 import Stream from 'stream';
+import { sleepMsec } from './common/util.js';
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
 class KacheryChannelConnection {
-    constructor({keyPair, nodeId, channel, verbose, nodeInfo, feedManager}) {
-        this._channel = channel;
+    constructor({keyPair, nodeId, channelName, verbose, nodeInfo, feedManager}) {
+        this._nodeId = nodeId;
+        this._channelName = channelName;
         this._feedManager = feedManager;
 
-        const swarmName = 'kachery:' + this._channel;
+        const swarmName = 'kachery:' + this._channelName;
         this._swarmConnection = new SwarmConnection({
             keyPair, nodeId, swarmName, verbose, nodeInfo
         });
 
         this._swarmConnection.createPeerMessageListener(
             (fromNodeId, msg) => {return (msg.type === 'seeking');}
-        ).onMessage(this._handlePeerSeeking);
+        ).onMessage((fromNodeId, msg) => {
+            this._handlePeerSeeking(fromNodeId, msg);
+        });
         this._swarmConnection.onPeerRequest(({fromNodeId, requestBody, onResponse, onError, onFinished}) => {
             this._handlePeerRequest({fromNodeId, requestBody, onResponse, onError, onFinished});
         });
-
-        this._swarmConnection.join();
+        this._start();
+    }
+    setIncomingPeerWebsocketConnection(peerId, connection) {
+        this._swarmConnection.setIncomingPeerWebsocketConnection(peerId, connection);
     }
     findFileOrLiveFeed = ({fileKey, timeoutMsec=4000}) => {
         const onFoundCallbacks = [];
@@ -43,7 +49,7 @@ class KacheryChannelConnection {
             onFinished: cb => {onFinishedCallbacks.push(cb)},
             cancel: handleCancel
         }
-        this.sendMessageToAllPeers({
+        this._swarmConnection.sendMessageToAllPeers({
             type: 'seeking',
             fileKey
         });
@@ -251,7 +257,7 @@ class KacheryChannelConnection {
             });
         });
     }
-    _handlePeerSeeking(fromNodeId, msg) {
+    async _handlePeerSeeking(fromNodeId, msg) {
         const fileKey = msg.fileKey;
         if (fileKey.sha1) {
             const fileInfo = await getLocalFileInfo({fileKey});
@@ -352,6 +358,32 @@ class KacheryChannelConnection {
             onFinished();
         }
     }
+    _getInfoText() {
+        const lines = [];
+        lines.push(`CHANNEL CONNECTION: ${this._channelName}`);
+        const peerIds = this._swarmConnection.peerIds();
+        for (let peerId of peerIds) {
+            const p = this._swarmConnection.peerConnection(peerId);
+            const ci = p.peerConnectInfo() || {};
+            const hasIn = p.hasIncomingWebsocketConnection();
+            const hasOut = p.hasOutgoingWebsocketConnection();
+            lines.push(`Peer ${peerId.slice(0, 6)}...: ${ci.host || ""}:${ci.port || ""} ${ci.local ? "(local)" : ""} ${hasIn ? "in" : ""} ${hasOut ? "out" : ""}`);
+        }
+        return lines.join('\n');
+    }
+    async _start() {
+        let lastInfoText = '';
+        while (true) {
+            const infoText = this._getInfoText();
+            if (infoText !== lastInfoText) {
+                console.info('****************************************************************');
+                console.info(infoText);
+                console.info('****************************************************************');
+                lastInfoText = infoText;
+            }
+            await sleepMsec(100);
+        }
+    }
 }
 
 const fileKeysMatch = (k1, k2) => {
@@ -365,3 +397,5 @@ const fileKeysMatch = (k1, k2) => {
         return false;
     }
 }
+
+export default KacheryChannelConnection;

@@ -1,5 +1,5 @@
-import { randomString } from '../../util.js';
-import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from './crypto_util.js';
+import { randomString } from '../../common/util.js';
+import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from '../../common/crypto_util.js';
 
 class HyperswarmPeerConnection {
     constructor({keyPair, nodeId, swarmName, peerId, verbose}) {

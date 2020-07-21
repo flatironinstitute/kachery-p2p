@@ -1,9 +1,10 @@
 import fs from 'fs'
 import { sleepMsec } from './common/util.js'
-import KacherySwarmConnection from './kacheryswarm/KacherySwarmConnection.js';
-import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './crypto_util.js';
+import KacheryChannelConnection from './KacheryChannelConnection.js';
+import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util.js';
 import FeedManager from './FeedManager.js';
 import WebsocketServer from './WebsocketServer.js';
+import swarm from 'hyperswarm';
 
 class Daemon {
     constructor({ configDir, listenHost, listenPort, proxyHost, proxyPort, verbose }) {
@@ -16,7 +17,7 @@ class Daemon {
         const { publicKey, privateKey } = _loadKeypair(configDir);
         this._keyPair = {publicKey, privateKey};
         this._nodeId = publicKeyToHex(this._keyPair.publicKey);
-        this._swarmConnections = {};
+        this._kacheryChannelConnections = {};
         this._verbose = verbose;
         this._halted = false;
 
@@ -35,9 +36,15 @@ class Daemon {
         }
         this._websocketServer = new WebsocketServer();
         this._websocketServer.onConnection((connection, initialInfo) => {
-            const {channel, nodeId} = initialInfo;
-            if (!(channel in this._swarmConnections)) {
-                console.warn(`Disconnecting incoming connection. Bad channel: ${channel}`);
+            const {swarmName, nodeId} = initialInfo;
+            const channelName = _getChannelNameFromSwarmName(swarmName);
+            if (!channelName) {
+                console.warn(`Disconnecting incoming connection. Bad swarm name: ${swarmName}`);
+                connection.disconnect();
+                return;
+            }
+            if (!(channelName in this._kacheryChannelConnections)) {
+                console.warn(`Disconnecting incoming connection. Not joined to channel: ${channelName}`);
                 connection.disconnect();
                 return;
             }
@@ -46,7 +53,7 @@ class Daemon {
                 connection.disconnect();
                 return;
             }
-            this._swarmConnections[channel].setIncomingPeerConnection(nodeId, connection);
+            this._kacheryChannelConnections[channelName].setIncomingPeerWebsocketConnection(nodeId, connection);
         });
         this._websocketServer.listen(listenPort);
 
@@ -62,7 +69,7 @@ class Daemon {
     halt = async () => await this._halt();
     joinChannel = async (channelName, opts) => await this._joinChannel(channelName, opts);
     leaveChannel = async (channelName, opts) => await this._leaveChannel(channelName, opts);
-    joinedChannelNames = () => {return Object.keys(this._lookupSwarmConnections)};
+    joinedChannelNames = () => {return Object.keys(this._kacheryChannelConnections)};
     getState = () => (this._getState());
     feedManager = () => (this._feedManager);
 
@@ -95,14 +102,14 @@ class Daemon {
     _joinChannel = async (channelName, opts) => {
         try {
             opts = opts || {};
-            if (channelName in this._swarmConnections) {
+            if (channelName in this._kacheryChannelConnections) {
                 console.warn(`Cannot join channel. Already joined: ${channelName}`);
                 return;
             }
             if (this._verbose >= 0) {
                 console.info(`Joining channel: ${channelName}`);
             }
-            const x = new KacherySwarmConnection({
+            const x = new KacheryChannelConnection({
                 keyPair: this._keyPair,
                 nodeId: this._nodeId,
                 channelName,
@@ -110,8 +117,7 @@ class Daemon {
                 feedManager: this._feedManager,
                 nodeInfo: this._nodeInfo
             });
-            await x.join();
-            this._swarmConnections[channelName] = x;
+            this._kacheryChannelConnections[channelName] = x;
             if (!opts._skipUpdateConfig) {
                 await this._updateConfigFile();
             }
@@ -124,15 +130,15 @@ class Daemon {
     _leaveChannel = async (channelName, opts) => {
         try {
             opts = opts || {};
-            if (!(channelName in this._swarmConnections)) {
+            if (!(channelName in this._kacheryChannelConnections)) {
                 console.warn(`Cannot leave channel. Not joined: ${channelName}`);
                 return;
             }
             if (this._verbose >= 0) {
                 console.info(`Leaving channel: ${channelName}`);
             }
-            await this._swarmConnections[channelName].leave();
-            delete this._swarmConnections[channelName];
+            await this._kacheryChannelConnections[channelName].leave();
+            delete this._kacheryChannelConnections[channelName];
             if (!opts._skipUpdateConfig) {
                 await this._updateConfigFile();
             }
@@ -177,10 +183,10 @@ class Daemon {
             else
                 console.info(`find file: ${JSON.stringify(fileKey)}`);
         }
-        const channelNames = Object.keys(this._swarmConnections);
+        const channelNames = Object.keys(this._kacheryChannelConnections);
         channelNames.forEach(channelName => {
-            const swarmConnection = this._swarmConnections[channelName];
-            const x = swarmConnection.findFileOrLiveFeed({fileKey, timeoutMsec});
+            const kacheryChannelConnection = this._kacheryChannelConnections[channelName];
+            const x = kacheryChannelConnection.findFileOrLiveFeed({fileKey, timeoutMsec});
             findOutputs.push(x);
             x.onFound(result => {
                 if (isFinished) return;
@@ -205,52 +211,52 @@ class Daemon {
         if (this._verbose >= 1) {
             console.info(`downloadFile: ${channel} ${nodeId.slice(0, 8)} ${JSON.stringify(fileKey)} ${fileSize}`);
         }
-        if (!(channel in this._swarmConnections)) {
+        if (!(channel in this._kacheryChannelConnections)) {
             throw Error(`Cannot download file... not joined to channel: ${channel}`)
         }
-        const swarmConnection = this._swarmConnections[channel];
-        return await swarmConnection.downloadFile({nodeId, fileKey, startByte: 0, endByte: fileSize, opts});
+        const kacheryChannelConnection = this._kacheryChannelConnections[channel];
+        return await kacheryChannelConnection.downloadFile({nodeId, fileKey, startByte: 0, endByte: fileSize, opts});
     }
     // returns {stream, cancel}
     _downloadFileBytes = async ({channel, nodeId, fileKey, startByte, endByte, opts}) => {
         if (this._verbose >= 1) {
             console.info(`downloadFileBytes: ${channel} ${nodeId.slice(0, 8)} ${JSON.stringify(fileKey)} ${startByte} ${endByte}`);
         }
-        if (!(channel in this._swarmConnections)) {
+        if (!(channel in this._kacheryChannelConnections)) {
             throw Error(`Cannot download file bytes... not joined to channel: ${channel}`)
         }
-        const swarmConnection = this._swarmConnections[channel];
-        return await swarmConnection.downloadFile({nodeId, fileKey, startByte, endByte, opts});
+        const kacheryChannelConnection = this._kacheryChannelConnections[channel];
+        return await kacheryChannelConnection.downloadFile({nodeId, fileKey, startByte, endByte, opts});
     }
     _getLiveFeedSignedMessages = async ({channel, nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
         if (this._verbose >= 1) {
             console.info(`getLiveFeedSignedMessages: ${channel} ${nodeId.slice(0, 8)} ${feedId.slice(0, 8)} ${subfeedName} ${position}`);
         }
-        if (!(channel in this._swarmConnections)) {
+        if (!(channel in this._kacheryChannelConnections)) {
             throw Error(`Cannot get live feed signed messages... not joined to channel: ${channel}`)
         }
-        const swarmConnection = this._swarmConnections[channel];
-        const signedMessages = await swarmConnection.getLiveFeedSignedMessages({nodeId, feedId, subfeedName, position, waitMsec, opts});
+        const kacheryChannelConnection = this._kacheryChannelConnections[channel];
+        const signedMessages = await kacheryChannelConnection.getLiveFeedSignedMessages({nodeId, feedId, subfeedName, position, waitMsec, opts});
         return signedMessages;
     }
     _submitMessagesToLiveFeed = async ({channel, nodeId, feedId, subfeedName, messages}) => {
         if (this._verbose >= 1) {
             console.info(`submitMessagesToLiveFeed: ${channel} ${nodeId.slice(0, 8)} ${feedId.slice(0, 8)} ${subfeedName} ${messages.length}`);
         }
-        if (!(channel in this._swarmConnections)) {
+        if (!(channel in this._kacheryChannelConnections)) {
             throw Error(`Cannot submit messages to live feed... not joined to channel: ${channel}`)
         }
-        const swarmConnection = this._swarmConnections[channel];
-        await swarmConnection.submitMessagesToLiveFeed({nodeId, feedId, subfeedName, messages});
+        const kacheryChannelConnection = this._kacheryChannelConnections[channel];
+        await kacheryChannelConnection.submitMessagesToLiveFeed({nodeId, feedId, subfeedName, messages});
     }
     _getState = () => {
         const state = {};
         state.channels = [];
-        for (let channelName in this._swarmConnections) {
-            const swarmConnection = this._swarmConnections[channelName];
+        for (let channelName in this._kacheryChannelConnections) {
+            const kacheryChannelConnection = this._kacheryChannelConnections[channelName];
             state.channels.push({
                 name: channelName,
-                numPeers: swarmConnection.numPeers()
+                numPeers: kacheryChannelConnection.numPeers()
             });
         }
         return state;
@@ -270,7 +276,7 @@ class Daemon {
     _updateConfigFile = async () => {
         const config = await this._readConfigFile() || [];
         config.channels = [];
-        for (let channelName in this._swarmConnections) {
+        for (let channelName in this._kacheryChannelConnections) {
             config.channels.push({
                 name: channelName
             })
@@ -338,6 +344,11 @@ const testKeyPair = (keyPair) => {
     if (hexToPrivateKey(privateKeyToHex(keyPair.privateKey)) !== keyPair.privateKey) {
         throw new Error('Problem testing public/private keys. Error converting private key to/from hex.');
     }
+}
+
+const _getChannelNameFromSwarmName = (swarmName) => {
+    if (!(swarmName.startsWith('kachery:'))) return null;
+    return swarmName.slice('kachery:'.length);
 }
 
 export default Daemon;

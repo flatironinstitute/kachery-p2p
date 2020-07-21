@@ -5,4 +5,4 @@ export KACHERY_STORAGE_DIR=$DIRECTORY/kachery-storage
 export KACHERY_P2P_CONFIG_DIR=$KACHERY_STORAGE_DIR
 mkdir -p $KACHERY_STORAGE_DIR
 
-kachery-p2p-start-daemon --channel test1 --method dev --verbose 200 --port 3001 "$@"
+kachery-p2p-start-daemon --channel test1 --method dev --verbose 200 --port 3008 "$@"
