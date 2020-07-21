@@ -26,7 +26,7 @@ class SwarmConnection {
     }
 
     async leave() {
-        this.broadcastMessage({
+        this.sendMessageToPeers({
             type: 'leaving'
         });
         this._halt = true;
@@ -128,7 +128,7 @@ class SwarmConnection {
         const onResponseCallbacks = [];
         const onErrorCallbacks = [];
         const onFinishedCallbacks = [];
-        // todo: think about doing this without a broadcast
+        
         const message = {
             type: 'requestToNode', // todo: make sure we handle this
             toNodeId: nodeId,
