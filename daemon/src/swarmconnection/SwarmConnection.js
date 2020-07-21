@@ -109,7 +109,7 @@ class SwarmConnection {
         }
         else {
             avoid[this._nodeId] = true; // avoid cycles
-            const peerIds2 = this._findPeersWithRouteTo(peerId, avoid);
+            const peerIds2 = this._findPeersWithRouteTo(toNodeId, avoid);
             if (peerIds2.length > 0) {
                 const peerId2 = peerIds2[0]; // todo: think about which one to use
                 this._peerConnections[peerId2].sendSignedMessage(signedMessage);
