@@ -26,7 +26,7 @@ class SwarmConnection {
             protocolVersion // version of the kachery-p2p protocol
         });
         // Listen for new nodes in the swarm announcing their node info
-        this._peerDiscoveryEngine.onPeerNodeInfoChanged(({peerId, nodeInfo}) => {
+        this._peerDiscoveryEngine.onPeerNodeInfoChanged(({peerId, peerNodeInfo}) => {
             this._handlePeerAnnounce({peerId, peerNodeInfo});
         });
 
@@ -190,9 +190,7 @@ class SwarmConnection {
             this._createPeerConnection(peerId);
         }
         if (peerId in this._peerConnections) {
-            this._peerConnections[peerId].setPeerNodeInfo({
-                peerNodeInfo
-            });
+            this._peerConnections[peerId].setPeerNodeInfo(peerNodeInfo);
         }
     }
     _handleSignedMessageFromPeer = async (msg) => {

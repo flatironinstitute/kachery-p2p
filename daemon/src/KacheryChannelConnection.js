@@ -18,7 +18,13 @@ class KacheryChannelConnection {
         // Create the swarm connection
         const swarmName = 'kachery:' + this._channelName;
         this._swarmConnection = new SwarmConnection({
-            keyPair, nodeId, swarmName, verbose, discoveryVerbose, nodeInfo, protocolVersion: PROTOCOL_VERSION
+            keyPair,
+            nodeId,
+            swarmName,
+            verbose,
+            discoveryVerbose,
+            nodeInfo,
+            protocolVersion: PROTOCOL_VERSION
         });
 
         // Listen for seeking messages (when a peer is seeking a file or feed)
@@ -56,16 +62,16 @@ class KacheryChannelConnection {
     // Download a file (or part of a file) from a particular node in the swarm
     // returns {stream, cancel}
     downloadFile = async ({nodeId, fileKey, startByte, endByte, opts}) => {
-        return await _downloadFile({nodeId, fileKey, startByte, endByte, opts});
+        return await this._downloadFile({nodeId, fileKey, startByte, endByte, opts});
     }
     // Get live feed signed messages
     // Returns list of signed messages
     getLiveFeedSignedMessages = async ({nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
-        return await _getLiveFeedSignedMessages({nodeId, feedId, subfeedName, position, waitMsec, opts});
+        return await this._getLiveFeedSignedMessages({nodeId, feedId, subfeedName, position, waitMsec, opts});
     }
     // Submit messages to a live feed on a remote node
     submitMessagesToLiveFeed = async ({nodeId, feedId, subfeedName, messages}) => {
-        return await _submitMessagesToLiveFeed({nodeId, feedId, subfeedName, messages});
+        return await this._submitMessagesToLiveFeed({nodeId, feedId, subfeedName, messages});
     }
     async leave() {
         this._halt = true;

@@ -16,7 +16,7 @@ class PeerDiscoveryEngine {
 
         // listen to incoming messages
         this._hyperswarmConnection.onMessage((fromNodeId, msg) => {
-            _handleHyperswarmConnectionMessage(fromNodeId, msg);
+            this._handleHyperswarmConnectionMessage(fromNodeId, msg);
         });
         // join the hyperswarm
         this._hyperswarmConnection.join();
@@ -45,12 +45,12 @@ class PeerDiscoveryEngine {
                 return;
             }
             // todo: other validation
-            const nodeInfoOld = this._peerNodeInfos[ni] || {};
+            const nodeInfoOld = this._peerNodeInfos[fromNodeId] || {};
             const nodeInfoNew = msg.nodeInfo;
             nodeInfoNew.local = this._hyperswarmConnection.peerIsLocal(fromNodeId); 
             if (JSONStringifyDeterministic(nodeInfoNew) !== JSONStringifyDeterministic(nodeInfoOld)) {
                 // something has changed
-                this._peerNodeInfos[ni] = nodeInfoNew;
+                this._peerNodeInfos[fromNodeId] = nodeInfoNew;
                 this._onPeerNodeInfoChangedCallbacks.forEach(cb => {
                     cb({
                         peerId: fromNodeId,

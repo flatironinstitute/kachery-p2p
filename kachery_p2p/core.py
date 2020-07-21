@@ -185,7 +185,7 @@ def _probe_daemon():
         return None
     return x
 
-def start_daemon(*, port, method='npx', channels=[], verbose=0, host=''):
+def start_daemon(*, port, method='npx', channels=[], verbose=0, dverbose=0, host=''):
     from kachery_p2p import __version__
 
     if _probe_daemon() is not None:
@@ -198,6 +198,7 @@ def start_daemon(*, port, method='npx', channels=[], verbose=0, host=''):
     for ch in channels:
         start_args.append(f'--channel {ch}')
     start_args.append(f'--verbose {verbose}')
+    start_args.append(f'--dverbose {dverbose}')
     if host:
         start_args.append(f'--host {host}')
     start_args.append(f'--port {port}')

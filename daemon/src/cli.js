@@ -60,34 +60,9 @@ function main() {
           channelNames,
           listenHost,
           listenPort,
-          proxyHost: null,
-          proxyPort: null,
           verbose: argv.verbose,
           discoveryVerbose: argv.dverbose,
         });
-      }
-    })
-    .command({
-      command: 'start-hub',
-      desc: 'Start a hub',
-      builder: (yargs) => {
-        yargs.option('port', {
-          describe: 'Port to listen on',
-          type: 'number',
-        })
-        yargs.option('verbose', {
-          describe: 'Verbosity level.',
-          type: 'number',
-          default: 0
-        })
-      },
-      handler: (argv) => {
-        let port = argv.port || 8080;
-        const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
-        if (!fs.existsSync(configDir)) {
-          fs.mkdirSync(configDir);
-        }
-        startHub({ configDir, port, verbose: argv.verbose });
       }
     })
     .demandCommand()
@@ -99,8 +74,8 @@ function main() {
 
 const apiPort = process.env.KACHERY_P2P_API_PORT || 20431;
 
-const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, proxyHost, proxyPort, verbose, discoveryVerbose }) => {
-  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, proxyHost, proxyPort});
+const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, verbose, discoveryVerbose }) => {
+  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort});
 
   const apiServer = new ApiServer(daemon, {verbose});
   apiServer.listen(apiPort);

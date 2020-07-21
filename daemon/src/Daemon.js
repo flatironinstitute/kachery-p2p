@@ -8,39 +8,43 @@ import WebsocketServer from './WebsocketServer.js';
 import swarm from 'hyperswarm';
 
 class Daemon {
-    constructor({ configDir, listenHost, listenPort, proxyHost, proxyPort, verbose, discoveryVerbose }) {
-        // Directory where 
-        this._configDir = configDir;
-        this._listenHost = listenHost;
-        this._listenPort = listenPort;
-        this._proxyHost = proxyHost;
-        this._proxyPort = proxyPort;
+    constructor({ configDir, listenHost, listenPort, verbose, discoveryVerbose }) {
+        this._configDir = configDir; // Directory where config information is stored (including names and keys for feeds)
+        this._listenHost = listenHost; // The host where we are listening
+        this._listenPort = listenPort; // The port where we are listening
         
-        const { publicKey, privateKey } = _loadKeypair(configDir);
-        this._keyPair = {publicKey, privateKey};
-        this._nodeId = publicKeyToHex(this._keyPair.publicKey);
-        this._kacheryChannelConnections = {};
-        this._verbose = verbose;
-        this._discoveryVerbose = discoveryVerbose;
-        this._halted = false;
+        const { publicKey, privateKey } = _loadKeypair(configDir); // The keypair for signing messages and the public key is used as the node id
+        this._keyPair = {publicKey, privateKey}; // the keypair
+        this._nodeId = publicKeyToHex(this._keyPair.publicKey); // get the node id from the public key
+        this._kacheryChannelConnections = {}; // the channel (aka swarm) connections
+        this._verbose = verbose; // our verbosity level (non-negative integer)
+        this._discoveryVerbose = discoveryVerbose; // The verbosity level for discovery/hyperswarm part (zero means silent)
+        this._halted = false; // Whether we have halted the daemon
 
+        // The node info, that will be passed to other nodes in the swarms
         this._nodeInfo = {
             nodeId: this._nodeId,
             host: listenHost,
             port: listenPort
         };
 
+        // The feed manager -- each feed is a collection of append-only logs
         this._feedManager = new FeedManager(this, {verbose: this._verbose});
 
         console.info(`Verbose level: ${verbose}`);
-
         if (!this._listenPort) {
             throw Error('Listen port is empty.');
         }
+
+        // Create a new websocket server for listening for incoming peer connections on the channels/swarms
         this._websocketServer = new WebsocketServer();
         this._websocketServer.onConnection((connection, initialInfo) => {
+            // We have a new connection -- and the first message passed has info about the swarm
+            // swarmName is determined from the channel name
             const {swarmName, nodeId} = initialInfo;
             const channelName = _getChannelNameFromSwarmName(swarmName);
+
+            // some basic validation
             if (!channelName) {
                 console.warn(`Disconnecting incoming connection. Bad swarm name: ${swarmName}`);
                 connection.disconnect();
@@ -56,6 +60,8 @@ class Daemon {
                 connection.disconnect();
                 return;
             }
+
+            // Add the incoming peer websocket connection to the channel connection
             this._kacheryChannelConnections[channelName].setIncomingPeerWebsocketConnection(nodeId, connection);
         });
         this._websocketServer.listen(listenPort);
@@ -67,29 +73,31 @@ class Daemon {
     API
     ******************************************************************************/
     
-    // channels (aka lookup swarms)
+    // return the node id for this node
     nodeId = () => (this._nodeId);
+    // halt everything, we are stopping the daemon
     halt = async () => await this._halt();
+    // join a particular channel (aka swarm)
     joinChannel = async (channelName, opts) => await this._joinChannel(channelName, opts);
+    // leave a channel
     leaveChannel = async (channelName, opts) => await this._leaveChannel(channelName, opts);
+    // get the list of channel names we have joined
     joinedChannelNames = () => {return Object.keys(this._kacheryChannelConnections)};
+    // get the state -- includes info about peers in swarms
     getState = () => (this._getState());
+    // return the feed manager
     feedManager = () => (this._feedManager);
 
     // Find a file
-    // returns on object with:
-    //    onFound()
-    //    onFinished()
-    //    cancel()
+    // returns on object:
+    //    {onFound, onFinished, cancel}
     findFile = ({fileKey, timeoutMsec}) => (this._findFile({fileKey, timeoutMsec}));
     // returns {stream, cancel}
     downloadFile = async ({channel, nodeId, fileKey, fileSize, opts}) => (await this._downloadFile({channel, nodeId, fileKey, fileSize, opts}));
     downloadFileBytes = async ({channel, nodeId, fileKey, startByte, endByte, opts}) => (await this._downloadFileBytes({channel, nodeId, fileKey, startByte, endByte, opts}));
     // Find a live feed
     // returns an object with:
-    //   onFound()
-    //   onFinished()
-    //   cancel()
+    //   {onFound, onFinished, cancel}
     findLiveFeed = ({feedId}) => (this._findLiveFeed({feedId}));
 
     /*****************************************************************************

@@ -8,6 +8,7 @@ class HyperswarmConnection {
     constructor({keyPair, nodeId, swarmName, protocolVersion, verbose}) {
         this._keyPair = keyPair;
         this._nodeId = nodeId;
+        this._protocolVersion = protocolVersion;
         if (this._nodeId !== publicKeyToHex(this._keyPair.publicKey.toString('hex'))) {
             throw Error('public key not consistent with node ID.');
         }
@@ -76,11 +77,14 @@ class HyperswarmConnection {
     _handleNewConnection({jsonSocket, socket, details}) {
         // todo: provide an AbstractHyperswarmConnection here
         // *** then implement the hub connection
+        if (this._verbose >= 20) {
+            console.info('HYPERSWARM:: new incoming connection');
+        }
         jsonSocket.sendMessage({
             type: 'initial',
             from: details.client ? 'server' : 'client',
             nodeId: this._nodeId,
-            protocolVersion: PROTOCOL_VERSION
+            protocolVersion: this._protocolVersion
         });
         let receivedInitialMessage = false;
         jsonSocket.on('message', msg => {
@@ -94,7 +98,7 @@ class HyperswarmConnection {
                 socket.destroy();
                 return;
             }
-            if (msg.protocolVersion !== PROTOCOL_VERSION) {
+            if (msg.protocolVersion !== this._protocolVersion) {
                 if (this._verbose >= 1) {
                     console.warn('HYPERSWARM:: Incorrect protocol version from peer connection. Closing socket.');
                 }
@@ -115,6 +119,9 @@ class HyperswarmConnection {
                 }
                 socket.destroy();
                 return;
+            }
+            if (this._verbose >= 20) {
+                console.info(`HYPERSWARM:: new incoming connection from ${msg.nodeId}`);
             }
             if (!this._peerConnections[msg.nodeId]) {
                 let peerConnection;

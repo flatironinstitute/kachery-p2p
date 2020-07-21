@@ -93,8 +93,7 @@ export const createKeyPair = () => {
 }
 
 // Thanks: https://stackoverflow.com/questions/16167581/sort-object-properties-and-json-stringify
-function JSONStringifyDeterministic( obj, space )
-{
+export const JSONStringifyDeterministic = ( obj, space ) => {
     var allKeys = [];
     JSON.stringify( obj, function( key, value ){ allKeys.push( key ); return value; } )
     allKeys.sort();
