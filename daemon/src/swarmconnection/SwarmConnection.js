@@ -78,7 +78,9 @@ class SwarmConnection {
             this.sendMessageToPeer(peerId, msg);
         }
     }
-    sendMessageToPeer(peerId, msg, {_routeToPeerAvoidNodeIds=[]}) {
+    sendMessageToPeer(peerId, msg, opts) {
+        opts = opts || {};
+        let _routeToPeerAvoidNodeIds = opts._routeToPeerAvoidNodeIds || [];
         if (!(peerId in this._peerConnections)) {
             console.warn(`Unable to send message ... no peer connection to ${peerId}`);
             return false;

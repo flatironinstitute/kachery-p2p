@@ -11,6 +11,7 @@ class KacheryChannelConnection {
         this._nodeId = nodeId;
         this._channelName = channelName;
         this._feedManager = feedManager;
+        this._halt = false;
 
         const swarmName = 'kachery:' + this._channelName;
         this._swarmConnection = new SwarmConnection({
@@ -257,6 +258,10 @@ class KacheryChannelConnection {
             });
         });
     }
+    async leave() {
+        this._halt = true;
+        await this._swarmConnection.leave();
+    }
     async _handlePeerSeeking(fromNodeId, msg) {
         const fileKey = msg.fileKey;
         if (fileKey.sha1) {
@@ -380,6 +385,7 @@ class KacheryChannelConnection {
     async _start() {
         let lastInfoText = '';
         while (true) {
+            if (this._halt) return;
             const infoText = this._getInfoText();
             if (infoText !== lastInfoText) {
                 console.info('****************************************************************');
