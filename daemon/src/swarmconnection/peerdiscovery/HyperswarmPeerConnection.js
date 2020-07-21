@@ -1,4 +1,4 @@
-import { randomString } from '../../common/util.js';
+import { randomAlphaString } from '../../common/util.js';
 import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from '../../common/crypto_util.js';
 
 class HyperswarmPeerConnection {
@@ -91,7 +91,7 @@ class HyperswarmPeerConnection {
         }, 0);
     }
     onMessage = (cb) => {
-        const callbackId = randomString(10);
+        const callbackId = randomAlphaString(10);
         const details = {
             removeCallback: () => {delete this._onMessageCallbacks[callbackId];}
         };

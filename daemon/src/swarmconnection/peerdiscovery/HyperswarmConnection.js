@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import HyperswarmPeerConnection from './HyperswarmPeerConnection.js';
-import { randomString, sleepMsec } from '../../common/util.js';
+import { randomAlphaString, sleepMsec } from '../../common/util.js';
 import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from '../../common/crypto_util.js';
 import AbstractHyperswarm from './AbstractHyperswarm.js';
 
@@ -256,7 +256,7 @@ class HyperswarmConnection {
         }
         if (toNodeId in this._peerConnections) {
             const body = {
-                messageId: randomString(10),
+                messageId: randomAlphaString(10),
                 message
             };
             const signature = getSignature(body, this._keyPair);
@@ -274,7 +274,7 @@ class HyperswarmConnection {
     broadcastMessage = (message, opts) => {
         opts = opts || {};
         const excludeNodeIds = opts.excludeNodeIds || {};
-        const messageId = opts.messageId || randomString(10);
+        const messageId = opts.messageId || randomAlphaString(10);
         this._messageIdsHandled[messageId] = true;
         const peerIds = Object.keys(this._peerConnections);
         peerIds.filter(peerId => (!excludeNodeIds[peerId])).forEach(peerId => {
@@ -297,7 +297,7 @@ class HyperswarmConnection {
     }
     createMessageListener = testFunction => {
         const x = {
-            id: randomString(),
+            id: randomAlphaString(),
             testFunction,
             onMessageCallbacks: []
         };

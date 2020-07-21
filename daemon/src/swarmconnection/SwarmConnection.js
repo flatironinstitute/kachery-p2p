@@ -1,6 +1,6 @@
 import PeerDiscoveryEngine from './peerdiscovery/PeerDiscoveryEngine.js';
 import PeerConnection from './PeerConnection.js';
-import { randomString, sleepMsec } from '../common/util.js';
+import { randomAlphaString, sleepMsec } from '../common/util.js';
 import { getSignature, hexToPublicKey, verifySignature } from '../common/crypto_util.js';
 
 class SwarmConnection {
@@ -62,7 +62,7 @@ class SwarmConnection {
     }
     createPeerMessageListener(testFunction) {
         const x = {
-            id: randomString(),
+            id: randomAlphaString(),
             testFunction,
             onMessageCallbacks: []
         };
@@ -124,7 +124,7 @@ class SwarmConnection {
     // returns {onResponse, onError, onFinished, cancel}
     makeRequestToPeer = (nodeId, requestBody, opts) => {
         // Send a request to node
-        const requestId = opts.requestId || randomString(10);
+        const requestId = opts.requestId || randomAlphaString(10);
         const onResponseCallbacks = [];
         const onErrorCallbacks = [];
         const onFinishedCallbacks = [];
@@ -249,7 +249,9 @@ class SwarmConnection {
         if (ids.length > 0) {
             // todo: figure out which to use
             const id0 = ids[0];
-            console.log('Forwarding signed message from peer', msg.body.fromNodeId, msg.body.toNodeId, msg.type, id0);
+            if (this._verbose >= 50) {
+                console.info('Forwarding signed message from peer', msg.body.fromNodeId, msg.body.toNodeId, msg.body.type, id0);
+            }
             this._peerConnections[id0].sendSignedMessage({
                 body: msg.body,
                 signature: msg.signature,
@@ -300,7 +302,15 @@ class SwarmConnection {
             for (let id in this._peerMessageListeners) {
                 const x = this._peerMessageListeners[id];
                 if (x.testFunction(fromNodeId, msg)) {
-                    x.onMessageCallbacks.forEach(cb => {cb(fromNodeId, msg);});
+                    x.onMessageCallbacks.forEach(cb => {
+                        try {
+                            cb(fromNodeId, msg);
+                        }
+                        catch(err) {
+                            console.warn(err);
+                            console.warn('Error for message', fromNodeId, msg.type);
+                        }
+                    });
                 }
             }
         }
