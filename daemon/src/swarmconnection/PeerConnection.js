@@ -146,6 +146,7 @@ class PeerConnection {
             if (peerConnectInfo.local) {
                 host = 'localhost';
             }
+            if (!host) return;
             let C;
             try {
                 C = new WebsocketConnection({ host, port });
