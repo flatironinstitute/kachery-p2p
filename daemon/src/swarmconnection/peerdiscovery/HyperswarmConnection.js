@@ -295,17 +295,18 @@ class HyperswarmConnection {
     onMessage = cb => {
         this._onMessageCallbacks.push(cb);
     }
-    createMessageListener = testFunction => {
+    createPeerMessageListener = (testFunction, opts) => {
+        opts = opts || {};
         const x = {
-            id: randomAlphaString(),
+            name: opts.name || randomAlphaString(10),
             testFunction,
             onMessageCallbacks: []
         };
-        this._messageListeners[x.id] = x;
+        this._messageListeners[x.name] = x;
         return {
             onMessage: cb => {x.onMessageCallbacks.push(cb);},
             cancel: () => {
-                delete this._messageListeners[x.id]
+                delete this._messageListeners[x.name]
             }
         };
     }
@@ -327,7 +328,7 @@ class HyperswarmConnection {
             }
             if (msg.type === 'broadcast') {
                 const excludeNodeIds = msg.excludeNodeIds;
-                this.broadcastMessage(msg.body.message, {messageId: messageId, fromNodeId: msg.fromNodeId, signature: msg.signature, excludeNodeIds});
+                this.broadcastMessage(msg.body.message, {messageId, fromNodeId: msg.fromNodeId, signature: msg.signature, excludeNodeIds});
             }
         }
         else if (msg.type === 'keepAlive') {

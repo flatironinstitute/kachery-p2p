@@ -7,6 +7,9 @@ export const randomString = (num_chars) => {
 }
 
 export const randomAlphaString = (num_chars) => {
+    if (!num_chars) {
+        throw Error('randomAlphaString: num_chars needs to be a positive integer.')
+    }
     var text = "";
     var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     for (var i = 0; i < num_chars; i++)

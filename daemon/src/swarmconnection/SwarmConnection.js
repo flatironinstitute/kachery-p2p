@@ -60,17 +60,18 @@ class SwarmConnection {
             connection.disconnect();
         }
     }
-    createPeerMessageListener(testFunction) {
+    createPeerMessageListener(testFunction, opts) {
+        opts = opts || {};
         const x = {
-            id: randomAlphaString(),
+            name: opts.name || randomAlphaString(10),
             testFunction,
             onMessageCallbacks: []
         };
-        this._peerMessageListeners[x.id] = x;
+        this._peerMessageListeners[x.name] = x;
         return {
             onMessage: cb => {x.onMessageCallbacks.push(cb);},
             cancel: () => {
-                delete this._peerMessageListeners[x.id]
+                delete this._peerMessageListeners[x.name]
             }
         };
     }
