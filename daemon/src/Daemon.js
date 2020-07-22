@@ -33,39 +33,40 @@ class Daemon {
         this._feedManager = new FeedManager(this, {verbose: this._verbose});
 
         console.info(`Verbose level: ${verbose}`);
-        if (!this._listenPort) {
-            throw Error('Listen port is empty.');
+        if (this._listenPort) {
+            // Create a new websocket server for listening for incoming peer connections on the channels/swarms
+            this._websocketServer = new WebsocketServer();
+            this._websocketServer.onConnection((connection, initialInfo) => {
+                // We have a new connection -- and the first message passed has info about the swarm
+                // swarmName is determined from the channel name
+                const {swarmName, nodeId} = initialInfo;
+                const channelName = _getChannelNameFromSwarmName(swarmName);
+
+                // some basic validation
+                if (!channelName) {
+                    console.warn(`Disconnecting incoming connection. Bad swarm name: ${swarmName}`);
+                    connection.disconnect();
+                    return;
+                }
+                if (!(channelName in this._kacheryChannelConnections)) {
+                    console.warn(`Disconnecting incoming connection. Not joined to channel: ${channelName}`);
+                    connection.disconnect();
+                    return;
+                }
+                if (!nodeId) {
+                    console.warn(`Disconnecting incoming connection. Empty nodeId.`);
+                    connection.disconnect();
+                    return;
+                }
+
+                // Add the incoming peer websocket connection to the channel connection
+                this._kacheryChannelConnections[channelName].setIncomingPeerWebsocketConnection(nodeId, connection);
+            });
+            this._websocketServer.listen(listenPort);
         }
-
-        // Create a new websocket server for listening for incoming peer connections on the channels/swarms
-        this._websocketServer = new WebsocketServer();
-        this._websocketServer.onConnection((connection, initialInfo) => {
-            // We have a new connection -- and the first message passed has info about the swarm
-            // swarmName is determined from the channel name
-            const {swarmName, nodeId} = initialInfo;
-            const channelName = _getChannelNameFromSwarmName(swarmName);
-
-            // some basic validation
-            if (!channelName) {
-                console.warn(`Disconnecting incoming connection. Bad swarm name: ${swarmName}`);
-                connection.disconnect();
-                return;
-            }
-            if (!(channelName in this._kacheryChannelConnections)) {
-                console.warn(`Disconnecting incoming connection. Not joined to channel: ${channelName}`);
-                connection.disconnect();
-                return;
-            }
-            if (!nodeId) {
-                console.warn(`Disconnecting incoming connection. Empty nodeId.`);
-                connection.disconnect();
-                return;
-            }
-
-            // Add the incoming peer websocket connection to the channel connection
-            this._kacheryChannelConnections[channelName].setIncomingPeerWebsocketConnection(nodeId, connection);
-        });
-        this._websocketServer.listen(listenPort);
+        else {
+            console.warn('Listen port is empty or zero. Not listening for incoming connections.');
+        }
 
         this._start();
     }

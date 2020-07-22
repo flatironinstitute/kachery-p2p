@@ -46,11 +46,6 @@ function main() {
           describe: 'Port to listen on.',
           type: 'string'
         })
-        yargs.option('max_num_peers', {
-          describe: 'Maximum number of peers per swarm (0 means no max)',
-          type: 'number',
-          default: 0
-        })
       },
       handler: (argv) => {
         let channelNames = argv.channel || [];
@@ -68,7 +63,6 @@ function main() {
           verbose: argv.verbose,
           discoveryVerbose: argv.dverbose,
           opts: {
-            maxNumPeers: argv.max_num_peers || undefined
           }
         });
       }

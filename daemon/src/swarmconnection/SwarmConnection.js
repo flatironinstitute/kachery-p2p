@@ -78,7 +78,7 @@ class SwarmConnection {
                 console.info(`SWARM:: Setting incoming websocket connection for peer ${peerId}`);
             }
             // set the incoming connection
-            this._peerConnections[peerId].setIncomingWebsocketConnection(connection); // todo: implement    
+            this._peerConnections[peerId].setIncomingWebsocketConnection(connection);
             return;
         }
         else {
@@ -129,8 +129,8 @@ class SwarmConnection {
         return this._makeRequestToPeer(nodeId, requestBody, opts);
     }
 
-    hasRouteToPeer = (peerId) => {
-        const route = this._smarty.which_route_should_i_use_to_send_a_message_to_this_peer(peerId, {calculateIfNeeded: false});
+    hasRouteToPeer = async (peerId) => {
+        const route = await this._smarty.which_route_should_i_use_to_send_a_message_to_this_peer(peerId, {calculateIfNeeded: false});
         return route ? true : false;
     }
 
@@ -161,7 +161,7 @@ class SwarmConnection {
         const {body, signature} = signedMessage;
         const {fromNodeId, toNodeId, message} = body;
         if (signedMessage.route) {
-            let index = signedMessage.route.indexOf(this._nodeInfo);
+            let index = signedMessage.route.indexOf(this._nodeId);
             if (index < 0) {
                 if (this._verbose >= 0) {
                     console.warn(`Unexpected this node ${this._nodeId} is not found in route ${signedMessage.route.join(",")}`);
@@ -170,7 +170,7 @@ class SwarmConnection {
             }
             if (index === (signedMessage.route.length - 1)) {
                 // I guess it's us!
-                if (this._nodeId !== signedMessage.toNodeId) {
+                if (this._nodeId !== toNodeId) {
                     if (this._verbose >= 0) {
                         console.warn(`Unexpected the final node in the route is not the toNodeId.`);
                     }
@@ -207,9 +207,9 @@ class SwarmConnection {
             if (!route) {
                 return false;
             }
-            const peerId0 = route[0];
-            if ((peerId0 in this._peerConnections) && (this._peerConnections[peerId0].hasWebsocketConnection())) {
-                this._peerConnections[peerId0].sendSignedMessage({
+            const peerId1 = route[1];
+            if ((peerId1 in this._peerConnections) && (this._peerConnections[peerId1].hasWebsocketConnection())) {
+                this._peerConnections[peerId1].sendSignedMessage({
                     body: body,
                     signature: signedMessage.signature,
                     route
@@ -220,17 +220,8 @@ class SwarmConnection {
         }
     }
     
-
     _createPeerConnection(peerId) {
         if (peerId in this._peerConnections) return;
-        if (this._opts.maxNumPeers) {
-            if (this.numPeers() >= this._opts.maxNumPeers) {
-                if (this._verbose >= 50) {
-                    console.info(`SWARM:: Not creating peer connection because maximum has been reached: ${peerId}`);
-                }
-                return;
-            }
-        }
         if (this._verbose >= 50) {
             console.info(`SWARM:: Creating peer connection: ${peerId}`);
         }
@@ -323,6 +314,8 @@ class SwarmConnection {
         }
     }
     _makeRequestToPeer = (nodeId, requestBody, opts) => {
+        opts = opts || {};
+
         // Send a request to node
         const requestId = opts.requestId || randomAlphaString(10);
         const onResponseCallbacks = [];

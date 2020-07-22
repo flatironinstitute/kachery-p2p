@@ -1,4 +1,5 @@
 import { randomString, sleepMsec } from "../common/util.js";
+import { getSignature, verifySignature, JSONStringifyDeterministic, hexToPublicKey } from '../common/crypto_util.js';
 
 class SmartySwarmConnection {
     constructor(swarmConnection) {
@@ -15,14 +16,14 @@ class SmartySwarmConnection {
         this._start();
     }
     async which_route_should_i_use_to_send_a_message_to_this_peer(peerId, {calculateIfNeeded}) {
-        for (let passnum = 1; passnum <= 2; passnum++) {
+        for (let passnum = 1; passnum <= 2; passnum ++) {
             if (peerId in this._optimalRoutesToPeers) {
-                const {route, timestamp} = this._optimalRoutesToPeers[peerId].route;
+                const {route, timestamp} = this._optimalRoutesToPeers[peerId];
                 const elapsed0 = (new Date() - timestamp);
                 if ((elapsed0 < 10000) || (!calculateIfNeeded)) {
-                    const firstNodeId = route[0];
-                    const pc = this._swarmConnection.peerConnection(firstNodeId);
-                    if ((pc) && (pc.hasWebsocketConnection())) {
+                    const firstNodeId = route[1];
+                    const firstPC = this._swarmConnection.peerConnection(firstNodeId);
+                    if ((firstPC) && (firstPC.hasWebsocketConnection())) {
                         return route;
                     }
                     else {
@@ -47,18 +48,20 @@ class SmartySwarmConnection {
     async _estimateOptimalRouteToPeer(peerId) {
         const peerIds = this._swarmConnection.peerIds();
         const candidatePeerIds = peerIds.filter(peerId => {
-            const pc = this._swarmConnection.peerConnection(pc);
+            const pc = this._swarmConnection.peerConnection(peerId);
             return ((pc) && (pc.hasWebsocketConnection()));
         })
         const timings = {};
         const routes = {};
         const testCandidate = (candidatePeerId) => {
-            const testData = randomString(1000);
+            const testData = { // needs to be an object so we can compute a signature
+                data1: randomString(1000)
+            };
             const requestBody = {
                 type: 'routeLatencyTest',
                 toPeerId: peerId,
                 testData,
-                avoid: [this._swarmConnection.nodeId()]
+                avoid: {[this._swarmConnection.nodeId()]: true}
             };
             const timer = new Date();
             const req = this._swarmConnection.makeRequestToPeer(candidatePeerId, requestBody, {timeout: 5000});
@@ -67,9 +70,11 @@ class SmartySwarmConnection {
             let responseRoute = null;
             req.onResponse(responseBody => {
                 if (finished) return;
-                if (responseBody.testData === testData) {
-                    gotCorrectResponse = true;
-                    responseRoute = [this._swarmConnection.nodeId(), ...responseBody.route];
+                if (JSONStringifyDeterministic(responseBody.testData) === JSONStringifyDeterministic(testData)) {
+                    if (verifySignature(responseBody.testData, responseBody.testDataSignature, hexToPublicKey(peerId))) {
+                        gotCorrectResponse = true;
+                        responseRoute = [this._swarmConnection.nodeId(), ...responseBody.route];
+                    }
                 }
             });
             req.onError(errorString => {
@@ -92,6 +97,7 @@ class SmartySwarmConnection {
                 }
             });
         }
+        // launch these tests simultaneously (without async)
         for (let candidatePeerId of candidatePeerIds) {
             testCandidate(candidatePeerId)
         }
@@ -118,7 +124,7 @@ class SmartySwarmConnection {
             }
             if (Object.keys(timings).length === candidatePeerIds.length)
                 return null;
-            sleepMsec(10);
+            await sleepMsec(10);
         }
     }
 
@@ -126,8 +132,9 @@ class SmartySwarmConnection {
         const {toPeerId, testData, avoid} = requestBody;
         if (toPeerId === this._swarmConnection.nodeId()) {
             onResponse({
-                route: [],
-                testData
+                route: [toPeerId],
+                testData,
+                testDataSignature: getSignature(testData, this._swarmConnection._keyPair)
             });
             onFinished();
             return;
@@ -137,24 +144,53 @@ class SmartySwarmConnection {
         const pc = this._swarmConnection.peerConnection(toPeerId);
         if ((pc) && (pc.hasWebsocketConnection())) {
             const req = this._swarmConnection.makeRequestToPeer(toPeerId, {
+                type: 'routeLatencyTest',
                 toPeerId,
                 testData,
-                avoid: [...avoid, this._swarmConnection.nodeId()]
-            });
+                avoid: {...avoid, [this._swarmConnection.nodeId()]: true}
+            }, {timeout: 5000});
             req.onResponse(responseBody => {
                 onResponse({
-                    route: [toPeerId, ...responseBody.route],
-                    testData: responseBody.testData
+                    route: [this._swarmConnection.nodeId(), ...responseBody.route],
+                    testData: responseBody.testData,
+                    testDataSignature: responseBody.testDataSignature
                 })
             });
-            req.onError(onError);
-            req.onFinished(onFinished);
+            req.onError((e) => {
+                onError(e);
+            });
+            req.onFinished(() => {
+                onFinished();
+            });
             return;
+        }
+        else {
+            onError('No route found.');
+        }
+    }
+
+    async _updateRoutesToPeers() {
+        const peerIds = this._swarmConnection.peerIds();
+        for (let peerId of peerIds) {
+            const pc = this._swarmConnection.peerConnection(peerId);
+            if (pc) {
+                if (!pc.hasWebsocketConnection()) {
+                    const _ = await this.which_route_should_i_use_to_send_a_message_to_this_peer(peerId, {calculateIfNeeded: true});
+                }
+            }
         }
     }
 
     async _start() {
-
+        let timeUpdateRoutesToPeers = 0;
+        while (true) {
+            const elapsedUpdateRoutesToPeers = (new Date()) - timeUpdateRoutesToPeers;
+            if (elapsedUpdateRoutesToPeers > 10000) {
+                await this._updateRoutesToPeers();
+                timeUpdateRoutesToPeers = new Date();
+            }
+            await sleepMsec(1000);
+        }
     }
 }
 

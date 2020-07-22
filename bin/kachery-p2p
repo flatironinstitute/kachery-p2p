@@ -79,11 +79,10 @@ def cat_file(uri, start, end):
 @click.option('--verbose', default=0, help='Verbosity level')
 @click.option('--dverbose', default=0, help='Discovery verbosity level')
 @click.option('--method', default='npx', help='Method for starting daemon: npx (default), dev')
-@click.option('--max_num_peers', default=0, help='Maximum number of peers per swarm (0 means no max)')
 @click.option('--host', default='', help='IP for connecting to this daemon')
-@click.option('--port', help='Port to listen on')
-def start_daemon(method, channel, verbose, dverbose, host, max_num_peers, port):
-    kp.start_daemon(method=method, channels=channel, verbose=verbose, dverbose=dverbose, host=host, max_num_peers=max_num_peers, port=port)
+@click.option('--port', default=0, help='Port to listen on (0 means do not listen)')
+def start_daemon(method, channel, verbose, dverbose, host, port):
+    kp.start_daemon(method=method, channels=channel, verbose=verbose, dverbose=dverbose, host=host, port=port)
 
 @click.command(help="Stop the daemon.")
 def stop_daemon():

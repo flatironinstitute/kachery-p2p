@@ -408,7 +408,7 @@ class KacheryChannelConnection {
             onFinished();
         }
     }
-    _getInfoText() {
+    async _getInfoText() {
         const lines = [];
         lines.push(`CHANNEL CONNECTION: ${this._channelName}`);
         const peerIds = this._swarmConnection.peerIds();
@@ -417,7 +417,7 @@ class KacheryChannelConnection {
             const ci = p.peerNodeInfo() || {};
             const hasIn = p.hasIncomingWebsocketConnection();
             const hasOut = p.hasOutgoingWebsocketConnection();
-            const hasRoute = this._swarmConnection.hasRouteToPeer(peerId);
+            const hasRoute = await this._swarmConnection.hasRouteToPeer(peerId);
             lines.push(`Peer ${peerId.slice(0, 6)}...: ${ci.host || ""}:${ci.port || ""} ${ci.local ? "(local)" : ""} ${hasIn ? "in" : ""} ${hasOut ? "out" : ""} ${hasRoute ? "route" : ""}`);
         }
         return lines.join('\n');
@@ -426,7 +426,7 @@ class KacheryChannelConnection {
         let lastInfoText = '';
         while (true) {
             if (this._halt) return;
-            const infoText = this._getInfoText();
+            const infoText = await this._getInfoText();
             if (infoText !== lastInfoText) {
                 console.info('****************************************************************');
                 console.info(infoText);
