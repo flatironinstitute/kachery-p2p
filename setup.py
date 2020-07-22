@@ -23,7 +23,7 @@ setuptools.setup(
     version=get_version("kachery_p2p/__init__.py"),
     author="Jeremy Magland",
     author_email="jmagland@flatironinstitute.org",
-    description="Run batches of Python functions in containers and on remote servers",
+    description="Peer-to-peer file sharing using kachery",
     url="https://github.com/magland/kachery_p2p",
     packages=setuptools.find_packages(),
     include_package_data=True,
