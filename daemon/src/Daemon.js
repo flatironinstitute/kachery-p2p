@@ -7,7 +7,7 @@ import FeedManager from './FeedManager.js';
 import WebsocketServer from './WebsocketServer.js';
 import swarm from 'hyperswarm';
 
-const PROTOCOL_VERSION = 'kachery-p2p-8'
+const PROTOCOL_VERSION = 'kachery-p2p-0.3.0'
 
 class Daemon {
     constructor({ configDir, listenHost, listenPort, verbose, discoveryVerbose, opts }) {
