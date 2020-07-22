@@ -740,7 +740,7 @@ const _subfeedHash = (subfeedName) => {
         return sha1sum(subfeedName);
     }
     else {
-        return sha1sum(JSONstringifyOrder(subfeedName));
+        return sha1sum(JSONStringifyDeterministic(subfeedName));
     }
 }
 
