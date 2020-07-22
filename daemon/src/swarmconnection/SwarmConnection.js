@@ -345,7 +345,8 @@ class SwarmConnection {
         let isFinished = false;
         let requestReceived = false;
         let timestampLastResponse = new Date();
-        let numResponsesReceived = 0;
+        let lastResponseIndex = -1;
+        let bufResponsesByIndex = {};
         const handleReceived = () => {
             requestReceived = true;
         }
@@ -359,7 +360,6 @@ class SwarmConnection {
             if (isFinished) return;
             timestampLastResponse = new Date();
             onResponseCallbacks.forEach(cb => cb(responseBody));
-            numResponsesReceived ++;
         }
         const handleError = (errorString) => {
             if (isFinished) return;
@@ -387,14 +387,20 @@ class SwarmConnection {
             }
             else if (msg.type === 'requestToNodeResponse') {
                 // todo: use msg.responseIndex to sort the order in which we handle the responses (in case they come in a different order)
-                handleResponse(msg.responseBody);
+                const responseIndex = msg.responseIndex;
+                bufResponsesByIndex[responseIndex] = msg.responseBody;
+                while (bufResponsesByIndex[lastResponseIndex + 1]) {
+                    handleResponse(bufResponsesByIndex[lastResponseIndex + 1]);
+                    delete bufResponsesByIndex[lastResponseIndex + 1];
+                    lastResponseIndex ++;
+                }
             }
             else if (msg.type === 'requestToNodeError') {
                 handleError(msg.errorString);
             }
             else if (msg.type === 'requestToNodeFinished') {
                 // wait until we have received the expected number of responses
-                while (numResponsesReceived < msg.numResponses) {
+                while (lastResponseIndex + 1 < msg.numResponses) {
                     await sleepMsec(10);
                 }
                 handleFinished();

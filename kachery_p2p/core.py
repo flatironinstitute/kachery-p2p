@@ -329,8 +329,10 @@ def _http_post_download_file(url: str, data: dict, total_size: int, dest_path: s
                 elapsed = time.time() - timer
                 if elapsed >=3:
                     timer = time.time()
-                    print(f'Downloaded {bytes_downloaded} of {total_size} bytes')
+                    print(f'Downloaded {bytes_downloaded} / {total_size} bytes')
                 f.write(chunk)
+            assert bytes_downloaded == total_size, f'Unexpected number of bytes downloaded. {bytes_downloaded} <> {total_size}'
+            print(f'Finished downloading {total_size} bytes')
 
 def _http_post_download_file_data(url: str, data: dict, content_size: int):
     try:
