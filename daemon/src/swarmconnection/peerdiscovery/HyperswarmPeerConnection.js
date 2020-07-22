@@ -1,13 +1,11 @@
 import { randomAlphaString } from '../../common/util.js';
-import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey } from '../../common/crypto_util.js';
+import { verifySignature, hexToPublicKey } from '../../common/crypto_util.js';
 
 class HyperswarmPeerConnection {
     constructor({keyPair, nodeId, swarmName, peerId, verbose}) {
         this._keyPair = keyPair;
         this._nodeId = nodeId;
-        if (this._nodeId !== publicKeyToHex(this._keyPair.publicKey.toString('hex'))) {
-            throw Error('public key not consistent with node ID (HPeerConnection).');
-        }
+
         this._swarmName = swarmName;
         this._peerId = peerId;
         this._verbose = verbose;
@@ -23,9 +21,7 @@ class HyperswarmPeerConnection {
 
         this._connectionInfo = {};
 
-        this._waitForMessageTestFunctions = {};
-
-        this._onMessageCallbacks = {};
+        this._onSignedMessageCallbacks = {};
 
         this._timestampLastIncomingMessage = new Date();
         this._timestampLastOutgoingMessage = new Date();
@@ -37,33 +33,47 @@ class HyperswarmPeerConnection {
         this._incomingJsonSocket = jsonSocket;
         this._incomingJsonSocket.on('message', msg => {
             // safe
-            if (!this._verifyMessageFromPeer(msg)) {
-                if (this._verbose >= 1) {
-                    console.warn(msg);
-                    console.warn('Error verifying message. Disconnecting peer.');
-                }
-                this.disconnect();
-                return;
-            }
-            if (msg.body.type === 'ready') {
+            if (msg.type === 'ready') {
                 this._incomingSocketReady = true;
-                setTimeout(() => {
-                    for (let cb of this._incomingSocketReadyCallbacks) {
-                        cb();
-                    }
-                }, 0);
+                for (let cb of this._incomingSocketReadyCallbacks) {
+                    cb();
+                }
             }
             else {
-                this._handleMessage(msg.body);
+                this._handleMessage(msg);
             }
         })
         try {
-            this._incomingJsonSocket.sendMessage(this._signMessage({type: 'ready'}));
+            this._incomingJsonSocket.sendMessage({type: 'ready'});
         }
         catch(err) {
             if (this._verbose >= 1) {
                 console.warn(err);
-                console.warn('Could not send message. Disconnecting.');
+                console.warn('Could not send message to incoming socket. Disconnecting.');
+            }
+            this.disconnect();
+        }
+    }
+    setOutgoingSocket(jsonSocket) {
+        this._outgoingJsonSocket = jsonSocket;
+        this._outgoingJsonSocket.on('message', msg => {
+            if (msg.type === 'ready') {
+                this._outgoingSocketReady = true;
+                for (let cb of this._outgoingSocketReadyCallbacks) {
+                    cb();
+                }
+            }
+            else {
+                this._handleMessage(msg);
+            }
+        })
+        try {
+            this._outgoingJsonSocket.sendMessage({type: 'ready'});
+        }
+        catch(err) {
+            if (this._verbose >= 1) {
+                console.warn(err);
+                console.warn('Could not send message to outgoing socket. Disconnecting.');
             }
             this.disconnect();
         }
@@ -75,54 +85,27 @@ class HyperswarmPeerConnection {
     async _handleMessage(msg) {
         this._timestampLastIncomingMessage = new Date();
         if (msg.type === 'keepAlive') {
-            //
-        }
-        else {
-            //
-        }
-        if (msg.type === 'keepAlive') {
             return;
         }
-        setTimeout(() => {
-            for (let id in this._onMessageCallbacks) {
-                const x = this._onMessageCallbacks[id];
-                x.callback(msg, x.details);
-            }
-        }, 0);
+        else if (msg.type === 'signedMessage') {
+            setTimeout(() => {
+                for (let id in this._onSignedMessageCallbacks) {
+                    const x = this._onSignedMessageCallbacks[id];
+                    x.callback(msg.signedMessage, x.details);
+                }
+            }, 0);
+        }
     }
-    onMessage = (cb) => {
+    onSignedMessage = (cb) => {
         const callbackId = randomAlphaString(10);
         const details = {
-            removeCallback: () => {delete this._onMessageCallbacks[callbackId];}
+            removeCallback: () => {delete this._onSignedMessageCallbacks[callbackId];}
         };
-        this._onMessageCallbacks[callbackId] = {
+        this._onSignedMessageCallbacks[callbackId] = {
             callback: cb,
             details
         }
         return details;
-    }
-    setOutgoingSocket(jsonSocket) {
-        this._outgoingJsonSocket = jsonSocket;
-        this._outgoingJsonSocket.on('message', msg => {
-            if (!this._verifyMessageFromPeer(msg)) {
-                if (this._verbose >= 1) {
-                    console.warn(msg);
-                    console.warn('Error verifying message. Disconnecting peer.');
-                }
-                this.disconnect();
-                return;
-            }
-            if (msg.body.type === 'ready') {
-                this._outgoingSocketReady = true;
-                for (let cb of this._outgoingSocketReadyCallbacks) {
-                    cb();
-                }
-            }
-            else {
-                this._handleMessage(msg.body);
-            }
-        })
-        this._outgoingJsonSocket.sendMessage(this._signMessage({type: 'ready'}));
     }
     asyncSendMessage = async (msg) => {
         if (this._disconnected) return;
@@ -148,7 +131,7 @@ class HyperswarmPeerConnection {
         const socket = await _waitForSocketReady();
         if (this._disconnected) return;
         try {
-            socket.sendMessage(this._signMessage(msg));
+            socket.sendMessage(msg);
         }
         catch(err) {
             if (this._verbose >= 1) {
@@ -160,13 +143,17 @@ class HyperswarmPeerConnection {
     // safe
     sendMessage = (msg) => {
         this._timestampLastOutgoingMessage = new Date();
-        if (msg.type === 'keepAlive') {
-            //
-        }
-        else {
-            //
-        }
         this.asyncSendMessage(msg);
+    }
+    sendSignedMessage = (signedMessage) => {
+        if (!verifySignature(signedMessage.body, signedMessage.signature, hexToPublicKey(signedMessage.body.fromNodeId))) {
+            console.warn('HYPERSWARM: Unexpected problem verifying signature before sending signed message. Not sending.');
+            return;
+        }
+        this.sendMessage({
+            type: 'signedMessage',
+            signedMessage
+        });
     }
     setConnectionInfo = (info) => {
         this._connectionInfo = info;
@@ -189,35 +176,6 @@ class HyperswarmPeerConnection {
     }
     elapsedTimeSecSinceLastOutgoingMessage() {
         return ((new Date()) - this._timestampLastOutgoingMessage) / 1000;
-    }
-    // safe
-    _signMessage = (msgBody) => {
-        const signature = getSignature(msgBody, this._keyPair);
-        if (!signature) {
-            throw Error('Error signing message.');
-        }
-        return {
-            body: msgBody,
-            signature: signature
-        }
-    }
-    // safe
-    _verifyMessageFromPeer = msg => {
-        if (!msg.body) return false;
-        if (!msg.signature) return false;
-        let peerPublicKey;
-        try {
-            peerPublicKey = hexToPublicKey(this._peerId, 'hex');
-        }
-        catch(err) {
-            if (this._verbose >= 1) {
-                console.warn(err);
-                console.warn('Problem converting peer ID to public key.')
-            }
-            return false;
-        }
-        // safe
-        return verifySignature(msg.body, msg.signature, peerPublicKey);
     }
 }
 

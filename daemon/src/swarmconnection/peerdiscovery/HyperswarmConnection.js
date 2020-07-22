@@ -1,63 +1,54 @@
-import crypto from 'crypto';
+import crypto, { sign } from 'crypto';
 import HyperswarmPeerConnection from './HyperswarmPeerConnection.js';
-import { randomAlphaString, sleepMsec } from '../../common/util.js';
+import { randomAlphaString, sleepMsec, randomString } from '../../common/util.js';
 import { getSignature, verifySignature, publicKeyToHex, hexToPublicKey, JSONStringifyDeterministic } from '../../common/crypto_util.js';
 import AbstractHyperswarm from './AbstractHyperswarm.js';
 
 class HyperswarmConnection {
     constructor({keyPair, nodeId, swarmName, protocolVersion, verbose}) {
-        this._keyPair = keyPair;
-        this._nodeId = nodeId;
-        this._protocolVersion = protocolVersion;
+        this._keyPair = keyPair; // The keypair for signing messages. Node id is the public key
+        this._nodeId = nodeId; // The node id, determined by the public key
+        this._protocolVersion = protocolVersion; // The protocol version we are using
+        // check that public key is consistent with node id
         if (this._nodeId !== publicKeyToHex(this._keyPair.publicKey.toString('hex'))) {
             throw Error('public key not consistent with node ID.');
         }
-        this._swarmName = swarmName;
-        this._verbose = verbose;
-        const topicKey = {
+        this._swarmName = swarmName; // name of the swarm
+        this._verbose = verbose; // verbosity level
+        const topicKey = { // the key used to compute the topic hash (for hyperswarm)
             protocolVersion: protocolVersion,
             swarmName: swarmName
         };
-        this._topic = crypto.createHash('sha256')
+        this._topic = crypto.createHash('sha256') // the topic hash (for hyperswarm)
             .update(JSONStringifyDeterministic(topicKey))
             .digest()
-        this._topicHex = crypto.createHash('sha256')
+        this._topicHex = crypto.createHash('sha256') // the hex version
             .update(JSONStringifyDeterministic(topicKey))
             .digest('hex');
-        this._hyperswarm = null;
-        this._peerConnections = {};
+        this._hyperswarm = null; // the hyperswarm object
+        this._peerConnections = {}; // connections to direct peers
 
-        this._messageIdsHandled = {};
-        this._onMessageCallbacks = [];
-        this._onPeerConnectionCallbacks = [];
-        this._messageListeners = {};
+        // todo: we have a memory leak here... clean up the old message ids
+        this._messageIdsHandled = {}; // ids of messages already handled (so we don't handle them twice)
+        this._onMessageCallbacks = []; // callbacks for when a message is received
+        this._onPeerConnectionCallbacks = []; // callbacks for when a new peer is connected
+        this._messageListeners = {}; // listeners for messages from peers
 
+        // check the event listeners
         this.onMessage((fromNodeId, msg) => {
-            if (!this._peerConnections[fromNodeId]) {
-                if (this._verbose >= 1) {
-                    console.warn(`HYPERSWARM:: Got message, but no peer connection found: ${fromNodeId}`);
-                }
-                return;
-            }
-            else if (msg.type === 'messageToNode') {
-                if (msg.toNodeId === this._nodeId) {
-                    this._onMessageCallbacks.forEach(cb => {
-                        cb(fromNodeId, msg.messageBody);
-                    })
+            // check all the message listeners
+            for (let id in this._messageListeners) {
+                const x = this._messageListeners[id];
+                if (x.testFunction(fromNodeId, msg)) {
+                    x.onMessageCallbacks.forEach(cb => {cb(fromNodeId, msg);});
                 }
             }
-            else {
-                for (let id in this._messageListeners) {
-                    const x = this._messageListeners[id];
-                    if (x.testFunction(fromNodeId, msg)) {
-                        x.onMessageCallbacks.forEach(cb => {cb(fromNodeId, msg);});
-                    }
-                }
-            }
-        })
+        });
 
+        // start the loop
         this._start();
     }
+    // join the swarm by creating a hyperswarm object
     async join() {
         if (this._verbose >= 1) {
             console.info(`HYPERSWARM:: joining hyperswarm: ${this._swarmName} ${this._topicHex}`)
@@ -65,9 +56,11 @@ class HyperswarmConnection {
         this._hyperswarm = new AbstractHyperswarm(this._topic);
         
         this._hyperswarm.onConnection((jsonSocket, socket, details) => {
+            // a new hyperswarm connection
             this._handleNewConnection({jsonSocket, socket, details});
         });
     }
+    // return whether a peer is local
     peerIsLocal(peerId) {
         if (peerId in this._peerConnections) {
             return this._peerConnections[peerId].peerIsLocal();
@@ -80,40 +73,60 @@ class HyperswarmConnection {
         if (this._verbose >= 20) {
             console.info('HYPERSWARM:: new incoming connection');
         }
-        jsonSocket.sendMessage({
+        // Send a special initial message to make sure we have the node id and the protocol version
+        const initialBody = {
             type: 'initial',
             from: details.client ? 'server' : 'client',
             nodeId: this._nodeId,
             protocolVersion: this._protocolVersion
+        };
+        const initialSignature = getSignature(initialBody, this._keyPair);
+        jsonSocket.sendMessage({
+            body: initialBody,
+            signature: initialSignature
         });
         let receivedInitialMessage = false;
         jsonSocket.on('message', msg => {
             // safe
             if (receivedInitialMessage) return;
             receivedInitialMessage = true;
-            if (msg.type !== 'initial') {
+            if (!msg.body) {
+                if (this._verbose >= 1) {
+                    console.warn('HYPERSWARM:: Unexpected initial message from peer connection. No body. Closing socket.');
+                }
+                socket.destroy();
+                return;
+            }
+            if (msg.body.type !== 'initial') {
                 if (this._verbose >= 1) {
                     console.warn('HYPERSWARM:: Unexpected initial message from peer connection. Closing socket.');
                 }
                 socket.destroy();
                 return;
             }
-            if (msg.protocolVersion !== this._protocolVersion) {
+            if (msg.body.protocolVersion !== this._protocolVersion) {
                 if (this._verbose >= 1) {
                     console.warn('HYPERSWARM:: Incorrect protocol version from peer connection. Closing socket.');
                 }
                 socket.destroy();
                 return;
             }
-            if (!validatePeerNodeId(msg.nodeId)) {
+            if (!validatePeerNodeId(msg.body.nodeId)) {
                 if (this._verbose >= 1) {
-                    console.warn(`HYPERSWARM:: Node ID: ${msg.nodeID}`);
+                    console.warn(`HYPERSWARM:: Node ID: ${msg.body.nodeId}`);
                     console.warn('HYPERSWARM:: Missing or incorrect node ID from peer connection. Closing socket.');
                 }
                 socket.destroy();
                 return;
             }
-            if (msg.from !== (details.client ? 'client' : 'server')) {
+            if (!verifySignature(msg.body, msg.signature, hexToPublicKey(msg.body.nodeId))) {
+                if (this._verbose >= 1) {
+                    console.warn('HYPERSWARM:: Unable to verify signature in initial message. Closing socket.');
+                }
+                socket.destroy();
+                return;
+            }
+            if (msg.body.from !== (details.client ? 'client' : 'server')) {
                 if (this._verbose >= 1) {
                     console.warn('HYPERSWARM:: Unexpected "from" value from peer connection. Closing socket.');
                 }
@@ -121,16 +134,16 @@ class HyperswarmConnection {
                 return;
             }
             if (this._verbose >= 20) {
-                console.info(`HYPERSWARM:: new incoming connection from ${msg.nodeId}`);
+                console.info(`HYPERSWARM:: new incoming connection from ${msg.body.nodeId}`);
             }
-            if (!this._peerConnections[msg.nodeId]) {
+            if (!this._peerConnections[msg.body.nodeId]) {
                 let peerConnection;
                 try {
                     peerConnection = new HyperswarmPeerConnection({
                         keyPair: this._keyPair,
                         nodeId: this._nodeId,
                         swarmName: this._swarmName,
-                        peerId: msg.nodeId,
+                        peerId: msg.body.nodeId,
                         verbose: this._verbose
                     });
                 }
@@ -142,25 +155,51 @@ class HyperswarmConnection {
                     socket.destroy();
                     return;
                 }
-                this._peerConnections[msg.nodeId] = peerConnection;
-                this._onPeerConnectionCallbacks.forEach(cb => cb(msg.nodeId));
-                peerConnection.onMessage((msg2, details) => {
-                    try {
-                        this._handleMessageFromPeer(msg.nodeId, msg2);
-                    }
-                    catch(err) {
+                this._peerConnections[msg.body.nodeId] = peerConnection;
+                this._onPeerConnectionCallbacks.forEach(cb => cb(msg.body.nodeId));
+                peerConnection.onSignedMessage((msg2, details) => {
+                    const fromNodeId = msg2.body.fromNodeId;
+                    if (!verifySignature(msg2.body, msg2.signature, hexToPublicKey(fromNodeId))) {
                         if (this._verbose >= 1) {
-                            console.warn(err);
-                            console.warn('HYPERSWARM:: Problem handling message from peer. Closing socket.');
+                            console.warn(msg2.body);
+                            console.warn(msg2.signature);
+                            console.warn(fromNodeId);
+                            console.warn('HYPERSWARM:: Problem verifying signature. Closing socket.');
                         }
                         socket.destroy();
+                        return;
+                    }
+                    const messageId = msg2.body.messageId;
+                    if (this._messageIdsHandled[messageId]) {
+                        // already handled
+                        return;
+                    }
+                    this._messageIdsHandled[messageId] = true;
+                    if ((msg2.body.toNodeId === this._nodeId) || (msg2.body.toNodeId === 'all')) {
+                        try {
+                            this._handleMessageFromNode(fromNodeId, deepCopy(msg2.body.message));
+                        }
+                        catch(err) {
+                            if (this._verbose >= 1) {
+                                console.warn(err);
+                                console.warn('HYPERSWARM:: Problem handling message from peer. Closing socket.');
+                            }
+                            socket.destroy();
+                        }
+                    }
+                    if (msg2.broadcast) {
+                        this._broadcastSignedMessage({
+                            body: msg2.body,
+                            broadcast: true,
+                            signature: msg2.signature,
+                            excludeNodeIds: msg2.excludeNodeIds || {}
+                        });
                     }
                 });
-                
             }
             if (details.client) {
                 try {
-                    this._peerConnections[msg.nodeId].setOutgoingSocket(jsonSocket);
+                    this._peerConnections[msg.body.nodeId].setOutgoingSocket(jsonSocket);
                 }
                 catch(err) {
                     if (this._verbose >= 1) {
@@ -172,7 +211,7 @@ class HyperswarmConnection {
             }
             else {
                 try {
-                    this._peerConnections[msg.nodeId].setIncomingSocket(jsonSocket);
+                    this._peerConnections[msg.body.nodeId].setIncomingSocket(jsonSocket);
                 }
                 catch(err) {
                     if (this._verbose >= 1) {
@@ -185,10 +224,10 @@ class HyperswarmConnection {
             if (details.peer) {
                 const peer = details.peer;
                 if (this._verbose >= 1) {
-                    console.info(`HYPERSWARM:: ${this._swarmName}: Connected to peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""} (${msg.nodeId})`);
+                    console.info(`HYPERSWARM:: ${this._swarmName}: Connected to peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""} (${msg.body.nodeId})`);
                 }
                 try {
-                    this._peerConnections[msg.nodeId].setConnectionInfo({
+                    this._peerConnections[msg.body.nodeId].setConnectionInfo({
                         host: details.peer.host,
                         port: details.peer.port,
                         local: details.peer.local
@@ -212,13 +251,13 @@ class HyperswarmConnection {
             });
             socket.on('close', () => {
                 // safe
-                if (msg.nodeId in this._peerConnections) {
-                    const peerInfo = this._peerConnections[msg.nodeId].connectionInfo();
+                if (msg.body.nodeId in this._peerConnections) {
+                    const peerInfo = this._peerConnections[msg.body.nodeId].connectionInfo();
                     if (this._verbose >= 1) {
-                        console.info(`HYPERSWARM:: Socket closed for peer connection: ${peerInfo.host}:${peerInfo.port}${peerInfo.local ? " (local)" : ""} (${msg.nodeId})`);
+                        console.info(`HYPERSWARM:: Socket closed for peer connection: ${peerInfo.host}:${peerInfo.port}${peerInfo.local ? " (local)" : ""} (${msg.body.nodeId})`);
                     }
-                    this._peerConnections[msg.nodeId].disconnect();
-                    delete this._peerConnections[msg.nodeId];
+                    this._peerConnections[msg.body.nodeId].disconnect();
+                    delete this._peerConnections[msg.body.nodeId];
                     this.printInfo();
                 }
             })
@@ -254,47 +293,52 @@ class HyperswarmConnection {
         console.info(`HYPERSWARM:: ${numPeers} ${numPeers === 1 ? "peer" : "peers"}`);
     }
     sendMessageToNode(toNodeId, messageBody, opts) {
-        const message = {
-            type: 'messageToNode',
+        const body = {
+            messageId: randomAlphaString(10),
+            fromNodeId: this._nodeId,
             toNodeId,
-            messageBody
+            message: messageBody
         }
+        const signature = getSignature(body, this._keyPair);
+        const signedMessage = {
+            body,
+            signature
+        };
         if (toNodeId in this._peerConnections) {
-            const body = {
-                messageId: randomAlphaString(10),
-                message
-            };
-            const signature = getSignature(body, this._keyPair);
-            this._peerConnections[toNodeId].sendMessage({
-                type: 'directToPeer',
-                fromNodeId: this._nodeId,
-                body,
-                signature
-            })
+            this._peerConnections[toNodeId].sendSignedMessage(signedMessage);
         }
         else {
-            this.broadcastMessage(message);
+            this._broadcastSignedMessage(signedMessage);
         }
     }
-    broadcastMessage = (message, opts) => {
-        opts = opts || {};
-        const excludeNodeIds = opts.excludeNodeIds || {};
-        const messageId = opts.messageId || randomAlphaString(10);
-        this._messageIdsHandled[messageId] = true;
+    sendMessageToAllNodes = (message) => {
+        const body = {
+            fromNodeId: this._nodeId,
+            toNodeId: 'all',
+            messageId: randomString(10),
+            message
+        };
+        const signature = getSignature(body, this._keyPair);
+        const signedMessage = {
+            body,
+            broadcast: true,
+            signature,
+            excludeNodeIds: {[this._nodeId]: true}
+        }
+        this._broadcastSignedMessage(signedMessage);
+    }
+    _broadcastSignedMessage = (signedMessage) => {
+        const excludeNodeIds = signedMessage.excludeNodeIds || {};
         const peerIds = Object.keys(this._peerConnections);
-        peerIds.filter(peerId => (!excludeNodeIds[peerId])).forEach(peerId => {
-            const body = {
-                messageId,
-                message,
-            };
-            const signature = opts.signature || getSignature(body, this._keyPair);
-            this._peerConnections[peerId].sendMessage({
-                type: 'broadcast',
-                fromNodeId: opts.fromNodeId || this._nodeId,
-                body,
-                signature,
-                excludeNodeIds: {...excludeNodeIds, [this._nodeId]: true}
-            });
+        peerIds.forEach(peerId => {
+            if (!excludeNodeIds[peerId]) {
+                this._peerConnections[peerId].sendSignedMessage({
+                    body: signedMessage.body,
+                    broadcast: true,
+                    signature: signedMessage.signature,
+                    excludeNodeIds: {...excludeNodeIds, [this._nodeId]: true}
+                });
+            }
         })
     }
     onMessage = cb => {
@@ -315,35 +359,9 @@ class HyperswarmConnection {
             }
         };
     }
-    _handleMessageFromPeer = (peerId, msg) => {
-        if ((msg.type === 'broadcast') || (msg.type === 'directToPeer')) {
-            if (!verifySignature(msg.body, msg.signature, hexToPublicKey(msg.fromNodeId))) {
-                if (this._verbose >= 1) {
-                    console.warn(`HYPERSWARM:: Unable to verify message from ${msg.fromNodeId}`);
-                }
-                return;
-            }
-            const messageId = msg.body.messageId;
-            if (messageId in this._messageIdsHandled) {
-                return;
-            }
-            this._messageIdsHandled[messageId] = true;
-            for (let cb of this._onMessageCallbacks) {
-                cb(msg.fromNodeId, msg.body.message);
-            }
-            if (msg.type === 'broadcast') {
-                const excludeNodeIds = msg.excludeNodeIds;
-                this.broadcastMessage(msg.body.message, {messageId, fromNodeId: msg.fromNodeId, signature: msg.signature, excludeNodeIds});
-            }
-        }
-        else if (msg.type === 'keepAlive') {
-
-        }
-        else {
-            // todo: disconnect from peer
-            if (this._verbose >= 1) {
-                console.warn(`HYPERSWARM:: Unexpected message type: ${msg.type}`);
-            }
+    _handleMessageFromNode = (fromNodeId, msg) => {
+        for (let cb of this._onMessageCallbacks) {
+            cb(fromNodeId, msg);
         }
     }
 
@@ -352,7 +370,7 @@ class HyperswarmConnection {
             const peerIds = this.peerIds();
             for (let peerId of peerIds) {
                 const peerConnection = this._peerConnections[peerId];
-                if (peerConnection.elapsedTimeSecSinceLastIncomingMessage() > 10) {
+                if (peerConnection.elapsedTimeSecSinceLastIncomingMessage() > 20) {
                     this.disconnectPeer(peerId);
                 }
                 if (peerConnection.elapsedTimeSecSinceLastOutgoingMessage() > 5) {
@@ -363,6 +381,10 @@ class HyperswarmConnection {
             await sleepMsec(100);
         }
     }
+}
+
+function deepCopy(x) {
+    return JSON.parse(JSON.stringify(x));
 }
 
 // safe

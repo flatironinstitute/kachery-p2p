@@ -64,7 +64,7 @@ class PeerDiscoveryEngine {
     }
     _announceSelfToSwarm() {
         // announce our node info to the swarm
-        this._hyperswarmConnection.broadcastMessage({
+        this._hyperswarmConnection.sendMessageToAllNodes({
             type: 'announce',
             nodeId: this._nodeId,
             nodeInfo: this._nodeInfo

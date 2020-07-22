@@ -3,7 +3,7 @@ import { randomString, sleepMsec } from "../common/util.js";
 class SmartySwarmConnection {
     constructor(swarmConnection) {
         this._swarmConnection = swarmConnection;
-        this._optimalRoutesToPeers = {};
+        this._optimalRoutesToPeers = {}; // {[peerId]: {timestamp: ..., optimalRoute: ...}}
 
         this._swarmConnection.onPeerRequest(({fromNodeId, requestBody, onResponse, onError, onFinished}) => {
             const type0 = requestBody.type;
@@ -17,21 +17,27 @@ class SmartySwarmConnection {
     async which_route_should_i_use_to_send_a_message_to_this_peer(peerId, {calculateIfNeeded}) {
         for (let passnum = 1; passnum <= 2; passnum++) {
             if (peerId in this._optimalRoutesToPeers) {
-                const route = this._optimalRoutesToPeers[peerId];
-                const firstNodeId = route[0];
-                const pc = this._swarmConnection.peerConnection(firstNodeId);
-                if ((pc) && (pc.hasWebsocketConnection())) {
-                    return route;
-                }
-                else {
-                    delete this._optimalRoutesToPeers[peerId];
+                const {route, timestamp} = this._optimalRoutesToPeers[peerId].route;
+                const elapsed0 = (new Date() - timestamp);
+                if ((elapsed0 < 10000) || (!calculateIfNeeded)) {
+                    const firstNodeId = route[0];
+                    const pc = this._swarmConnection.peerConnection(firstNodeId);
+                    if ((pc) && (pc.hasWebsocketConnection())) {
+                        return route;
+                    }
+                    else {
+                        delete this._optimalRoutesToPeers[peerId];
+                    }
                 }
             }
             if (passnum === 1) {
                 if (!calculateIfNeeded) return null;
                 const optimalRoute = await this._estimateOptimalRouteToPeer(peerId);
                 if (optimalRoute) {
-                    this._optimalRoutesToPeers[peerId] = optimalRoute;
+                    this._optimalRoutesToPeers[peerId] = {
+                        route: optimalRoute,
+                        timestamp: new Date()
+                    };
                 }
             }
         }
@@ -90,31 +96,35 @@ class SmartySwarmConnection {
             testCandidate(candidatePeerId)
         }
         while (true) {
+            function getBestRouteFromTimings() {
+                let bestTiming = null;
+                let bestCandidatePeerId = null;
+                for (let candidatePeerId of candidatePeerIds) {
+                    const timing0 = timings[candidatePeerId];
+                    if (timing0 !== null) {
+                        if ((bestTiming === null) || (timing0 < bestTiming)) {
+                            bestTiming = timing0;
+                            bestCandidatePeerId = candidatePeerId;
+                        }
+                    }
+                }
+                if (bestCandidatePeerId === null)
+                    return null;
+                return routes[bestCandidatePeerId];
+            }
+            const bestRoute = getBestRouteFromTimings();
+            if (bestRoute) {
+                return bestRoute;
+            }
             if (Object.keys(timings).length === candidatePeerIds.length)
-                break;
+                return null;
             sleepMsec(10);
         }
-        let bestTiming = null;
-        let bestCandidatePeerId = null;
-        for (let candidatePeerId of candidatePeerIds) {
-            const timing0 = timings[candidatePeerId];
-            if (timing0 !== null) {
-                if ((bestTiming === null) || (timing0 < bestTiming)) {
-                    bestTiming = timing0;
-                    bestCandidatePeerId = candidatePeerId;
-                }
-            }
-        }
-        if (bestCandidatePeerId === null)
-            return null;
-        return routes[bestCandidatePeerId];
     }
 
     async _handleRouteLatencyTest({fromNodeId, requestBody, onResponse, onError, onFinished}) {
-        console.log('--- handleRouteLatencyTest 1');
         const {toPeerId, testData, avoid} = requestBody;
         if (toPeerId === this._swarmConnection.nodeId()) {
-            console.log('--- handleRouteLatencyTest 2');
             onResponse({
                 route: [],
                 testData
@@ -126,14 +136,12 @@ class SmartySwarmConnection {
         // in future we can use the already-determined optimal route (and checking it does not contain the avoid stuff)
         const pc = this._swarmConnection.peerConnection(toPeerId);
         if ((pc) && (pc.hasWebsocketConnection())) {
-            console.log('--- handleRouteLatencyTest 3');
             const req = this._swarmConnection.makeRequestToPeer(toPeerId, {
                 toPeerId,
                 testData,
                 avoid: [...avoid, this._swarmConnection.nodeId()]
             });
             req.onResponse(responseBody => {
-                console.log('--- handleRouteLatencyTest 4');
                 onResponse({
                     route: [toPeerId, ...responseBody.route],
                     testData: responseBody.testData
@@ -143,11 +151,10 @@ class SmartySwarmConnection {
             req.onFinished(onFinished);
             return;
         }
-        console.log('--- handleRouteLatencyTest 5');
     }
 
     async _start() {
-        
+
     }
 }
 

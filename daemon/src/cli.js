@@ -46,6 +46,11 @@ function main() {
           describe: 'Port to listen on.',
           type: 'string'
         })
+        yargs.option('max_num_peers', {
+          describe: 'Maximum number of peers per swarm (0 means no max)',
+          type: 'number',
+          default: 0
+        })
       },
       handler: (argv) => {
         let channelNames = argv.channel || [];
@@ -62,6 +67,9 @@ function main() {
           listenPort,
           verbose: argv.verbose,
           discoveryVerbose: argv.dverbose,
+          opts: {
+            maxNumPeers: argv.max_num_peers || undefined
+          }
         });
       }
     })
@@ -74,8 +82,8 @@ function main() {
 
 const apiPort = process.env.KACHERY_P2P_API_PORT || 20431;
 
-const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, verbose, discoveryVerbose }) => {
-  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort});
+const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, verbose, discoveryVerbose, opts }) => {
+  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, opts});
 
   const apiServer = new ApiServer(daemon, {verbose});
   apiServer.listen(apiPort);

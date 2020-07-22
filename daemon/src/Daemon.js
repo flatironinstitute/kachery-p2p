@@ -8,10 +8,11 @@ import WebsocketServer from './WebsocketServer.js';
 import swarm from 'hyperswarm';
 
 class Daemon {
-    constructor({ configDir, listenHost, listenPort, verbose, discoveryVerbose }) {
+    constructor({ configDir, listenHost, listenPort, verbose, discoveryVerbose, opts }) {
         this._configDir = configDir; // Directory where config information is stored (including names and keys for feeds)
         this._listenHost = listenHost; // The host where we are listening
         this._listenPort = listenPort; // The port where we are listening
+        this._opts = opts;
         
         const { publicKey, privateKey } = _loadKeypair(configDir); // The keypair for signing messages and the public key is used as the node id
         this._keyPair = {publicKey, privateKey}; // the keypair
@@ -127,7 +128,8 @@ class Daemon {
                 verbose: this._verbose,
                 discoveryVerbose: this._discoveryVerbose,
                 feedManager: this._feedManager,
-                nodeInfo: this._nodeInfo
+                nodeInfo: this._nodeInfo,
+                opts: this._opts
             });
             this._kacheryChannelConnections[channelName] = x;
             if (!opts._skipUpdateConfig) {

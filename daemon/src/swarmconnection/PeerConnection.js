@@ -50,11 +50,6 @@ class PeerConnection {
     setRoutes(routes) {
         this._routes = routes;
     }
-    hasRouteTo(nodeId) {
-        if (!this.hasWebsocketConnection()) return false;
-        if (nodeId === this._peerId) return true;
-        return this._routes[nodeId] || false;
-    }
     setIncomingWebsocketConnection(connection) {
         if (this._verbose >= 100) {
             console.info(`Incoming connection established: ${this._peerId}`);

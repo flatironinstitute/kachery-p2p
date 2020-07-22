@@ -8,12 +8,13 @@ const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 const PROTOCOL_VERSION = 'kachery-p2p-5'
 
 class KacheryChannelConnection {
-    constructor({keyPair, nodeId, channelName, verbose, discoveryVerbose, nodeInfo, feedManager}) {
+    constructor({keyPair, nodeId, channelName, verbose, discoveryVerbose, nodeInfo, feedManager, opts}) {
         this._keyPair = keyPair; // The keypair used for signing message, the public key agrees with the node id
         this._nodeId = nodeId; // The node id, determined by the public key in the keypair
         this._channelName = channelName; // Name of the channel (related to the swarmName)
         this._feedManager = feedManager; // The feed manager (feeds are collections of append-only logs)
         this._halt = false; // Whether we have left this channel (see .leave())
+        this._opts = opts;
 
         // Create the swarm connection
         const swarmName = 'kachery:' + this._channelName;
@@ -24,7 +25,8 @@ class KacheryChannelConnection {
             verbose,
             discoveryVerbose,
             nodeInfo,
-            protocolVersion: PROTOCOL_VERSION
+            protocolVersion: PROTOCOL_VERSION,
+            opts
         });
 
         // Listen for seeking messages (when a peer is seeking a file or feed)
@@ -415,13 +417,8 @@ class KacheryChannelConnection {
             const ci = p.peerNodeInfo() || {};
             const hasIn = p.hasIncomingWebsocketConnection();
             const hasOut = p.hasOutgoingWebsocketConnection();
-            const numRoutes = Object.keys(p.routes()).length;
-            let numRoutesTo = 0;
-            for (let id2 of peerIds) {
-                const p2 = this._swarmConnection.peerConnection(id2);
-                if (p2.hasRouteTo(peerId)) numRoutesTo ++;
-            }
-            lines.push(`Peer ${peerId.slice(0, 6)}...: ${ci.host || ""}:${ci.port || ""} ${ci.local ? "(local)" : ""} ${hasIn ? "in" : ""} ${hasOut ? "out" : ""} [${numRoutes}] [${numRoutesTo}]`);
+            const hasRoute = this._swarmConnection.hasRouteToPeer(peerId);
+            lines.push(`Peer ${peerId.slice(0, 6)}...: ${ci.host || ""}:${ci.port || ""} ${ci.local ? "(local)" : ""} ${hasIn ? "in" : ""} ${hasOut ? "out" : ""} ${hasRoute ? "route" : ""}`);
         }
         return lines.join('\n');
     }

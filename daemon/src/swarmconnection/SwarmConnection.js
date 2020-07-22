@@ -6,7 +6,7 @@ import { getSignature, hexToPublicKey, verifySignature } from '../common/crypto_
 import SmartySwarmConnection from './SmartySwarmConnection.js';
 
 class SwarmConnection {
-    constructor({keyPair, nodeId, swarmName, verbose, discoveryVerbose, nodeInfo, protocolVersion}) {
+    constructor({keyPair, nodeId, swarmName, verbose, discoveryVerbose, nodeInfo, protocolVersion, opts}) {
         this._keyPair = keyPair; // the keypair for signing messages (public key is same as node id)
         this._nodeId = nodeId; // The id of the node, determined by the public key in the keypair
         this._swarmName = swarmName; // The name of the swarm (related to the channel name)
@@ -16,6 +16,7 @@ class SwarmConnection {
         this._peerMessageListeners = {}; // listeners for messages coming in from peers
         this._onPeerRequestCallbacks = []; // callbacks for requests coming in from peers
         this._halt = false;
+        this._opts = opts;
         this._smarty = new SmartySwarmConnection(this);
 
         // the discovery engine!
@@ -128,6 +129,11 @@ class SwarmConnection {
         return this._makeRequestToPeer(nodeId, requestBody, opts);
     }
 
+    hasRouteToPeer = (peerId) => {
+        const route = this._smarty.which_route_should_i_use_to_send_a_message_to_this_peer(peerId, {calculateIfNeeded: false});
+        return route ? true : false;
+    }
+
     // IMPLEMENTATION /////////////////////////////////////////////////////////////
     async _sendMessageToPeer(peerId, msg) {
         if (!(peerId in this._peerConnections)) {
@@ -217,6 +223,14 @@ class SwarmConnection {
 
     _createPeerConnection(peerId) {
         if (peerId in this._peerConnections) return;
+        if (this._opts.maxNumPeers) {
+            if (this.numPeers() >= this._opts.maxNumPeers) {
+                if (this._verbose >= 50) {
+                    console.info(`SWARM:: Not creating peer connection because maximum has been reached: ${peerId}`);
+                }
+                return;
+            }
+        }
         if (this._verbose >= 50) {
             console.info(`SWARM:: Creating peer connection: ${peerId}`);
         }
@@ -227,6 +241,7 @@ class SwarmConnection {
             peerId,
             verbose: this._verbose
         });
+        
         x.onSignedMessage(msg => {
             this._handleSignedMessageFromPeer(msg);
         });
