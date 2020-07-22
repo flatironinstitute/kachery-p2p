@@ -16,7 +16,7 @@ class HyperswarmConnection {
         this._swarmName = swarmName; // name of the swarm
         this._verbose = verbose; // verbosity level
         const topicKey = { // the key used to compute the topic hash (for hyperswarm)
-            protocolVersion: protocolVersion,
+            protocolVersion,
             swarmName: swarmName
         };
         this._topic = crypto.createHash('sha256') // the topic hash (for hyperswarm)
@@ -106,7 +106,8 @@ class HyperswarmConnection {
             }
             if (msg.body.protocolVersion !== this._protocolVersion) {
                 if (this._verbose >= 1) {
-                    console.warn('HYPERSWARM:: Incorrect protocol version from peer connection. Closing socket.');
+                    console.warn(JSON.stringify(details));
+                    console.warn(`HYPERSWARM:: Incorrect protocol version from peer connection. Closing socket. ${msg.body.protocolVersion} <> ${this._protocolVersion}`);
                 }
                 socket.destroy();
                 return;

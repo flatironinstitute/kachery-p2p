@@ -129,8 +129,11 @@ class Subfeed:
         
     def _get_snapshot_messages(self):
         # only applies when feed is a snapshot
-        obj = self._feed._snapshot_object['subfeeds'][self._subfeed_hash]
-        return obj['messages']
+        try:
+            obj = self._feed._snapshot_object['subfeeds'][self._subfeed_hash]
+            return obj['messages']
+        except:
+            return []
 
     def get_next_messages(self, *, wait_msec=10, signed=False, max_num_messages=0, advance_position=True):
         if not self.is_snapshot():
@@ -199,6 +202,8 @@ class Subfeed:
                 while self._relative_position >= len(self._messages):
                     self._load_messages()
                     if self._relative_position >= len(self._messages):
+                        if self._parent.is_snapshot():
+                            raise StopIteration
                         time.sleep(0.05)
                 self._parent._position = self._parent._position + 1
                 self._relative_position = self._relative_position + 1

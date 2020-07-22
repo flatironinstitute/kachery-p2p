@@ -10,6 +10,7 @@ class SwarmConnection {
         this._keyPair = keyPair; // the keypair for signing messages (public key is same as node id)
         this._nodeId = nodeId; // The id of the node, determined by the public key in the keypair
         this._swarmName = swarmName; // The name of the swarm (related to the channel name)
+        this._protocolVersion = protocolVersion;
         this._verbose = verbose; // Verbosity level
         this._nodeInfo = nodeInfo; // Info about this node, like host and port
         this._peerConnections = {}; // Peer connections
@@ -230,7 +231,8 @@ class SwarmConnection {
             swarmName: this._swarmName,
             nodeId: this._nodeId,
             peerId,
-            verbose: this._verbose
+            verbose: this._verbose,
+            protocolVersion: this._protocolVersion
         });
         
         x.onSignedMessage(msg => {
@@ -271,6 +273,7 @@ class SwarmConnection {
         if (msg.type === 'requestToNode') {
             if (msg.toNodeId === this._nodeId) {
                 const requestId = msg.requestId;
+                let numResponses = 0;
                 this.sendMessageToPeer(fromNodeId, {type: 'requestToNodeReceived', requestId});
                 this._onPeerRequestCallbacks.forEach(cb => {
                     cb({
@@ -278,13 +281,14 @@ class SwarmConnection {
                         requestId,
                         requestBody: msg.requestBody,
                         onResponse: responseBody => {
-                            this.sendMessageToPeer(fromNodeId, {type: 'requestToNodeResponse', requestId, responseBody});
+                            this.sendMessageToPeer(fromNodeId, {type: 'requestToNodeResponse', requestId, responseBody, responseIndex: numResponses});
+                            numResponses ++;
                         },
                         onError: errorString => {
                             this.sendMessageToPeer(fromNodeId, {type: 'requestToNodeError', requestId, errorString})
                         },
                         onFinished: () => {
-                            this.sendMessageToPeer(fromNodeId, {type: 'requestToNodeFinished', requestId});
+                            this.sendMessageToPeer(fromNodeId, {type: 'requestToNodeFinished', numResponses, requestId});
                         }
                     })
                 });
@@ -341,6 +345,7 @@ class SwarmConnection {
         let isFinished = false;
         let requestReceived = false;
         let timestampLastResponse = new Date();
+        let numResponsesReceived = 0;
         const handleReceived = () => {
             requestReceived = true;
         }
@@ -354,6 +359,7 @@ class SwarmConnection {
             if (isFinished) return;
             timestampLastResponse = new Date();
             onResponseCallbacks.forEach(cb => cb(responseBody));
+            numResponsesReceived ++;
         }
         const handleError = (errorString) => {
             if (isFinished) return;
@@ -375,17 +381,22 @@ class SwarmConnection {
             monitorTimeout();
         }
 
-        listener.onMessage((fromNodeId, msg) => {
+        listener.onMessage(async (fromNodeId, msg) => {
             if (msg.type === 'requestToNodeReceived') {
                 handleReceived();
             }
             else if (msg.type === 'requestToNodeResponse') {
+                // todo: use msg.responseIndex to sort the order in which we handle the responses (in case they come in a different order)
                 handleResponse(msg.responseBody);
             }
             else if (msg.type === 'requestToNodeError') {
                 handleError(msg.errorString);
             }
             else if (msg.type === 'requestToNodeFinished') {
+                // wait until we have received the expected number of responses
+                while (numResponsesReceived < msg.numResponses) {
+                    await sleepMsec(10);
+                }
                 handleFinished();
             }
         });

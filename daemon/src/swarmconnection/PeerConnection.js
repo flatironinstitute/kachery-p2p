@@ -3,7 +3,7 @@ import { sleepMsec } from '../common/util.js';
 import { JSONStringifyDeterministic } from '../common/crypto_util.js'
 
 class PeerConnection {
-    constructor({ keyPair, swarmName, nodeId, peerId, verbose }) {
+    constructor({ keyPair, swarmName, nodeId, peerId, verbose, protocolVersion }) {
         this._keyPair = keyPair;
         this._swarmName = swarmName;
         this._nodeId = nodeId;
@@ -17,6 +17,7 @@ class PeerConnection {
         this._onWebsocketConnectionCallbacks = [];
         this._routes = {};
         this._halt = false;
+        this._protocolVersion = protocolVersion;
         // this._queuedMessages = [];
 
         this._start();
@@ -133,6 +134,7 @@ class PeerConnection {
                     type: 'initial',
                     initialInfo: {
                         swarmName: this._swarmName,
+                        protocolVersion: this._protocolVersion,
                         nodeId: this._nodeId
                     }
                 });

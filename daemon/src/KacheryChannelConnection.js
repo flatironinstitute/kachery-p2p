@@ -5,14 +5,14 @@ import { getLocalFileInfo } from './kachery.js';
 import Stream from 'stream';
 import { sleepMsec } from './common/util.js';
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
-const PROTOCOL_VERSION = 'kachery-p2p-6'
 
 class KacheryChannelConnection {
-    constructor({keyPair, nodeId, channelName, verbose, discoveryVerbose, nodeInfo, feedManager, opts}) {
+    constructor({keyPair, nodeId, channelName, verbose, discoveryVerbose, protocolVersion, nodeInfo, feedManager, opts}) {
         this._keyPair = keyPair; // The keypair used for signing message, the public key agrees with the node id
         this._nodeId = nodeId; // The node id, determined by the public key in the keypair
         this._channelName = channelName; // Name of the channel (related to the swarmName)
         this._feedManager = feedManager; // The feed manager (feeds are collections of append-only logs)
+        this._protocolVersion = protocolVersion;
         this._halt = false; // Whether we have left this channel (see .leave())
         this._opts = opts;
 
@@ -25,7 +25,7 @@ class KacheryChannelConnection {
             verbose,
             discoveryVerbose,
             nodeInfo,
-            protocolVersion: PROTOCOL_VERSION,
+            protocolVersion,
             opts
         });
 

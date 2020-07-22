@@ -7,11 +7,14 @@ import FeedManager from './FeedManager.js';
 import WebsocketServer from './WebsocketServer.js';
 import swarm from 'hyperswarm';
 
+const PROTOCOL_VERSION = 'kachery-p2p-8'
+
 class Daemon {
     constructor({ configDir, listenHost, listenPort, verbose, discoveryVerbose, opts }) {
         this._configDir = configDir; // Directory where config information is stored (including names and keys for feeds)
         this._listenHost = listenHost; // The host where we are listening
         this._listenPort = listenPort; // The port where we are listening
+        this._protocolVersion = PROTOCOL_VERSION
         this._opts = opts;
         
         const { publicKey, privateKey } = _loadKeypair(configDir); // The keypair for signing messages and the public key is used as the node id
@@ -39,7 +42,12 @@ class Daemon {
             this._websocketServer.onConnection((connection, initialInfo) => {
                 // We have a new connection -- and the first message passed has info about the swarm
                 // swarmName is determined from the channel name
-                const {swarmName, nodeId} = initialInfo;
+                const {swarmName, nodeId, protocolVersion} = initialInfo;
+                if (protocolVersion !== this._protocolVersion) {
+                    console.warn(`Disconnecting incoming connection. Bad protocol version: ${protocolVersion} <> ${this._protocolVersion}`);
+                    connection.disconnect();
+                    return;
+                }
                 const channelName = _getChannelNameFromSwarmName(swarmName);
 
                 // some basic validation
@@ -130,6 +138,7 @@ class Daemon {
                 discoveryVerbose: this._discoveryVerbose,
                 feedManager: this._feedManager,
                 nodeInfo: this._nodeInfo,
+                protocolVersion: this._protocolVersion,
                 opts: this._opts
             });
             this._kacheryChannelConnections[channelName] = x;
