@@ -69,7 +69,7 @@ class FeedManager {
     async hasWriteableFeed({ feedId }) {
         // Check whether this node has a writeable feed.
         // We do this by ensuring that we have the associated private key and that the feed directory exists
-        const privateKey = this._getPrivateKeyForFeed(feedId);
+        const privateKey = await this._getPrivateKeyForFeed(feedId);
         if (!privateKey) return;
         // Returns true if we have the writeable feed
         return fs.existsSync(_feedDirectory(feedId));

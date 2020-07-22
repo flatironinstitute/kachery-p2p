@@ -178,7 +178,7 @@ export default class ApiServer {
             }
             catch(err) {
                 console.warn(err);
-                res.status(500).send('Error appending messages.');
+                res.status(500).send(`Error appending messages: ${err.message}`);
             }
         });
         // /feed/getMessages - get messages from a local or remote subfeed
