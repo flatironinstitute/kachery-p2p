@@ -5,7 +5,7 @@ import { getLocalFileInfo } from './kachery.js';
 import Stream from 'stream';
 import { sleepMsec } from './common/util.js';
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
-const PROTOCOL_VERSION = 'kachery-p2p-5'
+const PROTOCOL_VERSION = 'kachery-p2p-6'
 
 class KacheryChannelConnection {
     constructor({keyPair, nodeId, channelName, verbose, discoveryVerbose, nodeInfo, feedManager, opts}) {
