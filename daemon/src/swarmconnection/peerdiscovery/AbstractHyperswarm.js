@@ -68,6 +68,10 @@ class AbstractHyperswarm {
                 }
             }
         })
+        this._hyperswarm.on('error', (err) => {
+            // This is not documented in hyperswarm, but might be needed, not sure
+            console.warn('Hyperswarm error: ', err);
+        })
     }
     onConnection(cb) {
         this._onConnectionCallbacks.push(cb);
