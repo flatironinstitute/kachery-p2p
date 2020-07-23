@@ -40,6 +40,7 @@ setuptools.setup(
         "bin/kachery-p2p-node-info"
     ],
     install_requires=[
+        "click",
         "kachery>=0.6.4"
     ],
     classifiers=[

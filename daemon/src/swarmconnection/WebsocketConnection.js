@@ -36,6 +36,9 @@ class WebsocketConnection {
             });
         });
     }
+    disconnect() {
+        this._ws.close();
+    }
     onConnect(cb) {
         this._onConnectCallbacks.push(cb);
     }

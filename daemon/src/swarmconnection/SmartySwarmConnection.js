@@ -11,6 +11,9 @@ class SmartySwarmConnection {
             if (type0 === 'routeLatencyTest') {
                 this._handleRouteLatencyTest({fromNodeId, requestBody, onResponse, onError, onFinished});
             }
+            else if (type0 === 'checkAlive') {
+                this._handleCheckAlive({fromNodeId, requestBody, onResponse, onError, onFinished});
+            }
         });
 
         this._start();
@@ -168,6 +171,14 @@ class SmartySwarmConnection {
             onError('No route found.');
         }
     }
+    async _handleCheckAlive({fromNodeId, requestBody, onResponse, onError, onFinished}) {
+        const {testData} = requestBody;
+        onResponse({
+            testData,
+            testDataSignature: getSignature(testData, this._swarmConnection._keyPair)
+        });
+        onFinished();
+    }
 
     async _updateRoutesToPeers() {
         const peerIds = this._swarmConnection.peerIds();
@@ -181,16 +192,71 @@ class SmartySwarmConnection {
         }
     }
 
-    async _start() {
-        let timeUpdateRoutesToPeers = 0;
-        while (true) {
-            const elapsedUpdateRoutesToPeers = (new Date()) - timeUpdateRoutesToPeers;
-            if (elapsedUpdateRoutesToPeers > 10000) {
-                await this._updateRoutesToPeers();
-                timeUpdateRoutesToPeers = new Date();
+    async _checkPeerAlive(peerId) {
+        return new Promise((resolve, reject) => {
+            const testData = { // needs to be an object so we can compute a signature
+                data1: randomString(20)
+            };
+            const requestBody = {
+                type: 'checkAlive',
+                testData
+            };
+            const req = this._swarmConnection.makeRequestToPeer(peerId, requestBody, {timeout: 5000});
+            let finished = false;
+            let gotCorrectResponse = false;
+            req.onResponse(responseBody => {
+                if (finished) return;
+                if (JSONStringifyDeterministic(responseBody.testData) === JSONStringifyDeterministic(testData)) {
+                    if (verifySignature(responseBody.testData, responseBody.testDataSignature, hexToPublicKey(peerId))) {
+                        gotCorrectResponse = true;
+                    }
+                }
+            });
+            req.onError(errorString => {
+                if (finished) return;
+                finished = true;
+                resolve(false);
+            })
+            req.onFinished(() => {
+                if (finished) return;
+                finished = true;
+                if (gotCorrectResponse) {
+                    resolve(true);
+                }
+                else {
+                    resolve(false);
+                }
+            });
+        })
+    }
+
+    async _checkPeersAlive() {
+        const peerIds = this._swarmConnection.peerIds();
+        for (let peerId of peerIds) {
+            const alive = await this._checkPeerAlive(peerId);
+            console.log(`---------------------- peerAlive ${peerId} ${alive}`)
+            if (!alive) {
+                this._swarmConnection.disconnectPeerConnection(peerId);
             }
-            await sleepMsec(1000);
         }
+    }
+
+    async _startCheckPeersAlive() {
+        while (true) {
+            await this._checkPeersAlive();
+            await sleepMsec(10000);
+        }
+    }
+    async _startUpdateRoutesToPeers() {
+        while (true) {
+            await this._updateRoutesToPeers();
+            await sleepMsec(10000);
+        }
+    }
+
+    async _start() {
+        this._startCheckPeersAlive();
+        this._startUpdateRoutesToPeers();
     }
 }
 

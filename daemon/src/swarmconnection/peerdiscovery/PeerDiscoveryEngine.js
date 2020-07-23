@@ -35,6 +35,11 @@ class PeerDiscoveryEngine {
     leave() {
         this._halt = true;
     }
+    forgetNode(nodeId) {
+        if (nodeId in this._peerNodeInfos) {
+            delete this._peerNodeInfos[nodeId];
+        }
+    }
 
     // IMPLEMENTATION ////////////////////////////////////////////////////////////////////
     _handleHyperswarmConnectionMessage(fromNodeId, msg) {

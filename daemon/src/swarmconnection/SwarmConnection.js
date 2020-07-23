@@ -134,6 +134,16 @@ class SwarmConnection {
         const route = await this._smarty.which_route_should_i_use_to_send_a_message_to_this_peer(peerId, {calculateIfNeeded: false});
         return route ? true : false;
     }
+    disconnectPeerConnection = (peerId) => {
+        const pc = this.peerConnection(peerId);
+        if (!pc) return;
+        if (this._verbose >= 1) {
+            console.info(`Disconnecting peer: ${peerId}`);
+        }
+        pc.disconnect();
+        this._peerDiscoveryEngine.forgetNode(peerId);
+        delete this._peerConnections[peerId];
+    }
 
     // IMPLEMENTATION /////////////////////////////////////////////////////////////
     async _sendMessageToPeer(peerId, msg) {
@@ -142,7 +152,12 @@ class SwarmConnection {
             return false;
         }
         if (this._verbose >= 100) {
-            console.info(`Sending message to peer ${peerId.slice(0, 6)} ${msg.type}`);
+            if (msg.type === 'requestToNode') {
+                console.info(`Sending request to peer ${peerId.slice(0, 6)} ${msg.requestBody.type}`);
+            }
+            else {
+                console.info(`Sending message to peer ${peerId.slice(0, 6)} ${msg.type}`);
+            }
         }
         // Form the signed message (which may need to get routed through other nodes in the swarm)
         const body = {
@@ -297,6 +312,7 @@ class SwarmConnection {
         else if (msg.type === 'leaving') {
             if (fromNodeId in this._peerConnections) {
                 this._peerConnections[fromNodeId].disconnect();
+                this._peerDiscoveryEngine.forgetNode(fromNodeId);
                 delete this._peerConnections[fromNodeId];
             }
         }
