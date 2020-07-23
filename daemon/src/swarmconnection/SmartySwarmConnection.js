@@ -234,7 +234,6 @@ class SmartySwarmConnection {
         const peerIds = this._swarmConnection.peerIds();
         for (let peerId of peerIds) {
             const alive = await this._checkPeerAlive(peerId);
-            console.log(`---------------------- peerAlive ${peerId} ${alive}`)
             if (!alive) {
                 this._swarmConnection.disconnectPeerConnection(peerId);
             }
