@@ -6,6 +6,27 @@ import yargs from 'yargs';
 import Daemon from './Daemon.js';
 import ApiServer from './ApiServer.js';
 
+// Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
+process.on('uncaughtException', function (err) {
+  // This is important because utp-native was sporadically giving the following error and crashing:
+  /*
+  
+  /home/root/.npm/_npx/19496/lib/node_modules/kachery-p2p-daemon/node_modules/utp-native/lib/connection.js:238
+  const err = new Error(str)               ^
+  Error: UTP_ECONNRESET
+      at createUTPError (/home/root/.npm/_npx/19496/lib/node_modules/kachery-p2p-daemon/node_modules/utp-native/lib/connection.js:238:15)
+      at Connection._onerror (/home/root/.npm/_npx/19496/lib/node_modules/kachery-p2p-daemon/node_modules/utp-native/lib/connection.js:175:16)
+  Emitted 'error' event on Connection instance at:
+      at Connection._onclose (/home/root/.npm/_npx/19496/lib/node_modules/kachery-p2p-daemon/node_modules/utp-native/lib/connection.js:169:25) {
+    code: 'UTP_ECONNRESET',
+    errno: 1
+  }
+
+  */
+  console.warn(err.stack);
+  console.log('Caught exception: ', err);
+});
+
 function main() {
   // for (let i=0; i<10; i++) {
   //   const keyPair = createKeyPair();
