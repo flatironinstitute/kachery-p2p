@@ -4,7 +4,6 @@ import os from 'os';
 import fs from 'fs';
 import yargs from 'yargs';
 import Daemon from './Daemon.js';
-import Hub from './Hub.js';
 import ApiServer from './ApiServer.js';
 
 function main() {
@@ -42,6 +41,11 @@ function main() {
           type: 'string',
           default: ''
         })
+        yargs.option('label', {
+          describe: 'Label for this node.',
+          type: 'string',
+          default: os.hostname()
+        })
         yargs.option('port', {
           describe: 'Port to listen on.',
           type: 'string'
@@ -55,6 +59,7 @@ function main() {
         }
         const listenHost = argv.host;
         const listenPort = argv.port;
+        const label = argv.label;
         startDaemon({
           configDir,
           channelNames,
@@ -62,6 +67,7 @@ function main() {
           listenPort,
           verbose: argv.verbose,
           discoveryVerbose: argv.dverbose,
+          label,
           opts: {
           }
         });
@@ -76,8 +82,14 @@ function main() {
 
 const apiPort = process.env.KACHERY_P2P_API_PORT || 20431;
 
-const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, verbose, discoveryVerbose, opts }) => {
-  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, opts});
+class Log {
+  constructor() {
+
+  }
+}
+
+const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, verbose, discoveryVerbose, label, opts }) => {
+  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, label, opts});
 
   const apiServer = new ApiServer(daemon, {verbose});
   apiServer.listen(apiPort);
@@ -85,12 +97,6 @@ const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, ve
   for (let channelName of channelNames) {
     await daemon.joinChannel(channelName);
   }
-}
-
-const startHub = async ({ port, configDir, verbose }) => {
-  const hub = new Hub({configDir, verbose});
-
-  hub.listen(port);
 }
 
 main();

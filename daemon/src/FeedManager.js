@@ -4,17 +4,17 @@ import { sleepMsec } from './common/util.js';
 import { JSONStringifyDeterministic } from './common/crypto_util.js';
 import { kacheryStorageDir } from './kachery.js';
 import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSignature, hexToPublicKey, hexToPrivateKey, sha1sum } from './common/crypto_util.js'
+import { log } from './common/log.js';
 
 class FeedManager {
     // Manages the local feeds and access to the remote feeds in the p2p network
 
-    constructor(daemon, {verbose}) {
+    constructor(daemon) {
         this._daemon = daemon; // The kachery-p2p daemon
         this._storageDir = kacheryStorageDir() + '/feeds'; // Where we store the feed data (subdir of the kachery storage dir)
         this._feedsConfig = null; // The config will be loaded from disk as need. Contains all the private keys for the feeds and the local name/ID associations.
         this._subfeeds = {}; // The subfeed instances (Subfeed()) that have been loaded into memory
-        this._verbose = verbose;
-        this._remoteFeedManager = new RemoteFeedManager(this._daemon, {verbose: this._verbose}); // Manages the interaction with feeds on remote nodes
+        this._remoteFeedManager = new RemoteFeedManager(this._daemon); // Manages the interaction with feeds on remote nodes
     }
     async createFeed({ feedName }) {
         // Create a new writeable feed on this node and return the ID of the new feed
@@ -79,8 +79,14 @@ class FeedManager {
 
         // Load the subfeed and make sure it is writeable
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
+        if (!subfeed) {
+            throw Error(`Unable to load subfeed: ${feedId} ${subfeedName}`);
+        }
         if (!subfeed.isWriteable()) {
             throw Error(`Subfeed is not writeable: ${feedId} ${subfeedName}`);
+        }
+        if (!subfeed._signedMessages) {
+            throw Error(`Unexpected. Loaded subfeed has null _signedMessages`);
         }
 
         // Append the messages
@@ -262,21 +268,34 @@ class FeedManager {
     async _loadSubfeed({feedId, subfeedName}) {
         // Load a subfeed (Subfeed() instance
 
-        // If we have already loaded it into memory, the do not reload
+        // If we have already loaded it into memory, then do not reload
         const k = feedId + ':' + _subfeedHash(subfeedName);
         const subfeed = this._subfeeds[k] || null;
+
         if (subfeed) {
             await subfeed.waitUntilInitialized();
         }
         else {
+            // Instantiate and initialize the subfeed
+            const sf = new Subfeed({ daemon: this._daemon, remoteFeedManager: this._remoteFeedManager, feedId, subfeedName });
+            // Store in memory for future access (the order is important here, see waitUntilInitialized above)
+            this._subfeeds[k] = sf;
+
             // Load private key if this is writeable (otherwise, privateKey will be null)
+            // important to do this after setting this._subfeeds[k], because we need to await it
             const privateKey = await this._getPrivateKeyForFeed(feedId);
 
-            // Instantiate and initialize the subfeed
-            const sf = new Subfeed({ daemon: this._daemon, remoteFeedManager: this._remoteFeedManager, feedId, subfeedName, privateKey });
-            // Store in memory for future access
-            this._subfeeds[k] = sf;
-            await sf.initialize();
+            try {
+                await sf.initialize(privateKey);
+            }
+            catch(err) {
+                for (let cb of sf._onInitializeErrorCallbacks)
+                    cb(err);
+                delete this._subfeeds[k];
+                throw err;
+            }
+            for (let cb of sf._onInitializedCallbacks)
+                cb();
         }
         
         // Return the subfeed instance
@@ -286,16 +305,13 @@ class FeedManager {
 
 class RemoteFeedManager {
     // Manages interactions with feeds on remote nodes within the p2p network
-    constructor(daemon, {verbose}) {
+    constructor(daemon) {
         this._daemon = daemon; // The kachery-p2p daemon
         this._liveFeedInfos = {}; // Information about the live feeds (cached in memory)
-        this._verbose = verbose;
     }
     async getSignedMessages({feedId, subfeedName, position, waitMsec}) {
         // Get signed messages from a remote feed
-        if (this._verbose >= 200) {
-            console.log('getSignedMessages', feedId, subfeedName, position, waitMsec);
-        }
+        log().info('getSignedMessages', {feedId, subfeedName, position, waitMsec});
 
         // Search and find the info for the feed (channel and node id)
         // If not found, return null
@@ -312,9 +328,7 @@ class RemoteFeedManager {
                     waitMsec -= 1000;   
                 }
                 else {
-                    if (this._verbose >= 200) {
-                        console.info('Unable to get signed messages (cannot find live feed info)');
-                    }
+                    log().info('Unable to get signed messages (cannot find live feed info)', {feedId});
                     return null;
                 }
             }
@@ -331,9 +345,7 @@ class RemoteFeedManager {
             opts: {}
         });
 
-        if (this._verbose >= 200) {
-            console.info(`Got ${signedMessages.length} signed messages.`);
-        }
+        log().info(`Got signed messages.`, {numMessages: signedMessages.length});
 
         // Return the retrieved messages
         return signedMessages;
@@ -419,11 +431,11 @@ class RemoteFeedManager {
 class Subfeed {
     // Represents a subfeed, which may or may not be writeable on this node
 
-    constructor({ daemon, remoteFeedManager, feedId, subfeedName, privateKey }) {
+    constructor({ daemon, remoteFeedManager, feedId, subfeedName }) {
         this._daemon = daemon; // The kachery-p2p daemon
         this._feedId = feedId; // The ID of the feed
         this._publicKey = hexToPublicKey(this._feedId); // The public key of the feed (which is determined by the feed ID)
-        this._privateKey = privateKey; // The private key (or null if this is not writeable on the local node)
+        this._privateKey = null; // The private key (or null if this is not writeable on the local node) -- set below
         this._subfeedName = subfeedName; // The name of the subfeed
         this._feedDir = _feedDirectory(feedId); // The directory of the feed data
         this._subfeedDir = _subfeedDirectory(feedId, subfeedName); // The directory of the subfeed data
@@ -434,8 +446,10 @@ class Subfeed {
         this._initialized = false;
         this._initializing = false;
         this._onInitializedCallbacks = [];
+        this._onInitializeErrorCallbacks = [];
     }
-    async initialize() {
+    async initialize(privateKey) {
+        this._privateKey = privateKey;
         if (this._initialized) return;
         if (this._initializing) {
             await this.waitUntilInitialized();
@@ -458,9 +472,6 @@ class Subfeed {
             let previousMessageNumber = -1;
             for (let msg of messages) {
                 if (!verifySignature(msg.body, msg.signature, this._publicKey)) {
-                    console.warn(msg.body);
-                    console.warn(msg.signature);
-                    console.warn(this._publicKey);
                     throw Error(`Unable to verify signature of message in feed: ${this._feedDir} ${msg.signature}`)
                 }
                 if (previousSignature !== (msg.body.previousSignature || null)) {
@@ -492,12 +503,17 @@ class Subfeed {
         }
         this._initializing = false;
         this._initialized = true;
-        for (let cb of this._onInitializedCallbacks)
-            cb();
+
+        if (!this._signedMessages) {
+            throw Error('Unexpected. signed messages is null at the end of subfeed initialization');
+        }
     }
     async waitUntilInitialized() {
         if (this._initialized) return;
         return new Promise((resolve, reject) => {
+            this._onInitializeErrorCallbacks.push((err) => {
+                reject(err);
+            })
             this._onInitializedCallbacks.push(() => {
                 resolve();
             });
@@ -626,9 +642,6 @@ class Subfeed {
             const body = signedMessage.body;
             const signature = signedMessage.signature;
             if (!verifySignature(body, signature, this._publicKey)) {
-                console.warn(body);
-                console.warn(signature);
-                console.warn(this._publicKey);
                 throw Error(`Error verifying signature when appending signed message for: ${this._feedId} ${this._subfeedName} ${signature}`);
             }
             if ((body.previousSignature || null) !== (previousSignature || null)) {
@@ -665,7 +678,6 @@ const readMessagesFile = async (path) => {
         return [];
     }
     if (typeof(txt) !== 'string') {
-        console.error(txt);
         throw Error('Unexpected: txt is not a string.');
     }
     let messages = [];
@@ -676,37 +688,7 @@ const readMessagesFile = async (path) => {
                 messages.push(JSON.parse(line));
             }
             catch(err) {
-                console.error(line);
-                console.warn(`Problem parsing JSON from file: ${path}`);
-                return [];
-            }
-        }
-    }
-    return messages;
-}
-
-const readAcc = async (path) => {
-    let txt;
-    try {
-        txt = await fs.promises.readFile(path, {encoding: 'utf8'});
-    }
-    catch(err) {
-        return [];
-    }
-    if (typeof(txt) !== 'string') {
-        console.error(txt);
-        throw Error('Unexpected: txt is not a string.');
-    }
-    let messages = [];
-    const lines = txt.split('\n');
-    for (let line of lines) {
-        if (line) {
-            try {
-                messages.push(JSON.parse(line));
-            }
-            catch(err) {
-                console.error(line);
-                console.warn(`Problem parsing JSON from file: ${path}`);
+                log().warning(`Problem parsing JSON from file.`, {path});
                 return [];
             }
         }

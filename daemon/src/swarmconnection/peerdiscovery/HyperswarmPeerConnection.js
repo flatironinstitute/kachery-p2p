@@ -1,14 +1,14 @@
 import { randomAlphaString } from '../../common/util.js';
 import { verifySignature, hexToPublicKey } from '../../common/crypto_util.js';
+import { log } from '../../common/log.js';
 
 class HyperswarmPeerConnection {
-    constructor({keyPair, nodeId, swarmName, peerId, verbose}) {
+    constructor({keyPair, nodeId, swarmName, peerId}) {
         this._keyPair = keyPair;
         this._nodeId = nodeId;
 
         this._swarmName = swarmName;
         this._peerId = peerId;
-        this._verbose = verbose;
 
         this._incomingJsonSocket = null;
         this._outgoingJsonSocket = null;
@@ -47,10 +47,7 @@ class HyperswarmPeerConnection {
             this._incomingJsonSocket.sendMessage({type: 'ready'});
         }
         catch(err) {
-            if (this._verbose >= 1) {
-                console.warn(err);
-                console.warn('Could not send message to incoming socket. Disconnecting.');
-            }
+            log('discovery').warning('Could not send message to incoming socket. Disconnecting.', {error: err.message});
             this.disconnect();
         }
     }
@@ -71,10 +68,7 @@ class HyperswarmPeerConnection {
             this._outgoingJsonSocket.sendMessage({type: 'ready'});
         }
         catch(err) {
-            if (this._verbose >= 1) {
-                console.warn(err);
-                console.warn('Could not send message to outgoing socket. Disconnecting.');
-            }
+            log('discovery').warning('Could not send message to outgoing socket. Disconnecting.', {error: err.message});
             this.disconnect();
         }
     }
@@ -134,10 +128,7 @@ class HyperswarmPeerConnection {
             socket.sendMessage(msg);
         }
         catch(err) {
-            if (this._verbose >= 1) {
-                console.warn(err);
-                console.warn('Error sending message')
-            }
+            log('discovery').warning('Error sending message', {error: err.message})
         }
     }
     // safe
@@ -147,7 +138,7 @@ class HyperswarmPeerConnection {
     }
     sendSignedMessage = (signedMessage) => {
         if (!verifySignature(signedMessage.body, signedMessage.signature, hexToPublicKey(signedMessage.body.fromNodeId))) {
-            console.warn('HYPERSWARM: Unexpected problem verifying signature before sending signed message. Not sending.');
+            log('discovery').warning('HYPERSWARM: Unexpected problem verifying signature before sending signed message. Not sending.');
             return;
         }
         this.sendMessage({

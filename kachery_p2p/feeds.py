@@ -355,16 +355,19 @@ def get_feed_id(feed_name, *, create=False):
     feed_id = x['feedId']
     return feed_id
 
+def load_subfeed(subfeed_uri):
+    feed_id, subfeed_name, position = _parse_feed_uri(subfeed_uri)
+    assert subfeed_name is not None, 'No subfeed name found'
+    return Feed('feed://' + feed_id).get_subfeed(subfeed_name=subfeed_name, position=position)
+        
 def load_feed(feed_name_or_uri, *, create=False):
     if feed_name_or_uri.startswith('feed://'):
         if create is True:
             raise Exception('Cannot use create=True when feed ID is specified.')
         feed_uri = feed_name_or_uri
         feed_id, subfeed_name, position = _parse_feed_uri(feed_uri)
-        if subfeed_name is None:
-            return Feed('feed://' + feed_id)
-        else:
-            return Feed('feed://' + feed_id).get_subfeed(subfeed_name=subfeed_name, position=position)
+        assert subfeed_name is None, 'Not a feed uri'
+        return Feed('feed://' + feed_id)
     elif feed_name_or_uri.startswith('sha1://'):
         if create is True:
             raise Exception('Cannot use create=True when feed is a snapshot.')

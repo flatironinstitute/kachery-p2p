@@ -1,14 +1,14 @@
 import WebsocketConnection from './WebsocketConnection.js';
 import { sleepMsec } from '../common/util.js';
 import { JSONStringifyDeterministic } from '../common/crypto_util.js'
+import { log } from '../common/log.js';
 
 class PeerConnection {
-    constructor({ keyPair, swarmName, nodeId, peerId, verbose, protocolVersion }) {
+    constructor({ keyPair, swarmName, nodeId, peerId, protocolVersion }) {
         this._keyPair = keyPair;
         this._swarmName = swarmName;
         this._nodeId = nodeId;
         this._peerId = peerId;
-        this._verbose = verbose;
         this._peerNodeInfo = null;
         this._incomingWebsocketConnection = null;
         this._outgoingWebsocketConnection = null;
@@ -36,9 +36,9 @@ class PeerConnection {
             // not a change
             return;
         }
-        if (this._verbose >= 50) {
-            console.info(`SWARM:: Setting peer node info for ${this._peerId}: ${JSONStringifyDeterministic(peerNodeInfo)}`);
-        }
+
+        log().info(`SWARM:: Setting peer node info.`, {peerId: this._peerId, peerNodeInfo});
+
         this._peerNodeInfo = peerNodeInfo;
         this._scheduleOutgoingWebsocketConnection = true;
     }
@@ -52,18 +52,14 @@ class PeerConnection {
         this._routes = routes;
     }
     setIncomingWebsocketConnection(connection) {
-        if (this._verbose >= 100) {
-            console.info(`Incoming connection established: ${this._peerId}`);
-        }
+        log().info(`Incoming connection established`, {peerId: this._peerId});
         this._incomingWebsocketConnection = connection;
         connection.onMessage(msg => {
             this._handleMessage(msg);
         });
         connection.onDisconnect(() => {
             if (this._incomingWebsocketConnection === connection) {
-                if (this._verbose >= 100) {
-                    console.info(`Incoming connection disconnected: ${this._peerId}`);
-                }
+                log().info(`Incoming connection disconnected`, {peerId: this._peerId});
                 this._incomingWebsocketConnection = null;
             }
         });
@@ -121,15 +117,11 @@ class PeerConnection {
                 C = new WebsocketConnection({ host, port });
             }
             catch(err) {
-                if (this._verbose >= 100) {
-                    console.warn(`Problem establishing outgoing websocket connection to: ${host}:${port}`);
-                }
+                log().warning(`Problem establishing outgoing websocket connection`, {host, port});
                 return;
             }
             C.onConnect(() => {
-                if (this._verbose >= 100) {
-                    console.info(`Outgoing connection established: ${this._peerId}`);
-                }
+                log().info(`Outgoing connection established`, {peerId: this._peerId});
                 C.sendMessage({
                     type: 'initial',
                     initialInfo: {
@@ -143,9 +135,7 @@ class PeerConnection {
                 });
                 C.onDisconnect(() => {
                     if (this._outgoingWebsocketConnection === C) {
-                        if (this._verbose >= 100) {
-                            console.info(`Outgoing connection disconnected: ${this._peerId}`);
-                        }
+                        log().info(`Outgoing connection disconnected`, {peerId: this._peerId});
                         this._outgoingWebsocketConnection = null;
                     }
                 });

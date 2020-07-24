@@ -4,10 +4,12 @@ import SwarmConnection from './swarmconnection/SwarmConnection.js';
 import { getLocalFileInfo } from './kachery.js';
 import Stream from 'stream';
 import { sleepMsec } from './common/util.js';
+import { log } from './common/log.js';
+
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
 class KacheryChannelConnection {
-    constructor({keyPair, nodeId, channelName, verbose, discoveryVerbose, protocolVersion, nodeInfo, feedManager, opts}) {
+    constructor({keyPair, nodeId, channelName, protocolVersion, nodeInfo, feedManager, opts}) {
         this._keyPair = keyPair; // The keypair used for signing message, the public key agrees with the node id
         this._nodeId = nodeId; // The node id, determined by the public key in the keypair
         this._channelName = channelName; // Name of the channel (related to the swarmName)
@@ -22,8 +24,6 @@ class KacheryChannelConnection {
             keyPair,
             nodeId,
             swarmName,
-            verbose,
-            discoveryVerbose,
             nodeInfo,
             protocolVersion,
             opts
@@ -106,11 +106,11 @@ class KacheryChannelConnection {
         });
         listener.onMessage((fromNodeId, msg) => {
             if (fromNodeId !== msg.nodeId) {
-                console.warn(`UNEXPECTED: msg.nodeId ${msg.nodeId} is not the same as fromNodeId ${fromNodeId}`);
+                log().warning(`UNEXPECTED: msg.nodeId is not the same as fromNodeId`, {nodeId: msg.nodeId, fromNodeId});
                 return;
             }
             if (this._channelName !== msg.channel) {
-                console.warn(`UNEXPECTED: msg.channel ${msg.channel} is not the same as this._channelName ${this._channelName}`);
+                log().warning(`UNEXPECTED: msg.channel is not the same as this._channelName`, {msgChannel: msg.channel, channelName: this._channelName});
                 return;
             }
             const result = {
@@ -200,7 +200,6 @@ class KacheryChannelConnection {
                         streamState.readyToWrite = false;
                     }
                     catch(err) {
-                        console.warn(err);
                         finished = true;
                         reject('Problem downloading data: ' + err.message);
                     }
@@ -232,7 +231,7 @@ class KacheryChannelConnection {
                         await downloadChunk(chunkNum);
                     }
                     catch(err) {
-                        console.warn(err.message);
+                        log().warning(`Problem in downloadChunks`, {error: err.message});
                         _handleCancel();
                     }
                 }
@@ -248,9 +247,7 @@ class KacheryChannelConnection {
     }
     _getLiveFeedSignedMessages = async ({nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
         return new Promise((resolve, reject) => {
-            if (this._verbose >= 200) {
-                console.info(':getLiveFeedSignedMessages:');
-            }
+            log().info('getLiveFeedSignedMessages', {nodeId, feedId, subfeedName, position, waitMsec, opts});
             const requestBody = {
                 type: 'getLiveFeedSignedMessages',
                 feedId,
@@ -383,7 +380,6 @@ class KacheryChannelConnection {
                 });
             }
             catch(err) {
-                console.warn(err);
                 onError(`Error getting signed messages: ${err.message}`);
                 return;
             }
@@ -400,7 +396,6 @@ class KacheryChannelConnection {
                 });
             }
             catch(err) {
-                console.warn(err);
                 onError(`Error submitting messages: ${err.message}`);
                 return;
             }
@@ -418,7 +413,7 @@ class KacheryChannelConnection {
             const hasIn = p.hasIncomingWebsocketConnection();
             const hasOut = p.hasOutgoingWebsocketConnection();
             const hasRoute = await this._swarmConnection.hasRouteToPeer(peerId);
-            lines.push(`Peer ${peerId.slice(0, 6)}...: ${ci.host || ""}:${ci.port || ""} ${ci.local ? "(local)" : ""} ${hasIn ? "in" : ""} ${hasOut ? "out" : ""} ${hasRoute ? "route" : ""}`);
+            lines.push(`Peer ${peerId.slice(0, 6)}... ${ci.label}: ${ci.host || ""}:${ci.port || ""} ${ci.local ? "(local)" : ""} ${hasIn ? "in" : ""} ${hasOut ? "out" : ""} ${hasRoute ? "route" : ""}`);
         }
         return lines.join('\n');
     }

@@ -4,14 +4,14 @@ import { randomAlphaString, sleepMsec } from '../common/util.js';
 import { JSONStringifyDeterministic } from '../common/crypto_util.js'
 import { getSignature, hexToPublicKey, verifySignature } from '../common/crypto_util.js';
 import SmartySwarmConnection from './SmartySwarmConnection.js';
+import { log } from '../common/log.js';
 
 class SwarmConnection {
-    constructor({keyPair, nodeId, swarmName, verbose, discoveryVerbose, nodeInfo, protocolVersion, opts}) {
+    constructor({keyPair, nodeId, swarmName, nodeInfo, protocolVersion, opts}) {
         this._keyPair = keyPair; // the keypair for signing messages (public key is same as node id)
         this._nodeId = nodeId; // The id of the node, determined by the public key in the keypair
         this._swarmName = swarmName; // The name of the swarm (related to the channel name)
         this._protocolVersion = protocolVersion;
-        this._verbose = verbose; // Verbosity level
         this._nodeInfo = nodeInfo; // Info about this node, like host and port
         this._peerConnections = {}; // Peer connections
         this._peerMessageListeners = {}; // listeners for messages coming in from peers
@@ -26,7 +26,6 @@ class SwarmConnection {
             swarmName,
             nodeId,
             nodeInfo,
-            verbose: discoveryVerbose, // verbosity for just the discovery/hyperswarm part
             protocolVersion // version of the kachery-p2p protocol
         });
         // Listen for new nodes in the swarm announcing their node info
@@ -75,9 +74,7 @@ class SwarmConnection {
         }
 
         if (peerId in this._peerConnections) {
-            if (this._verbose >= 50) {
-                console.info(`SWARM:: Setting incoming websocket connection for peer ${peerId}`);
-            }
+            log().info(`SWARM:: Setting incoming websocket connection for peer`, {peerId});
             // set the incoming connection
             this._peerConnections[peerId].setIncomingWebsocketConnection(connection);
             return;
@@ -137,9 +134,7 @@ class SwarmConnection {
     disconnectPeerConnection = (peerId) => {
         const pc = this.peerConnection(peerId);
         if (!pc) return;
-        if (this._verbose >= 1) {
-            console.info(`Disconnecting peer: ${peerId}`);
-        }
+        log().info(`Disconnecting peer`, {peerId});
         pc.disconnect();
         this._peerDiscoveryEngine.forgetNode(peerId);
         delete this._peerConnections[peerId];
@@ -148,16 +143,14 @@ class SwarmConnection {
     // IMPLEMENTATION /////////////////////////////////////////////////////////////
     async _sendMessageToPeer(peerId, msg) {
         if (!(peerId in this._peerConnections)) {
-            console.warn(`Unable to send message ... no peer connection to ${peerId}`);
+            log().warning(`Unable to send message ... no connection to peer`, {peerId});
             return false;
         }
-        if (this._verbose >= 100) {
-            if (msg.type === 'requestToNode') {
-                console.info(`Sending request to peer ${peerId.slice(0, 6)} ${msg.requestBody.type}`);
-            }
-            else {
-                console.info(`Sending message to peer ${peerId.slice(0, 6)} ${msg.type}`);
-            }
+        if (msg.type === 'requestToNode') {
+            log().info(`Sending request to peer`, {peerId, requestType: msg.requestBody.type});
+        }
+        else {
+            log().info(`Sending message to peer`, {peerId, messageType: msg.type});
         }
         // Form the signed message (which may need to get routed through other nodes in the swarm)
         const body = {
@@ -179,17 +172,13 @@ class SwarmConnection {
         if (signedMessage.route) {
             let index = signedMessage.route.indexOf(this._nodeId);
             if (index < 0) {
-                if (this._verbose >= 0) {
-                    console.warn(`Unexpected this node ${this._nodeId} is not found in route ${signedMessage.route.join(",")}`);
-                }
+                log().warning(`Unexpected. Node is not found in route`, {nodeId: this._nodeId, route: signedMessage.route});
                 return false;
             }
             if (index === (signedMessage.route.length - 1)) {
                 // I guess it's us!
                 if (this._nodeId !== toNodeId) {
-                    if (this._verbose >= 0) {
-                        console.warn(`Unexpected the final node in the route is not the toNodeId.`);
-                    }
+                    log().warning(`Unexpected. The final node in the route is not the toNodeId.`);
                     return false;
                 }
                 this._handleSignedMessageFromPeer({
@@ -200,15 +189,11 @@ class SwarmConnection {
             }
             const nextNodeId = signedMessage.route[index + 1];
             if (!(nextNodeId in this._peerConnections)) {
-                if (this._verbose >= 0) {
-                    console.warn(`Unexpected no node that is the next item in route: ${nextNodeId}`);
-                }
+                log().warning(`Unexpected. No node that is the next item in route`, {nextNodeId});
                 return false;
             }
             if (!(this._peerConnections[nextNodeId].hasWebsocketConnection())) {
-                if (this._verbose >= 0) {
-                    console.warn(`Unexpected no websocket connection to next item in route: ${nextNodeId}`);
-                }
+                log().warning(`Unexpected. No websocket connection to next item in route`, {nextNodeId});
                 return false;
             }
             this._peerConnections[nextNodeId].sendSignedMessage(signedMessage);
@@ -238,15 +223,12 @@ class SwarmConnection {
     
     _createPeerConnection(peerId) {
         if (peerId in this._peerConnections) return;
-        if (this._verbose >= 50) {
-            console.info(`SWARM:: Creating peer connection: ${peerId}`);
-        }
+        log().info(`SWARM:: Creating peer connection`, {peerId});
         const x = new PeerConnection({
             keyPair: this._keyPair,
             swarmName: this._swarmName,
             nodeId: this._nodeId,
             peerId,
-            verbose: this._verbose,
             protocolVersion: this._protocolVersion
         });
         
@@ -266,7 +248,7 @@ class SwarmConnection {
     }
     _handleSignedMessageFromPeer = async (msg) => {
         if (!verifySignature(msg.body, msg.signature, hexToPublicKey(msg.body.fromNodeId))) {
-            console.warn(`SWARM:: Unable to verify message from ${msg.body.fromNodeId}`);
+            log().warning(`SWARM:: Unable to verify message`, {fromNodeId: msg.body.fromNodeId});
             return;
         }
         if (msg.route) {
@@ -277,14 +259,10 @@ class SwarmConnection {
             this._handleMessageFromPeer(msg.body.fromNodeId, msg.body.message);
             return;
         }
-        if (this._verbose >= 0) {
-            console.warn(`Unexpected: message does not have route, and the toNodeId does not equal this one. ${msg.body.toNodeId} <> ${this._nodeId}`);
-        }
+        log().warning(`Unexpected: message does not have route, and the toNodeId does not equal this one`, {toNodeId: msg.body.toNodeId, nodeId: this._nodeId});
     }
     _handleMessageFromPeer = async (fromNodeId, msg) => {
-        if (this._verbose >= 100) {
-            console.info(`SWARM:: message from peer: ${fromNodeId.slice(0, 6)} ${msg.type}`);
-        }
+        log().info(`SWARM:: message from peer`, {fromNodeId, messageType: msg.type});
         if (msg.type === 'requestToNode') {
             if (msg.toNodeId === this._nodeId) {
                 const requestId = msg.requestId;
@@ -325,8 +303,7 @@ class SwarmConnection {
                             cb(fromNodeId, msg);
                         }
                         catch(err) {
-                            console.warn(err);
-                            console.warn('Error for message', fromNodeId, msg.type);
+                            log().warning('Error for message', {fromNodeId, messageType: msg.type, error: err.message});
                         }
                     });
                 }

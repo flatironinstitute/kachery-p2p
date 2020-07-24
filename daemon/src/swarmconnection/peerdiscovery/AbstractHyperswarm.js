@@ -1,5 +1,6 @@
 import hyperswarm from 'hyperswarm';
 import JsonSocket from 'json-socket';
+import { log } from '../../common/log.js';
 
 class AbstractHyperswarm {
     constructor(topic) {
@@ -26,9 +27,7 @@ class AbstractHyperswarm {
         //     console.info(`${this._swarmName}: Peer discovered: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`)
         // });
         this._hyperswarm.on('peer-rejected', peer => {
-            if (this._verbose >= 1) {
-                console.info(`${this._swarmName}: Peer rejected: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`)
-            }
+            log('discovery').info(`Peer rejected`, {host: peer.host, port: peer.port, local: peer.local});
         });
 
         this._hyperswarm.on('connection', (socket, details) => {
@@ -38,19 +37,14 @@ class AbstractHyperswarm {
                 jsonSocket = new JsonSocket(socket);
             }
             catch(err) {
-                if (this._verbose >= 1) {
-                    console.warn(err);
-                    console.warn('Problem creating JsonSocket. Closing socket.');
-                }
+                log('discovery').warning('Problem creating JsonSocket. Closing socket.');
                 socket.destroy();
                 return;
             }
             jsonSocket._socket = socket;
             const peer = details.peer;
             if (peer) {
-                if (this._verbose >= 1) {
-                    console.info(`${this._swarmName}: Connecting to peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`);
-                }
+                log('discovery').info(`Connecting to peer`, {host: peer.host, port: peer.port, local: peer.local});
                 // const pc = new PeerConnection(peer, jsonSocket);
                 // this._peerConnections[peerId] = pc;
             }
@@ -63,14 +57,12 @@ class AbstractHyperswarm {
             // safe
             const peer = info.peer;
             if (peer) {
-                if (this._verbose >= 1) {
-                    console.info(`${this._swarmName}: Disconnecting from peer: ${peer.host}:${peer.port}${peer.local ? " (local)" : ""}`);
-                }
+                log('discovery').info(`Disconnecting from peer`, {host: peer.host, port: peer.port, local: peer.local});
             }
         })
         this._hyperswarm.on('error', (err) => {
             // This is not documented in hyperswarm, but might be needed, not sure
-            console.warn('Hyperswarm error: ', err);
+            log('discovery').warning('Hyperswarm error: ', {error: err.message});
         })
     }
     onConnection(cb) {

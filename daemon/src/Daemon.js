@@ -5,12 +5,12 @@ import KacheryChannelConnection from './KacheryChannelConnection.js';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util.js';
 import FeedManager from './FeedManager.js';
 import WebsocketServer from './WebsocketServer.js';
-import swarm from 'hyperswarm';
+import { initializeLog, log } from './common/log.js';
 
-const PROTOCOL_VERSION = 'kachery-p2p-0.3.2'
+const PROTOCOL_VERSION = 'kachery-p2p-0.3.3'
 
 class Daemon {
-    constructor({ configDir, listenHost, listenPort, verbose, discoveryVerbose, opts }) {
+    constructor({ configDir, listenHost, listenPort, verbose, discoveryVerbose, label, opts }) {
         this._configDir = configDir; // Directory where config information is stored (including names and keys for feeds)
         this._listenHost = listenHost; // The host where we are listening
         this._listenPort = listenPort; // The port where we are listening
@@ -21,21 +21,21 @@ class Daemon {
         this._keyPair = {publicKey, privateKey}; // the keypair
         this._nodeId = publicKeyToHex(this._keyPair.publicKey); // get the node id from the public key
         this._kacheryChannelConnections = {}; // the channel (aka swarm) connections
-        this._verbose = verbose; // our verbosity level (non-negative integer)
-        this._discoveryVerbose = discoveryVerbose; // The verbosity level for discovery/hyperswarm part (zero means silent)
         this._halted = false; // Whether we have halted the daemon
 
         // The node info, that will be passed to other nodes in the swarms
         this._nodeInfo = {
             nodeId: this._nodeId,
+            label,
             host: listenHost,
             port: listenPort
         };
 
         // The feed manager -- each feed is a collection of append-only logs
-        this._feedManager = new FeedManager(this, {verbose: this._verbose});
+        this._feedManager = new FeedManager(this);
+        initializeLog(this._feedManager, {verbose: verbose, categoryOpts: {discovery: {verbose: discoveryVerbose}}});
 
-        console.info(`Verbose level: ${verbose}`);
+        log().info(`Starting daemon`, {configDir, listenHost, listenPort, verbose, discoveryVerbose, label, opts});
         if (this._listenPort) {
             // Create a new websocket server for listening for incoming peer connections on the channels/swarms
             this._websocketServer = new WebsocketServer();
@@ -44,7 +44,7 @@ class Daemon {
                 // swarmName is determined from the channel name
                 const {swarmName, nodeId, protocolVersion} = initialInfo;
                 if (protocolVersion !== this._protocolVersion) {
-                    console.warn(`Disconnecting incoming connection. Bad protocol version: ${protocolVersion} <> ${this._protocolVersion}`);
+                    log().warning(`Disconnecting incoming connection. Bad protocol version.`, {incomingProtocolVersion: protocolVersion, protocolVersion: this._protocolVersion});
                     connection.disconnect();
                     return;
                 }
@@ -52,17 +52,17 @@ class Daemon {
 
                 // some basic validation
                 if (!channelName) {
-                    console.warn(`Disconnecting incoming connection. Bad swarm name: ${swarmName}`);
+                    log().warning(`Disconnecting incoming connection. Bad swarm name.`, {swarmName});
                     connection.disconnect();
                     return;
                 }
                 if (!(channelName in this._kacheryChannelConnections)) {
-                    console.warn(`Disconnecting incoming connection. Not joined to channel: ${channelName}`);
+                    log().warning(`Disconnecting incoming connection. Not joined to channel.`, {channelName});
                     connection.disconnect();
                     return;
                 }
                 if (!nodeId) {
-                    console.warn(`Disconnecting incoming connection. Empty nodeId.`);
+                    log().warning(`Disconnecting incoming connection. Empty nodeId.`);
                     connection.disconnect();
                     return;
                 }
@@ -73,7 +73,7 @@ class Daemon {
             this._websocketServer.listen(listenPort);
         }
         else {
-            console.warn('Listen port is empty or zero. Not listening for incoming connections.');
+            log().warning('Listen port is empty or zero. Not listening for incoming connections.');
         }
 
         this._start();
@@ -91,12 +91,16 @@ class Daemon {
     joinChannel = async (channelName, opts) => await this._joinChannel(channelName, opts);
     // leave a channel
     leaveChannel = async (channelName, opts) => await this._leaveChannel(channelName, opts);
+    // return true if we have already joined the channel
+    hasJoinedChannel = (channelName) => (channelName in this._kacheryChannelConnections);
     // get the list of channel names we have joined
     joinedChannelNames = () => {return Object.keys(this._kacheryChannelConnections)};
     // get the state -- includes info about peers in swarms
     getState = () => (this._getState());
     // return the feed manager
     feedManager = () => (this._feedManager);
+    // return the log object
+    log = () => (this._log);
 
     // Find a file
     // returns on object:
@@ -124,18 +128,13 @@ class Daemon {
         try {
             opts = opts || {};
             if (channelName in this._kacheryChannelConnections) {
-                console.warn(`Cannot join channel. Already joined: ${channelName}`);
                 return;
             }
-            if (this._verbose >= 0) {
-                console.info(`Joining channel: ${channelName}`);
-            }
+            log().info(`Joining channel.`, {channelName});
             const x = new KacheryChannelConnection({
                 keyPair: this._keyPair,
                 nodeId: this._nodeId,
                 channelName,
-                verbose: this._verbose,
-                discoveryVerbose: this._discoveryVerbose,
                 feedManager: this._feedManager,
                 nodeInfo: this._nodeInfo,
                 protocolVersion: this._protocolVersion,
@@ -147,20 +146,17 @@ class Daemon {
             }
         }
         catch(err) {
-            console.warn(err);
-            console.warn(`Problem joining channel: ${channelName}`);
+            log().warning(`Problem joining channel.`, {channelName, error: err.message});
         }
     }
     _leaveChannel = async (channelName, opts) => {
         try {
             opts = opts || {};
             if (!(channelName in this._kacheryChannelConnections)) {
-                console.warn(`Cannot leave channel. Not joined: ${channelName}`);
+                log().warning(`Cannot leave channel. Not joined.`, {channelName});
                 return;
             }
-            if (this._verbose >= 0) {
-                console.info(`Leaving channel: ${channelName}`);
-            }
+            log().info(`Leaving channel,`, {channelName});
             await this._kacheryChannelConnections[channelName].leave();
             delete this._kacheryChannelConnections[channelName];
             if (!opts._skipUpdateConfig) {
@@ -168,8 +164,7 @@ class Daemon {
             }
         }
         catch(err) {
-            console.warn(err);
-            console.warn(`Problem leaving channel: ${channelName}`);
+            log().warning(`Problem leaving channel.`, {channelName, error: err.message});
         }
     }
 
@@ -201,12 +196,12 @@ class Daemon {
             onFinished: cb => {finishedCallbacks.push(cb)},
             cancel: handleCancel
         };
-        if (this._verbose >= 1) {
-            if (fileKey.type === 'liveFeed')
-                console.info(`find live feed: ${JSONStringifyDeterministic(fileKey)}`);
-            else
-                console.info(`find file: ${JSONStringifyDeterministic(fileKey)}`);
-        }
+
+        if (fileKey.type === 'liveFeed')
+            log().info(`Finding live feed`, {fileKey});
+        else
+            log().info(`Finding file`, {fileKey});
+
         const channelNames = Object.keys(this._kacheryChannelConnections);
         channelNames.forEach(channelName => {
             const kacheryChannelConnection = this._kacheryChannelConnections[channelName];
@@ -232,9 +227,7 @@ class Daemon {
 
     // returns {stream, cancel}
     _downloadFile = async ({channel, nodeId, fileKey, fileSize, opts}) => {
-        if (this._verbose >= 1) {
-            console.info(`downloadFile: ${channel} ${nodeId.slice(0, 8)} ${JSONStringifyDeterministic(fileKey)} ${fileSize}`);
-        }
+        log().info(`downloadFile`, {channel, nodeId, fileKey, fileSize});
         if (!(channel in this._kacheryChannelConnections)) {
             throw Error(`Cannot download file... not joined to channel: ${channel}`)
         }
@@ -243,9 +236,7 @@ class Daemon {
     }
     // returns {stream, cancel}
     _downloadFileBytes = async ({channel, nodeId, fileKey, startByte, endByte, opts}) => {
-        if (this._verbose >= 1) {
-            console.info(`downloadFileBytes: ${channel} ${nodeId.slice(0, 8)} ${JSONStringifyDeterministic(fileKey)} ${startByte} ${endByte}`);
-        }
+        log().info(`downloadFileBytes`, {channel, nodeId, fileKey, startByte, endByte});
         if (!(channel in this._kacheryChannelConnections)) {
             throw Error(`Cannot download file bytes... not joined to channel: ${channel}`)
         }
@@ -253,9 +244,7 @@ class Daemon {
         return await kacheryChannelConnection.downloadFile({nodeId, fileKey, startByte, endByte, opts});
     }
     _getLiveFeedSignedMessages = async ({channel, nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
-        if (this._verbose >= 1) {
-            console.info(`getLiveFeedSignedMessages: ${channel} ${nodeId.slice(0, 8)} ${feedId.slice(0, 8)} ${subfeedName} ${position}`);
-        }
+        log().info(`getLiveFeedSignedMessages`, {channel, nodeId, feedId, subfeedName, position});
         if (!(channel in this._kacheryChannelConnections)) {
             throw Error(`Cannot get live feed signed messages... not joined to channel: ${channel}`)
         }
@@ -264,9 +253,7 @@ class Daemon {
         return signedMessages;
     }
     _submitMessagesToLiveFeed = async ({channel, nodeId, feedId, subfeedName, messages}) => {
-        if (this._verbose >= 1) {
-            console.info(`submitMessagesToLiveFeed: ${channel} ${nodeId.slice(0, 8)} ${feedId.slice(0, 8)} ${subfeedName} ${messages.length}`);
-        }
+        log().info(`submitMessagesToLiveFeed`, {channel, nodeId, feedId, subfeedName, numMessages: messages.length});
         if (!(channel in this._kacheryChannelConnections)) {
             throw Error(`Cannot submit messages to live feed... not joined to channel: ${channel}`)
         }

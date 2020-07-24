@@ -74,6 +74,19 @@ def cat_file(uri, start, end):
         sys.stdout = old_stdout
         kp.load_bytes(uri=uri, start=start, end=end, write_to_stdout=True)
 
+@click.command(help="Print messages in a subfeed.")
+@click.argument('uri')
+def print_messages(uri):
+    sf = kp.load_subfeed(uri)
+    sf.print_messages()
+
+@click.command(help="Print messages in a subfeed.")
+def log():
+    f = kp.load_feed('kachery-p2p-daemon-log')
+    sf = f.get_subfeed('default')
+    sf.print_messages()
+
+
 @click.command(help="Start the daemon.")
 @click.option('--channel', multiple=True, help='Channel to join')
 @click.option('--verbose', default=0, help='Verbosity level')
@@ -98,15 +111,17 @@ def version():
     click.echo(f"This is kachery_p2p version {kp.__version__}.")
     exit()
 
+cli.add_command(cat_file)
+cli.add_command(find_file)
 cli.add_command(get_channels)
 cli.add_command(join_channel)
 cli.add_command(leave_channel)
-cli.add_command(find_file)
 cli.add_command(load_file)
-cli.add_command(cat_file)
+cli.add_command(log)
+cli.add_command(node_info)
+cli.add_command(print_messages)
 cli.add_command(start_daemon)
 cli.add_command(stop_daemon)
-cli.add_command(node_info)
 cli.add_command(version)
 
 if __name__ == "__main__":

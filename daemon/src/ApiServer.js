@@ -4,12 +4,13 @@ import http from 'http';
 import fs from 'fs';
 import JsonSocket from 'json-socket';
 import { sleepMsec } from './common/util.js';
+import { log } from './common/log.js';
 
 export default class ApiServer {
     // This is the API server for the local daemon
     // The local Python code communicates with the daemon
     // via this API
-    constructor(daemon, {verbose}) {
+    constructor(daemon) {
         this._daemon = daemon; // The kachery-p2p daemon
 
         this._stopper_callbacks = [];
@@ -22,9 +23,7 @@ export default class ApiServer {
 
         // /probe - check whether the daemon is up and running and return info such as the node ID
         this._app.get('/probe', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/probe');
-            }
+            log().info('/probe');
             try {
                 await this._apiProbe(req, res) 
             }
@@ -34,9 +33,7 @@ export default class ApiServer {
         });
         // /halt - halt the kachery-p2p daemon (stops the server process)
         this._app.get('/halt', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/halt');
-            }
+            log().info('/halt');
             await waitMsec(100);
             try {
                 await this._apiHalt(req, res)
@@ -49,9 +46,7 @@ export default class ApiServer {
         });
         // /getState - return the state of the daemon, with information about the channels and peers
         this._app.post('/getState', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/getState');
-            }
+            log().info('/getState');
             try {
                 await this._apiGetState(req, res)
             }
@@ -61,9 +56,7 @@ export default class ApiServer {
         });
         // /joinChannel - join a channel for lookups
         this._app.post('/joinChannel', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/joinChannel');
-            }
+            log().info('/joinChannel');
             try {
                 await this._apiJoinChannel(req, res)
             }
@@ -73,9 +66,7 @@ export default class ApiServer {
         });
         // /leaveChannel - leave a previously-joined channel
         this._app.post('/leaveChannel', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/leaveChannel');
-            }
+            log().info('/leaveChannel');
             try {
                 await this._apiLeaveChannel(req, res)
             }
@@ -85,9 +76,7 @@ export default class ApiServer {
         });
         // /findFile - find a file (or feed) in the remote nodes. May return more than one.
         this._app.post('/findFile', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/findFile');
-            }
+            log().info('/findFile');
             try {
                 await this._apiFindFile(req, res)
             }
@@ -97,9 +86,7 @@ export default class ApiServer {
         });
         // /downloadFile - download a previously-found file from a remote node
         this._app.post('/downloadFile', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/downloadFile');
-            }
+            log().info('/downloadFile');
             try {
                 await this._apiDownloadFile(req, res)
             }
@@ -109,9 +96,7 @@ export default class ApiServer {
         });
         // /downloadFile - download a chunk of a previously-found file from a remote node
         this._app.post('/downloadFileBytes', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/downloadFileBytes');
-            }
+            log().info('/downloadFileBytes');
             try {
                 await this._apiDownloadFileBytes(req, res)
             }
@@ -121,9 +106,7 @@ export default class ApiServer {
         });
         // /feed/createFeed - create a new writeable feed on this node
         this._app.post('/feed/createFeed', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/createFeed');
-            }
+            log().info('/feed/createFeed');
             try {
                 await this._feedApiCreateFeed(req, res)
             }
@@ -133,9 +116,7 @@ export default class ApiServer {
         });
         // /feed/deleteFeed - delete feed on this node
         this._app.post('/feed/deleteFeed', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/deleteFeed');
-            }
+            log().info('/feed/deleteFeed');
             try {
                 await this._feedApiDeleteFeed(req, res)
             }
@@ -145,9 +126,7 @@ export default class ApiServer {
         });
         // /feed/getFeedId - lookup the ID of a local feed based on its name
         this._app.post('/feed/getFeedId', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/getFeedId');
-            }
+            log().info('/feed/getFeedId');
             try {
                 await this._feedApiGetFeedId(req, res)
             }
@@ -157,115 +136,101 @@ export default class ApiServer {
         });
         // /feed/appendMessages - append messages to a local writeable subfeed
         this._app.post('/feed/appendMessages', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/appendMessages');
-            }
+            log().info('/feed/appendMessages');
             try {
                 await this._feedApiAppendMessages(req, res)
             }
             catch(err) {
-                console.warn(err);
+                log().warning('Error in appendMessages', {error: err.message});
                 res.status(500).send('Error appending messages.');
             }
         });
         // /feed/submitMessages - submit messages to a remote live subfeed (must have permission)
         this._app.post('/feed/submitMessages', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/submitMessages');
-            }
+            log().info('/feed/submitMessages');
             try {
                 await this._feedApiSubmitMessages(req, res)
             }
             catch(err) {
-                console.warn(err);
+                log().warning('Error in submitMessages', {error: err.message});
                 res.status(500).send(`Error appending messages: ${err.message}`);
             }
         });
         // /feed/getMessages - get messages from a local or remote subfeed
         this._app.post('/feed/getMessages', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/getMessages');
-            }
+            // important not to log this because then we'll have a feedback loop if we are listening to the log by getting the messages!
+            // log().info('/feed/getMessages');
             try {
                 await this._feedApiGetMessages(req, res)
             }
             catch(err) {
+                log().warning('Error in getMessages', {error: err.message});
                 res.status(500).send('Error getting messages.');
             }
         });
         // /feed/getSignedMessages - get signed messages from a local or remote subfeed
         this._app.post('/feed/getSignedMessages', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/getSignedMessages');
-            }
+            log().info('/feed/getSignedMessages');
             try {
                 await this._feedApiGetSignedMessages(req, res)
             }
             catch(err) {
+                log().warning('Error in getSignedMessages', {error: err.message});
                 res.status(500).send('Error getting signed messages.');
             }
         });
         // /feed/getNumMessages - get number of messages in a subfeed
         this._app.post('/feed/getNumMessages', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/getNumMessages');
-            }
+            log().info('/feed/getNumMessages');
             try {
                 await this._feedApiGetNumMessages(req, res)
             }
             catch(err) {
-                console.error(err);
+                log().warning('Error in getNumMessages', {error: err.message});
                 res.status(500).send('Error getting num. messages.');
             }
         });
         // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
         this._app.post('/feed/getFeedInfo', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/getFeedInfo');
-            }
+            log().info('/feed/getFeedInfo');
             try {
                 await this._feedApiGetFeedInfo(req, res)
             }
             catch(err) {
-                console.error(err);
+                log().warning('Error in getFeedInfo', {error: err.message});
                 res.status(500).send('Error getting feed info.');
             }
         });
         // /feed/getAccessRules - get access rules for a local writeable subfeed
         this._app.post('/feed/getAccessRules', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/getAccessRules');
-            }
+            log().info('/feed/getAccessRules');
             try {
                 await this._feedApiGetAccessRules(req, res)
             }
             catch(err) {
-                console.error(err);
+                log().warning('Error in getAccessRules', {error: err.message});
                 res.status(500).send('Error getting access rules.');
             }
         });
         // /feed/setAccessRules - set access rules for a local writeable subfeed
         this._app.post('/feed/setAccessRules', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/setAccessRules');
-            }
+            log().info('/feed/setAccessRules');
             try {
                 await this._feedApiSetAccessRules(req, res)
             }
             catch(err) {
-                console.error(err);
+                log().warning('Error in setAccessRules', {error: err.message});
                 res.status(500).send('Error setting access rules.');
             }
         });
         // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
         this._app.post('/feed/watchForNewMessages', async (req, res) => {
-            if (verbose >= 10) {
-                console.info('/feed/watchForNewMessages');
-            }
+            log().info('/feed/watchForNewMessages');
             try {
                 await this._feedApiWatchForNewMessages(req, res)
             }
             catch(err) {
+                log().warning('Error in watchForNewMessages', {error: err.message});
                 res.status(500).send('Error watching for new messages.');
             }
         });
@@ -458,19 +423,19 @@ export default class ApiServer {
     }
     // Helper function for returning http request with an error response
     async _errorResponse(req, res, code, errstr) {
-        console.info(`Responding with error: ${code} ${errstr}`);
+        log().info(`Responding with error: ${code} ${errstr}`);
         try {
             res.status(code).send(errstr);
         }
         catch(err) {
-            console.warn(`Problem sending error: ${err.message}`);
+            log().warning(`Problem sending error`, {error: err.message});
         }
         await waitMsec(100);
         try {
             req.connection.destroy();
         }
         catch(err) {
-            console.warn(`Problem destroying connection: ${err.message}`);
+            log().warning('Problem destroying connection', {error: err.message});
         }
     }
     // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
@@ -525,5 +490,5 @@ async function start_http_server(app, listen_port, stopper) {
         app.server.close();
     });
     await app.server.listen(listen_port);
-    console.info(`API server is running ${app.protocol} on port ${app.port}`);
+    log().info('API server is running', {protocol: app.protocol, port: app.port}, {print: true});
 }

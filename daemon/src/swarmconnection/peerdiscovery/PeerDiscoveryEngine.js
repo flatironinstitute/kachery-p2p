@@ -1,17 +1,17 @@
 import HyperswarmConnection from './HyperswarmConnection.js';
 import { sleepMsec } from '../../common/util.js';
 import { JSONStringifyDeterministic } from '../../common/crypto_util.js';
+import { log } from '../../common/log.js';
 
 class PeerDiscoveryEngine {
-    constructor({keyPair, swarmName, nodeId, nodeInfo, verbose, protocolVersion}) {
+    constructor({keyPair, swarmName, nodeId, nodeInfo, protocolVersion}) {
         this._keyPair = keyPair; // The keypair for signing messages -- the public key corresponds to the node ID
         this._swarmName = swarmName; // The swarm name (related to the channel)
         this._nodeId = nodeId; // The node ID (determined by the public key in the keypair)
         this._nodeInfo = nodeInfo; // The information to be reported to the other nodes in the swarm -- like the host and port (for listening for websockets)
-        this._verbose = verbose; // Integer verbosity level. 0 means silent
         this._onPeerNodeInfoChangedCallbacks = []; // When a peer announces new information (nodeInfo) about itself
         this._halt = false; // Whether we have halted this engine via leave
-        this._hyperswarmConnection = new HyperswarmConnection({keyPair, swarmName, nodeId, verbose, protocolVersion}); // Interface to hyperswarm
+        this._hyperswarmConnection = new HyperswarmConnection({keyPair, swarmName, nodeId, protocolVersion}); // Interface to hyperswarm
         this._peerNodeInfos = {}; // The infos received from the peer nodes (like host, port, local)
 
         // listen to incoming messages
@@ -46,7 +46,7 @@ class PeerDiscoveryEngine {
         if (msg.type === 'announce') {
             // peer is announcing its node info
             if (msg.nodeId !== fromNodeId) {
-                console.warn('DISCOVERY: Unexpected: msg.nodeId <> fromNodeId', msg.nodeId, fromNodeId);
+                log('discovery').warning('DISCOVERY: Unexpected: msg.nodeId <> fromNodeId', {nodeId: msg.nodeId, fromNodeId});
                 return;
             }
             // todo: other validation
