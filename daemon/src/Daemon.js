@@ -7,7 +7,7 @@ import FeedManager from './FeedManager.js';
 import WebsocketServer from './WebsocketServer.js';
 import { initializeLog, log } from './common/log.js';
 
-const PROTOCOL_VERSION = 'kachery-p2p-0.3.4'
+const PROTOCOL_VERSION = 'kachery-p2p-0.3.5'
 
 class Daemon {
     constructor({ configDir, listenHost, listenPort, verbose, discoveryVerbose, label, opts }) {

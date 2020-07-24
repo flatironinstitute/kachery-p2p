@@ -103,47 +103,75 @@ class PeerConnection {
     //         this.sendMessage(msg);
     //     });
     // }
-    async _tryOutgoingWebsocketConnection() {
-        const peerNodeInfo = this._peerNodeInfo;
-        if ((peerNodeInfo) && (peerNodeInfo.port)) {
-            let host = peerNodeInfo.host;
-            let port = peerNodeInfo.port;
-            if (peerNodeInfo.local) {
-                host = 'localhost';
-            }
-            if (!host) return;
-            let C;
-            try {
-                C = new WebsocketConnection({ host, port });
-            }
-            catch(err) {
-                log().warning(`Problem establishing outgoing websocket connection`, {host, port});
-                return;
-            }
-            C.onConnect(() => {
-                log().info(`Outgoing connection established`, {peerId: this._peerId});
-                C.sendMessage({
-                    type: 'initial',
-                    initialInfo: {
-                        swarmName: this._swarmName,
-                        protocolVersion: this._protocolVersion,
-                        nodeId: this._nodeId
+
+    // try outgoing connection and return true or false
+    async tryOutgoingWebsocketConnection() {
+        return new Promise((resolve, reject) => {
+            const peerNodeInfo = this._peerNodeInfo;
+            if ((peerNodeInfo) && (peerNodeInfo.port)) {
+                let host = peerNodeInfo.host;
+                let port = peerNodeInfo.port;
+                if (peerNodeInfo.local) {
+                    host = 'localhost';
+                }
+                if (!host) return;
+                let C;
+                try {
+                    C = new WebsocketConnection({ host, port });
+                }
+                catch(err) {
+                    log().info(`Problem establishing outgoing websocket connection`, {peerId: this._peerId, host, port});
+                    resolve(false);
+                    return;
+                }
+                let connected = false;
+                let errored = false;
+                C.onError(() => {
+                    errored = true;
+                    if (connected) {
+                        // presumably we'll get a disconnect below
+                        return;
                     }
+                    resolve(false);
                 });
-                C.onMessage(msg => {
-                    this._handleMessage(msg);
-                });
-                C.onDisconnect(() => {
-                    if (this._outgoingWebsocketConnection === C) {
-                        log().info(`Outgoing connection disconnected`, {peerId: this._peerId});
-                        this._outgoingWebsocketConnection = null;
+                C.onConnect(() => {
+                    if (errored) {
+                        log().info(`Unexpected. We connected, but also errored.`, {peerId: this._peerId});
+                        return;
                     }
+                    connected = true;
+                    log().info(`Outgoing connection established`, {peerId: this._peerId});
+                    try {
+                        C.sendMessage({
+                            type: 'initial',
+                            initialInfo: {
+                                swarmName: this._swarmName,
+                                protocolVersion: this._protocolVersion,
+                                nodeId: this._nodeId
+                            }
+                        });
+                    }
+                    catch(err) {
+                        log().warning(`Problem sending initial message in outgoing connection`, {peerId: this._peerId});
+                        resolve(false);
+                        return;
+                    }
+                    C.onMessage(msg => {
+                        this._handleMessage(msg);
+                    });
+                    C.onDisconnect(() => {
+                        if (this._outgoingWebsocketConnection === C) {
+                            log().info(`Outgoing connection disconnected`, {peerId: this._peerId});
+                            this._outgoingWebsocketConnection = null;
+                        }
+                    });
+                    this._outgoingWebsocketConnection = C;
+                    this._onWebsocketConnectionCallbacks.forEach(cb => cb());
+                    resolve(true);
+                    // this._sendQueuedMessages();
                 });
-                this._outgoingWebsocketConnection = C;
-                this._onWebsocketConnectionCallbacks.forEach(cb => cb());
-                // this._sendQueuedMessages();
-            });
-        }
+            }
+        });
     }
     async _start() {
         let timeLastOutgoingWebsocketTry = new Date();
@@ -154,7 +182,7 @@ class PeerConnection {
                 if ((this._scheduleOutgoingWebsocketConnection) || (elapsed > 5000)) {
                     timeLastOutgoingWebsocketTry = new Date();
                     this._scheduleOutgoingWebsocketConnection = false;
-                    await this._tryOutgoingWebsocketConnection();
+                    await this.tryOutgoingWebsocketConnection();
                 }
             }
             await sleepMsec(100);

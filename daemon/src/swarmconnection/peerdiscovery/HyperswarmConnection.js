@@ -74,6 +74,7 @@ class HyperswarmConnection {
             type: 'initial',
             from: details.client ? 'server' : 'client',
             nodeId: this._nodeId,
+            swarmName: this._swarmName,
             protocolVersion: this._protocolVersion
         };
         const initialSignature = getSignature(initialBody, this._keyPair);
@@ -93,6 +94,11 @@ class HyperswarmConnection {
             }
             if (msg.body.type !== 'initial') {
                 log('discovery').warning('HYPERSWARM:: Unexpected initial message from peer connection. Closing socket.');
+                socket.destroy();
+                return;
+            }
+            if (JSONStringifyDeterministic(msg.body.swarmName) !== JSONStringifyDeterministic(this._swarmName)) {
+                log('discovery').warning('HYPERSWARM:: Incorrect swarm name in initial message. Closing socket.', {fromNodeId, fromSwarmName: msg.body.swarmName || null, swarmName: this._swarmName});
                 socket.destroy();
                 return;
             }
@@ -136,6 +142,12 @@ class HyperswarmConnection {
                 this._onPeerConnectionCallbacks.forEach(cb => cb(msg.body.nodeId));
                 peerConnection.onSignedMessage((msg2, details) => {
                     const fromNodeId = msg2.body.fromNodeId;
+                    const swarmName = msg2.body.swarmName;
+                    if (JSONStringifyDeterministic(swarmName) !== JSONStringifyDeterministic(this._swarmName)) {
+                        log('discovery').warning('HYPERSWARM:: Incorrect swarm name. Closing socket.', {fromNodeId, fromSwarmName: swarmName || null, swarmName: this._swarmName});
+                        socket.destroy();
+                        return;
+                    }
                     if (!verifySignature(msg2.body, msg2.signature, hexToPublicKey(fromNodeId))) {
                         log('discovery').warning('HYPERSWARM:: Problem verifying signature. Closing socket.', {fromNodeId});
                         socket.destroy();
@@ -248,6 +260,7 @@ class HyperswarmConnection {
             messageId: randomAlphaString(10),
             fromNodeId: this._nodeId,
             toNodeId,
+            swarmName: this._swarmName,
             message: messageBody
         }
         const signature = getSignature(body, this._keyPair);
@@ -264,9 +277,10 @@ class HyperswarmConnection {
     }
     sendMessageToAllNodes = (message) => {
         const body = {
+            messageId: randomAlphaString(10),
             fromNodeId: this._nodeId,
             toNodeId: 'all',
-            messageId: randomString(10),
+            swarmName: this._swarmName,
             message
         };
         const signature = getSignature(body, this._keyPair);

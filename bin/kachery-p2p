@@ -91,7 +91,7 @@ def log():
 @click.option('--channel', multiple=True, help='Channel to join')
 @click.option('--verbose', default=0, help='Verbosity level')
 @click.option('--dverbose', default=0, help='Discovery verbosity level')
-@click.option('--method', default='npx', help='Method for starting daemon: npx (default), dev')
+@click.option('--method', default='npx', help='Method for starting daemon: npx (default), npm, or dev')
 @click.option('--host', default='', help='IP for connecting to this daemon')
 @click.option('--port', default=0, help='Port to listen on (0 means do not listen)')
 def start_daemon(method, channel, verbose, dverbose, host, port):

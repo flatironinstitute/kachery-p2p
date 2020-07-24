@@ -203,20 +203,35 @@ def start_daemon(*, port=0, method='npx', channels=[], verbose=0, dverbose=0, ho
         start_args.append(f'--host {host}')
     start_args.append(f'--port {port}')
 
-    if method == 'npx':
+    if (method == 'npx') or (method == 'npm'):
         try:
             subprocess.check_call(['npx', 'check-node-version', '--print', '--node', '>=12'])
         except:
             raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
         
-        ss = ShellScript(f'''
-        #!/bin/bash
-        set -ex
+        npm_package = 'kachery-p2p-daemon@0.3.5'
 
-        export KACHERY_P2P_API_PORT="{api_port}"
-        export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-        exec npx kachery-p2p-daemon@0.3.4 start {' '.join(start_args)}
-        ''')
+        if method == 'npx':
+            ss = ShellScript(f'''
+            #!/bin/bash
+            set -ex
+
+            export KACHERY_P2P_API_PORT="{api_port}"
+            export KACHERY_P2P_CONFIG_DIR="{config_dir}"
+            exec npx {npm_package} start {' '.join(start_args)}
+            ''')
+        elif method == 'npm':
+            ss = ShellScript(f'''
+            #!/bin/bash
+            set -ex
+
+            export KACHERY_P2P_API_PORT="{api_port}"
+            export KACHERY_P2P_CONFIG_DIR="{config_dir}"
+            npm install -g {npm_package}
+            exec kachery-p2p-daemon start {' '.join(start_args)}
+            ''')
+        else:
+            raise Exception(f'Unexpected method: {method}')
         ss.start()
         try:
             ss.wait()

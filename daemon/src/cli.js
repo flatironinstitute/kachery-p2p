@@ -10,7 +10,7 @@ import ApiServer from './ApiServer.js';
 process.on('uncaughtException', function (err) {
   // This is important because utp-native was sporadically giving the following error and crashing:
   /*
-  
+
   /home/root/.npm/_npx/19496/lib/node_modules/kachery-p2p-daemon/node_modules/utp-native/lib/connection.js:238
   const err = new Error(str)               ^
   Error: UTP_ECONNRESET
@@ -24,7 +24,7 @@ process.on('uncaughtException', function (err) {
 
   */
   console.warn(err.stack);
-  console.log('Caught exception: ', err);
+  console.log('Uncaught exception: ', err);
 });
 
 function main() {

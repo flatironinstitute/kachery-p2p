@@ -18,6 +18,8 @@ class SwarmConnection {
         this._onPeerRequestCallbacks = []; // callbacks for requests coming in from peers
         this._halt = false;
         this._opts = opts;
+        this._lastAnnounceTimestamps = {};
+        this._handledBroadcastMessageIds = {};
         this._smarty = new SmartySwarmConnection(this);
 
         // the discovery engine!
@@ -30,7 +32,12 @@ class SwarmConnection {
         });
         // Listen for new nodes in the swarm announcing their node info
         this._peerDiscoveryEngine.onPeerNodeInfoChanged(({peerId, peerNodeInfo}) => {
-            this._handlePeerAnnounce({peerId, peerNodeInfo});
+            if (peerId in this._peerConnections) {
+                this._peerConnections[peerId].setPeerNodeInfo(peerNodeInfo);
+            }
+            else {
+                this._handleNewPeerAnnounce({peerId, peerNodeInfo});
+            }
         });
 
         // Start the loop
@@ -67,7 +74,7 @@ class SwarmConnection {
         console.info(`${numPeers} ${numPeers === 1 ? "peer" : "peers"}`);
     }
     // Set an incoming peer websocket connection
-    setIncomingPeerWebsocketConnection(peerId, connection) {
+    setIncomingPeerWebsocketConnection(peerId, websocketConnection) {
         // Create the connection if needed
         if (!(peerId in this._peerConnections)) {
             this._createPeerConnection(peerId);
@@ -76,12 +83,12 @@ class SwarmConnection {
         if (peerId in this._peerConnections) {
             log().info(`SWARM:: Setting incoming websocket connection for peer`, {peerId});
             // set the incoming connection
-            this._peerConnections[peerId].setIncomingWebsocketConnection(connection);
+            this._peerConnections[peerId].setIncomingWebsocketConnection(websocketConnection);
             return;
         }
         else {
-            // we couldn't create it, so let's disconnect
-            connection.disconnect();
+            // we couldn't create it (not expected), so let's disconnect
+            websocketConnection.disconnect();
         }
     }
     // Create a new listener for messages coming from a peer
@@ -105,9 +112,21 @@ class SwarmConnection {
     }
     // Send a message to all peers
     sendMessageToAllPeers(msg) {
+        const body = {
+            broadcastMessageId: randomAlphaString(10),
+            fromNodeId: this._nodeId,
+            message: msg
+        };
         for (let peerId in this._peerConnections) {
             // do not await... send them simultaneously
-            this.sendMessageToPeer(peerId, msg);
+            let pc = this._peerConnections[peerId];
+            if (pc.hasWebsocketConnection()) {
+                this.sendMessageToPeer(peerId, {
+                    type: 'broadcast',
+                    body,
+                    signature: getSignature(body, this._keyPair)
+                });
+            }
         }
     }
     // Send a message to a peer
@@ -131,7 +150,7 @@ class SwarmConnection {
         const route = await this._smarty.which_route_should_i_use_to_send_a_message_to_this_peer(peerId, {calculateIfNeeded: false});
         return route ? true : false;
     }
-    disconnectPeerConnection = (peerId) => {
+    disconnectPeer = (peerId) => {
         const pc = this.peerConnection(peerId);
         if (!pc) return;
         log().info(`Disconnecting peer`, {peerId});
@@ -148,6 +167,9 @@ class SwarmConnection {
         }
         if (msg.type === 'requestToNode') {
             log().info(`Sending request to peer`, {peerId, requestType: msg.requestBody.type});
+        }
+        else if (msg.type === 'broadcast') {
+            log().info(`Broadcasting message to peer`, {peerId, messageType: msg.body.message.type});
         }
         else {
             log().info(`Sending message to peer`, {peerId, messageType: msg.type});
@@ -236,15 +258,20 @@ class SwarmConnection {
             this._handleSignedMessageFromPeer(msg);
         });
         this._peerConnections[peerId] = x;
+        this._lastAnnounceTimestamps[peerId] = new Date();
     }
 
-    _handlePeerAnnounce({peerId, peerNodeInfo}) {
-        if (!(peerId in this._peerConnections)) {
-            this._createPeerConnection(peerId);
-        }
+    _handleNewPeerAnnounce({peerId, peerNodeInfo}) {
         if (peerId in this._peerConnections) {
-            this._peerConnections[peerId].setPeerNodeInfo(peerNodeInfo);
+            log().warning('Unexpected in handleNewPeerAnnounce. Already have peer connection.', {peerId});
+            return;
         }
+        this._createPeerConnection(peerId);
+        this._peerConnections[peerId].setPeerNodeInfo(peerNodeInfo);
+        this.sendMessageToPeer(peerId, {
+            type: 'announcing',
+            nodeInfo: this._nodeInfo
+        });
     }
     _handleSignedMessageFromPeer = async (msg) => {
         if (!verifySignature(msg.body, msg.signature, hexToPublicKey(msg.body.fromNodeId))) {
@@ -287,11 +314,52 @@ class SwarmConnection {
                 });
             }
         }
+        else if (msg.type === 'broadcast') {
+            const broadcastMessageId = msg.body.broadcastMessageId;
+            const originalFromNodeId = msg.body.fromNodeId;
+            const message = msg.body.message;
+            const signature = msg.signature;
+            if (this._handledBroadcastMessageIds[broadcastMessageId]) {
+                return;
+            }
+            if (!verifySignature(msg.body, signature, hexToPublicKey(originalFromNodeId))) {
+                log().warning('Problem verifying signature in broadcast message.', {fromNodeId, originalFromNodeId});
+                return;
+            }
+            // todo: delete these after a period of time
+            this._handledBroadcastMessageIds[broadcastMessageId] = true;
+            this._handleMessageFromPeer(originalFromNodeId, message);
+            for (let peerId in this._peerConnections) {
+                if ((peerId !== fromNodeId) && (peerId !== originalFromNodeId)) {
+                    // do not await... send them simultaneously
+                    let pc = this._peerConnections[peerId];
+                    if (pc.hasWebsocketConnection()) {
+                        this.sendMessageToPeer(peerId, {
+                            type: 'broadcast',
+                            body: msg.body,
+                            signature: msg.signature
+                        });
+                    }
+                }
+            }
+        }
+        else if (msg.type === 'announcing') {
+            if (!msg.nodeInfo) {
+                log().warning('Unexpected. No nodeInfo in announcing message', {fromNodeId});
+                return;
+            }
+            this._lastAnnounceTimestamps[fromNodeId] = new Date();
+            // todo: validate the node info
+            if (fromNodeId in this._peerConnections) {
+                this._peerConnections[fromNodeId].setPeerNodeInfo(msg.nodeInfo);
+            }
+            else {
+                this._handleNewPeerAnnounce({peerId: fromNodeId, peerNodeInfo: msg.nodeInfo});
+            }
+        }
         else if (msg.type === 'leaving') {
             if (fromNodeId in this._peerConnections) {
-                this._peerConnections[fromNodeId].disconnect();
-                this._peerDiscoveryEngine.forgetNode(fromNodeId);
-                delete this._peerConnections[fromNodeId];
+                this.disconnectPeer(fromNodeId);
             }
         }
         else {
@@ -408,7 +476,38 @@ class SwarmConnection {
             cancel: () => {handleFinished(); listener.cancel();}
         }
     }
+    async _startAnnouncing() {
+        await sleepMsec(100);
+        while (true) {
+            if (this._halt) return;
+
+            this.sendMessageToAllPeers({
+                type: 'announcing',
+                nodeInfo: this._nodeInfo
+            });
+
+            await sleepMsec(10000);
+        }
+    }
+    async _startCheckingTimeouts() {
+        await sleepMsec(100);
+        while (true) {
+            if (this._halt) return;
+
+            for (let peerId in this._peerConnections) {
+                const elapsed = (new Date()) - this._lastAnnounceTimestamps[peerId];
+                if (elapsed > 30000) {
+                    log().info(`Disconnecting peer due to timeout`, {peerId});
+                    this.disconnectPeer(peerId);
+                }
+            }
+
+            await sleepMsec(1000);
+        }
+    }
     async _start() {
+        this._startAnnouncing();
+        this._startCheckingTimeouts();
         await sleepMsec(100);
         while (true) {
             if (this._halt) return;

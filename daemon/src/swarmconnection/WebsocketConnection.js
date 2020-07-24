@@ -9,6 +9,7 @@ class WebsocketConnection {
         this._queuedMessages = [];
         this._onMessageCallbacks = [];
         this._onConnectCallbacks = [];
+        this._onErrorCallbacks = [];
         this._onDisconnectCallbacks = [];
         this._isOpen = false;
         this._isClosed = false;
@@ -26,6 +27,7 @@ class WebsocketConnection {
         });
 
         this._ws.on('error', () => {
+            this._onErrorCallbacks.forEach(cb => cb());
             // this is important so we don't throw an exception
             // question: do we need to do something here? will 'close' be called also?
         });
@@ -42,6 +44,9 @@ class WebsocketConnection {
     }
     onConnect(cb) {
         this._onConnectCallbacks.push(cb);
+    }
+    onError(cb) {
+        this._onErrorCallbacks.push(cb);
     }
     onMessage(cb) {
         this._onMessageCallbacks.push(cb);
