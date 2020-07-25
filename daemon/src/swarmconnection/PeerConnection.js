@@ -12,9 +12,11 @@ class PeerConnection {
         this._peerNodeInfo = null;
         this._incomingWebsocketConnection = null;
         this._outgoingWebsocketConnection = null;
+        this._incomingUdpConnection = null;
         this._scheduleOutgoingWebsocketConnection = false;
         this._onSignedMessageCallbacks = [];
         this._onWebsocketConnectionCallbacks = [];
+        this._onUdpConnectionCallbacks = [];
         this._routes = {};
         this._halt = false;
         this._protocolVersion = protocolVersion;
@@ -28,8 +30,14 @@ class PeerConnection {
     hasOutgoingWebsocketConnection() {
         return this._outgoingWebsocketConnection ? true : false;
     }
+    hasIncomingUdpConnection() {
+        return this._incomingUdpConnection ? true : false;
+    }
     hasWebsocketConnection() {
         return this.hasIncomingWebsocketConnection() || this.hasOutgoingWebsocketConnection();
+    }
+    hasUdpConnection() {
+        return this.hasIncomingUdpConnection();
     }
     setPeerNodeInfo(peerNodeInfo) {
         if ((this._peerNodeInfo) && (JSONStringifyDeterministic(peerNodeInfo) === JSONStringifyDeterministic(this._peerNodeInfo))) {
@@ -52,18 +60,39 @@ class PeerConnection {
         this._routes = routes;
     }
     setIncomingWebsocketConnection(connection) {
-        log().info(`Incoming connection established`, {peerId: this._peerId});
+        log().info(`Incoming websocket connection established`, {peerId: this._peerId});
+        if (this._incomingWebsocketConnection) {
+            this._incomingWebsocketConnection.disconnect();
+        }
         this._incomingWebsocketConnection = connection;
         connection.onMessage(msg => {
             this._handleMessage(msg);
         });
         connection.onDisconnect(() => {
             if (this._incomingWebsocketConnection === connection) {
-                log().info(`Incoming connection disconnected`, {peerId: this._peerId});
+                log().info(`Incoming websocket connection disconnected`, {peerId: this._peerId});
                 this._incomingWebsocketConnection = null;
             }
         });
         this._onWebsocketConnectionCallbacks.forEach(cb => cb());
+        // this._sendQueuedMessages();
+    }
+    setIncomingUdpConnection(connection) {
+        log().info(`Incoming udp connection established`, {peerId: this._peerId});
+        if (this._incomingUdpConnection) {
+            this._incomingUdpConnection.disconnect();
+        }
+        this._incomingUdpConnection = connection;
+        connection.onMessage(msg => {
+            this._handleMessage(msg);
+        });
+        connection.onDisconnect(() => {
+            if (this._incomingUdpConnection === connection) {
+                log().info(`Incoming udp connection disconnected`, {peerId: this._peerId});
+                this._incomingUdpConnection = null;
+            }
+        });
+        this._onUdpConnectionCallbacks.forEach(cb => cb());
         // this._sendQueuedMessages();
     }
     onSignedMessage(cb) {
@@ -72,12 +101,18 @@ class PeerConnection {
     onWebsocketConnection(cb) {
         this._onWebsocketConnectionCallbacks.push(cb);
     }
+    onUdpConnection(cb) {
+        this._onUdpConnectionCallbacks.push(cb);
+    }
     sendSignedMessage(msg) {
         if (this._incomingWebsocketConnection) {
             this._incomingWebsocketConnection.sendMessage(msg);
         }
         else if (this._outgoingWebsocketConnection) {
             this._outgoingWebsocketConnection.sendMessage(msg);
+        }
+        else if (this._incomingUdpConnection) {
+            this._incomingUdpConnection.sendMessage(msg);
         }
         else {
             throw Error('Unable to send message to peer. No connections available.')
@@ -91,6 +126,9 @@ class PeerConnection {
         if (this._outgoingWebsocketConnection) {
             this._outgoingWebsocketConnection.disconnect();
         }
+        if (this._incomingUdpConnection) {
+            this._incomingUdpConnection.disconnect();
+        }
         this._halt = true;
     }
     _handleMessage = (msg) => {
@@ -103,6 +141,8 @@ class PeerConnection {
     //         this.sendMessage(msg);
     //     });
     // }
+
+    // todo: try outgoing udp connection
 
     // try outgoing connection and return true or false
     async tryOutgoingWebsocketConnection() {

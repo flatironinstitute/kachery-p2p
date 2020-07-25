@@ -48,6 +48,10 @@ class KacheryChannelConnection {
     setIncomingPeerWebsocketConnection(peerId, connection) {
         this._swarmConnection.setIncomingPeerWebsocketConnection(peerId, connection);
     }
+    // Set an incoming udp connection for a peer
+    setIncomingPeerUdpConnection(peerId, connection) {
+        this._swarmConnection.setIncomingPeerUdpConnection(peerId, connection);
+    }
     // The number of peers
     numPeers = () => {
         return this._swarmConnection.peerIds().length;

@@ -91,6 +91,24 @@ class SwarmConnection {
             websocketConnection.disconnect();
         }
     }
+    // Set an incoming peer websocket connection
+    setIncomingPeerUdpConnection(peerId, udpConnection) {
+        // Create the connection if needed
+        if (!(peerId in this._peerConnections)) {
+            this._createPeerConnection(peerId);
+        }
+
+        if (peerId in this._peerConnections) {
+            log().info(`SWARM:: Setting incoming udp connection for peer`, {peerId});
+            // set the incoming connection
+            this._peerConnections[peerId].setIncomingUdpConnection(udpConnection);
+            return;
+        }
+        else {
+            // we couldn't create it (not expected), so let's disconnect
+            udpConnection.disconnect();
+        }
+    }
     // Create a new listener for messages coming from a peer
     // if testFunction(fromNodeId, msg) returns true, it will call
     // the callbacks registered in ret.onMessage(...)

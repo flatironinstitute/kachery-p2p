@@ -5,15 +5,17 @@ import KacheryChannelConnection from './KacheryChannelConnection.js';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util.js';
 import FeedManager from './FeedManager.js';
 import WebsocketServer from './WebsocketServer.js';
+import UdpServer from './UdpServer.js';
 import { initializeLog, log } from './common/log.js';
 
 const PROTOCOL_VERSION = 'kachery-p2p-0.3.5'
 
 class Daemon {
-    constructor({ configDir, listenHost, listenPort, verbose, discoveryVerbose, label, opts }) {
+    constructor({ configDir, listenHost, listenPort, udpListenPort, verbose, discoveryVerbose, label, opts }) {
         this._configDir = configDir; // Directory where config information is stored (including names and keys for feeds)
         this._listenHost = listenHost; // The host where we are listening
         this._listenPort = listenPort; // The port where we are listening
+        this._udpListenPort = udpListenPort; // Port where we are listening for udp messages. See below for more info.
         this._protocolVersion = PROTOCOL_VERSION
         this._opts = opts;
         
@@ -70,10 +72,58 @@ class Daemon {
                 // Add the incoming peer websocket connection to the channel connection
                 this._kacheryChannelConnections[channelName].setIncomingPeerWebsocketConnection(nodeId, connection);
             });
-            this._websocketServer.listen(listenPort);
+            this._websocketServer.listen(this._listenPort);
         }
         else {
             log().warning('Listen port is empty or zero. Not listening for incoming connections.');
+            this._websocketServer = null;
+        }
+
+        if (this._udpListenPort) {
+            /*
+            We will listen for udp messages. This serves two purposes. First, it can be used as an
+            alternative way to receive messages from peers via udp hole punching when both nodes
+            are behind different NAT firewalls. Second, it can be used as a rendezvous server to
+            provide information to nodes about their public udp endpoints ip/port or how these appear
+            to the outside world.
+            */
+
+            this._udpServer = new UdpServer({nodeId: this._nodeId, keyPair: this._keyPair});
+            this._udpServer.onConnection((connection, initialInfo) => {
+                // We have a new connection -- and the first message passed has info about the swarm
+                // swarmName is determined from the channel name
+                const {swarmName, nodeId, protocolVersion} = initialInfo;
+                if (protocolVersion !== this._protocolVersion) {
+                    log().warning(`Disconnecting incoming connection. Bad protocol version.`, {incomingProtocolVersion: protocolVersion, protocolVersion: this._protocolVersion});
+                    connection.disconnect();
+                    return;
+                }
+                const channelName = _getChannelNameFromSwarmName(swarmName);
+
+                // some basic validation
+                if (!channelName) {
+                    log().warning(`Disconnecting incoming connection. Bad swarm name.`, {swarmName});
+                    connection.disconnect();
+                    return;
+                }
+                if (!(channelName in this._kacheryChannelConnections)) {
+                    log().warning(`Disconnecting incoming connection. Not joined to channel.`, {channelName});
+                    connection.disconnect();
+                    return;
+                }
+                if (!nodeId) {
+                    log().warning(`Disconnecting incoming connection. Empty nodeId.`);
+                    connection.disconnect();
+                    return;
+                }
+
+                // Add the incoming peer websocket connection to the channel connection
+                this._kacheryChannelConnections[channelName].setIncomingPeerUdpConnection(nodeId, connection);
+            });
+            this._udpServer.listen(this._udpListenPort);
+        }
+        else {
+            this._udpServer = null;
         }
 
         this._start();
