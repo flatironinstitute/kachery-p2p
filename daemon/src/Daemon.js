@@ -108,6 +108,7 @@ class Daemon {
             }
             log().info(`Joining channel.`, {channelName});
             const x = new KacheryChannelConnection({
+                udpServer: this._udpServer,
                 keyPair: this._keyPair,
                 nodeId: this._nodeId,
                 channelName,

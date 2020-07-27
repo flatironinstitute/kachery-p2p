@@ -12,6 +12,8 @@ class UdpServer {
         this._socket = null;
         this._openConnections = {}; // by connection id
         this._publicEndpoint = null;
+        this._swarmNodes = {};
+        this._onLocateSwarmNodesResponseCallbacks = [];
         this._clientCode = randomAlphaString(10); // so we can verify that the remote endpoint is coming from a place where we requested it from
     }
     onConnection = (cb) => {
@@ -61,6 +63,9 @@ class UdpServer {
         this._socket = socket;
         this._start();
     }
+    onLocateSwarmNodesResponse(cb) {
+        this._onLocateSwarmNodesResponseCallbacks.push(cb);
+    }
     async _handleMessage(fromNodeId, remote, message, connectionId) {
         if (message.type === 'whatsMyPublicEndpoint') {
             // No connection, just provide a response
@@ -96,6 +101,61 @@ class UdpServer {
             log().debug('Handling whatsMyPublicEndpointResponse message', {message});
             this._publicEndpoint = message.publicEndpoint;
             // todo: verify the correctness of the endpoint
+        }
+        else if (message.type === 'announceSwarmNode') {
+            if ((!remote.address) || (!remote.port)) {
+                log().warning('announceSwarmNode: no remote.address or remote.port', {remote});
+                return;
+            }
+            if (!message.swarmName) {
+                log().warning('announceSwarmNode: no remote.swarmName');
+                return;
+            }
+            if (!message.nodeInfo) {
+                log().warning('announceSwarmNode: no remote.nodeInfo');
+                return;
+            }
+            log().debug('Handling announceSwarmNode message', {fromNodeId, remote, message});
+            const swarmName = message.swarmName;
+            if (!(swarmName in this._swarmNodes))
+                this._swarmNodes[swarmName] = {};
+            const nodeInfo = message.nodeInfo;
+            nodeInfo.udpAddress = remote.address;
+            nodeInfo.udpPort = remote.port;
+            this._swarmNodes[swarmName][fromNodeId] = nodeInfo;
+            return;
+        }
+        else if (message.type === 'locateSwarmNodes') {
+            if ((!remote.address) || (!remote.port)) {
+                log().warning('locateSwarmNodes: no remote.address or remote.port', {remote});
+                return;
+            }
+            if (!message.swarmName) {
+                log().warning('locateSwarmNodes: no remote.swarmName');
+                return;
+            }
+            log().debug('Handling locateSwarmNodes message', {fromNodeId, remote, message});
+            const nodeInfos = this._swarmNodes[message.swarmName] || {};
+            this._sendMessageToRemote(remote, {
+                type: 'locateSwarmNodesResponse',
+                swarmName: message.swarmName,
+                nodeInfos
+            });
+            return;
+        }
+        else if (message.type === 'locateSwarmNodesResponse') {
+            if (!message.swarmName) {
+                log().warning('locateSwarmNodesResponse: no remote.swarmName');
+                return;
+            }
+            if (!message.nodeInfos) {
+                log().warning('locateSwarmNodesResponse: no remote.nodeInfos');
+                return;
+            }
+            this._onLocateSwarmNodesResponseCallbacks.forEach(cb => {
+                cb({swarmName: message.swarmName, nodeInfos: message.nodeInfos});
+            });
+            return;
         }
         else if (message.type === 'openConnection') {
             // wants to open a new connection
@@ -157,14 +217,14 @@ class UdpServer {
     async _startCheckingForPublicEndpoint() {
         while (true) {
             if (!this._publicEndpoint) {
-                const rendezvousServerInfo = {
-                    address: '52.9.11.30', // aws
-                    port: 44501
-                };
                 // const rendezvousServerInfo = {
-                //     address: 'localhost',
-                //     port: 3008
+                //     address: '52.9.11.30', // aws
+                //     port: 44501
                 // };
+                const rendezvousServerInfo = {
+                    address: 'localhost',
+                    port: 3008
+                };
                 const msg = {
                     type: 'whatsMyPublicEndpoint',
                     clientCode: this._clientCode
@@ -177,7 +237,7 @@ class UdpServer {
         }
     }
     async _start() {
-        this._startCheckingForPublicEndpoint();
+        // this._startCheckingForPublicEndpoint();
         while (true) {
             //
 

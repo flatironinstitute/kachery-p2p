@@ -6,8 +6,101 @@ import { getSignature, hexToPublicKey, verifySignature } from '../common/crypto_
 import SmartySwarmConnection from './SmartySwarmConnection.js';
 import { log } from '../common/log.js';
 
+class PeerDiscoveryEngine2 {
+    constructor({
+        nodeId,
+        udpServer,
+        swarmName
+    }) {
+        this._nodeId = nodeId;
+        this._udpServer =udpServer;
+        this._swarmName = swarmName;
+        this._onPeerNodeInfoChangedCallbacks = [];
+        this._nodeInfo = null;
+        this._udpServer.onLocateSwarmNodesResponse(({swarmName, nodeInfos}) => this._handleLocateSwarmNodesResponse({swarmName, nodeInfos}));
+        this._halt = false;
+        this._peerNodeInfos = {};
+        // this._remoteServerInfo = {
+        //     address: '52.9.11.30', // aws
+        //     port: 44501
+        // };
+        this._remoteServerInfo = {
+            address: 'localhost',
+            port: 3008
+        };
+        this._start();
+    }
+    onPeerNodeInfoChanged(cb) {
+        this._onPeerNodeInfoChangedCallbacks.push(cb);
+    }
+    setNodeInfo(nodeInfo) {
+        if (JSONStringifyDeterministic(nodeInfo) === JSONStringifyDeterministic(this._nodeInfo || {})) {
+            return;
+        }
+        this._nodeInfo = nodeInfo;
+        this._sendAnnounceMessage();
+    }
+    leave() {
+        this._halt = true;
+    }
+    forgetNode(nodeId) {
+        if (nodeId in this._peerNodeInfos) {
+            delete this._peerNodeInfos[nodeId];
+        }
+    }
+    _sendAnnounceMessage() {
+        if (!this._nodeInfo) return;
+        const msg = {
+            type: 'announceSwarmNode',
+            swarmName: this._swarmName,
+            nodeInfo: this._nodeInfo
+        };
+        this._udpServer._sendMessageToRemote(this._remoteServerInfo, msg);
+    }
+    _handleLocateSwarmNodesResponse({swarmName, nodeInfos}) {
+        if (swarmName === this._swarmName) {
+            for (let nodeId in nodeInfos) {
+                if (nodeId !== this._nodeId) {
+                    const nodeInfo = nodeInfos[nodeId];
+                    if ((nodeId in this._peerNodeInfos) && (JSONStringifyDeterministic(nodeInfo) === (JSONStringifyDeterministic(this._peerNodeInfos[nodeId])))) {
+                        // no change
+                    }
+                    else {
+                        this._peerNodeInfos[nodeId] = nodeInfo;
+                        this._onPeerNodeInfoChangedCallbacks.forEach(cb => {
+                            cb({peerId: nodeId, peerNodeInfo: nodeInfos[nodeId]});
+                        });
+                    }
+                }
+            }
+        }
+    }
+    async _startLocatingNodesInSwarm() {
+        while (true) {
+            if (this._halt) return;
+            const msg = {
+                type: 'locateSwarmNodes',
+                swarmName: this._swarmName
+            };
+            this._udpServer._sendMessageToRemote(this._remoteServerInfo, msg);
+
+            await sleepMsec(5000);
+        }
+    }
+    async _startAnnouncing() {
+        while (true) {
+            this._sendAnnounceMessage();
+            await sleepMsec(60000);
+        }
+    }
+    async _start() {
+        this._startLocatingNodesInSwarm();
+        this._startAnnouncing();
+    }
+}
+
 class SwarmConnection {
-    constructor({keyPair, nodeId, swarmName, protocolVersion, opts}) {
+    constructor({keyPair, nodeId, swarmName, protocolVersion, udpServer, opts}) {
         this._keyPair = keyPair; // the keypair for signing messages (public key is same as node id)
         this._nodeId = nodeId; // The id of the node, determined by the public key in the keypair
         this._nodeInfo = null; // The information to be reported to the other nodes in the swarm -- like the host and port (for listening for websockets)
@@ -23,11 +116,10 @@ class SwarmConnection {
         this._smarty = new SmartySwarmConnection(this);
 
         // the discovery engine!
-        this._peerDiscoveryEngine = new PeerDiscoveryEngine({
-            keyPair,
-            swarmName,
+        this._peerDiscoveryEngine = new PeerDiscoveryEngine2({
             nodeId,
-            protocolVersion // version of the kachery-p2p protocol
+            udpServer,
+            swarmName
         });
         // Listen for new nodes in the swarm announcing their node info
         this._peerDiscoveryEngine.onPeerNodeInfoChanged(({peerId, peerNodeInfo}) => {

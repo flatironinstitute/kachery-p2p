@@ -9,7 +9,7 @@ import { log } from './common/log.js';
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
 class KacheryChannelConnection {
-    constructor({keyPair, nodeId, channelName, protocolVersion, feedManager, opts}) {
+    constructor({keyPair, nodeId, channelName, protocolVersion, feedManager, udpServer, opts}) {
         this._keyPair = keyPair; // The keypair used for signing message, the public key agrees with the node id
         this._nodeId = nodeId; // The node id, determined by the public key in the keypair
         this._nodeInfo = null; // The information to be reported to the other nodes in the swarm -- like the host and port (for listening for websockets)
@@ -22,6 +22,7 @@ class KacheryChannelConnection {
         // Create the swarm connection
         const swarmName = 'kachery:' + this._channelName;
         this._swarmConnection = new SwarmConnection({
+            udpServer,
             keyPair,
             nodeId,
             swarmName,
