@@ -15,9 +15,11 @@ class UdpClientConnection {
         this._onMessageCallbacks = [];
         this._onDisconnectCallbacks = [];
         this._onConnectCallbacks = [];
+        this._onErrorCallbacks = [];
         this._connectionId = null;
+        this._queuedMessages = [];
         this._socket = dgram.createSocket('udp4');
-        this._socket.onMessage((messageTxt, remote) => {
+        this._socket.on('message', (messageTxt, remote) => {
             let msg;
             try {
                 msg = JSON.parse(messageTxt);
@@ -30,7 +32,7 @@ class UdpClientConnection {
                 log().warning('UdpClientConnection: Improper udp message', {remote});
                 return;
             }
-            const { body, signature } = message;
+            const { body, signature } = msg;
             const fromNodeId = body.fromNodeId;
             const message = body.message;
             if (!fromNodeId) {
@@ -51,6 +53,9 @@ class UdpClientConnection {
             }
             this._handleMessageFromRemote(remote, message);
         });
+        this._socket.on('error', (err) => {
+            this._onErrorCallbacks.forEach(cb => cb(err));
+        });
         this.sendMessage({
             type: 'openConnection',
             initialInfo: {
@@ -59,6 +64,15 @@ class UdpClientConnection {
                 protocolVersion: this._protocolVersion
             }
         });
+        setTimeout(() => {
+            if (this._connectionId) return;
+            log().warning('Timeout while waiting for udp connection.', {remoteAddress, remotePort});
+            this._socket.close();
+            this._onDisconnectCallbacks.forEach(cb => cb());
+        }, 5000);
+    }
+    onError(cb) {
+        this._onErrorCallbacks.push(cb);
     }
     onMessage(cb) {
         this._onMessageCallbacks.push(cb);
@@ -85,10 +99,10 @@ class UdpClientConnection {
         }
         const signedMessage = {
             body,
-            signature: getSignature(responseBody, this._keyPair)
+            signature: getSignature(body, this._keyPair)
         }
         const signedMessageTxt = JSONStringifyDeterministic(signedMessage);
-        socket.send(signedMessageTxt, this._remotePort, this._remoteAddress, (err, numBytesSent) => {
+        this._socket.send(signedMessageTxt, this._remotePort, this._remoteAddress, (err, numBytesSent) => {
             if (err) {
                 log.warning('Failed to send udp message to remote', {remoteAddress: this._remoteAddress, remotePort: this._remotePort, messageType: message.type, error: err.message});
                 return;
@@ -103,6 +117,7 @@ class UdpClientConnection {
         this.sendMessage({
             type: 'closeConnection'
         });
+        this._socket.close();
         this._onDisconnectCallbacks.forEach(cb => cb());
     }
     _handleMessageFromRemote(remote, message) {
@@ -110,6 +125,10 @@ class UdpClientConnection {
         if (message.type === 'connectionOpened') {
             if (!message.connectionId) {
                 log().warning('UdpClientConnection: No connectionId in connectionOpened message', {});
+                return;
+            }
+            if (this._connectionId) {
+                log().warning('UdpClientConnection: Got connectionOpened message, but we already have a connection id.');
                 return;
             }
             this._connectionId = message.connectionId;

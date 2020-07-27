@@ -38,92 +38,18 @@ class Daemon {
         initializeLog(this._feedManager, {verbose: verbose, categoryOpts: {discovery: {verbose: discoveryVerbose}}});
 
         log().info(`Starting daemon`, {configDir, listenHost, listenPort, verbose, discoveryVerbose, label, opts});
+
+        this._websocketServer = null;
         if (this._listenPort) {
-            // Create a new websocket server for listening for incoming peer connections on the channels/swarms
-            this._websocketServer = new WebsocketServer();
-            this._websocketServer.onConnection((connection, initialInfo) => {
-                // We have a new connection -- and the first message passed has info about the swarm
-                // swarmName is determined from the channel name
-                const {swarmName, nodeId, protocolVersion} = initialInfo;
-                if (protocolVersion !== this._protocolVersion) {
-                    log().warning(`Disconnecting incoming connection. Bad protocol version.`, {incomingProtocolVersion: protocolVersion, protocolVersion: this._protocolVersion});
-                    connection.disconnect();
-                    return;
-                }
-                const channelName = _getChannelNameFromSwarmName(swarmName);
-
-                // some basic validation
-                if (!channelName) {
-                    log().warning(`Disconnecting incoming connection. Bad swarm name.`, {swarmName});
-                    connection.disconnect();
-                    return;
-                }
-                if (!(channelName in this._kacheryChannelConnections)) {
-                    log().warning(`Disconnecting incoming connection. Not joined to channel.`, {channelName});
-                    connection.disconnect();
-                    return;
-                }
-                if (!nodeId) {
-                    log().warning(`Disconnecting incoming connection. Empty nodeId.`);
-                    connection.disconnect();
-                    return;
-                }
-
-                // Add the incoming peer websocket connection to the channel connection
-                this._kacheryChannelConnections[channelName].setIncomingPeerWebsocketConnection(nodeId, connection);
-            });
-            this._websocketServer.listen(this._listenPort);
+            this._initializeWebsocketServer();
         }
         else {
-            log().warning('Listen port is empty or zero. Not listening for incoming connections.');
-            this._websocketServer = null;
+            log().info('Listen port is empty or zero. Not listening for incoming connections.');
         }
 
+        this._udpServer = null;
         if (this._udpListenPort) {
-            /*
-            We will listen for udp messages. This serves two purposes. First, it can be used as an
-            alternative way to receive messages from peers via udp hole punching when both nodes
-            are behind different NAT firewalls. Second, it can be used as a rendezvous server to
-            provide information to nodes about their public udp endpoints ip/port or how these appear
-            to the outside world.
-            */
-
-            this._udpServer = new UdpServer({nodeId: this._nodeId, keyPair: this._keyPair});
-            this._udpServer.onConnection((connection, initialInfo) => {
-                // We have a new connection -- and the first message passed has info about the swarm
-                // swarmName is determined from the channel name
-                const {swarmName, nodeId, protocolVersion} = initialInfo;
-                if (protocolVersion !== this._protocolVersion) {
-                    log().warning(`Disconnecting incoming connection. Bad protocol version.`, {incomingProtocolVersion: protocolVersion, protocolVersion: this._protocolVersion});
-                    connection.disconnect();
-                    return;
-                }
-                const channelName = _getChannelNameFromSwarmName(swarmName);
-
-                // some basic validation
-                if (!channelName) {
-                    log().warning(`Disconnecting incoming connection. Bad swarm name.`, {swarmName});
-                    connection.disconnect();
-                    return;
-                }
-                if (!(channelName in this._kacheryChannelConnections)) {
-                    log().warning(`Disconnecting incoming connection. Not joined to channel.`, {channelName});
-                    connection.disconnect();
-                    return;
-                }
-                if (!nodeId) {
-                    log().warning(`Disconnecting incoming connection. Empty nodeId.`);
-                    connection.disconnect();
-                    return;
-                }
-
-                // Add the incoming peer websocket connection to the channel connection
-                this._kacheryChannelConnections[channelName].setIncomingPeerUdpConnection(nodeId, connection);
-            });
-            this._udpServer.listen(this._udpListenPort);
-        }
-        else {
-            this._udpServer = null;
+            this._initializeUdpServer();
         }
 
         this._start();
@@ -186,10 +112,10 @@ class Daemon {
                 nodeId: this._nodeId,
                 channelName,
                 feedManager: this._feedManager,
-                nodeInfo: this._nodeInfo,
                 protocolVersion: this._protocolVersion,
                 opts: this._opts
             });
+            x.setNodeInfo(this._nodeInfo);
             this._kacheryChannelConnections[channelName] = x;
             if (!opts._skipUpdateConfig) {
                 await this._updateConfigFile();
@@ -322,12 +248,32 @@ class Daemon {
         }
         return state;
     }
+    async _startCheckingForUdpPublicEndpoint() {
+        await sleepMsec(1000);
+        while (true) {
+            if (this._udpServer) {
+                if (!this._nodeInfo.udpAddress) {
+                    const publicEndpoint = this._udpServer.publicEndpoint();
+                    if (publicEndpoint) {
+                        this._nodeInfo.udpAddress = publicEndpoint.address;
+                        this._nodeInfo.udpPort = publicEndpoint.port;
+                        for (let ch in this._kacheryChannelConnections) {
+                            this._kacheryChannelConnections[ch].setNodeInfo(this._nodeInfo);
+                        }
+                    }
+                }
+            }
+            await sleepMsec(10000);
+        }
+    }
     async _start() {
         const config = await this._readConfigFile();
         const channels = config['channels'] || [];
         for (let ch of channels) {
             await this.joinChannel(ch.name, {_skipUpdateConfig: true});
         }
+        this._startCheckingForUdpPublicEndpoint();
+
         while (true) {
             if (this._halted) return;
             // maintenance goes here
@@ -349,6 +295,87 @@ class Daemon {
     }
     _writeConfigFile = async (config) => {
         await writeJsonFile(this._configDir + '/config.json', config);
+    }
+
+    _initializeWebsocketServer() {
+        // Create a new websocket server for listening for incoming peer connections on the channels/swarms
+        this._websocketServer = new WebsocketServer();
+        this._websocketServer.onConnection((connection, initialInfo) => {
+            // We have a new connection -- and the first message passed has info about the swarm
+            // swarmName is determined from the channel name
+            const {swarmName, nodeId, protocolVersion} = initialInfo;
+            if (protocolVersion !== this._protocolVersion) {
+                log().warning(`Disconnecting incoming connection. Bad protocol version.`, {incomingProtocolVersion: protocolVersion, protocolVersion: this._protocolVersion});
+                connection.disconnect();
+                return;
+            }
+            const channelName = _getChannelNameFromSwarmName(swarmName);
+
+            // some basic validation
+            if (!channelName) {
+                log().warning(`Disconnecting incoming connection. Bad swarm name.`, {swarmName});
+                connection.disconnect();
+                return;
+            }
+            if (!(channelName in this._kacheryChannelConnections)) {
+                log().warning(`Disconnecting incoming connection. Not joined to channel.`, {channelName});
+                connection.disconnect();
+                return;
+            }
+            if (!nodeId) {
+                log().warning(`Disconnecting incoming connection. Empty nodeId.`);
+                connection.disconnect();
+                return;
+            }
+
+            // Add the incoming peer websocket connection to the channel connection
+            this._kacheryChannelConnections[channelName].setIncomingPeerWebsocketConnection(nodeId, connection);
+        });
+        this._websocketServer.listen(this._listenPort);
+    }
+
+    _initializeUdpServer() {
+        /*
+        We will listen for udp messages. This serves two purposes. First, it can be used as an
+        alternative way to receive messages from peers via udp hole punching when both nodes
+        are behind different NAT firewalls. Second, it can be used as a rendezvous server to
+        provide information to nodes about their public udp endpoints ip/port or how these appear
+        to the outside world.
+        */
+
+        this._udpServer = new UdpServer({nodeId: this._nodeId, keyPair: this._keyPair});
+        this._udpServer.onConnection((connection, initialInfo) => {
+            // We have a new connection -- and the first message passed has info about the swarm
+            // swarmName is determined from the channel name
+            const {swarmName, nodeId, protocolVersion} = initialInfo;
+            if (protocolVersion !== this._protocolVersion) {
+                log().warning(`Disconnecting incoming connection. Bad protocol version.`, {incomingProtocolVersion: protocolVersion, protocolVersion: this._protocolVersion});
+                connection.disconnect();
+                return;
+            }
+            const channelName = _getChannelNameFromSwarmName(swarmName);
+
+            // some basic validation
+            if (!channelName) {
+                log().warning(`Disconnecting incoming connection. Bad swarm name.`, {swarmName});
+                connection.disconnect();
+                return;
+            }
+            if (!(channelName in this._kacheryChannelConnections)) {
+                log().warning(`Disconnecting incoming connection. Not joined to channel.`, {channelName});
+                connection.disconnect();
+                return;
+            }
+            if (!nodeId) {
+                log().warning(`Disconnecting incoming connection. Empty nodeId.`);
+                connection.disconnect();
+                return;
+            }
+
+            // Add the incoming peer websocket connection to the channel connection
+            this._kacheryChannelConnections[channelName].setIncomingPeerUdpConnection(nodeId, connection);
+        });
+        this._udpServer.listen(this._udpListenPort);
     }
 }
 

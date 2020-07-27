@@ -2,6 +2,7 @@ import WebsocketConnection from './WebsocketConnection.js';
 import { sleepMsec } from '../common/util.js';
 import { JSONStringifyDeterministic } from '../common/crypto_util.js'
 import { log } from '../common/log.js';
+import UdpClientConnection from '../UdpClientConnection.js';
 
 class PeerConnection {
     constructor({ keyPair, swarmName, nodeId, peerId, protocolVersion }) {
@@ -13,7 +14,10 @@ class PeerConnection {
         this._incomingWebsocketConnection = null;
         this._outgoingWebsocketConnection = null;
         this._incomingUdpConnection = null;
-        this._scheduleOutgoingWebsocketConnection = false;
+        this._outgoingUdpConnection = null;
+        this._scheduleTryOutgoingWebsocketConnection = false;
+        this._scheduleTryOutgoingUdpConnection = false;
+        this._tryingOutgoingWebsocketConnection = false;
         this._onSignedMessageCallbacks = [];
         this._onWebsocketConnectionCallbacks = [];
         this._onUdpConnectionCallbacks = [];
@@ -33,22 +37,28 @@ class PeerConnection {
     hasIncomingUdpConnection() {
         return this._incomingUdpConnection ? true : false;
     }
+    hasOutgoingUdpConnection() {
+        return this._outgoingUdpConnection ? true : false;
+    }
     hasWebsocketConnection() {
         return this.hasIncomingWebsocketConnection() || this.hasOutgoingWebsocketConnection();
     }
     hasUdpConnection() {
-        return this.hasIncomingUdpConnection();
+        return this.hasIncomingUdpConnection() || this.hasOutgoingUdpConnection();
+    }
+    hasDirectConnection() {
+        return this.hasWebsocketConnection() || this.hasUdpConnection();
     }
     setPeerNodeInfo(peerNodeInfo) {
         if ((this._peerNodeInfo) && (JSONStringifyDeterministic(peerNodeInfo) === JSONStringifyDeterministic(this._peerNodeInfo))) {
             // not a change
             return;
         }
-
         log().info(`SWARM:: Setting peer node info.`, {peerId: this._peerId, peerNodeInfo});
 
         this._peerNodeInfo = peerNodeInfo;
-        this._scheduleOutgoingWebsocketConnection = true;
+        this._scheduleTryOutgoingWebsocketConnection = true;
+        this._scheduleTryOutgoingUdpConnection = true; // don't worry, it won't try until after we try the websocket connection
     }
     peerNodeInfo() {
         return this._peerNodeInfo;
@@ -66,7 +76,7 @@ class PeerConnection {
         }
         this._incomingWebsocketConnection = connection;
         connection.onMessage(msg => {
-            this._handleMessage(msg);
+            this._handleSignedMessage(msg);
         });
         connection.onDisconnect(() => {
             if (this._incomingWebsocketConnection === connection) {
@@ -84,7 +94,7 @@ class PeerConnection {
         }
         this._incomingUdpConnection = connection;
         connection.onMessage(msg => {
-            this._handleMessage(msg);
+            this._handleSignedMessage(msg);
         });
         connection.onDisconnect(() => {
             if (this._incomingUdpConnection === connection) {
@@ -105,11 +115,14 @@ class PeerConnection {
         this._onUdpConnectionCallbacks.push(cb);
     }
     sendSignedMessage(msg) {
-        if (this._incomingWebsocketConnection) {
+        if (this._outgoingWebsocketConnection) {
+            this._outgoingWebsocketConnection.sendMessage(msg);
+        }
+        else if (this._incomingWebsocketConnection) {
             this._incomingWebsocketConnection.sendMessage(msg);
         }
-        else if (this._outgoingWebsocketConnection) {
-            this._outgoingWebsocketConnection.sendMessage(msg);
+        else if (this._outgoingUdpConnection) {
+            this._outgoingUdpConnection.sendMessage(msg);
         }
         else if (this._incomingUdpConnection) {
             this._incomingUdpConnection.sendMessage(msg);
@@ -129,9 +142,12 @@ class PeerConnection {
         if (this._incomingUdpConnection) {
             this._incomingUdpConnection.disconnect();
         }
+        if (this._outgoingUdpConnection) {
+            this._outgoingUdpConnection.disconnect();
+        }
         this._halt = true;
     }
-    _handleMessage = (msg) => {
+    _handleSignedMessage = (msg) => {
         this._onSignedMessageCallbacks.forEach(cb => cb(msg));
     }
     // _sendQueuedMessages = () => {
@@ -144,7 +160,7 @@ class PeerConnection {
 
     // todo: try outgoing udp connection
 
-    // try outgoing connection and return true or false
+    // try outgoing websocket connection and return true or false
     async tryOutgoingWebsocketConnection() {
         return new Promise((resolve, reject) => {
             const peerNodeInfo = this._peerNodeInfo;
@@ -154,7 +170,10 @@ class PeerConnection {
                 if (peerNodeInfo.local) {
                     host = 'localhost';
                 }
-                if (!host) return;
+                if (!host) {
+                    resolve(false);
+                    return;
+                }
                 let C;
                 try {
                     C = new WebsocketConnection({ host, port });
@@ -180,7 +199,7 @@ class PeerConnection {
                         return;
                     }
                     connected = true;
-                    log().info(`Outgoing connection established`, {peerId: this._peerId});
+                    log().info(`Outgoing websocket connection established`, {peerId: this._peerId});
                     try {
                         C.sendMessage({
                             type: 'initial',
@@ -192,16 +211,16 @@ class PeerConnection {
                         });
                     }
                     catch(err) {
-                        log().warning(`Problem sending initial message in outgoing connection`, {peerId: this._peerId});
+                        log().warning(`Problem sending initial message in outgoing websocket connection`, {peerId: this._peerId});
                         resolve(false);
                         return;
                     }
                     C.onMessage(msg => {
-                        this._handleMessage(msg);
+                        this._handleSignedMessage(msg);
                     });
                     C.onDisconnect(() => {
                         if (this._outgoingWebsocketConnection === C) {
-                            log().info(`Outgoing connection disconnected`, {peerId: this._peerId});
+                            log().info(`Outgoing websocket connection disconnected`, {peerId: this._peerId});
                             this._outgoingWebsocketConnection = null;
                         }
                     });
@@ -213,18 +232,117 @@ class PeerConnection {
             }
         });
     }
-    async _start() {
-        let timeLastOutgoingWebsocketTry = new Date();
+    // try outgoing udp connection and return true or false
+    async tryOutgoingUdpConnection() {
+        return new Promise((resolve, reject) => {
+            const peerNodeInfo = this._peerNodeInfo;
+            if ((peerNodeInfo) && (peerNodeInfo.udpAddress) && (peerNodeInfo.udpPort)) {
+                const udpAddress = peerNodeInfo.udpAddress;
+                const udpPort = peerNodeInfo.udpPort;
+                let C;
+                try {
+                    C = new UdpClientConnection({
+                        nodeId: this._nodeId,
+                        keyPair: this._keyPair,
+                        remoteNodeId: this._peerId,
+                        remoteAddress: udpAddress,
+                        remotePort: udpPort,
+                        swarmName: this._swarmName,
+                        protocolVersion: this._protocolVersion
+                    });
+                }
+                catch(err) {
+                    log().warning(`Problem establishing outgoing udp connection`, {peerId: this._peerId, udpAddress, udpPort, error: err.message});
+                    resolve(false);
+                    return;
+                }
+                let connected = false;
+                let errored = false;
+                C.onError(() => { // todo: implement this
+                    errored = true;
+                    if (connected) {
+                        // presumably we'll get a disconnect below
+                        return;
+                    }
+                    resolve(false);
+                });
+                C.onMessage(msg => {
+                    this._handleSignedMessage(msg);
+                });
+                C.onDisconnect(() => {
+                    if (this._outgoingUdpConnection === C) {
+                        log().info(`Outgoing udp connection disconnected`, {peerId: this._peerId});
+                        this._outgoingUdpConnection = null;
+                    }
+                });
+                C.onConnect(() => {
+                    if (errored) {
+                        log().warning(`Unexpected. We connected udp, but also errored.`, {peerId: this._peerId});
+                        return;
+                    }
+                    if (connected) {
+                        log().warning(`Unexpected. Already connected to udp.`, {peerId: this._peerId});
+                        return;
+                    }
+                    connected = true;
+                    log().info(`Outgoing udp connection established`, {peerId: this._peerId}); 
+                    this._outgoingUdpConnection = C;
+                    this._onUdpConnectionCallbacks.forEach(cb => cb());
+                    resolve(true);
+                    // this._sendQueuedMessages();
+                });
+            }
+            else {
+                resolve(false);
+            }
+        });
+    }
+    async _startTryingOutgoingWebsocketConnection() {
+        let timeLastTry = new Date();
         while (true) {
             if (this._halt) return;
             if ((!this._outgoingWebsocketConnection) && (this._peerNodeInfo)) {
-                const elapsed = (new Date()) - timeLastOutgoingWebsocketTry;
-                if ((this._scheduleOutgoingWebsocketConnection) || (elapsed > 5000)) {
-                    timeLastOutgoingWebsocketTry = new Date();
-                    this._scheduleOutgoingWebsocketConnection = false;
-                    await this.tryOutgoingWebsocketConnection();
+                const elapsed = (new Date()) - timeLastTry;
+                if ((this._scheduleTryOutgoingWebsocketConnection) || (elapsed > 5000)) {
+                    timeLastTry = new Date();
+                    this._scheduleTryOutgoingWebsocketConnection = false;
+                    this._tryingOutgoingWebsocketConnection = true;
+                    try {
+                        await this.tryOutgoingWebsocketConnection();
+                    }
+                    finally {
+                        this._tryingOutgoingWebsocketConnection = false;
+                    }
                 }
             }
+            await sleepMsec(100);
+        }
+    }
+    async _startTryingOutgoingUdpConnection() {
+        let timeLastTry = new Date();
+        while (true) {
+            if (this._halt) return;
+            // first make sure we are not trying websocket -- because that's highest priority
+            if ((!this._outgoingUdpConnection) && (!this._outgoingWebsocketConnection) && (!this._incomingWebsocketConnection) && (this._peerNodeInfo)) {
+                if ((!this._scheduleTryOutgoingWebsocketConnection) && (!this._tryingOutgoingWebsocketConnection)) {
+                    const elapsed = (new Date()) - timeLastTry;
+                    if ((this._scheduleTryOutgoingUdpConnection) || (elapsed > 5000)) {
+                        timeLastTry = new Date();
+                        this._scheduleTryOutgoingUdpConnection = false;
+                        await this.tryOutgoingUdpConnection();
+                    }
+                }
+            }
+            await sleepMsec(100);
+        }
+    }
+    async _start() {
+        this._startTryingOutgoingWebsocketConnection();
+        this._startTryingOutgoingUdpConnection();
+        
+        while (true) {
+            if (this._halt) return;
+            
             await sleepMsec(100);
         }
     }

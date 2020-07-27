@@ -23,7 +23,7 @@ class SmartySwarmConnection {
                 if ((elapsed0 < 10000) || (!calculateIfNeeded)) {
                     const firstNodeId = route[1];
                     const firstPC = this._swarmConnection.peerConnection(firstNodeId);
-                    if ((firstPC) && (firstPC.hasWebsocketConnection())) {
+                    if ((firstPC) && (firstPC.hasDirectConnection())) {
                         return route;
                     }
                     else {
@@ -49,7 +49,7 @@ class SmartySwarmConnection {
         const peerIds = this._swarmConnection.peerIds();
         const candidatePeerIds = peerIds.filter(peerId => {
             const pc = this._swarmConnection.peerConnection(peerId);
-            return ((pc) && (pc.hasWebsocketConnection()));
+            return ((pc) && (pc.hasDirectConnection()));
         })
         const timings = {};
         const routes = {};
@@ -142,7 +142,7 @@ class SmartySwarmConnection {
         // for now we only test routes of length 2
         // in future we can use the already-determined optimal route (and checking it does not contain the avoid stuff)
         const pc = this._swarmConnection.peerConnection(toPeerId);
-        if ((pc) && (pc.hasWebsocketConnection())) {
+        if ((pc) && (pc.hasDirectConnection())) {
             const req = this._swarmConnection.makeRequestToPeer(toPeerId, {
                 type: 'routeLatencyTest',
                 toPeerId,
@@ -174,7 +174,7 @@ class SmartySwarmConnection {
         for (let peerId of peerIds) {
             const pc = this._swarmConnection.peerConnection(peerId);
             if (pc) {
-                if (!pc.hasWebsocketConnection()) {
+                if (!pc.hasDirectConnection()) {
                     const _ = await this.which_route_should_i_use_to_send_a_message_to_this_peer(peerId, {calculateIfNeeded: true});
                 }
             }

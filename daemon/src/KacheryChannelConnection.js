@@ -9,9 +9,10 @@ import { log } from './common/log.js';
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
 class KacheryChannelConnection {
-    constructor({keyPair, nodeId, channelName, protocolVersion, nodeInfo, feedManager, opts}) {
+    constructor({keyPair, nodeId, channelName, protocolVersion, feedManager, opts}) {
         this._keyPair = keyPair; // The keypair used for signing message, the public key agrees with the node id
         this._nodeId = nodeId; // The node id, determined by the public key in the keypair
+        this._nodeInfo = null; // The information to be reported to the other nodes in the swarm -- like the host and port (for listening for websockets)
         this._channelName = channelName; // Name of the channel (related to the swarmName)
         this._feedManager = feedManager; // The feed manager (feeds are collections of append-only logs)
         this._protocolVersion = protocolVersion;
@@ -24,7 +25,6 @@ class KacheryChannelConnection {
             keyPair,
             nodeId,
             swarmName,
-            nodeInfo,
             protocolVersion,
             opts
         });
@@ -43,6 +43,10 @@ class KacheryChannelConnection {
 
         // Start the loop
         this._start();
+    }
+    setNodeInfo(nodeInfo) {
+        this._nodeInfo = nodeInfo;
+        this._swarmConnection.setNodeInfo(nodeInfo);
     }
     // Set an incoming websocket connection for a peer
     setIncomingPeerWebsocketConnection(peerId, connection) {
@@ -410,14 +414,23 @@ class KacheryChannelConnection {
     async _getInfoText() {
         const lines = [];
         lines.push(`CHANNEL CONNECTION: ${this._channelName}`);
+        lines.push(`self ${this._nodeId.slice(0, 6)}`);
         const peerIds = this._swarmConnection.peerIds();
         for (let peerId of peerIds) {
             const p = this._swarmConnection.peerConnection(peerId);
             const ci = p.peerNodeInfo() || {};
             const hasIn = p.hasIncomingWebsocketConnection();
             const hasOut = p.hasOutgoingWebsocketConnection();
+            const hasUdpIn = p.hasIncomingUdpConnection();
+            const hasUdpOut = p.hasOutgoingUdpConnection();
             const hasRoute = await this._swarmConnection.hasRouteToPeer(peerId);
-            lines.push(`Peer ${peerId.slice(0, 6)}... ${ci.label}: ${ci.host || ""}:${ci.port || ""} ${ci.local ? "(local)" : ""} ${hasIn ? "in" : ""} ${hasOut ? "out" : ""} ${hasRoute ? "route" : ""}`);
+            const items = [];
+            if (hasIn) items.push('in');
+            if (hasOut) items.push('out');
+            if (hasUdpIn) items.push('udp-in');
+            if (hasUdpOut) items.push('udp-out');
+            if (hasRoute) items.push('route');
+            lines.push(`Peer ${peerId.slice(0, 6)}... ${ci.label}: ${ci.host || ""}:${ci.port || ""} ${ci.local ? "(local)" : ""} ${items.join(' ')}`);
         }
         return lines.join('\n');
     }

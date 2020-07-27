@@ -7,12 +7,12 @@ import SmartySwarmConnection from './SmartySwarmConnection.js';
 import { log } from '../common/log.js';
 
 class SwarmConnection {
-    constructor({keyPair, nodeId, swarmName, nodeInfo, protocolVersion, opts}) {
+    constructor({keyPair, nodeId, swarmName, protocolVersion, opts}) {
         this._keyPair = keyPair; // the keypair for signing messages (public key is same as node id)
         this._nodeId = nodeId; // The id of the node, determined by the public key in the keypair
+        this._nodeInfo = null; // The information to be reported to the other nodes in the swarm -- like the host and port (for listening for websockets)
         this._swarmName = swarmName; // The name of the swarm (related to the channel name)
         this._protocolVersion = protocolVersion;
-        this._nodeInfo = nodeInfo; // Info about this node, like host and port
         this._peerConnections = {}; // Peer connections
         this._peerMessageListeners = {}; // listeners for messages coming in from peers
         this._onPeerRequestCallbacks = []; // callbacks for requests coming in from peers
@@ -27,7 +27,6 @@ class SwarmConnection {
             keyPair,
             swarmName,
             nodeId,
-            nodeInfo,
             protocolVersion // version of the kachery-p2p protocol
         });
         // Listen for new nodes in the swarm announcing their node info
@@ -42,6 +41,10 @@ class SwarmConnection {
 
         // Start the loop
         this._start();
+    }
+    setNodeInfo(nodeInfo) {
+        this._nodeInfo = nodeInfo;
+        this._peerDiscoveryEngine.setNodeInfo(nodeInfo);
     }
 
     // This node id
@@ -138,7 +141,7 @@ class SwarmConnection {
         for (let peerId in this._peerConnections) {
             // do not await... send them simultaneously
             let pc = this._peerConnections[peerId];
-            if (pc.hasWebsocketConnection()) {
+            if (pc.hasDirectConnection()) {
                 this.sendMessageToPeer(peerId, {
                     type: 'broadcast',
                     body,
@@ -232,14 +235,14 @@ class SwarmConnection {
                 log().warning(`Unexpected. No node that is the next item in route`, {nextNodeId});
                 return false;
             }
-            if (!(this._peerConnections[nextNodeId].hasWebsocketConnection())) {
-                log().warning(`Unexpected. No websocket connection to next item in route`, {nextNodeId});
+            if (!(this._peerConnections[nextNodeId].hasDirectConnection())) {
+                log().warning(`Unexpected. No direct connection to next item in route`, {nextNodeId});
                 return false;
             }
             this._peerConnections[nextNodeId].sendSignedMessage(signedMessage);
             return true;
         }
-        else if (this._peerConnections[toNodeId].hasWebsocketConnection()) {
+        else if (this._peerConnections[toNodeId].hasDirectConnection()) {
             this._peerConnections[toNodeId].sendSignedMessage(signedMessage);
             return true;
         }
@@ -249,7 +252,7 @@ class SwarmConnection {
                 return false;
             }
             const peerId1 = route[1];
-            if ((peerId1 in this._peerConnections) && (this._peerConnections[peerId1].hasWebsocketConnection())) {
+            if ((peerId1 in this._peerConnections) && (this._peerConnections[peerId1].hasDirectConnection())) {
                 this._peerConnections[peerId1].sendSignedMessage({
                     body: body,
                     signature: signedMessage.signature,
@@ -351,7 +354,7 @@ class SwarmConnection {
                 if ((peerId !== fromNodeId) && (peerId !== originalFromNodeId)) {
                     // do not await... send them simultaneously
                     let pc = this._peerConnections[peerId];
-                    if (pc.hasWebsocketConnection()) {
+                    if (pc.hasDirectConnection()) {
                         this.sendMessageToPeer(peerId, {
                             type: 'broadcast',
                             body: msg.body,

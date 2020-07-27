@@ -110,7 +110,7 @@ class Log {
 }
 
 const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, verbose, discoveryVerbose, label, opts }) => {
-  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, label, opts});
+  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, udpListenPort: listenPort, label, opts});
 
   const apiServer = new ApiServer(daemon, {verbose});
   apiServer.listen(apiPort);

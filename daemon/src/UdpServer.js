@@ -1,7 +1,8 @@
 import dgram from 'dgram';
 import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from './common/crypto_util.js'
 import { log } from './common/log.js';
-import { randomAlphaString } from './common/util.js';
+import { randomAlphaString, sleepMsec } from './common/util.js';
+import { request } from 'http';
 
 class UdpServer {
     constructor({nodeId, keyPair}) {
@@ -10,9 +11,14 @@ class UdpServer {
         this._onConnectionCallbacks = [];
         this._socket = null;
         this._openConnections = {}; // by connection id
+        this._publicEndpoint = null;
+        this._clientCode = randomAlphaString(10); // so we can verify that the remote endpoint is coming from a place where we requested it from
     }
     onConnection = (cb) => {
         this._onConnectionCallbacks.push(cb);
+    }
+    publicEndpoint() {
+        return this._publicEndpoint;
     }
     async listen(port) {
         ///////////////////////////////////////////////////////////////////////////////
@@ -34,9 +40,10 @@ class UdpServer {
                 log().warning('Improper udp message', {remote});
                 return;
             }
-            const { body, signature } = message;
+            const { body, signature } = msg;
             const fromNodeId = body.fromNodeId;
             const message = body.message;
+            const connectionId = body.connectionId || null;
             if (!fromNodeId) {
                 log().warning('No body.fromNodeId in udp message', {remote});
                 return;
@@ -49,11 +56,12 @@ class UdpServer {
                 log().warning('Unable to verify signature in udp message', {remote});
                 return;
             }
-            this._handleMessage(fromNodeId, remote, message);
+            this._handleMessage(fromNodeId, remote, message, connectionId);
         });
         this._socket = socket;
+        this._start();
     }
-    async _handleMessage(fromNodeId, remote, message) {
+    async _handleMessage(fromNodeId, remote, message, connectionId) {
         if (message.type === 'whatsMyPublicEndpoint') {
             // No connection, just provide a response
             // the client wants to know their public endpoint for purpose of holepunching
@@ -61,12 +69,33 @@ class UdpServer {
                 log().warning('whatsMyPublicEndpoint message: no remote.address or remote.port', {remote});
                 return;
             }
+            if (!message.clientCode) {
+                log().warning('whatsMyPublicEndpoint message: no remote.clientCode');
+                return;
+            }
+            log().debug('Handling whatsMyPublicEndpoint message', {fromNodeId, remote});
             this._sendMessageToRemote(remote, {
                 type: 'whatsMyPublicEndpointResponse',
-                publicAddress: remote.address,
-                publicPort: remote.port
+                publicEndpoint: {
+                    address: remote.address,
+                    port: remote.port
+                },
+                clientCode: message.clientCode
             });
             return;
+        }
+        else if (message.type === 'whatsMyPublicEndpointResponse') {
+            if (message.clientCode !== this._clientCode) {
+                log().warning('whatsMyPublicEndpointReponse message: incorrect client code', {messageClientCode: message.clientCode, clientCode: this._clientCode});
+                return;
+            }
+            if (this._publicEndpoint) {
+                log().warning('whatsMyPublicEndpointReponse message: already have the public endpoint');
+                return;
+            }
+            log().debug('Handling whatsMyPublicEndpointResponse message', {message});
+            this._publicEndpoint = message.publicEndpoint;
+            // todo: verify the correctness of the endpoint
         }
         else if (message.type === 'openConnection') {
             // wants to open a new connection
@@ -77,7 +106,7 @@ class UdpServer {
                 }
             });
             this._openConnections[connection.connectionId()] = connection;
-            this._sendMessageToRemote({
+            this._sendMessageToRemote(remote, {
                 type: 'connectionOpened',
                 connectionId: connection.connectionId()
             });
@@ -86,18 +115,19 @@ class UdpServer {
             });
         }
         else {
-            if (!message.connectionId) {
+            if (!connectionId) {
+                console.warn(message);
                 log().warning('No connectionId in incoming udp message', {remote});
                 return;
             }
-            if (!(message.connectionId in this._openConnections)) {
-                log().warning('No open udp connection with id', {remote, connectionId: message.connectionId});
+            if (!(connectionId in this._openConnections)) {
+                log().warning('No open udp connection with id', {remote, connectionId});
                 return;
             }
-            const con = this._openConnections[message.connectionId];
+            const con = this._openConnections[connectionId];
             if (fromNodeId !== con.fromNodeId()) {
                 // this is important, so we don't get fake messages from other nodes
-                log().warning('Yikes. fromNodeId does not match for udp message connection', {remote, connectionId: message.connectionId, fromNodeId, expectedFromNodeId: con.fromNodeId()});
+                log().warning('Yikes. fromNodeId does not match for udp message connection', {remote, connectionId, fromNodeId, expectedFromNodeId: con.fromNodeId()});
                 return;
             }
             con._handleMessageFromClient(message);
@@ -110,10 +140,10 @@ class UdpServer {
         };
         const signedMessage = {
             body,
-            signature: getSignature(responseBody, this._keyPair)
+            signature: getSignature(body, this._keyPair)
         }
         const signedMessageTxt = JSONStringifyDeterministic(signedMessage);
-        socket.send(signedMessageTxt, remote.port, remote.address, (err, numBytesSent) => {
+        this._socket.send(signedMessageTxt, remote.port, remote.address, (err, numBytesSent) => {
             if (err) {
                 log.warning('Failed to send udp message to remote', {remote, messageType: message.type, error: err.message});
                 return;
@@ -123,6 +153,36 @@ class UdpServer {
                 return;
             }
         });
+    }
+    async _startCheckingForPublicEndpoint() {
+        while (true) {
+            if (!this._publicEndpoint) {
+                const rendezvousServerInfo = {
+                    address: '52.9.11.30', // aws
+                    port: 44501
+                };
+                // const rendezvousServerInfo = {
+                //     address: 'localhost',
+                //     port: 3008
+                // };
+                const msg = {
+                    type: 'whatsMyPublicEndpoint',
+                    clientCode: this._clientCode
+                }
+                log().debug('Sending whatsMyPublicEndpoint message to rendezvous server', {rendezvousServerInfo});
+                this._sendMessageToRemote(rendezvousServerInfo, msg);
+            }
+
+            await sleepMsec(10000);
+        }
+    }
+    async _start() {
+        this._startCheckingForPublicEndpoint();
+        while (true) {
+            //
+
+            await sleepMsec(1000);
+        }
     }
 }
 
