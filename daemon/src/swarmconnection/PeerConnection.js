@@ -5,7 +5,8 @@ import { log } from '../common/log.js';
 import UdpClientConnection from '../UdpClientConnection.js';
 
 class PeerConnection {
-    constructor({ keyPair, swarmName, nodeId, peerId, protocolVersion }) {
+    constructor({ udpServer, keyPair, swarmName, nodeId, peerId, protocolVersion }) {
+        this._udpServer = udpServer;
         this._keyPair = keyPair;
         this._swarmName = swarmName;
         this._nodeId = nodeId;
@@ -239,23 +240,12 @@ class PeerConnection {
             if ((peerNodeInfo) && (peerNodeInfo.udpAddress) && (peerNodeInfo.udpPort)) {
                 const udpAddress = peerNodeInfo.udpAddress;
                 const udpPort = peerNodeInfo.udpPort;
-                let C;
-                try {
-                    C = new UdpClientConnection({
-                        nodeId: this._nodeId,
-                        keyPair: this._keyPair,
-                        remoteNodeId: this._peerId,
-                        remoteAddress: udpAddress,
-                        remotePort: udpPort,
-                        swarmName: this._swarmName,
-                        protocolVersion: this._protocolVersion
-                    });
-                }
-                catch(err) {
-                    log().warning(`Problem establishing outgoing udp connection`, {peerId: this._peerId, udpAddress, udpPort, error: err.message});
-                    resolve(false);
-                    return;
-                }
+                const C = this._udpServer.createOutgoingConnection({
+                    remoteNodeId: this._peerId,
+                    remoteAddress: udpAddress,
+                    remotePort: udpPort,
+                    swarmName: this._swarmName
+                });
                 let connected = false;
                 let errored = false;
                 C.onError(() => { // todo: implement this

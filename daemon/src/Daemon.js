@@ -344,8 +344,8 @@ class Daemon {
         to the outside world.
         */
 
-        this._udpServer = new UdpServer({nodeId: this._nodeId, keyPair: this._keyPair});
-        this._udpServer.onConnection((connection, initialInfo) => {
+        this._udpServer = new UdpServer({nodeId: this._nodeId, keyPair: this._keyPair, protocolVersion: this._protocolVersion});
+        this._udpServer.onIncomingConnection((connection, initialInfo) => {
             // We have a new connection -- and the first message passed has info about the swarm
             // swarmName is determined from the channel name
             const {swarmName, nodeId, protocolVersion} = initialInfo;

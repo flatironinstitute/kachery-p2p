@@ -55,7 +55,7 @@ class PeerDiscoveryEngine2 {
             swarmName: this._swarmName,
             nodeInfo: this._nodeInfo
         };
-        this._udpServer._sendMessageToRemote(this._remoteServerInfo, msg);
+        this._udpServer._sendMessageToRemote(this._remoteServerInfo, msg, {connectionId: null});
     }
     _handleLocateSwarmNodesResponse({swarmName, nodeInfos}) {
         if (swarmName === this._swarmName) {
@@ -82,7 +82,7 @@ class PeerDiscoveryEngine2 {
                 type: 'locateSwarmNodes',
                 swarmName: this._swarmName
             };
-            this._udpServer._sendMessageToRemote(this._remoteServerInfo, msg);
+            this._udpServer._sendMessageToRemote(this._remoteServerInfo, msg, {connectionId: null});
 
             await sleepMsec(5000);
         }
@@ -90,7 +90,7 @@ class PeerDiscoveryEngine2 {
     async _startAnnouncing() {
         while (true) {
             this._sendAnnounceMessage();
-            await sleepMsec(60000);
+            await sleepMsec(20000);
         }
     }
     async _start() {
@@ -101,6 +101,7 @@ class PeerDiscoveryEngine2 {
 
 class SwarmConnection {
     constructor({keyPair, nodeId, swarmName, protocolVersion, udpServer, opts}) {
+        this._udpServer = udpServer;
         this._keyPair = keyPair; // the keypair for signing messages (public key is same as node id)
         this._nodeId = nodeId; // The id of the node, determined by the public key in the keypair
         this._nodeInfo = null; // The information to be reported to the other nodes in the swarm -- like the host and port (for listening for websockets)
@@ -360,6 +361,7 @@ class SwarmConnection {
         if (peerId in this._peerConnections) return;
         log().info(`SWARM:: Creating peer connection`, {peerId});
         const x = new PeerConnection({
+            udpServer: this._udpServer,
             keyPair: this._keyPair,
             swarmName: this._swarmName,
             nodeId: this._nodeId,
