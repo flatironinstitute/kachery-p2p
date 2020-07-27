@@ -20,14 +20,14 @@ class PeerDiscoveryEngine2 {
         this._udpServer.onLocateSwarmNodesResponse(({swarmName, nodeInfos}) => this._handleLocateSwarmNodesResponse({swarmName, nodeInfos}));
         this._halt = false;
         this._peerNodeInfos = {};
-        // this._remoteServerInfo = {
-        //     address: '52.9.11.30', // aws
-        //     port: 44501
-        // };
         this._remoteServerInfo = {
-            address: 'localhost',
-            port: 3008
+            address: '52.9.11.30', // aws
+            port: 44501
         };
+        // this._remoteServerInfo = {
+        //     address: 'localhost',
+        //     port: 3008
+        // };
         this._start();
     }
     onPeerNodeInfoChanged(cb) {

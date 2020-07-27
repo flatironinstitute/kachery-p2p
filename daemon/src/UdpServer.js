@@ -217,14 +217,14 @@ class UdpServer {
     async _startCheckingForPublicEndpoint() {
         while (true) {
             if (!this._publicEndpoint) {
-                // const rendezvousServerInfo = {
-                //     address: '52.9.11.30', // aws
-                //     port: 44501
-                // };
                 const rendezvousServerInfo = {
-                    address: 'localhost',
-                    port: 3008
+                    address: '52.9.11.30', // aws
+                    port: 44501
                 };
+                // const rendezvousServerInfo = {
+                //     address: 'localhost',
+                //     port: 3008
+                // };
                 const msg = {
                     type: 'whatsMyPublicEndpoint',
                     clientCode: this._clientCode
