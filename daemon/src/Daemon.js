@@ -5,7 +5,7 @@ import KacheryChannelConnection from './KacheryChannelConnection.js';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util.js';
 import FeedManager from './FeedManager.js';
 import WebsocketServer from './WebsocketServer.js';
-import UdpServer from './UdpServer.js';
+import UdpConnectionManager from './UdpConnectionManager.js';
 import { initializeLog, log } from './common/log.js';
 
 const PROTOCOL_VERSION = 'kachery-p2p-0.3.5'
@@ -47,9 +47,9 @@ class Daemon {
             log().info('Listen port is empty or zero. Not listening for incoming connections.');
         }
 
-        this._udpServer = null;
+        this._udpConnectionManager = null;
         if (this._udpListenPort) {
-            this._initializeUdpServer();
+            this._initializeUdpConnectionManager();
         }
 
         this._start();
@@ -108,7 +108,7 @@ class Daemon {
             }
             log().info(`Joining channel.`, {channelName});
             const x = new KacheryChannelConnection({
-                udpServer: this._udpServer,
+                udpConnectionManager: this._udpConnectionManager,
                 keyPair: this._keyPair,
                 nodeId: this._nodeId,
                 channelName,
@@ -249,31 +249,31 @@ class Daemon {
         }
         return state;
     }
-    async _startCheckingForUdpPublicEndpoint() {
-        await sleepMsec(1000);
-        while (true) {
-            if (this._udpServer) {
-                if (!this._nodeInfo.udpAddress) {
-                    const publicEndpoint = this._udpServer.publicEndpoint();
-                    if (publicEndpoint) {
-                        this._nodeInfo.udpAddress = publicEndpoint.address;
-                        this._nodeInfo.udpPort = publicEndpoint.port;
-                        for (let ch in this._kacheryChannelConnections) {
-                            this._kacheryChannelConnections[ch].setNodeInfo(this._nodeInfo);
-                        }
-                    }
-                }
-            }
-            await sleepMsec(10000);
-        }
-    }
+    // async _startCheckingForUdpPublicEndpoint() {
+    //     await sleepMsec(1000);
+    //     while (true) {
+    //         if (this._udpConnectionManager) {
+    //             if (!this._nodeInfo.udpAddress) {
+    //                 const publicEndpoint = this._udpConnectionManager.publicEndpoint();
+    //                 if (publicEndpoint) {
+    //                     this._nodeInfo.udpAddress = publicEndpoint.address;
+    //                     this._nodeInfo.udpPort = publicEndpoint.port;
+    //                     for (let ch in this._kacheryChannelConnections) {
+    //                         this._kacheryChannelConnections[ch].setNodeInfo(this._nodeInfo);
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         await sleepMsec(10000);
+    //     }
+    // }
     async _start() {
         const config = await this._readConfigFile();
         const channels = config['channels'] || [];
         for (let ch of channels) {
             await this.joinChannel(ch.name, {_skipUpdateConfig: true});
         }
-        this._startCheckingForUdpPublicEndpoint();
+        // this._startCheckingForUdpPublicEndpoint();
 
         while (true) {
             if (this._halted) return;
@@ -335,7 +335,7 @@ class Daemon {
         this._websocketServer.listen(this._listenPort);
     }
 
-    _initializeUdpServer() {
+    _initializeUdpConnectionManager() {
         /*
         We will listen for udp messages. This serves two purposes. First, it can be used as an
         alternative way to receive messages from peers via udp hole punching when both nodes
@@ -344,39 +344,46 @@ class Daemon {
         to the outside world.
         */
 
-        this._udpServer = new UdpServer({nodeId: this._nodeId, keyPair: this._keyPair, protocolVersion: this._protocolVersion});
-        this._udpServer.onIncomingConnection((connection, initialInfo) => {
+        this._udpConnectionManager = new UdpConnectionManager({nodeId: this._nodeId, keyPair: this._keyPair, protocolVersion: this._protocolVersion});
+        this._udpConnectionManager.onIncomingConnection((connection) => {
             // We have a new connection -- and the first message passed has info about the swarm
             // swarmName is determined from the channel name
-            const {swarmName, nodeId, protocolVersion} = initialInfo;
-            if (protocolVersion !== this._protocolVersion) {
-                log().warning(`Disconnecting incoming connection. Bad protocol version.`, {incomingProtocolVersion: protocolVersion, protocolVersion: this._protocolVersion});
-                connection.disconnect();
-                return;
-            }
-            const channelName = _getChannelNameFromSwarmName(swarmName);
 
-            // some basic validation
-            if (!channelName) {
-                log().warning(`Disconnecting incoming connection. Bad swarm name.`, {swarmName});
-                connection.disconnect();
-                return;
-            }
-            if (!(channelName in this._kacheryChannelConnections)) {
-                log().warning(`Disconnecting incoming connection. Not joined to channel.`, {channelName});
-                connection.disconnect();
-                return;
-            }
-            if (!nodeId) {
-                log().warning(`Disconnecting incoming connection. Empty nodeId.`);
-                connection.disconnect();
-                return;
-            }
+            const remoteNodeId = connection.remoteNodeId();
+            let gotInitialMessage = false;
+            connection.onMessage(msg => {
+                if (gotInitialMessage) return;
+                if (!msg.initialInfo) {
+                    log().warning(`Disconnecting incoming connection. Bad initial message.`);
+                    connection.disconnect();
+                    return;
+                }
+                gotInitialMessage = true;
+                const swarmName = msg.initialInfo.swarmName;
+                const channelName = _getChannelNameFromSwarmName(swarmName);
 
-            // Add the incoming peer websocket connection to the channel connection
-            this._kacheryChannelConnections[channelName].setIncomingPeerUdpConnection(nodeId, connection);
+                // some basic validation
+                if (!channelName) {
+                    log().warning(`Disconnecting incoming connection. Bad swarm name.`, {swarmName});
+                    connection.disconnect();
+                    return;
+                }
+                if (!(channelName in this._kacheryChannelConnections)) {
+                    log().warning(`Disconnecting incoming connection. Not joined to channel.`, {channelName});
+                    connection.disconnect();
+                    return;
+                }
+                if (!remoteNodeId) {
+                    log().warning(`Disconnecting incoming connection. Empty nodeId.`);
+                    connection.disconnect();
+                    return;
+                }
+
+                // Add the incoming peer websocket connection to the channel connection
+                this._kacheryChannelConnections[channelName].setIncomingPeerUdpConnection(remoteNodeId, connection);
+            });
         });
-        this._udpServer.listen(this._udpListenPort);
+        this._udpConnectionManager.listen(this._udpListenPort);
     }
 }
 

@@ -8,9 +8,145 @@ import { log } from './common/log.js';
 
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
+class PeerDiscoveryEngine3 {
+    constructor({
+        nodeId,
+        udpConnectionManager,
+        swarmName
+    }) {
+        this._nodeId = nodeId;
+        this._udpConnectionManager = udpConnectionManager;
+        this._swarmName = swarmName;
+        this._onPeerNodeInfoChangedCallbacks = [];
+        this._nodeInfo = null;
+        this._halt = false;
+        this._peerNodeInfos = {}; // peerId / {timestamp, nodeInfo}
+
+        // this._remoteServerInfo = {
+        //     address: '52.9.11.30', // aws
+        //     port: 44501
+        // };
+        this._remoteServerInfo = {
+            address: 'localhost',
+            port: 3008
+        };
+
+        this._udpConnection = null;
+
+        this._start();
+    }
+    onPeerNodeInfoChanged(cb) {
+        this._onPeerNodeInfoChangedCallbacks.push(cb);
+    }
+    setNodeInfo(nodeInfo) {
+        if (JSONStringifyDeterministic(nodeInfo) === JSONStringifyDeterministic(this._nodeInfo || {})) {
+            return;
+        }
+        this._nodeInfo = nodeInfo;
+        this._sendAnnounceMessages();
+    }
+    leave() {
+        this._halt = true;
+    }
+    forgetNode(nodeId) {
+        if (nodeId in this._peerNodeInfos) {
+            delete this._peerNodeInfos[nodeId];
+        }
+    }
+    _sendAnnounceMessage() {
+        if ((this._udpConnection) && (this._nodeInfo)) {
+            const msg = {
+                type: 'announceSwarmNode',
+                swarmName: this._swarmName,
+                nodeInfo: this._nodeInfo
+            };
+            this._udpConnection.sendMessage(msg);
+        }
+    }
+    _handleLocateSwarmNodesResponse({nodeInfos}) {
+        console.log('------------------- hlsnr', nodeInfos);
+        for (let nodeId in nodeInfos) {
+            if (nodeId !== this._nodeId) {
+                const nodeInfo = nodeInfos[nodeId];
+                if ((nodeId in this._peerNodeInfos) && (JSONStringifyDeterministic(nodeInfo) === (JSONStringifyDeterministic(this._peerNodeInfos[nodeId])))) {
+                    // no change
+                }
+                else {
+                    this._peerNodeInfos[nodeId] = nodeInfo;
+                    this._onPeerNodeInfoChangedCallbacks.forEach(cb => {
+                        cb({peerId: nodeId, peerNodeInfo: nodeInfos[nodeId]});
+                    });
+                }
+            }
+        }
+    }
+    _handleUdpMessage(msg) {
+        if (msg.type === 'locateSwarmNodesResponse') {
+            const nodeInfos = msg.nodeInfos;
+            this._handleLocateSwarmNodesResponse({nodeInfos});
+        }
+    }
+    async _startLocatingNodesInSwarm() {
+        while (true) {
+            if (this._halt) return;
+            if (this._udpConnection) {
+                const msg = {
+                    type: 'locateSwarmNodes',
+                    swarmName: this._swarmName
+                };
+                this._udpConnection.sendMessage(msg);
+            }
+            await sleepMsec(5000);
+        }
+    }
+    async _startAnnouncing() {
+        while (true) {
+            if (this._halt) return;
+            this._sendAnnounceMessage();
+            await sleepMsec(20000);
+        }
+    }
+    async _startMaintainingConnection() {
+        while (true) {
+            if (this._halt) return;
+            if (!this._udpConnection) {
+                const C = this._udpConnectionManager.createOutgoingConnection({
+                    remoteAddress: this._remoteServerInfo.address,
+                    remotePort: this._remoteServerInfo.port,
+                });
+                C.onMessage(msg => this._handleUdpMessage(msg));
+                C.onConnect(() => {
+                    if (!this._udpConnection) {
+                        this._udpConnection = C;
+                    }
+                    this._sendAnnounceMessage();
+                });
+                C.onError(() => {
+                    if (C === this._udpConnection) {
+                        this._udpConnection = null;
+                    }
+                })
+                C.onDisconnect(() => {
+                    if (C === this._udpConnection) {
+                        this._udpConnection = null;
+                    }
+                });
+            }
+            
+            await sleepMsec(10000);
+        }
+    }
+    async _start() {
+        this._startMaintainingConnection();
+        this._startLocatingNodesInSwarm();
+        this._startAnnouncing();
+    }
+}
+
 class KacheryChannelConnection {
-    constructor({keyPair, nodeId, channelName, protocolVersion, feedManager, udpServer, opts}) {
+    constructor({keyPair, nodeId, channelName, protocolVersion, feedManager, udpConnectionManager, opts}) {
         this._keyPair = keyPair; // The keypair used for signing message, the public key agrees with the node id
+        this._udpConnectionManager = udpConnectionManager;
         this._nodeId = nodeId; // The node id, determined by the public key in the keypair
         this._nodeInfo = null; // The information to be reported to the other nodes in the swarm -- like the host and port (for listening for websockets)
         this._channelName = channelName; // Name of the channel (related to the swarmName)
@@ -18,11 +154,12 @@ class KacheryChannelConnection {
         this._protocolVersion = protocolVersion;
         this._halt = false; // Whether we have left this channel (see .leave())
         this._opts = opts;
+        this._swarmName = 'kachery:' + this._channelName;
 
         // Create the swarm connection
-        const swarmName = 'kachery:' + this._channelName;
+        const swarmName = this._swarmName;
         this._swarmConnection = new SwarmConnection({
-            udpServer,
+            udpConnectionManager,
             keyPair,
             nodeId,
             swarmName,
@@ -42,11 +179,22 @@ class KacheryChannelConnection {
             this._handlePeerRequest({fromNodeId, requestBody, onResponse, onError, onFinished});
         });
 
+        console.log('-------------------------- nodeId, swarmName', this._nodeId, this._swarmName);
+        this._peerDiscoveryEngine = new PeerDiscoveryEngine3({
+            nodeId: this._nodeId,
+            udpConnectionManager: this._udpConnectionManager,
+            swarmName: this._swarmName
+        });
+        this._peerDiscoveryEngine.onPeerNodeInfoChanged(({peerId, peerNodeInfo}) => {
+            this._swarmConnection.reportPotentialPeer({nodeId: peerId, nodeInfo: peerNodeInfo});
+        });
+
         // Start the loop
         this._start();
     }
     setNodeInfo(nodeInfo) {
         this._nodeInfo = nodeInfo;
+        this._peerDiscoveryEngine.setNodeInfo(nodeInfo);
         this._swarmConnection.setNodeInfo(nodeInfo);
     }
     // Set an incoming websocket connection for a peer

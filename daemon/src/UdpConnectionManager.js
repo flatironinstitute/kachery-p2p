@@ -3,26 +3,28 @@ import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignatu
 import { log } from './common/log.js';
 import { randomAlphaString, sleepMsec } from './common/util.js';
 import { request } from 'http';
+import { rejects } from 'assert';
 
-class UdpServer {
+class UdpConnectionManager {
     constructor({nodeId, keyPair, protocolVersion}) {
         this._nodeId = nodeId;
         this._keyPair = keyPair;
-        this._onIncomingConnectionCallbacks = [];
+        this._protocolVersion = protocolVersion;
+
         this._socket = null;
-        this._openConnections = {}; // by connection id
+        this._incomingConnections = {}; // by connection id
+        this._outgoingConnections = {}; // by connection id
         this._pendingOutgoingConnections = {}; // by connection id
-        this._publicEndpoint = null;
+
+        this._onIncomingConnectionCallbacks = [];
+
+        // to: move elsewhere
         this._swarmNodes = {};
         this._onLocateSwarmNodesResponseCallbacks = [];
-        this._protocolVersion = protocolVersion;
-        this._clientCode = randomAlphaString(10); // so we can verify that the remote endpoint is coming from a place where we requested it from
+        
     }
     onIncomingConnection = (cb) => {
         this._onIncomingConnectionCallbacks.push(cb);
-    }
-    publicEndpoint() {
-        return this._publicEndpoint;
     }
     async listen(port) {
         ///////////////////////////////////////////////////////////////////////////////
@@ -65,66 +67,86 @@ class UdpServer {
         this._socket = socket;
         this._start();
     }
+    // todo: move this
     onLocateSwarmNodesResponse(cb) {
         this._onLocateSwarmNodesResponseCallbacks.push(cb);
     }
-    createOutgoingConnection({remoteNodeId, remoteAddress, remotePort, swarmName}) {
-        const C = new UdpServerConnection(this, {remoteNodeId, remoteAddress, remotePort, incoming: false});
+    createOutgoingConnection({remoteAddress, remotePort}) {
+        const C = new UdpConnection(this, {remoteAddress, remotePort, incoming: false});
         C.sendMessage({
             type: 'openConnection',
             connectionId: C._connectionId,
-            initialInfo: {
-                swarmName,
-                nodeId: this._nodeId,
-                protocolVersion: this._protocolVersion
-            }
+            protocolVersion: this._protocolVersion,
+            nodeId: this._nodeId
         });
         this._pendingOutgoingConnections[C._connectionId]  = C;
         return C;
     }
     async _handleMessage(fromNodeId, remote, message, connectionId) {
-        if (message.type === 'whatsMyPublicEndpoint') {
-            // No connection, just provide a response
-            // the client wants to know their public endpoint for purpose of holepunching
-            if ((!remote.address) || (!remote.port)) {
-                log().warning('whatsMyPublicEndpoint message: no remote.address or remote.port', {remote});
+        if (message.type === 'openConnection') {
+            if (message.protocolVersion !== this._protocolVersion) {
+                log().warning('Udp openConnection: Mismatch protocol version');
                 return;
             }
-            if (!message.clientCode) {
-                log().warning('whatsMyPublicEndpoint message: no remote.clientCode');
+            if (!message.connectionId) {
+                log().warning('Udp openConnection: No connection ID');
                 return;
             }
-            log().debug('Handling whatsMyPublicEndpoint message', {fromNodeId, remote});
+            if (message.connectionId in this._incomingConnections) {
+                log().warning('Udp openConnection: Incoming connection with ID already exists', {connectionId: message.connectionId});
+                return;
+            }
+            // wants to open a new connection
+            const connection = new UdpConnection(this, {remoteAddress: remote.address, remotePort: remote.port, connectionId: message.connectionId, incoming: true});
+            connection._remoteNodeId = fromNodeId;
+            connection.onDisconnect(() => {
+                if (connection.connectionId() in this._incomingConnections) {
+                    delete this._incomingConnections[connection.connectionId()];
+                }
+            });
+            this._incomingConnections[connection.connectionId()] = connection;
             this._sendMessageToRemote(remote, {
-                type: 'whatsMyPublicEndpointResponse',
-                publicEndpoint: {
-                    address: remote.address,
-                    port: remote.port
-                },
-                clientCode: message.clientCode
+                type: 'connectionOpened',
+                connectionId: message.connectionId,
+                endpoint: remote,
+                nodeId: this._nodeId
             }, {connectionId: null});
-            return;
+            this._onIncomingConnectionCallbacks.forEach(cb => {
+                cb(connection);
+            });
+            connection._triggerConnect();
         }
-        else if (message.type === 'whatsMyPublicEndpointResponse') {
-            if (message.clientCode !== this._clientCode) {
-                log().warning('whatsMyPublicEndpointReponse message: incorrect client code', {messageClientCode: message.clientCode, clientCode: this._clientCode});
+        else if (message.type === 'connectionOpened') {
+            if (!message.connectionId) {
+                log().warning('Udp connectionOpened: No connectionId');
                 return;
             }
-            if (this._publicEndpoint) {
-                log().warning('whatsMyPublicEndpointReponse message: already have the public endpoint');
+            const connectionId = message.connectionId;
+            if (!(connectionId in this._pendingOutgoingConnections)) {
+                log().warning('Udp connectionOpened: connetion ID not in pending outgoing connections');
                 return;
             }
-            log().debug('Handling whatsMyPublicEndpointResponse message', {message});
-            this._publicEndpoint = message.publicEndpoint;
-            // todo: verify the correctness of the endpoint
+            const C = this._pendingOutgoingConnections[connectionId];
+            delete this._pendingOutgoingConnections[connectionId];
+            C._remoteNodeId = fromNodeId;
+            C._endpoint = message.endpoint;
+            C._remoteNodeId = message.remoteNodeId;
+            this._outgoingConnections[connectionId] = C;
+            C.onDisconnect(() => {
+                if (C.connectionId() in this._outgoingConnections) {
+                    delete this._outgoingConnections[C.connectionId()];
+                }
+            });
+            C._triggerConnect();
         }
+        // todo: move
         else if (message.type === 'announceSwarmNode') {
             if ((!remote.address) || (!remote.port)) {
                 log().warning('announceSwarmNode: no remote.address or remote.port', {remote});
                 return;
             }
             if (!message.swarmName) {
-                log().warning('announceSwarmNode: no remote.swarmName');
+                log().warning('announceSwarmNode: no remote.swarmName', {message});
                 return;
             }
             if (!message.nodeInfo) {
@@ -144,6 +166,7 @@ class UdpServer {
             };
             return;
         }
+        // todo: move
         else if (message.type === 'locateSwarmNodes') {
             if ((!remote.address) || (!remote.port)) {
                 log().warning('locateSwarmNodes: no remote.address or remote.port', {remote});
@@ -172,6 +195,7 @@ class UdpServer {
             }, {connectionId: null});
             return;
         }
+        // todo: move
         else if (message.type === 'locateSwarmNodesResponse') {
             if (!message.swarmName) {
                 log().warning('locateSwarmNodesResponse: no remote.swarmName');
@@ -186,43 +210,6 @@ class UdpServer {
             });
             return;
         }
-        else if (message.type === 'openConnection') {
-            if (!message.connectionId) {
-                return;
-            }
-            if (message.connectionId in this._openConnections) {
-                return;
-            }
-            // wants to open a new connection
-            const connection = new UdpServerConnection(this, {remoteNodeId: fromNodeId, remoteAddress: remote.address, remotePort: remote.port, connectionId: message.connectionId, incoming: true});
-            connection.onDisconnect(() => {
-                if (connection.connectionId() in this._openConnections) {
-                    delete this._openConnections[connection.connectionId()];
-                }
-            });
-            this._openConnections[connection.connectionId()] = connection;
-            this._sendMessageToRemote(remote, {
-                type: 'connectionOpened',
-                connectionId: message.connectionId
-            }, {connectionId: null});
-            this._onIncomingConnectionCallbacks.forEach(cb => {
-                cb(connection, message.initialInfo);
-            });
-            connection._triggerConnect();
-        }
-        else if (message.type === 'connectionOpened') {
-            if (!message.connectionId) {
-                return;
-            }
-            const connectionId = message.connectionId;
-            if (!(connectionId in this._pendingOutgoingConnections)) {
-                return;
-            }
-            const C = this._pendingOutgoingConnections[connectionId];
-            delete this._pendingOutgoingConnections[connectionId];
-            this._openConnections[connectionId] = C;
-            C._triggerConnect();
-        }
         else {
             if (!connectionId) {
                 console.warn(message);
@@ -233,11 +220,12 @@ class UdpServer {
                 log().warning('Got message for connection that is still pending', {remote, connectionId});
                 return;
             }
-            if (!(connectionId in this._openConnections)) {
+            const con = this._incomingConnections[connectionId] || this._outgoingConnections[connectionId];
+            if (!con) {
                 log().warning('No open udp connection with id', {remote, connectionId});
                 return;
             }
-            const con = this._openConnections[connectionId];
+            
             if (fromNodeId !== con.remoteNodeId()) {
                 // this is important, so we don't get fake messages from other nodes
                 log().warning('Yikes. fromNodeId does not match for udp message connection', {remote, connectionId, fromNodeId, expectedFromNodeId: con.remoteNodeId()});
@@ -270,30 +258,7 @@ class UdpServer {
             }
         });
     }
-    async _startCheckingForPublicEndpoint() {
-        while (true) {
-            if (!this._publicEndpoint) {
-                const rendezvousServerInfo = {
-                    address: '52.9.11.30', // aws
-                    port: 44501
-                };
-                // const rendezvousServerInfo = {
-                //     address: 'localhost',
-                //     port: 3008
-                // };
-                const msg = {
-                    type: 'whatsMyPublicEndpoint',
-                    clientCode: this._clientCode
-                }
-                log().debug('Sending whatsMyPublicEndpoint message to rendezvous server', {rendezvousServerInfo});
-                this._sendMessageToRemote(rendezvousServerInfo, msg, {connectionId: null});
-            }
-
-            await sleepMsec(10000);
-        }
-    }
     async _start() {
-        // this._startCheckingForPublicEndpoint();
         while (true) {
             //
 
@@ -302,18 +267,22 @@ class UdpServer {
     }
 }
 
-class UdpServerConnection {
-    constructor(udpServer, {remoteNodeId, remoteAddress, remotePort, connectionId, incoming}) {
+class UdpConnection {
+    constructor(udpConnectionManager, {remoteAddress, remotePort, connectionId, incoming}) {
+        this._udpConnectionManager = udpConnectionManager;
         this._connectionId = connectionId || randomAlphaString(10) + '-udp';
         this._incoming = incoming;
-        this._udpServer = udpServer;
-        this._remoteNodeId = remoteNodeId;
+        this._remoteNodeId = null;
         this._remote = {address: remoteAddress, port: remotePort};
         this._onMessageCallbacks = [];
         this._onConnectCallbacks = [];
         this._onDisconnectCallbacks = [];
         this._onErrorCallbacks = [];
         this._connected = false;
+        this._endpoing = null;
+    }
+    endpoint() {
+        return this._endpoint;
     }
     connectionId() {
         return this._connectionId;
@@ -337,10 +306,10 @@ class UdpServerConnection {
         this._onDisconnectCallbacks.push(cb);
     }
     sendMessage(msg) {
-        this._udpServer._sendMessageToRemote(this._remote, msg, {connectionId: this._connectionId});
+        this._udpConnectionManager._sendMessageToRemote(this._remote, msg, {connectionId: this._connectionId});
     }
     disconnect() {
-        // note: this will trigger deleting the connection from the list of open connections in the udpServer
+        // note: this will trigger deleting the connection from the list of open connections in the udpConnectionManager
         this._onDisconnectCallbacks.forEach(cb => cb());
     }
     _handleMessageFromClient(message) {
@@ -359,4 +328,4 @@ class UdpServerConnection {
     }
 }
 
-export default UdpServer;
+export default UdpConnectionManager;

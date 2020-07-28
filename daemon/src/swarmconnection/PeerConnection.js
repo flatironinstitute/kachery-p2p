@@ -5,8 +5,8 @@ import { log } from '../common/log.js';
 import UdpClientConnection from '../UdpClientConnection.js';
 
 class PeerConnection {
-    constructor({ udpServer, keyPair, swarmName, nodeId, peerId, protocolVersion }) {
-        this._udpServer = udpServer;
+    constructor({ udpConnectionManager, keyPair, swarmName, nodeId, peerId, protocolVersion }) {
+        this._udpConnectionManager = udpConnectionManager;
         this._keyPair = keyPair;
         this._swarmName = swarmName;
         this._nodeId = nodeId;
@@ -240,11 +240,9 @@ class PeerConnection {
             if ((peerNodeInfo) && (peerNodeInfo.udpAddress) && (peerNodeInfo.udpPort)) {
                 const udpAddress = peerNodeInfo.udpAddress;
                 const udpPort = peerNodeInfo.udpPort;
-                const C = this._udpServer.createOutgoingConnection({
-                    remoteNodeId: this._peerId,
+                const C = this._udpConnectionManager.createOutgoingConnection({
                     remoteAddress: udpAddress,
-                    remotePort: udpPort,
-                    swarmName: this._swarmName
+                    remotePort: udpPort
                 });
                 let connected = false;
                 let errored = false;
@@ -268,14 +266,26 @@ class PeerConnection {
                 C.onConnect(() => {
                     if (errored) {
                         log().warning(`Unexpected. We connected udp, but also errored.`, {peerId: this._peerId});
+                        C.disconnect();
                         return;
                     }
                     if (connected) {
                         log().warning(`Unexpected. Already connected to udp.`, {peerId: this._peerId});
+                        C.disconnect();
+                        return;
+                    }
+                    if (C.remoteNodeId() !== this._peerId) {
+                        log().warning(`Unexpected. Node ID mismatch.`, {peerId: this._peerId, remoteNodeId: C.remoteNodeId()});
+                        C.disconnect();
                         return;
                     }
                     connected = true;
                     log().info(`Outgoing udp connection established`, {peerId: this._peerId}); 
+                    C.sendMessage({
+                        initialInfo: {
+                            swarmName: this._swarmName
+                        }
+                    });
                     this._outgoingUdpConnection = C;
                     this._onUdpConnectionCallbacks.forEach(cb => cb());
                     resolve(true);

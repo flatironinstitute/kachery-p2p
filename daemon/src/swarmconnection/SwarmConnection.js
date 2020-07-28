@@ -1,4 +1,4 @@
-import PeerDiscoveryEngine from './peerdiscovery/PeerDiscoveryEngine.js';
+// import PeerDiscoveryEngine from './peerdiscovery/PeerDiscoveryEngine.js';
 import PeerConnection from './PeerConnection.js';
 import { randomAlphaString, sleepMsec } from '../common/util.js';
 import { JSONStringifyDeterministic } from '../common/crypto_util.js'
@@ -6,102 +6,9 @@ import { getSignature, hexToPublicKey, verifySignature } from '../common/crypto_
 import SmartySwarmConnection from './SmartySwarmConnection.js';
 import { log } from '../common/log.js';
 
-class PeerDiscoveryEngine2 {
-    constructor({
-        nodeId,
-        udpServer,
-        swarmName
-    }) {
-        this._nodeId = nodeId;
-        this._udpServer =udpServer;
-        this._swarmName = swarmName;
-        this._onPeerNodeInfoChangedCallbacks = [];
-        this._nodeInfo = null;
-        this._udpServer.onLocateSwarmNodesResponse(({swarmName, nodeInfos}) => this._handleLocateSwarmNodesResponse({swarmName, nodeInfos}));
-        this._halt = false;
-        this._peerNodeInfos = {};
-        this._remoteServerInfo = {
-            address: '52.9.11.30', // aws
-            port: 44501
-        };
-        // this._remoteServerInfo = {
-        //     address: 'localhost',
-        //     port: 3008
-        // };
-        this._start();
-    }
-    onPeerNodeInfoChanged(cb) {
-        this._onPeerNodeInfoChangedCallbacks.push(cb);
-    }
-    setNodeInfo(nodeInfo) {
-        if (JSONStringifyDeterministic(nodeInfo) === JSONStringifyDeterministic(this._nodeInfo || {})) {
-            return;
-        }
-        this._nodeInfo = nodeInfo;
-        this._sendAnnounceMessage();
-    }
-    leave() {
-        this._halt = true;
-    }
-    forgetNode(nodeId) {
-        if (nodeId in this._peerNodeInfos) {
-            delete this._peerNodeInfos[nodeId];
-        }
-    }
-    _sendAnnounceMessage() {
-        if (!this._nodeInfo) return;
-        const msg = {
-            type: 'announceSwarmNode',
-            swarmName: this._swarmName,
-            nodeInfo: this._nodeInfo
-        };
-        this._udpServer._sendMessageToRemote(this._remoteServerInfo, msg, {connectionId: null});
-    }
-    _handleLocateSwarmNodesResponse({swarmName, nodeInfos}) {
-        if (swarmName === this._swarmName) {
-            for (let nodeId in nodeInfos) {
-                if (nodeId !== this._nodeId) {
-                    const nodeInfo = nodeInfos[nodeId];
-                    if ((nodeId in this._peerNodeInfos) && (JSONStringifyDeterministic(nodeInfo) === (JSONStringifyDeterministic(this._peerNodeInfos[nodeId])))) {
-                        // no change
-                    }
-                    else {
-                        this._peerNodeInfos[nodeId] = nodeInfo;
-                        this._onPeerNodeInfoChangedCallbacks.forEach(cb => {
-                            cb({peerId: nodeId, peerNodeInfo: nodeInfos[nodeId]});
-                        });
-                    }
-                }
-            }
-        }
-    }
-    async _startLocatingNodesInSwarm() {
-        while (true) {
-            if (this._halt) return;
-            const msg = {
-                type: 'locateSwarmNodes',
-                swarmName: this._swarmName
-            };
-            this._udpServer._sendMessageToRemote(this._remoteServerInfo, msg, {connectionId: null});
-
-            await sleepMsec(5000);
-        }
-    }
-    async _startAnnouncing() {
-        while (true) {
-            this._sendAnnounceMessage();
-            await sleepMsec(20000);
-        }
-    }
-    async _start() {
-        this._startLocatingNodesInSwarm();
-        this._startAnnouncing();
-    }
-}
-
 class SwarmConnection {
-    constructor({keyPair, nodeId, swarmName, protocolVersion, udpServer, opts}) {
-        this._udpServer = udpServer;
+    constructor({keyPair, nodeId, swarmName, protocolVersion, udpConnectionManager, opts}) {
+        this._udpConnectionManager = udpConnectionManager;
         this._keyPair = keyPair; // the keypair for signing messages (public key is same as node id)
         this._nodeId = nodeId; // The id of the node, determined by the public key in the keypair
         this._nodeInfo = null; // The information to be reported to the other nodes in the swarm -- like the host and port (for listening for websockets)
@@ -117,27 +24,27 @@ class SwarmConnection {
         this._smarty = new SmartySwarmConnection(this);
 
         // the discovery engine!
-        this._peerDiscoveryEngine = new PeerDiscoveryEngine2({
-            nodeId,
-            udpServer,
-            swarmName
-        });
-        // Listen for new nodes in the swarm announcing their node info
-        this._peerDiscoveryEngine.onPeerNodeInfoChanged(({peerId, peerNodeInfo}) => {
-            if (peerId in this._peerConnections) {
-                this._peerConnections[peerId].setPeerNodeInfo(peerNodeInfo);
-            }
-            else {
-                this._handleNewPeerAnnounce({peerId, peerNodeInfo});
-            }
-        });
+        // this._peerDiscoveryEngine = new PeerDiscoveryEngine2({
+        //     nodeId,
+        //     udpConnectionManager,
+        //     swarmName
+        // });
+        // // Listen for new nodes in the swarm announcing their node info
+        // this._peerDiscoveryEngine.onPeerNodeInfoChanged(({peerId, peerNodeInfo}) => {
+        //     if (peerId in this._peerConnections) {
+        //         this._peerConnections[peerId].setPeerNodeInfo(peerNodeInfo);
+        //     }
+        //     else {
+        //         this._handleNewPeerAnnounce({peerId, peerNodeInfo});
+        //     }
+        // });
 
         // Start the loop
         this._start();
     }
     setNodeInfo(nodeInfo) {
         this._nodeInfo = nodeInfo;
-        this._peerDiscoveryEngine.setNodeInfo(nodeInfo);
+        // this._peerDiscoveryEngine.setNodeInfo(nodeInfo);
     }
 
     // This node id
@@ -150,7 +57,7 @@ class SwarmConnection {
             type: 'leaving'
         });
         this._halt = true;
-        this._peerDiscoveryEngine.leave();
+        // this._peerDiscoveryEngine.leave();
     }
     // A sorted list of the peer ids
     peerIds = () => {
@@ -243,6 +150,21 @@ class SwarmConnection {
             }
         }
     }
+    reportPotentialPeer({nodeId, nodeInfo}) {
+        if (nodeId in this._peerConnections) {
+            // do we want to update the peer info?
+            this._peerConnections[nodeId].setPeerNodeInfo(nodeInfo);
+        }
+        else {
+            this._handleNewPeerAnnounce({peerId: nodeId, peerNodeInfo: nodeInfo});
+        }
+        //     if (peerId in this._peerConnections) {
+        //         this._peerConnections[peerId].setPeerNodeInfo(peerNodeInfo);
+        //     }
+        //     else {
+        //         this._handleNewPeerAnnounce({peerId, peerNodeInfo});
+        //     }
+    }
     // Send a message to a peer
     async sendMessageToPeer(peerId, msg) {
         await this._sendMessageToPeer(peerId, msg);
@@ -269,7 +191,7 @@ class SwarmConnection {
         if (!pc) return;
         log().info(`Disconnecting peer`, {peerId});
         pc.disconnect();
-        this._peerDiscoveryEngine.forgetNode(peerId);
+        // this._peerDiscoveryEngine.forgetNode(peerId);
         delete this._peerConnections[peerId];
     }
 
@@ -361,7 +283,7 @@ class SwarmConnection {
         if (peerId in this._peerConnections) return;
         log().info(`SWARM:: Creating peer connection`, {peerId});
         const x = new PeerConnection({
-            udpServer: this._udpServer,
+            udpConnectionManager: this._udpConnectionManager,
             keyPair: this._keyPair,
             swarmName: this._swarmName,
             nodeId: this._nodeId,
