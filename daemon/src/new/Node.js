@@ -43,7 +43,7 @@ class Node {
 
         this._channels = {}; // by channel name ---- {[channelName]: {nodes: {[nodeId]: {timestamp: ..., nodeInfo: ...}}}}
         this._peers = {}; // by peerId
-        this._findChannelNodesLookup = {}; // {[channelName]: {nodes: {[nodeId]: {timestamp..., nodeInfo: ...}}}}
+        this._findChannelNodesLookup = {}; // {[channelName]: {nodes: {[nodeId]: {signature, body: {timestamp, nodeInfo}}}}
 
         this._websocketServer = this._initializeServer({ type: 'websocket', listenPort: this._port });
         // this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._udpPort });
@@ -486,7 +486,6 @@ class Node {
         }
     }
     async getLiveFeedSignedMessages({channelName, nodeId, feedId, subfeedName, position, waitMsec}) {
-        console.log('----------------------------------------- nodeId', nodeId);
         return new Promise((resolve, reject) => {
             const requestBody = {
                 type: 'getLiveFeedSignedMessages',
@@ -581,7 +580,7 @@ class Node {
             const CH = this._channels[channelName];
             for (let nodeId in CH.nodes) {
                 nodesIncluded[nodeId] = true;
-                const nodeInfo = CH.nodes[nodeId].nodeInfo;
+                const nodeInfo = CH.nodes[nodeId].data.body.nodeInfo;
                 lines.push(makeNodeLine(nodeId, nodeInfo));
             }
             lines.push('');
@@ -964,64 +963,71 @@ class Node {
         });
     }
     async _handleAnnouncingMessage({ fromNodeId, message }) {
+        // one of two mechanisms to discover nodes and get updated info
         this._validateNodeId(fromNodeId);
         this._validateMessage(message);
-        const nodeInfo = message.nodeInfo;
+        this._validateSimpleObject(message.data);
+        this._validateString(message.data.signature);
+        this._validateSimpleObject(message.data.body);
+        assert(message.data.body.timestamp, 'Missing timestamp');
+        this._validateSimpleObject(message.data.body.nodeInfo);
+        this._validateNodeInfo(message.data.body.nodeInfo);
+        assert(message.data.body.nodeInfo.nodeId === fromNodeId, 'Mismatch in node id');
+        const data0 = message.data;
         const channelName = message.channelName;
-
-        this._validateNodeInfo(nodeInfo);
-        this._validateChannelName(channelName, {mustBeJoined: true});
-
-        if (nodeInfo.nodeId !== fromNodeId) {
-            throw new Error('handleAnnouncingMessage. Inconsistent nodeId');
-        }
-
-        const CH = this._channels[channelName];
-        if (!CH) {
-            return;
-        }
-        if (!(fromNodeId in CH.nodes)) {
-            CH.nodes[fromNodeId] = {};
-        }
-        CH.nodes[fromNodeId].timestamp = new Date();
-        CH.nodes[fromNodeId].nodeInfo = nodeInfo;
+        this._handleReceiveNodeInfo({channelName, data: data0});
+    }
+    _createFindChannelNodesDataForSelf() {
+        const body = {
+            nodeInfo: this.nodeInfo(),
+            timestamp: (new Date()) - 0
+        };
+        return {
+            body,
+            signature: getSignature(body, this._keyPair)
+        };
     }
     _handleFindChannelNodes({ fromNodeId, message }) {
+        // This system allows us to trust that the node info is coming from the node itself
         this._validateNodeId(fromNodeId);
         this._validateMessage(message);
 
-        // todo: think about this
         const channelName = message.channelName;
-        const nodeInfo = message.nodeInfo;
-
         this._validateChannelName(channelName);
-        this._validateNodeInfo(nodeInfo);
 
+        const data = message.data;
+        this._validateSimpleObject(data);
+        this._validateString(data.signature);
+        this._validateSimpleObject(data.body);
+        this._validateSimpleObject(data.body.nodeInfo);
+        this._validateNodeInfo(data.body.nodeInfo);
+        assert(fromNodeId === data.body.nodeInfo.nodeId, 'Mismatch with node id');
+        assert(data.body.timestamp, 'Missing timestamp');
+
+        if (!verifySignature(data.body, data.signature, hexToPublicKey(fromNodeId))) {
+            throw new SignatureError({fromNodeId});
+        }
+        
         if (!this._peers[fromNodeId]) {
             throw new Error('findChannelNodes must come from peer. Peer not found.');
         }
         if (!this._peers[fromNodeId].hasConnection()) {
             throw new Error('findChannelNodes must come from peer with aconnection. Peer connection not found.');
         }
-        if (nodeInfo.nodeId !== fromNodeId) {
-            throw new Error(`handleFindChannelNodes: inconsistent node ID.`);
-        }
-        if (!(channelName in this._findChannelNodesLookup)) { // todo
+        if (!(channelName in this._findChannelNodesLookup)) {
             this._findChannelNodesLookup[channelName] = { nodes: {} };
         }
         const x = this._findChannelNodesLookup[channelName];
         x.nodes[fromNodeId] = {
-            nodeInfo,
-            timestamp: new Date()
+            internalTimestamp: new Date(),
+            data
         };
         const nodes = {};
         for (let nodeId in x.nodes) {
             if (nodeId !== fromNodeId) {
-                const elapsed = (new Date()) - x.nodes[nodeId].timestamp;
+                const elapsed = (new Date()) - x.nodes[nodeId].internalTimestamp;
                 if (elapsed < 60000) {
-                    nodes[nodeId] = {
-                        nodeInfo: x.nodes[nodeId].nodeInfo
-                    }
+                    nodes[nodeId] = x.nodes[nodeId].data;
                 }
                 else {
                     delete x.nodes[nodeId];
@@ -1030,9 +1036,7 @@ class Node {
         }
         if (channelName in this._channels) {
             // report self
-            nodes[this._nodeId] = {
-                nodeInfo: this.nodeInfo
-            }
+            nodes[this._nodeId] = this._createFindChannelNodesDataForSelf();
         }
         if (Object.keys(nodes).length > 0) {
             this._peers[fromNodeId].sendMessage({
@@ -1042,7 +1046,41 @@ class Node {
             });
         }
     }
+    _handleReceiveNodeInfo({ channelName, data }) {
+        // called by the two mechanisms for discovering nodes and getting updated nodeInfo data
+        // This system allows us to trust that the node info is coming from the node itself
+        this._validateChannelName(channelName, {mustBeJoined: true});
+        let CH = this._channels[channelName];
+        this._validateSimpleObject(data, {fields: {
+            signature: {optional: false, type: 'string'},
+            body: {optional: false}
+        }});
+        assert(data.body.timestamp, 'Missing timestamp');
+        this._validateNodeInfo(data.body.nodeInfo);
+        const nodeId = data.body.nodeInfo.nodeId;
+        this._validateNodeId(nodeId);
+        if (!verifySignature(data.body, data.signature, hexToPublicKey(data.body.nodeInfo.nodeId))) {
+            throw new SignatureError({nodeId: data.body.nodeInfo.nodeId, fromNodeId});
+        }
+        let okayToReplace = false;
+        if (nodeId in CH.nodes) {
+            const difference = data.body.timestamp - CH.nodes[nodeId].data.body.timestamp;
+            if (difference > 0) {
+                okayToReplace = true;
+            }
+        }
+        else {
+            okayToReplace = true;
+        }
+        if (okayToReplace) {
+            CH.nodes[nodeId] = {
+                internalTimestamp: new Date(), // for deciding when to delete it internal to this component -- don't use remote timestamp because it might be a different time zone - only use remote timestamp for comparing and determining most recent
+                data: data
+            };
+        }
+    }
     _handleFindChannelNodesResponse({ fromNodeId, message }) {
+        // one of two mechanisms to discover nodes and get updated info
         this._validateNodeId(fromNodeId);
         this._validateMessage(message);
 
@@ -1052,19 +1090,10 @@ class Node {
         this._validateChannelName(channelName, {mustBeJoined: true});
         this._validateSimpleObject(nodes);
 
-        // todo: we can't trust this info coming in... so we need to try the connections rather than just updating the info
-        let CH = this._channels[channelName];
         for (let nodeId in nodes) {
             this._validateNodeId(nodeId);
-            console.log('------------------------------------------', nodes);
-            this._validateSimpleObject(nodes[nodeId], {fields: {
-                nodeInfo: {optional: false}
-            }});
-            // todo: get proof from original node, and include timestamp from original node, and only update if newer
-            CH.nodes[nodeId] = {
-                nodeInfo: nodes[nodeId],
-                timestamp: new Date()
-            }
+            const data0 = nodes[nodeId];
+            this._handleReceiveNodeInfo({channelName, data: data0});
         }
     }
     _nodeIsInOneOfOurChannels(nodeId) {
@@ -1082,7 +1111,7 @@ class Node {
             if (!P.isBootstrapPeer()) {
                 if (!this._nodeIsInOneOfOurChannels(peerId)) {
                     if (P.hasOutgoingConnection()) {
-                        console.log(`Removing outgoing connections to peer because it is not in any of our channels: ${peerId.slice(0, 6)}`);
+                        console.info(`Removing outgoing connections to peer because it is not in any of our channels: ${peerId.slice(0, 6)}`);
                         P.disconnectOutgoingConnections();
                     }
                 }
@@ -1094,7 +1123,7 @@ class Node {
                 if (P.isBootstrapPeer()) {
                     this._bootstrapPeerInfos.push(P.bootstrapPeerInfo());
                 }
-                console.log(`Removing peer: ${peerId.slice(0, 6)}`);
+                console.info(`Removing peer: ${peerId.slice(0, 6)}`);
                 P.disconnect();
                 delete this._peers[peerId];
             }
@@ -1150,18 +1179,18 @@ class Node {
                 nodeInfo,
                 {
                     fields: {
-                        nodeId: {optional: false, type: 'string'},
-                        address: {optional: true},
-                        port: {optional: true},
-                        udpAddress: {optional: true},
-                        udpPort: {optional: true},
-                        label: {optional: false, type: 'string'}
+                        nodeId: {optional: false, type: 'string', minLength: 64, maxLength: 64},
+                        address: {optional: true, type: 'string', nullOkay: true, minLength: 0, maxLength: 80},
+                        port: {optional: true, type: 'integer', nullOkay: true},
+                        udpAddress: {optional: true,  type: 'string', nullOkay: true, minLength: 0, maxLength: 80},
+                        udpPort: {optional: true, type: 'integer', nullOkay: true},
+                        label: {optional: false, type: 'string', minLength: 0, maxLength: 160}
                     }
                 }
             )
         }
-        catch(err) {
-            throw new InvalidNodeInfoError(nodeInfo);
+        catch(error) {
+            throw new InvalidNodeInfoError({nodeInfo, error});
         }
     }
     _validateRequestBody(x) {
@@ -1189,16 +1218,39 @@ class Node {
         }
     }
     _validateSimpleObject(x, opts) {
+
+        const validateField = ({field, value, key}) => {
+            if (value === null) {
+                if (field.nullOkay) {
+                    return; // we are okay
+                }
+            }
+            const f = field;
+            const val = value;
+            const k = key;
+            if (f.type === 'string') {
+                assert(typeof(val) === 'string', `Field not a string: ${k} ${value}`);
+                if (f.minLength) {
+                    assert(val.length >= f.minLength, `Length of string must be at least ${f.minLength}`);
+                }
+                if (f.maxLength) {
+                    assert(val.length <= f.maxLength, `Length of string must be at least ${f.maxLength}`);
+                }
+            }
+            else if (f.type === 'integer') {
+                assert(typeof(val) === 'number', `Field not an integer: ${k}`);
+            }
+        }
+
         assert(typeof(x) === 'object', `Not an object`);
         opts = opts || {};
         if (opts.fields) {
             for (let k in x) {
+                let val = x[k];
                 if (!(k in opts.fields)) {
                     throw new Error(`Invalid field in object: ${k}`);
                 }
-                if (opts.fields[k].type === 'string') {
-                    assert(typeof(x[k]) === 'string', `Field not a string: ${k}`);
-                }
+                validateField({field: opts.fields[k], value: val, key: k});
             }
             for (let k in opts.fields) {
                 if (!opts.fields[k].optional) {
@@ -1228,7 +1280,7 @@ class Node {
             for (let channelName in this._channels) {
                 const message = {
                     type: 'announcing',
-                    nodeInfo: this.nodeInfo(),
+                    data: this._createFindChannelNodesDataForSelf(),
                     channelName
                 };
                 this.broadcastMessage({ channelName, message });
@@ -1243,37 +1295,42 @@ class Node {
             for (let channelName in this._channels) {
                 const CH = this._channels[channelName];
                 for (let nodeId in CH.nodes) {
-                    const elapsed = (new Date()) - CH.nodes[nodeId].timestamp; // todo: use this
-                    const nodeInfo = CH.nodes[nodeId].nodeInfo;
-                    this._validateNodeInfo(nodeInfo);
-                    if ((nodeInfo.address) && (nodeInfo.port)) {
-                        if ((!this._peers[nodeId]) || (!this._peers[nodeId].hasOutgoingWebsocketConnection())) {
-                            let C = null;
-                            try {
-                                // todo: there is a problem where we may try the connection multiple times if the peer belongs to multiple channels that we are in
-                                C = await this._websocketServer.createOutgoingWebsocketConnection({
-                                    address: nodeInfo.address,
-                                    port: nodeInfo.port,
-                                    remoteNodeId: nodeId
-                                });
-                            }
-                            catch (err) {
-                                // console.warn(`Problem creating outgoing connection to node. ${err.message}`);
-                            }
-                            if (C) {
-                                if (!this._peers[nodeId]) {
-                                    this._createPeer(nodeId);
+                    const elapsed = (new Date()) - CH.nodes[nodeId].data.timestamp;
+                    if (elapsed < 120000) {
+                        const nodeInfo = CH.nodes[nodeId].data.body.nodeInfo;
+                        this._validateNodeInfo(nodeInfo);
+                        if ((nodeInfo.address) && (nodeInfo.port)) {
+                            if ((!this._peers[nodeId]) || (!this._peers[nodeId].hasOutgoingWebsocketConnection())) {
+                                let C = null;
+                                try {
+                                    // todo: there is a problem where we may try the connection multiple times if the peer belongs to multiple channels that we are in
+                                    C = await this._websocketServer.createOutgoingWebsocketConnection({
+                                        address: nodeInfo.address,
+                                        port: nodeInfo.port,
+                                        remoteNodeId: nodeId
+                                    });
                                 }
-                                const P = this._peers[nodeId];
-                                if (P) {
-                                    P.setOutgoingConnection({ type: 'websocket', connection: C });
+                                catch (err) {
+                                    // console.warn(`Problem creating outgoing connection to node. ${err.message}`);
                                 }
-                                else {
-                                    console.warn(`Unable to create peer for outgoing connection. Disconnecting.`);
-                                    C.disconnect();
+                                if (C) {
+                                    if (!this._peers[nodeId]) {
+                                        this._createPeer(nodeId);
+                                    }
+                                    const P = this._peers[nodeId];
+                                    if (P) {
+                                        P.setOutgoingConnection({ type: 'websocket', connection: C });
+                                    }
+                                    else {
+                                        console.warn(`Unable to create peer for outgoing connection. Disconnecting.`);
+                                        C.disconnect();
+                                    }
                                 }
                             }
                         }
+                    }
+                    else {
+                        delete CH.nodes[nodeId];
                     }
                 }
             }
@@ -1292,12 +1349,12 @@ class Node {
         await sleepMsec(1000);
         while (true) {
             if (this._halt) return;
-            const nodeInfo = this.nodeInfo();
+            const data0 = this._createFindChannelNodesDataForSelf();
             for (let channelName in this._channels) {
                 const message = {
                     type: 'findChannelNodes',
                     channelName,
-                    nodeInfo
+                    data: data0
                 }
                 for (let peerId in this._peers) {
                     const P = this._peers[peerId];
@@ -1421,9 +1478,9 @@ class RouteError extends Error {
 }
 
 class InvalidNodeInfoError extends Error {
-    constructor(nodeInfo) {
+    constructor({nodeInfo, error}) {
         console.warn(nodeInfo);
-        super(`Invalid node info`);
+        super(`Invalid node info: ${error.message}`);
         this.name = this.constructor.name
         Error.captureStackTrace(this, this.constructor);
         this.nodeInfo = nodeInfo;

@@ -37,8 +37,22 @@ class Daemon {
             label: this._label
         });
 
-        if (this._listenPort !== 3008) {
-            this._node.connectToBootstrapPeer({address: 'localhost', port: 3008});
+        const bootstrapPeerInfos = [
+            {
+                address: 'localhost',
+                port: 3008
+            }
+        ].filter(bpi => {
+            if ((bpi.address === 'localhost') || (bpi.address === this._listenHost)) {
+                if (bpi.port === this._listenPort) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        for (let bpi of bootstrapPeerInfos) {
+            this._node.connectToBootstrapPeer({address: bpi.address, port: bpi.port});
         }
 
         this._start();
