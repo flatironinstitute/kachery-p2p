@@ -91,6 +91,7 @@ export default class ApiServer {
                 await this._apiDownloadFile(req, res)
             }
             catch(err) {
+                console.warn(err.stack);
                 res.status(500).send('Error downloading file.');
             }
         });
@@ -101,6 +102,7 @@ export default class ApiServer {
                 await this._apiDownloadFileBytes(req, res)
             }
             catch(err) {
+                console.warn(err.stack);
                 res.status(500).send('Error downloading file block.');
             }
         });
@@ -164,6 +166,7 @@ export default class ApiServer {
                 await this._feedApiGetMessages(req, res)
             }
             catch(err) {
+                console.warn(err);
                 log().warning('Error in getMessages', {error: err.message});
                 res.status(500).send('Error getting messages.');
             }
@@ -197,6 +200,7 @@ export default class ApiServer {
                 await this._feedApiGetFeedInfo(req, res)
             }
             catch(err) {
+                console.warn(err.stack);
                 log().warning('Error in getFeedInfo', {error: err.message});
                 res.status(500).send('Error getting feed info.');
             }
@@ -293,7 +297,7 @@ export default class ApiServer {
     async _apiDownloadFile(req, res) {
         const reqData = req.body;
         const {stream, cancel} = await this._daemon.downloadFile({
-            channel: reqData.channel,
+            channelName: reqData.channel,
             nodeId: reqData.nodeId,
             fileKey: reqData.fileKey,
             fileSize: reqData.fileSize,
@@ -306,7 +310,7 @@ export default class ApiServer {
     async _apiDownloadFileBytes(req, res) {
         const reqData = req.body;
         const {stream, cancel} = await this._daemon.downloadFileBytes({
-            channel: reqData.channel,
+            channelName: reqData.channel,
             nodeId: reqData.nodeId,
             fileKey: reqData.fileKey,
             startByte: reqData.startByte,

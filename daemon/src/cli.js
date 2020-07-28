@@ -79,7 +79,7 @@ function main() {
           fs.mkdirSync(configDir);
         }
         const listenHost = argv.host;
-        const listenPort = argv.port;
+        const listenPort = argv.port ? Number(argv.port) : null;
         const label = argv.label;
         startDaemon({
           configDir,
@@ -116,7 +116,7 @@ const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, ve
   apiServer.listen(apiPort);
 
   for (let channelName of channelNames) {
-    await daemon.joinChannel(channelName);
+    daemon.joinChannel(channelName);
   }
 }
 

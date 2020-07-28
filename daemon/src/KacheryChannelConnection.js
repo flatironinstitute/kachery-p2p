@@ -64,7 +64,6 @@ class PeerDiscoveryEngine3 {
         }
     }
     _handleLocateSwarmNodesResponse({nodeInfos}) {
-        console.log('------------------- hlsnr', nodeInfos);
         for (let nodeId in nodeInfos) {
             if (nodeId !== this._nodeId) {
                 const nodeInfo = nodeInfos[nodeId];
@@ -179,7 +178,6 @@ class KacheryChannelConnection {
             this._handlePeerRequest({fromNodeId, requestBody, onResponse, onError, onFinished});
         });
 
-        console.log('-------------------------- nodeId, swarmName', this._nodeId, this._swarmName);
         this._peerDiscoveryEngine = new PeerDiscoveryEngine3({
             nodeId: this._nodeId,
             udpConnectionManager: this._udpConnectionManager,

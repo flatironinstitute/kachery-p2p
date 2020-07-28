@@ -38,7 +38,8 @@ class SmartyNode {
     }
 
     async _estimateOptimalRouteToNode({channelName, toNodeId}) {
-        const peerIds = this._node.getPeerIds.peerIds({channelName});
+        return null; // todo
+        const peerIds = this._node.getPeerIds({channelName});
         const candidatePeerIds = peerIds.filter(peerId => {
             const pc = this._swarmConnection.peerConnection(peerId);
             return ((pc) && (pc.hasDirectConnection()));

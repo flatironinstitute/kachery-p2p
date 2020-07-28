@@ -6,6 +6,7 @@ class Peer {
         this._outgoingWebsocketConnection = null;
         this._incomingUdpConnection = null;
         this._outgoingUdpConnection = null;
+        this._isBootstrapPeer = false;
         this._halt = false;
     }
     peerId() {
@@ -13,6 +14,16 @@ class Peer {
     }
     onMessage(cb) {
         this._onMessageCallbacks.push(cb);
+    }
+    setIsBootstrapPeer(val, bootstrapPeerInfo) {
+        this._isBootstrapPeer = val;
+        this._bootstrapPeerInfo = bootstrapPeerInfo;
+    }
+    isBootstrapPeer() {
+        return this._isBootstrapPeer;
+    }
+    bootstrapPeerInfo() {
+        return this._bootstrapPeerInfo;
     }
     sendMessage(message) {
         if (this._outgoingWebsocketConnection) {
@@ -102,6 +113,14 @@ class Peer {
             this._outgoingUdpConnection.disconnect();
         }
     }
+    disconnectOutgoingConnections() {
+        if (this._outgoingWebsocketConnection) {
+            this._outgoingWebsocketConnection.disconnect();
+        }
+        if (this._outgoingUdpConnection) {
+            this._outgoingUdpConnection.disconnect();
+        }
+    }
     hasIncomingWebsocketConnection() {
         return this._incomingWebsocketConnection ? true : false;
     }
@@ -120,12 +139,18 @@ class Peer {
     hasUdpConnection() {
         return this.hasIncomingUdpConnection() || this.hasOutgoingUdpConnection();
     }
+    hasIncomingConnection() {
+        return this.hasIncomingWebsocketConnection() || this.hasIncomingUdpConnection();
+    }
+    hasOutgoingConnection() {
+        return this.hasOutgoingWebsocketConnection() || this.hasOutgoingUdpConnection();
+    }
     hasConnection() {
         return this.hasWebsocketConnection() || this.hasUdpConnection();
     }
 
     _handleMessage(message) {
-        this._onMessageCallbacks(cb => {
+        this._onMessageCallbacks.forEach(cb => {
             cb(message);
         });
     }

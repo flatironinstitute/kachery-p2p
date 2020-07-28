@@ -1,12 +1,12 @@
 import WebSocket from 'ws';
-import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from './common/crypto_util.js'
+import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from '../common/crypto_util.js'
 import { protocolVersion } from './protocolVersion.js';
 
 class WebsocketServer {
     constructor({nodeId, keyPair}) {
         this._nodeId = nodeId;
         this._keyPair = keyPair;
-        this._onConnectionCallbacks = [];
+        this._onIncomingConnectionCallbacks = [];
     }
     onIncomingConnection = (cb) => {
         this._onIncomingConnectionCallbacks.push(cb);
@@ -33,15 +33,15 @@ class WebsocketServer {
                 finished = true;
                 resolve(X);
             });
-            X.onError(() => {
+            X.onError((errorString) => {
                 if (finished) return;
                 finished = true;
-                reject();
+                reject(new Error(errorString));
             });
             X.onDisconnect(() => {
                 if (finished) return;
                 finished = true;
-                reject();
+                reject(new Error('Outgoing connection disconnected.'));
             });
         });
     }
@@ -160,6 +160,7 @@ class OutgoingWebsocketConnection {
         this._ws.on('open', () => {
             if (this._isOpen) return;
             this._isOpen = true;
+            this._sendQueuedMessages();
         });
 
         this._ws.on('close', () => {
@@ -205,7 +206,6 @@ class OutgoingWebsocketConnection {
                 if (message2.type === 'accepted') {
                     this._accepted = true;
                     this._onConnectCallbacks.forEach(cb => cb());
-                    this._sendQueuedMessages();
                     return;
                 }
             }

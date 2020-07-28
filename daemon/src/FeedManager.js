@@ -336,13 +336,12 @@ class RemoteFeedManager {
 
         // Now that we know the channel and nodeId, we can get the messages from the swarm
         const signedMessages = await this._daemon._getLiveFeedSignedMessages({
-            channel: liveFeedInfo.channel,
+            channelName: liveFeedInfo.channel,
             nodeId: liveFeedInfo.nodeId,
             feedId,
             subfeedName,
             position,
-            waitMsec,
-            opts: {}
+            waitMsec
         });
 
         log().info(`Got signed messages.`, {numMessages: signedMessages.length});
@@ -381,7 +380,7 @@ class RemoteFeedManager {
 
         // Now that we know the channel and nodeId, we can submit the messages via the swarm
         await this._daemon._submitMessagesToLiveFeed({
-            channel: liveFeedInfo.channel,
+            channelName: liveFeedInfo.channel,
             nodeId: liveFeedInfo.nodeId,
             feedId,
             subfeedName,
