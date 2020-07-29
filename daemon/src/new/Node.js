@@ -9,6 +9,7 @@ import assert from 'assert';
 import Stream from 'stream';
 import WebsocketServer from './WebsocketServer.js';
 import crypto from 'crypto';
+import BootstrapPeerManager from './BootstrapPeerManager.js';
 
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
@@ -36,7 +37,7 @@ class Node {
         this._messageListeners = {}; // listeners for incoming
         this._halt = false;
 
-        this._bootstrapPeerInfos = [];
+        this._bootstrapPeerManagers = [];
 
         this._onProvidingCallbacks = [];
         this._onRequestCallbacks = [];
@@ -51,28 +52,8 @@ class Node {
         this._smartyNode = new SmartyNode(this);
 
         this.onRequest(({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) => {
-            this._validateChannelName(channelName, {mustBeInChannel: true});
-            this._validateNodeId(fromNodeId);
-            this._validateSimpleObject(requestBody);
-            this._validateFunction(onResponse);
-            this._validateFunction(onError);
-            this._validateFunction(onFinished);
-            if (requestBody.type === 'downloadFile') {
-                this._handleDownloadFileRequest({
-                    channelName, fromNodeId, requestBody, onResponse, onError, onFinished
-                })
-            }
-            else if (requestBody.type === 'getLiveFeedSignedMessages') {
-                this._handleGetLiveFeedSignedMessages({
-                    channelName, fromNodeId, requestBody, onResponse, onError, onFinished
-                })
-            }
-            else if (requestBody.type === 'submitMessageToLiveFeed') {
-                this._handleSubmitMessagesToLiveFeed({
-                    channelName, fromNodeId, requestBody, onResponse, onError, onFinished
-                })
-            }
-        })
+            this._handleRequestFromNode({channelName, fromNodeId, requestBody, onError, onFinished});
+        });
 
         this._start();
     }
@@ -101,8 +82,10 @@ class Node {
         }
         return ret;
     }
-    async connectToBootstrapPeer({address, port}) {
-        this._bootstrapPeerInfos.push({address, port});
+    async addBootstrapPeer({address, port}) {
+        this._bootstrapPeerManagers.push(
+            new BootstrapPeerManager(this, {address, port})
+        );
     }
     onProviding(cb) {
         this._onProvidingCallbacks.push(cb);
@@ -543,6 +526,30 @@ class Node {
                 resolve();
             });
         });
+    }
+
+    _handleRequestFromNode({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) {
+        this._validateChannelName(channelName, {mustBeInChannel: true});
+        this._validateNodeId(fromNodeId);
+        this._validateSimpleObject(requestBody);
+        this._validateFunction(onResponse);
+        this._validateFunction(onError);
+        this._validateFunction(onFinished);
+        if (requestBody.type === 'downloadFile') {
+            this._handleDownloadFileRequest({
+                channelName, fromNodeId, requestBody, onResponse, onError, onFinished
+            })
+        }
+        else if (requestBody.type === 'getLiveFeedSignedMessages') {
+            this._handleGetLiveFeedSignedMessages({
+                channelName, fromNodeId, requestBody, onResponse, onError, onFinished
+            })
+        }
+        else if (requestBody.type === 'submitMessageToLiveFeed') {
+            this._handleSubmitMessagesToLiveFeed({
+                channelName, fromNodeId, requestBody, onResponse, onError, onFinished
+            })
+        }
     }
 
     _getInfoText() {
@@ -1120,9 +1127,6 @@ class Node {
         for (let peerId in this._peers) {
             const P = this._peers[peerId];
             if (!P.hasConnection()) {
-                if (P.isBootstrapPeer()) {
-                    this._bootstrapPeerInfos.push(P.bootstrapPeerInfo());
-                }
                 console.info(`Removing peer: ${peerId.slice(0, 6)}`);
                 P.disconnect();
                 delete this._peers[peerId];
@@ -1289,13 +1293,16 @@ class Node {
         }
     }
     async _startOutgoingConnections() {
-        sleepMsec(1000);
+        // start aggressively and then slow down
+        let delayMsec = 1000;
         while (true) {
+            await sleepMsec(delayMsec);
             if (this._halt) return;
             for (let channelName in this._channels) {
                 const CH = this._channels[channelName];
                 for (let nodeId in CH.nodes) {
-                    const elapsed = (new Date()) - CH.nodes[nodeId].data.timestamp;
+                    assert(CH.nodes[nodeId].internalTimestamp, 'Unexpected, missing internalTimestamp');
+                    const elapsed = (new Date()) - CH.nodes[nodeId].internalTimestamp;
                     if (elapsed < 120000) {
                         const nodeInfo = CH.nodes[nodeId].data.body.nodeInfo;
                         this._validateNodeInfo(nodeInfo);
@@ -1334,7 +1341,10 @@ class Node {
                     }
                 }
             }
-            await sleepMsec(4000);
+            delayMsec *= 2;
+            if (delayMsec >= 10000) {
+                delayMsec = 10000;
+            }
         }
     }
     async _startCleanupPeers() {
@@ -1346,8 +1356,10 @@ class Node {
         }
     }
     async _startDiscoverNodes() {
-        await sleepMsec(1000);
+        // start aggressively and then slow down
+        let delayMsec = 1000;
         while (true) {
+            await sleepMsec(delayMsec);
             if (this._halt) return;
             const data0 = this._createFindChannelNodesDataForSelf();
             for (let channelName in this._channels) {
@@ -1363,7 +1375,10 @@ class Node {
                     }
                 }
             }
-            await sleepMsec(3000);
+            delayMsec *= 2;
+            if (delayMsec >= 20000) {
+                delayMsec = 20000;
+            }
         }
     }
     async _startPrintInfo() {
@@ -1381,65 +1396,12 @@ class Node {
             await sleepMsec(500);
         }
     }
-    async _internalConnectToBootstrapPeer({address, port}) {
-        // console.info(`Trying to connect to bootstrap peer: ${address}:${port}`);
-        let C;
-        try {
-            C = await this._websocketServer.createOutgoingWebsocketConnection({
-                address,
-                port,
-                remoteNodeId: null
-            });
-        }
-        catch(err) {
-            // console.warn(`Problem creating outgoing connection to bootstrap peer. ${err.message}`);
-            return false;
-        }
-        if (!C) {
-            console.warn(`Unable to connect to bootstrap peer: ${address}:${port}`);
-            return false;
-        }
-        const remoteNodeId = C.remoteNodeId();
-        if (!(remoteNodeId in this._peers)) {
-            this._createPeer(remoteNodeId);
-        }
-        const P = this._peers[remoteNodeId];
-        if (!P) {
-            console.warn('Problem connecting to bootstrap peer.');
-            C.disconnect();
-            return false;
-        }
-        P.setOutgoingConnection({type: 'websocket', connection: C});
-        P.setIsBootstrapPeer(true, {address, port});
-        return true;
-    }
-
-    async _startConnectToBootstrapPeers() {
-        await sleepMsec(1000);
-        while (true) {
-            if (this._halt) return;
-            const newBpis = [];
-            for (let bpi of this._bootstrapPeerInfos) {
-                if (await this._internalConnectToBootstrapPeer(bpi)) {
-                    // great!
-                }
-                else {
-                    // try later
-                    newBpis.push(bpi);
-                }
-            }
-            this._bootstrapPeerInfos = newBpis;
-            
-            await sleepMsec(4000);
-        }
-    }
     async _start() {
         this._startAnnouncingSelf();
         this._startOutgoingConnections();
         this._startCleanupPeers();
         this._startDiscoverNodes();
         this._startPrintInfo();
-        this._startConnectToBootstrapPeers();
     }
 }
 

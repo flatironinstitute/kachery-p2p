@@ -38,10 +38,8 @@ class Daemon {
         });
 
         const bootstrapPeerInfos = [
-            {
-                address: 'localhost',
-                port: 3008
-            }
+            {address: 'localhost', port: 3008},
+            {address: '45.33.92.31', port: 45001}
         ].filter(bpi => {
             if ((bpi.address === 'localhost') || (bpi.address === this._listenHost)) {
                 if (bpi.port === this._listenPort) {
@@ -52,7 +50,7 @@ class Daemon {
         });
 
         for (let bpi of bootstrapPeerInfos) {
-            this._node.connectToBootstrapPeer({address: bpi.address, port: bpi.port});
+            this._node.addBootstrapPeer({address: bpi.address, port: bpi.port});
         }
 
         this._start();
