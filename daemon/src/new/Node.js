@@ -47,20 +47,19 @@ class Node {
         this._findChannelNodesLookup = {}; // {[channelName]: {nodes: {[nodeId]: {signature, body: {timestamp, nodeInfo}}}}
 
         this._websocketServer = this._initializeServer({ type: 'websocket', listenPort: this._port });
-        if (this._udpPort) {
-            this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._udpPort });
-        }
-        else {
-            this._udpServer = null;
-        }
+        this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._udpPort });
+        this._udpServer.onUdpPublicEndpointChanged(() => this._handleUdpPublicEndpointChanged());
 
         this._smartyNode = new SmartyNode(this);
 
         this.onRequest(({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) => {
-            this._handleRequestFromNode({channelName, fromNodeId, requestBody, onError, onFinished});
+            this._handleRequestFromNode({channelName, fromNodeId, requestBody, onResponse, onError, onFinished});
         });
 
         this._start();
+    }
+    nodeId() {
+        return this._nodeId;
     }
     nodeInfo() {
         return {
@@ -78,12 +77,15 @@ class Node {
         }
         this._halt = true;
     }
-    getPeerIds({channelName}) {
+    getPeerIdsForChannel(channelName) {
         const ret = [];
         const CH = this._channels[channelName] || {nodes: {}};
         for (let nodeId in CH.nodes) {
-            if (nodeId in this._peers)
-                ret.push(nodeId);
+            if (nodeId in this._peers) {
+                if (this._peers[nodeId].hasConnection()) {
+                    ret.push(nodeId);
+                }
+            }
         }
         return ret;
     }
@@ -137,15 +139,19 @@ class Node {
         }
         return ret;
     }
-    async sendMessageToNode({ channelName, toNodeId, route, message }) {
+    async sendMessageToNode({ channelName, toNodeId, direct=false, route, message }) {
         this._validateChannelName(channelName, { mustBeJoined: true });
-        this._validateNodeId(toNodeId, { mustBeInChannel: channelName });
+        this._validateNodeId(toNodeId);
+        this._validateBool(direct);
         if (route) {
             this._validateRoute(route, { mustEndWithNode: toNodeId, mustContainNode: this._nodeId });
+            if (direct) {
+                throw Error('Cannot provide route with direct=true');
+            }
         }
         this._validateMessage(message);
 
-        if (!route) {
+        if ((!route) || (direct)) {
             //  check if we can send it directly to peer
             if (toNodeId in this._peers) {
                 if (this._peers[toNodeId].hasConnection()) {
@@ -153,7 +159,10 @@ class Node {
                     return;
                 }
             }
-            route = await this._smartyNode.which_route_should_i_use_to_send_a_message_to_this_peer({ channelName, toNodeId, calculateIfNeeded: true })
+        }
+        if ((!route) && (!direct)) {
+            // check for a route unless we are forcing direct
+            route = await this._smartyNode.which_route_should_i_use_to_send_a_message_to_this_node({ channelName, toNodeId, calculateIfNeeded: true })
             if (!route) {
                 throw new NoRouteToNodeError({channelName, toNodeId});
             }
@@ -202,12 +211,13 @@ class Node {
     onRequest(cb) {
         this._onRequestCallbacks.push(cb);
     }
-    makeRequestToNode = ({ channelName, toNodeId, requestBody, timeout, requestId }) => {
+    makeRequestToNode = ({ channelName, toNodeId, requestBody, direct=false, timeout, requestId }) => {
         timeout = timeout || null;
         requestId = requestId || randomAlphaString(10);
         this._validateChannelName(channelName, { mustBeJoined: true });
-        this._validateNodeId(toNodeId, { mustBeInChannel: channelName });
+        this._validateNodeId(toNodeId);
         this._validateRequestBody(requestBody);
+        this._validateBool(direct);
         if (timeout !== null) {
             this._validateInteger(timeout);
         }
@@ -224,7 +234,7 @@ class Node {
             requestId,
             requestBody
         }
-        this.sendMessageToNode({ channelName, toNodeId, route: null, message });
+        this.sendMessageToNode({ channelName, toNodeId, direct, route: null, message });
         const listener = this.createMessageListener(({ fromNodeId, message }) => {
             if (fromNodeId !== toNodeId) return false;
             return ((
@@ -352,7 +362,7 @@ class Node {
     }
     async downloadFile({channelName, nodeId, fileKey, startByte, endByte}) {
         this._validateChannelName(channelName, {mustBeJoined: true});
-        this._validateNodeId(nodeId, {mustBeInChannel: channelName});
+        this._validateNodeId(nodeId);
         this._validateSimpleObject(fileKey);
         this._validateInteger(startByte);
         this._validateInteger(endByte);
@@ -557,8 +567,23 @@ class Node {
         }
     }
 
-    _getInfoText() {
-        const makeNodeLine = (nodeId, nodeInfo) => {
+    _handleUdpPublicEndpointChanged() {
+        const remote = this._udpServer.udpPublicEndpoint();
+        if (remote) {
+            console.info('Setting udp public endpoint', remote);
+            this._udpAddress = remote.address || null;
+            this._udpPort = remote.port || null;
+            this._announceSelfToAllChannels();
+        }
+    }
+
+    async _hasRouteToNode({channelName, toNodeId}) {
+        const route = await this._smartyNode.which_route_should_i_use_to_send_a_message_to_this_node({ channelName, toNodeId, calculateIfNeeded: true });
+        return route ? true : false;
+    }
+
+    async _getInfoText() {
+        const makeNodeLine = async ({channelName, nodeId, nodeInfo}) => {
             const ni = nodeInfo || {};
             const p = this._peers[nodeId];
             const hasIn = p ? p.hasIncomingWebsocketConnection() : false;
@@ -572,8 +597,10 @@ class Node {
                 ni.port = ni.port || p.bootstrapPeerInfo().port;
             }
 
-            // const hasRoute = await this._swarmConnection.hasRouteToPeer(peerId);
-            const hasRoute = false;
+            let hasRoute = null;
+            if ((!p) || (!p.hasConnection())) {
+                hasRoute = channelName ? await this._hasRouteToNode({channelName, toNodeId: nodeId}) : false;
+            }
             const items = [];
             if (bootstrap) items.push('bootstrap');
             if (hasIn) items.push('in');
@@ -593,14 +620,14 @@ class Node {
             for (let nodeId in CH.nodes) {
                 nodesIncluded[nodeId] = true;
                 const nodeInfo = CH.nodes[nodeId].data.body.nodeInfo;
-                lines.push(makeNodeLine(nodeId, nodeInfo));
+                lines.push(await makeNodeLine({channelName, nodeId, nodeInfo}));
             }
             lines.push('');
         }
         lines.push('OTHER');
         for (let nodeId in this._peers) {
             if (!nodesIncluded[nodeId]) {
-                lines.push(makeNodeLine(nodeId, null));
+                lines.push(await makeNodeLine({channelName: null, nodeId, nodeInfo: null}));
             }
         }
         return lines.join('\n');
@@ -715,7 +742,7 @@ class Node {
             X = new WebsocketServer({ nodeId: this._nodeId, keyPair: this._keyPair });
         }
         else if (type === 'udp') {
-            X = new WebsocketServer({nodeId: this._nodeId, keyPair: this._keyPair, useUdp: true}); // todo
+            X = new WebsocketServer({ nodeId: this._nodeId, keyPair: this._keyPair, useUdp: true });
         }
         else {
             throw new UnexpectedInternalError(`Unexpected type: ${type}`)
@@ -743,7 +770,7 @@ class Node {
             }
         });
 
-        if (listenPort) {
+        if ((listenPort) || (type === 'udp')) {
             X.listen(listenPort);
         }
 
@@ -878,7 +905,7 @@ class Node {
             }
             const P = this._peers[nextNodeId];
             if (P.hasConnection()) {
-                P.sendMessage({ channelName, message });
+                P.sendMessage(message);
             }
             else {
                 throw new RouteError('Peer that is next in the route has no connection.');
@@ -1171,15 +1198,6 @@ class Node {
         opts = opts || {};
         assert(typeof(nodeId) === 'string', `Node ID must be a string`);
         assert(nodeId.length == 64, `Length of node ID must be 64`);
-        if (opts.mustBeInChannel) {
-            const channelName = opts.mustBeInChannel;
-            if (!(channelName in this._channels)) {
-                throw new Error(`Not joined to channel (validating node id): ${channelName}`);
-            }
-            if (!(nodeId in this._channels[channelName].nodes)) {
-                throw new Error(`Node ${nodeId} is not in channel ${channelName}`);
-            }
-        }
     }
     _validateNodeInfo(nodeInfo) {
         try {
@@ -1280,19 +1298,27 @@ class Node {
             assert(x.length <= opts.maxLength, `Length of string must be at most ${x.length}`);
         }
     }
+    _validateBool(x, opts) {
+        opts = opts || {};
+        assert(typeof(x) === 'boolean', `Not a boolean`);
+    }
+
+    _announceSelfToAllChannels() {
+        for (let channelName in this._channels) {
+            const message = {
+                type: 'announcing',
+                data: this._createFindChannelNodesDataForSelf(),
+                channelName
+            };
+            this.broadcastMessage({ channelName, message });
+        }
+    }
 
     async _startAnnouncingSelf() {
         sleepMsec(1000);
         while (true) {
             if (this._halt) return;
-            for (let channelName in this._channels) {
-                const message = {
-                    type: 'announcing',
-                    data: this._createFindChannelNodesDataForSelf(),
-                    channelName
-                };
-                this.broadcastMessage({ channelName, message });
-            }
+            this._announceSelfToAllChannels();
             await sleepMsec(10000);
         }
     }
@@ -1344,18 +1370,12 @@ class Node {
 
                         if ((nodeInfo.udpAddress) && (nodeInfo.udpPort) && (this._udpServer)) {
                             if ((!this._peers[nodeId]) || (!this._peers[nodeId].hasOutgoingUdpConnection())) {
-                                let C = null;
-                                try {
-                                    // todo: there is a problem where we may try the connection multiple times if the peer belongs to multiple channels that we are in
-                                    C = await this._udpServer.createOutgoingWebsocketConnection({
-                                        address: nodeInfo.address,
-                                        port: nodeInfo.port,
-                                        remoteNodeId: nodeId
-                                    });
-                                }
-                                catch (err) {
-                                    // console.warn(`Problem creating outgoing connection to node. ${err.message}`);
-                                }
+                                // todo: there is a problem where we may try the connection multiple times if the peer belongs to multiple channels that we are in
+                                const C = await this._udpServer.createOutgoingWebsocketConnection({
+                                    address: nodeInfo.udpAddress,
+                                    port: nodeInfo.udpPort,
+                                    remoteNodeId: nodeId
+                                });
                                 if (C) {
                                     if (!this._peers[nodeId]) {
                                         this._createPeer(nodeId);

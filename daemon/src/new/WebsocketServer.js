@@ -13,6 +13,7 @@ class WebsocketServer {
         this._useUdp = useUdp;
         this._websocketServer = null; // or udpServer
         this._onIncomingConnectionCallbacks = [];
+        this._udpPublicEndpointChangedCallbacks = [];
     }
     onIncomingConnection = (cb) => {
         this._onIncomingConnectionCallbacks.push(cb);
@@ -24,6 +25,9 @@ class WebsocketServer {
         }
         else {
             this._websocketServer = new UdpServer({ port });
+            this._websocketServer.onPublicEndpointChanged(() => {
+                this._udpPublicEndpointChangedCallbacks.forEach(cb => cb());
+            })
         }
         this._websocketServer.on('connection', (ws) => {
             let X = new IncomingWebsocketConnection(ws, {nodeId: this._nodeId, keyPair: this._keyPair});
@@ -34,6 +38,18 @@ class WebsocketServer {
             });
         });
         ///////////////////////////////////////////////////////////////////////////////
+    }
+    udpPublicEndpoint() {
+        if (!this._useUdp) return null;
+        if (this._websocketServer) {
+            return this._websocketServer.publicEndpoint();
+        }
+        else {
+            return null;
+        }
+    }
+    onUdpPublicEndpointChanged(cb) {
+        this._udpPublicEndpointChangedCallbacks.push(cb);
     }
     async createOutgoingWebsocketConnection({address, port, remoteNodeId}) {
         return new Promise((resolve, reject) => {
@@ -96,18 +112,22 @@ class IncomingWebsocketConnection {
             }
             if (!this._initialized) {
                 if (!body.fromNodeId) {
+                    console.warn('IncomingSocketConnection: missing fromNodeId');
                     this._webSocket.close();
                     return;
                 }
                 if (body.message.type !== 'initial') {
+                    console.warn(`IncomingSocketConnection: message type was expected to be initial, but got ${body.message.type}`);
                     this._webSocket.close();
                     return;
                 }
                 if (body.message.protocolVersion !== protocolVersion()) {
+                    console.warn(`IncomingSocketConnection: incorrect protocl version ${body.message.protocolVersion} <> ${protocolVersion()}`);
                     this._webSocket.close();
                     return;
                 }
                 if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId))) {
+                    console.warn(`IncomingSocketConnection: problem verifying signature`);
                     this._webSocket.close();
                     return;
                 }
@@ -117,7 +137,7 @@ class IncomingWebsocketConnection {
                 this.sendMessage({type: 'accepted'});
                 return;
             }
-            
+
             if (body.fromNodeId !== this._remoteNodeId) {
                 this._webSocket.close();
                 return;
@@ -175,6 +195,7 @@ class OutgoingWebsocketConnection {
         this._isOpen = false;
         this._isClosed = false;
         this._accepted = false;
+
         if (!this._useUdp) {
             this._ws = new WebSocket(`ws://${this._address}:${this._port}`);
         }
@@ -205,17 +226,20 @@ class OutgoingWebsocketConnection {
             const body = message.body;
             const signature = message.signature;
             if ((!body) || (!signature)) {
+                console.warn('OutgoingSocketConnection: Missing body or signature in message');
                 this.disconnect();
                 return;
             }
             const message2 = message.body.message;
             const fromNodeId = message.body.fromNodeId;
             if (!message2) {
+                console.warn('OutgoingSocketConnection: Missing message in body');
                 this.disconnect();
                 return;
             }
             if (this._remoteNodeId) {
                 if (fromNodeId !== this._remoteNodeId) {
+                    console.warn('OutgoingSocketConnection: Mismatch in fromNodeId/remoteNodeId');
                     this.disconnect();
                     return;
                 }
@@ -224,6 +248,7 @@ class OutgoingWebsocketConnection {
                 this._remoteNodeId = fromNodeId;
             }            this._
             if (!verifySignature(body, signature, hexToPublicKey(fromNodeId))) {
+                console.warn('OutgoingSocketConnection: Problem verifying signature');
                 this.disconnect();
                 return;
             }
@@ -296,45 +321,70 @@ class UdpServer {
         this._incomingConnections = {}; // by connection id
         this._outgoingConnections = {}; // by connection id
         this._pendingOutgoingConnections = {}; // by connection id
-        this._queuedMessages = [];
+        this._publicEndpoint = null;
+        this._publicEndpointChangedCallbacks = [];
         
         const socket = dgram.createSocket('udp4');
-        socket.bind(port, '');
+        if (port)
+            socket.bind(port, '');
+        else
+            socket.bind();
+        socket.on('listening', () => {
+            // console.info('Udp socket', socket.address());
+        });
         socket.on('message', (messageTxt, remote) => {
-            let msg;
+            let message;
             try {
-                msg = JSON.parse(messageTxt);
+                message = JSON.parse(messageTxt);
             }
             catch {
                 console.warn('Unable to parse udp message', {remote});
                 return;
             }
             if ((message.type === 'openConnection') && (isValidConnectionId(message.connectionId))) {
-                if (!(message.connectionId in this._incomingConnections)) {
-                    this._incomingConnections[message.connectionId] = new UdpConnection({
-                        udpServer,
-                        connectionId: message.connectionId,
-                        remoteAddress: remote.address,
-                        remotePort: remote.port
-                    });
-                    const acceptMessage = {type: 'acceptConnection', connectionId: message.connectionId};
-                    _udpSocketSend(this._socket, acceptMessage, remote.port, remote.address);
-                    this._incomingConnections[message.connectionId]._setOpen();
+                if (message.connectionId in this._incomingConnections) {
+                    console.warn('openConnection: connection with id already exists.');
+                    return;
                 }
+                this._incomingConnections[message.connectionId] = new UdpConnection({
+                    udpServer: this,
+                    connectionId: message.connectionId,
+                    remoteAddress: remote.address,
+                    remotePort: remote.port
+                });
+                const acceptMessage = {
+                    type: 'acceptConnection',
+                    connectionId: message.connectionId,
+                    initiatorPublicEndpoint: remote // the public endpoint of the initiator to the connection
+                };
+                _udpSocketSend(this._socket, acceptMessage, remote.port, remote.address);
+                this._incomingConnections[message.connectionId]._setOpen();
+                this._onConnectionCallbacks.forEach(cb => {
+                    cb(this._incomingConnections[message.connectionId]);
+                });
             }
             else if ((message.type === 'acceptConnection') && (isValidConnectionId(message.connectionId))) {
                 if (message.connectionId in this._pendingOutgoingConnections) {
-                    this._outgoingConnections[message.connectionId] = this._pendingOutgoingConnections[message.connectionId];
+                    const C = this._pendingOutgoingConnections[message.connectionId];
+                    const ipe = message.initiatorPublicEndpoint;
+                    // make sure it really is a public endpoint
+                    if ((ipe) && (ipe.address) && (!ipe.address.startsWith('127.0.0')) && (!ipe.address.startsWith('0.')) && (C.remoteAddress() !== 'localhost')) {
+                        if ((!this._publicEndpoint) || (JSONStringifyDeterministic(this._publicEndpoint) !== message.initiatorPublicEndpoint)) {
+                            this._publicEndpoint = message.initiatorPublicEndpoint;
+                            this._publicEndpointChangedCallbacks.forEach(cb => cb());
+                        }
+                    }
+                    this._outgoingConnections[message.connectionId] = C
                     delete this._pendingOutgoingConnections[message.connectionId];
-                    this._outgoingConnections[message.connectionId]._setOpen();
+                    C._setOpen();
                 }
             }
-            else if (msg.connectionId) {
-                if (msg.connectionId in this._incomingConnections) {
-                    this._incomingConnections[msg.connectionId]._handleIncomingMessage(msg.message);
+            else if (message.connectionId) {
+                if (message.connectionId in this._incomingConnections) {
+                    this._incomingConnections[message.connectionId]._handleIncomingMessage(message.message);
                 }
-                else if (msg.connectionId in this._outgoingConnections) {
-                    this._outgoingConnections[msg.connectionId]._handleIncomingMessage(msg.message);
+                else if (message.connectionId in this._outgoingConnections) {
+                    this._outgoingConnections[message.connectionId]._handleIncomingMessage(message.message);
                 }
             }
             else {
@@ -347,14 +397,22 @@ class UdpServer {
         if (name === 'connection')
             this._onConnectionCallbacks.push(cb);
     }
+    publicEndpoint() {
+        return this._publicEndpoint;
+    }
+    onPublicEndpointChanged(cb) {
+        this._publicEndpointChangedCallbacks.push(cb);
+    }
     _createOutgoingUdpConnection({address, port}) {
         const connectionId = randomAlphaString(10);
-        this._pendingOutgoingConnections[connectionId] = new UdpConnection({udpServer: this, connectionId, remoteAddress: address, remotePort: port});
+        const C = new UdpConnection({udpServer: this, connectionId, remoteAddress: address, remotePort: port});
+        this._pendingOutgoingConnections[connectionId] = C;
         const openMessage = {
             type: 'openConnection',
             connectionId
         };
         _udpSocketSend(this._socket, openMessage, port, address);
+        return C;
     }
 }
 
@@ -366,6 +424,8 @@ class UdpConnection {
         this._remotePort = remotePort;
         this._open = false;
         this._closed = false;
+        this._queuedMessages = [];
+        this._isUdp = true;
 
         this._onOpenCallbacks = [];
         this._onCloseCallbacks = [];
@@ -404,6 +464,12 @@ class UdpConnection {
         this._closed = true;
         this._open = false;
         this._onCloseCallbacks.forEach(cb => cb());
+    }
+    remoteAddress() {
+        return this._remoteAddress;
+    }
+    remotePort() {
+        return this._remotePort;
     }
     _handleIncomingMessage(message) {
         if (this._closed) return;

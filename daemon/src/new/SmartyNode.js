@@ -1,25 +1,34 @@
+import { getSignature, JSONStringifyDeterministic, verifySignature, hexToPublicKey } from "../common/crypto_util.js";
+import { randomString, sleepMsec } from "../common/util.js";
+
 class SmartyNode {
     constructor(node) {
         this._node = node;
         this._optimalRoutesToNodes = {}; // {[channelName]: {[toNodeId]: {timestamp: ..., optimalRoute: ...}}}
+        this._node.onRequest(({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) => {
+            if (requestBody.type === 'routeLatencyTest') {
+                this._handleRouteLatencyTest({channelName, fromNodeId, requestBody, onResponse, onError, onFinished});
+            }
+        });
+        this._node.onR
     }
-    async which_route_should_i_use_to_send_a_message_to_this_peer({channelName, toNodeId, calculateIfNeeded}) {
+    async which_route_should_i_use_to_send_a_message_to_this_node({channelName, toNodeId, calculateIfNeeded}) {
         if (!(channelName in this._optimalRoutesToNodes)) {
             this._optimalRoutesToNodes[channelName] = {};
         }
-        const oo = this._optimalRoutesToNodes[channelName];
+        const optimalRoutes = this._optimalRoutesToNodes[channelName];
         for (let passnum = 1; passnum <= 2; passnum ++) {
-            if (toNodeId in oo) {
-                const {route, timestamp} = oo[toNodeId];
+            if (toNodeId in optimalRoutes) {
+                const {route, timestamp} = optimalRoutes[toNodeId];
                 const elapsed0 = (new Date() - timestamp);
-                if ((elapsed0 < 10000) || (!calculateIfNeeded)) {
-                    const firstNodeId = route[1];
-                    const firstPC = this._swarmConnection.peerConnection(firstNodeId);
-                    if ((firstPC) && (firstPC.hasDirectConnection())) {
+                if ((elapsed0 < 10000) || ((!calculateIfNeeded) && (elapsed0 < 30000))) {
+                    const firstPeerId = route[1];
+                    const firstPeerConnection = this._node._peers[firstPeerId];
+                    if ((firstPeerConnection) && (firstPeerConnection.hasConnection())) {
                         return route;
                     }
                     else {
-                        delete oo[toNodeId];
+                        delete optimalRoutes[toNodeId];
                     }
                 }
             }
@@ -27,7 +36,7 @@ class SmartyNode {
                 if (!calculateIfNeeded) return null;
                 const optimalRoute = await this._estimateOptimalRouteToNode({channelName, toNodeId});
                 if (optimalRoute) {
-                    oo[toNodeId] = {
+                    optimalRoutes[toNodeId] = {
                         route: optimalRoute,
                         timestamp: new Date()
                     };
@@ -38,12 +47,7 @@ class SmartyNode {
     }
 
     async _estimateOptimalRouteToNode({channelName, toNodeId}) {
-        return null; // todo
-        const peerIds = this._node.getPeerIds({channelName});
-        const candidatePeerIds = peerIds.filter(peerId => {
-            const pc = this._swarmConnection.peerConnection(peerId);
-            return ((pc) && (pc.hasDirectConnection()));
-        })
+        const candidatePeerIds = this._node.getPeerIdsForChannel(channelName);
         const timings = {};
         const routes = {};
         const testCandidate = (candidatePeerId) => {
@@ -51,11 +55,11 @@ class SmartyNode {
                 data1: randomString(1000)
             };
             const requestBody = {
-                type: 'routeLatencyTest', // todo
+                type: 'routeLatencyTest',
                 channelName,
                 toNodeId,
                 testData,
-                avoid: {[this._swarmConnection.nodeId()]: true}
+                avoid: {[this._node.nodeId()]: true}
             };
             const timer = new Date();
             const req = this._node.makeRequestToNode({channelName, toNodeId: candidatePeerId, requestBody, timeout: 5000});
@@ -67,7 +71,7 @@ class SmartyNode {
                 if (JSONStringifyDeterministic(responseBody.testData) === JSONStringifyDeterministic(testData)) {
                     if (verifySignature(responseBody.testData, responseBody.testDataSignature, hexToPublicKey(toNodeId))) {
                         gotCorrectResponse = true;
-                        responseRoute = [this._swarmConnection.nodeId(), ...responseBody.route];
+                        responseRoute = [this._node.nodeId(), ...responseBody.route];
                     }
                 }
             });
@@ -119,6 +123,56 @@ class SmartyNode {
             if (Object.keys(timings).length === candidatePeerIds.length)
                 return null;
             await sleepMsec(10);
+        }
+    }
+    async _handleRouteLatencyTest({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) {
+        this._node._validateSimpleObject(requestBody);
+        this._node._validateNodeId(requestBody.toNodeId);
+        this._node._validateSimpleObject(requestBody.testData);
+        this._node._validateSimpleObject(requestBody.avoid);
+        const {toNodeId, testData, avoid} = requestBody;
+        if (toNodeId === this._node.nodeId()) {
+            onResponse({
+                route: [toNodeId],
+                testData,
+                testDataSignature: getSignature(testData, this._node._keyPair)
+            });
+            onFinished();
+            return;
+        }
+        // for now we only test routes of length 2
+        // in future we can use the already-determined optimal route (and checking it does not contain the avoid stuff)
+        const pc = this._node._peers[toNodeId];
+        if ((pc) && (pc.hasConnection())) {
+            const req = this._node.makeRequestToNode({
+                channelName,
+                toNodeId: toNodeId,
+                direct: true, // ensure that we are going directly to the node
+                requestBody: {
+                    type: 'routeLatencyTest',
+                    toNodeId,
+                    testData,
+                    avoid: {...avoid, [this._node.nodeId()]: true}
+                },
+                timestamp: 5000
+            });
+            req.onResponse(responseBody => {
+                onResponse({
+                    route: [this._node.nodeId(), ...responseBody.route],
+                    testData: responseBody.testData,
+                    testDataSignature: responseBody.testDataSignature
+                })
+            });
+            req.onError((e) => {
+                onError(e);
+            });
+            req.onFinished(() => {
+                onFinished();
+            });
+            return;
+        }
+        else {
+            onError('No route found.');
         }
     }
 }
