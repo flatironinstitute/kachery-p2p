@@ -523,7 +523,7 @@ class UdpConnection {
             const elapsed = (new Date()) - this._lastKeepAliveTimestamp;
             if (elapsed > 60000) {
                 console.warn('Closing udp connection due to inactivity');
-                this.disconnect();
+                this.close();
             }
         }
     }
