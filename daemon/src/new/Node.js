@@ -47,7 +47,12 @@ class Node {
         this._findChannelNodesLookup = {}; // {[channelName]: {nodes: {[nodeId]: {signature, body: {timestamp, nodeInfo}}}}
 
         this._websocketServer = this._initializeServer({ type: 'websocket', listenPort: this._port });
-        // this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._udpPort });
+        if (this._udpPort) {
+            this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._udpPort });
+        }
+        else {
+            this._udpServer = null;
+        }
 
         this._smartyNode = new SmartyNode(this);
 
@@ -710,8 +715,7 @@ class Node {
             X = new WebsocketServer({ nodeId: this._nodeId, keyPair: this._keyPair });
         }
         else if (type === 'udp') {
-            throw new Error('Not yet implemented');
-            // X = new UdpServer({nodeId: this._nodeId, keyPair: this._keyPair}); // todo
+            X = new WebsocketServer({nodeId: this._nodeId, keyPair: this._keyPair, useUdp: true}); // todo
         }
         else {
             throw new UnexpectedInternalError(`Unexpected type: ${type}`)
@@ -1292,6 +1296,7 @@ class Node {
             await sleepMsec(10000);
         }
     }
+
     async _startOutgoingConnections() {
         // start aggressively and then slow down
         let delayMsec = 1000;
