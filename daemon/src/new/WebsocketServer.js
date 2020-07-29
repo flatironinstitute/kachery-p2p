@@ -68,10 +68,10 @@ class WebsocketServer {
                 finished = true;
                 resolve(X);
             });
-            X.onError((errorString) => {
+            X.onError((error) => {
                 if (finished) return;
                 finished = true;
-                reject(new Error(errorString));
+                reject(error);
             });
             X.onDisconnect(() => {
                 if (finished) return;
@@ -215,8 +215,8 @@ class OutgoingWebsocketConnection {
             this._onDisconnectCallbacks.forEach(cb => cb());
         });
 
-        this._ws.on('error', () => {
-            this._onErrorCallbacks.forEach(cb => cb());
+        this._ws.on('error', (err) => {
+            this._onErrorCallbacks.forEach(cb => cb(err));
             // this is important so we don't throw an exception
             // question: do we need to do something here? will 'close' be called also?
         });

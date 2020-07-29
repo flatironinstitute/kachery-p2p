@@ -23,18 +23,11 @@ class BootstrapPeerManager {
     }
     async _tryToConnect() {
         if (this._connected) return;
-        let C;
-        try {
-            C = await this._node._websocketServer.createOutgoingWebsocketConnection({
-                address: this._address,
-                port: this._port,
-                remoteNodeId: null // we don't know it yet
-            });
-        }
-        catch(err) {
-            // console.warn(`Problem creating outgoing connection to bootstrap peer. ${err.message}`);
-            return false;
-        }
+        const C = await this._node._websocketServer.createOutgoingWebsocketConnection({
+            address: this._address,
+            port: this._port,
+            remoteNodeId: null // we don't know it yet
+        });
         if (!C) {
             console.warn(`Unable to connect to bootstrap peer: ${address}:${port}`);
             return false;
