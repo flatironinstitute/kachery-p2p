@@ -93,7 +93,7 @@ class Node {
     getNodeIdsForChannel(channelName) {
         const ret = [];
         for (let nodeId in this._nodeInfoStore) {
-            if (channelName in this._nodeInfoStore[nodeId].data.body.channels)) {
+            if (channelName in this._nodeInfoStore[nodeId].data.body.channels) {
                 ret.push(nodeId);
             }
         }
