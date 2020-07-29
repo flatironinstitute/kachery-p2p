@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from '../common/crypto_util.js'
 import { protocolVersion } from './protocolVersion.js';
 import dgram from 'dgram';
-import { randomAlphaString } from '../common/util.js';
+import { randomAlphaString, sleepMsec } from '../common/util.js';
 
 // todo: monitor and clean up closed connections throughout file
 
@@ -103,7 +103,13 @@ class IncomingWebsocketConnection {
         });
 
         this._webSocket.on('message', (message) => {
-            const msg = JSON.parse(message);
+            let msg;
+            if (this._webSocket._useUdp) {
+                msg = message;
+            }
+            else {
+                msg = JSON.parse(message);
+            }
             const body = msg.body;
             const signature = msg.signature;
             if (!body.message) {
@@ -269,7 +275,9 @@ class OutgoingWebsocketConnection {
         });
         setTimeout(() => {
             if (!this._accepted) {
-                this.disconnect();
+                if (!this._isClosed) {
+                    this.disconnect();
+                }
             }
         }, 5000);
     }
@@ -436,6 +444,10 @@ class UdpConnection {
         this._onCloseCallbacks = [];
         this._onErrorCallbacks = [];
         this._onMessageCallbacks = [];
+
+        this._lastKeepAliveTimestamp = new Date();
+
+        this._start();
     }
     on(name, cb) {
         if (name === 'open') {
@@ -478,7 +490,12 @@ class UdpConnection {
     }
     _handleIncomingMessage(message) {
         if (this._closed) return;
-        this._onMessageCallbacks.forEach(cb => cb(message));
+        if (message.type === 'keepAlive') {
+            this._lastKeepAliveTimestamp = new Date();
+        }
+        else {
+            this._onMessageCallbacks.forEach(cb => cb(message));
+        }
     }
     _setOpen() {
         if (this._open) return;
@@ -489,6 +506,25 @@ class UdpConnection {
         this._queuedMessages = [];
         for (let m of qm) {
             this._sendMessage(m);
+        }
+    }
+    async _start() {
+        const delayMsec = 10000;
+        while (true) {
+            await sleepMsec(delayMsec);
+            if (this._closed) {
+                return;
+            }
+            if (this._open) {
+                this.send({
+                    type: 'keepAlive',
+                });
+            }
+            const elapsed = (new Date()) - this._lastKeepAliveTimestamp;
+            if (elapsed > 60000) {
+                console.warn('Closing udp connection due to inactivity');
+                this.disconnect();
+            }
         }
     }
 

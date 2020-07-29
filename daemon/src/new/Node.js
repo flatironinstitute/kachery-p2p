@@ -1421,11 +1421,17 @@ class Node {
                         if ((nodeInfo.udpAddress) && (nodeInfo.udpPort) && (this._udpServer)) {
                             if ((!this._peers[nodeId]) || (!this._peers[nodeId].hasOutgoingUdpConnection())) {
                                 // todo: there is a problem where we may try the connection multiple times if the peer belongs to multiple channels that we are in
-                                const C = await this._udpServer.createOutgoingWebsocketConnection({
-                                    address: nodeInfo.udpAddress,
-                                    port: nodeInfo.udpPort,
-                                    remoteNodeId: nodeId
-                                });
+                                let C = null;
+                                try {
+                                    C = await this._udpServer.createOutgoingWebsocketConnection({
+                                        address: nodeInfo.udpAddress,
+                                        port: nodeInfo.udpPort,
+                                        remoteNodeId: nodeId
+                                    });
+                                }
+                                catch(err) {
+                                    // todo: handle the error smartly
+                                }
                                 if (C) {
                                     if (!this._peers[nodeId]) {
                                         this._createPeer(nodeId);
