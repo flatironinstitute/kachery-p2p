@@ -31,8 +31,8 @@ class Daemon {
             keyPair: this._keyPair,
             address: this._listenHost,
             port: this._listenPort,
-            udpAddress: null,
-            udpPort: null,
+            udpAddress: this._listenHost,
+            udpPort: this._listenPort,
             feedManager: this._feedManager,
             label: this._label
         });

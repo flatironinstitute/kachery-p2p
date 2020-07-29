@@ -4,6 +4,8 @@ import { protocolVersion } from './protocolVersion.js';
 import dgram from 'dgram';
 import { randomAlphaString } from '../common/util.js';
 
+// todo: monitor and clean up closed connections throughout file
+
 class WebsocketServer {
     constructor({nodeId, keyPair, useUdp=false}) {
         this._nodeId = nodeId;
@@ -290,7 +292,7 @@ class OutgoingWebsocketConnection {
 
 class UdpServer {
     constructor(port) {
-        this._onConnectCallbacks = [];
+        this._onConnectionCallbacks = [];
         this._incomingConnections = {}; // by connection id
         this._outgoingConnections = {}; // by connection id
         this._pendingOutgoingConnections = {}; // by connection id

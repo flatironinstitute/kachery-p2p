@@ -1311,6 +1311,7 @@ class Node {
                     if (elapsed < 120000) {
                         const nodeInfo = CH.nodes[nodeId].data.body.nodeInfo;
                         this._validateNodeInfo(nodeInfo);
+
                         if ((nodeInfo.address) && (nodeInfo.port)) {
                             if ((!this._peers[nodeId]) || (!this._peers[nodeId].hasOutgoingWebsocketConnection())) {
                                 let C = null;
@@ -1332,6 +1333,36 @@ class Node {
                                     const P = this._peers[nodeId];
                                     if (P) {
                                         P.setOutgoingConnection({ type: 'websocket', connection: C });
+                                    }
+                                    else {
+                                        console.warn(`Unable to create peer for outgoing connection. Disconnecting.`);
+                                        C.disconnect();
+                                    }
+                                }
+                            }
+                        }
+
+                        if ((nodeInfo.udpAddress) && (nodeInfo.udpPort) && (this._udpServer)) {
+                            if ((!this._peers[nodeId]) || (!this._peers[nodeId].hasOutgoingUdpConnection())) {
+                                let C = null;
+                                try {
+                                    // todo: there is a problem where we may try the connection multiple times if the peer belongs to multiple channels that we are in
+                                    C = await this._udpServer.createOutgoingWebsocketConnection({
+                                        address: nodeInfo.address,
+                                        port: nodeInfo.port,
+                                        remoteNodeId: nodeId
+                                    });
+                                }
+                                catch (err) {
+                                    // console.warn(`Problem creating outgoing connection to node. ${err.message}`);
+                                }
+                                if (C) {
+                                    if (!this._peers[nodeId]) {
+                                        this._createPeer(nodeId);
+                                    }
+                                    const P = this._peers[nodeId];
+                                    if (P) {
+                                        P.setOutgoingConnection({ type: 'udp', connection: C });
                                     }
                                     else {
                                         console.warn(`Unable to create peer for outgoing connection. Disconnecting.`);
