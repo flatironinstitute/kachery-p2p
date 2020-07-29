@@ -359,21 +359,27 @@ class UdpServer {
                     console.warn('openConnection: connection with id already exists.');
                     return;
                 }
-                this._incomingConnections[message.connectionId] = new UdpConnection({
+                const C = new UdpConnection({
                     udpServer: this,
                     connectionId: message.connectionId,
                     remoteAddress: remote.address,
                     remotePort: remote.port
                 });
+                C.on('close', () => {
+                    if (this._incomingConnections[message.connectionId]) {
+                        delete this._incomingConnections[message.connectionId];
+                    }
+                });
+                this._incomingConnections[message.connectionId] = C;
                 const acceptMessage = {
                     type: 'acceptConnection',
                     connectionId: message.connectionId,
                     initiatorPublicEndpoint: remote // the public endpoint of the initiator to the connection
                 };
                 _udpSocketSend(this._socket, acceptMessage, remote.port, remote.address);
-                this._incomingConnections[message.connectionId]._setOpen();
+                C._setOpen();
                 this._onConnectionCallbacks.forEach(cb => {
-                    cb(this._incomingConnections[message.connectionId]);
+                    cb(C);
                 });
             }
             else if ((message.type === 'acceptConnection') && (isValidConnectionId(message.connectionId))) {
@@ -419,6 +425,14 @@ class UdpServer {
     _createOutgoingUdpConnection({address, port}) {
         const connectionId = randomAlphaString(10);
         const C = new UdpConnection({udpServer: this, connectionId, remoteAddress: address, remotePort: port});
+        C.on('close', () => {
+            if (connectionId in this._pendingOutgoingConnections) {
+                delete this._pendingOutgoingConnections[connectionId];
+            }
+            if (connectionId in this._outgoingConnections) {
+                delete this._outgoingConnections[connectionId];
+            }
+        })
         this._pendingOutgoingConnections[connectionId] = C;
         const openMessage = {
             type: 'openConnection',
@@ -522,7 +536,7 @@ class UdpConnection {
             }
             const elapsed = (new Date()) - this._lastKeepAliveTimestamp;
             if (elapsed > 60000) {
-                console.warn('Closing udp connection due to inactivity');
+                console.warn(`Closing udp connection due to inactivity: ${this._connectionId}`);
                 this.close();
             }
         }
