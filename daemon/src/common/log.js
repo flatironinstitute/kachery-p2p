@@ -94,11 +94,11 @@ class Log {
                 console.info(txt);
             }
         }
-        this._feedManager.appendMessages({
-            feedId: this._feedId,
-            subfeedName: category,
-            messages: [{type, category, name, data}]
-        });
+        // this._feedManager.appendMessages({
+        //     feedId: this._feedId,
+        //     subfeedName: category,
+        //     messages: [{type, category, name, data}]
+        // });
     }
 }
 

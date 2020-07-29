@@ -267,6 +267,11 @@ class OutgoingWebsocketConnection {
             type: 'initial',
             protocolVersion: protocolVersion()
         });
+        setTimeout(() => {
+            if (!this._accepted) {
+                this.disconnect();
+            }
+        }, 5000);
     }
     remoteNodeId() {
         return this._remoteNodeId;
