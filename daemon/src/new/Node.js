@@ -42,9 +42,9 @@ class Node {
         this._onProvidingCallbacks = [];
         this._onRequestCallbacks = [];
 
-        this._channels = {}; // by channel name ---- {[channelName]: {nodes: {[nodeId]: {timestamp: ...}}}}
+        this._channels = {}; // by channel name ---- {[channelName]: true}}
         this._peers = {}; // by peerId
-        this._nodeInfoStore = {}; // {[nodeId]: {signature, body: {timestamp, nodeInfo}}}
+        this._nodeInfoStore = {}; // {[nodeId]: {internalTimestamp, body: {signature, body: {timestamp, channels: {[channelName]: true}, nodeInfo}}}}
 
         this._websocketServer = this._initializeServer({ type: 'websocket', listenPort: this._port });
         this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._udpPort });
@@ -79,12 +79,22 @@ class Node {
     }
     getPeerIdsForChannel(channelName) {
         const ret = [];
-        const ch = this._channels[channelName] || {nodes: {}};
-        for (let nodeId in ch.nodes) {
-            if (nodeId in this._peers) {
-                if (this._peers[nodeId].hasConnection()) {
-                    ret.push(nodeId);
+        for (let nodeId in this._nodeInfoStore) {
+            if (channelName in (this._nodeInfoStore[nodeId].data.body.channels || {})) {
+                if (nodeId in this._peers) {
+                    if (this._peers[nodeId].hasConnection()) {
+                        ret.push(nodeId);
+                    }
                 }
+            }
+        }
+        return ret;
+    }
+    getNodeIdsForChannel(channelName) {
+        const ret = [];
+        for (let nodeId in this._nodeInfoStore) {
+            if (channelName in (this._nodeInfoStore[nodeId].data.body.channels || {})) {
+                ret.push(nodeId);
             }
         }
         return ret;
@@ -118,7 +128,7 @@ class Node {
         if (channelName in this._channels) {
             return;
         }
-        this._channels[channelName] = { nodes: {} };
+        this._channels[channelName] = true;
     }
     leaveChannel(channelName) {
         this._validateChannelName(channelName);
@@ -616,8 +626,8 @@ class Node {
         for (let channelName in this._channels) {
             lines.push(`CHANNEL: ${channelName}`);
             lines.push(`self ${this._nodeId.slice(0, 6)}`);
-            const ch = this._channels[channelName];
-            for (let nodeId in ch.nodes) {
+            const nodeIdsInChannel = this.getNodeIdsForChannel(channelName); // todo
+            for (let nodeId of nodeIdsInChannel) {
                 nodesIncluded[nodeId] = true;
                 const nodeInfo = this._nodeInfoStore[nodeId] ? this._nodeInfoStore[nodeId].data.body.nodeInfo : null;
                 lines.push(await makeNodeLine({channelName, nodeId, nodeInfo}));
@@ -850,7 +860,6 @@ class Node {
         this._validateMessage(body.message);
 
         this._validateChannelName(channelName, {mustBeJoined: true});
-        if (!(channelName in this._channels)) return;
 
         const signature = message.signature;
         if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId))) {
@@ -860,7 +869,8 @@ class Node {
             // don't handle it ourselves if we are the ones sending it.
             this._handleMessage({ fromNodeId: body.fromNodeId, message: body.message })
         }
-        for (let nodeId in this._channels[channelName].nodes) {
+        const nodeIdsInChannel = this.getNodeIdsForChannel(channelName);
+        for (let nodeId of nodeIdsInChannel) {
             if ((nodeId !== fromNodeId) && (nodeId in this._peers)) {
                 const P = this._peers[nodeId];
                 if (P.hasConnection()) {
@@ -881,7 +891,6 @@ class Node {
         this._validateMessage(body.message);
 
         this._validateChannelName(channelName, {mustBeJoined: true});
-        if (!(channelName in this._channels)) return;
 
         const signature = message.signature;
         if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId))) {
@@ -1011,18 +1020,16 @@ class Node {
         this._validateSimpleObject(message.data.body.nodeInfo);
         this._validateNodeInfo(message.data.body.nodeInfo);
         assert(message.data.body.nodeInfo.nodeId === fromNodeId, 'Mismatch in node id');
-        const channelName = message.channelName;
-        if (channelName) {
-            this._validateChannelName(channelName);
-            if (channelName in this._channels) {
-                this._channels[channelName].nodes[fromNodeId] = {timestamp: new Date()};
-            }
-        }
         const data0 = message.data;
         this._handleReceiveNodeInfo({data: data0});
     }
     _createFindChannelNodesDataForSelf() {
+        const channels0 = {};
+        for (let channelName in this._channels) {
+            channels0[channelName] = true;
+        }
         const body = {
+            channels: channels0,
             nodeInfo: this.nodeInfo(),
             timestamp: (new Date()) - 0
         };
@@ -1068,16 +1075,20 @@ class Node {
             if (nodeId !== fromNodeId) {
                 const elapsed = (new Date()) - x[nodeId].internalTimestamp;
                 if (elapsed < 60000) {
-                    nodes[nodeId] = x[nodeId].data;
+                    const channels0 = x[nodeId].data.channels || {};
+                    if (channelName in channels0) {
+                        nodes[nodeId] = x[nodeId].data;
+                    }
                 }
                 else {
                     delete x[nodeId];
                 }
             }
         }
-        if (channelName in this._channels) {
+        const selfData = this._createFindChannelNodesDataForSelf();
+        if (channelName in selfData.body.channels) {
             // report self
-            nodes[this._nodeId] = this._createFindChannelNodesDataForSelf();
+            nodes[this._nodeId] = selfData;
         }
         if (Object.keys(nodes).length > 0) {
             this._peers[fromNodeId].sendMessage({
@@ -1133,15 +1144,15 @@ class Node {
             this._validateNodeId(nodeId);
             const data0 = nodes[nodeId];
             this._handleReceiveNodeInfo({data: data0});
-            this._channels[channelName].nodes[nodeId] = {
-                timestamp: new Date()
-            }
         }
     }
     _nodeIsInOneOfOurChannels(nodeId) {
         this._validateNodeId(nodeId);
+        const nodeInfoData = this._nodeInfoStore[nodeId] ? this._nodeInfoStore[nodeId].data : null;
+        if (!nodeInfoData) return false;
+        const nodeChannels = nodeInfoData.body.channels || {};
         for (let channelName in this._channels) {
-            if (nodeId in this._channels[channelName].nodes) {
+            if (channelName in nodeChannels) {
                 return true;
             }
         }
@@ -1165,18 +1176,6 @@ class Node {
                 console.info(`Removing peer: ${peerId.slice(0, 6)}`);
                 P.disconnect();
                 delete this._peers[peerId];
-            }
-        }
-    }
-    _cleanupChannels() {
-        for (let channelName in this._channels) {
-            const ch = this._channels[channelName];
-            for (let nodeId in ch.nodes) {
-                const n = ch.nodes[nodeId];
-                const elapsed = (new Date()) - n.timestamp;
-                if (elapsed > 60000) {
-                    delete ch.nodes[nodeId]
-                }
             }
         }
     }
@@ -1324,8 +1323,7 @@ class Node {
         for (let channelName in this._channels) {
             const message = {
                 type: 'announcing',
-                data: selfData,
-                channelName
+                data: selfData
             };
             this.broadcastMessage({ channelName, message });
         }
@@ -1334,8 +1332,7 @@ class Node {
             if (P.hasConnection()) {
                 P.sendMessage({
                     type: 'announcing',
-                    data: selfData,
-                    channelName: null
+                    data: selfData
                 });
             }
         }
@@ -1359,8 +1356,7 @@ class Node {
 
             const nodeIdsToTry = {};
             for (let channelName in this._channels) {
-                const ch = this._channels[channelName];
-                const nodeIdsInChannel = Object.keys(ch.nodes);
+                const nodeIdsInChannel = this.getNodeIdsForChannel(channelName);
                 for (let nodeId of nodeIdsInChannel) {
                     let okay = false;
                     if (nodeId in this._nodeInfoStore) {
@@ -1464,14 +1460,6 @@ class Node {
             await sleepMsec(2000);
         }
     }
-    async _startCleanupChannels() {
-        await sleepMsec(1000);
-        while (true) {
-            if (this._halt) return;
-            this._cleanupChannels();
-            await sleepMsec(2000);
-        }
-    }
     async _startDiscoverNodes() {
         // start aggressively and then slow down
         let delayMsec = 1000;
@@ -1517,7 +1505,6 @@ class Node {
         this._startAnnouncingSelf();
         this._startOutgoingConnections();
         this._startCleanupPeers();
-        this._startCleanupChannels();
         this._startDiscoverNodes();
         this._startPrintInfo();
     }
