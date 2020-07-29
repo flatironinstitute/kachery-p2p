@@ -80,7 +80,7 @@ class Node {
     getPeerIdsForChannel(channelName) {
         const ret = [];
         for (let nodeId in this._nodeInfoStore) {
-            if (channelName in (this._nodeInfoStore[nodeId].data.body.channels || {})) {
+            if (channelName in this._nodeInfoStore[nodeId].data.body.channels) {
                 if (nodeId in this._peers) {
                     if (this._peers[nodeId].hasConnection()) {
                         ret.push(nodeId);
@@ -93,7 +93,7 @@ class Node {
     getNodeIdsForChannel(channelName) {
         const ret = [];
         for (let nodeId in this._nodeInfoStore) {
-            if (channelName in (this._nodeInfoStore[nodeId].data.body.channels || {})) {
+            if (channelName in this._nodeInfoStore[nodeId].data.body.channels)) {
                 ret.push(nodeId);
             }
         }
@@ -1075,7 +1075,7 @@ class Node {
             if (nodeId !== fromNodeId) {
                 const elapsed = (new Date()) - x[nodeId].internalTimestamp;
                 if (elapsed < 60000) {
-                    const channels0 = x[nodeId].data.channels || {};
+                    const channels0 = x[nodeId].data.body.channels;
                     if (channelName in channels0) {
                         nodes[nodeId] = x[nodeId].data;
                     }
@@ -1150,7 +1150,7 @@ class Node {
         this._validateNodeId(nodeId);
         const nodeInfoData = this._nodeInfoStore[nodeId] ? this._nodeInfoStore[nodeId].data : null;
         if (!nodeInfoData) return false;
-        const nodeChannels = nodeInfoData.body.channels || {};
+        const nodeChannels = nodeInfoData.body.channels;
         for (let channelName in this._channels) {
             if (channelName in nodeChannels) {
                 return true;
