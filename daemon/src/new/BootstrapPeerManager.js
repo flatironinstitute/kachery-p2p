@@ -7,6 +7,7 @@ class BootstrapPeerManager {
         this._port = port;
         this._connected = false;
         this._peerId = null; // to be determined
+        this._printedError = false;
 
         this._start();
     }
@@ -23,15 +24,30 @@ class BootstrapPeerManager {
     }
     async _tryToConnect() {
         if (this._connected) return;
-        const C = await this._node._websocketServer.createOutgoingWebsocketConnection({
-            address: this._address,
-            port: this._port,
-            remoteNodeId: null // we don't know it yet
-        });
-        if (!C) {
-            console.warn(`Unable to connect to bootstrap peer: ${address}:${port}`);
+        let C;
+        try {
+            C = await this._node._websocketServer.createOutgoingWebsocketConnection({
+                address: this._address,
+                port: this._port,
+                remoteNodeId: null // we don't know it yet
+            });
+        }
+        catch(err) {
+            if (!this._printedError) {
+                console.warn(err);
+                console.warn(`Error connecting to bootstrap node: ${this._address}:${this._port}`);
+                this._printedError = true;
+            }
             return false;
         }
+        if (!C) {
+            if (!this._printedError) {
+                console.warn(`Unable to connect to bootstrap node: ${this._address}:${this._port}`);
+                this._printedError = true;
+            }
+            return false;
+        }
+        this._printedError = false;
         const remoteNodeId = C.remoteNodeId();
         if (!(remoteNodeId in this._node._peers)) {
             this._node._createPeer(remoteNodeId);
