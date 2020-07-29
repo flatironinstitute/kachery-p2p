@@ -34,7 +34,7 @@ class BootstrapPeerManager {
         }
         catch(err) {
             if (!this._printedError) {
-                console.warn(err);
+                // console.warn(err);
                 console.warn(`Error connecting to bootstrap node: ${this._address}:${this._port}`);
                 this._printedError = true;
             }
@@ -47,6 +47,7 @@ class BootstrapPeerManager {
             }
             return false;
         }
+        console.info(`Connected to bootstrap node: ${this._address}:${this._port}`);
         this._printedError = false;
         const remoteNodeId = C.remoteNodeId();
         if (!(remoteNodeId in this._node._peers)) {
