@@ -209,7 +209,7 @@ def start_daemon(*, port=0, method='npx', channels=[], verbose=0, dverbose=0, ho
         except:
             raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
         
-        npm_package = 'kachery-p2p-daemon@0.3.5'
+        npm_package = 'kachery-p2p-daemon@0.4.2'
 
         if method == 'npx':
             ss = ShellScript(f'''
