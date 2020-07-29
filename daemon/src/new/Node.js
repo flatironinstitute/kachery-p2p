@@ -42,9 +42,9 @@ class Node {
         this._onProvidingCallbacks = [];
         this._onRequestCallbacks = [];
 
-        this._channels = {}; // by channel name ---- {[channelName]: {nodes: {[nodeId]: {timestamp: ..., nodeInfo: ...}}}}
+        this._channels = {}; // by channel name ---- {[channelName]: {nodes: {[nodeId]: {timestamp: ...}}}}
         this._peers = {}; // by peerId
-        this._findChannelNodesLookup = {}; // {[channelName]: {nodes: {[nodeId]: {signature, body: {timestamp, nodeInfo}}}}
+        this._nodeInfoStore = {}; // {[nodeId]: {signature, body: {timestamp, nodeInfo}}}
 
         this._websocketServer = this._initializeServer({ type: 'websocket', listenPort: this._port });
         this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._udpPort });
@@ -79,8 +79,8 @@ class Node {
     }
     getPeerIdsForChannel(channelName) {
         const ret = [];
-        const CH = this._channels[channelName] || {nodes: {}};
-        for (let nodeId in CH.nodes) {
+        const ch = this._channels[channelName] || {nodes: {}};
+        for (let nodeId in ch.nodes) {
             if (nodeId in this._peers) {
                 if (this._peers[nodeId].hasConnection()) {
                     ret.push(nodeId);
@@ -616,10 +616,10 @@ class Node {
         for (let channelName in this._channels) {
             lines.push(`CHANNEL: ${channelName}`);
             lines.push(`self ${this._nodeId.slice(0, 6)}`);
-            const CH = this._channels[channelName];
-            for (let nodeId in CH.nodes) {
+            const ch = this._channels[channelName];
+            for (let nodeId in ch.nodes) {
                 nodesIncluded[nodeId] = true;
-                const nodeInfo = CH.nodes[nodeId].data.body.nodeInfo;
+                const nodeInfo = this._nodeInfoStore[nodeId] ? this._nodeInfoStore[nodeId].data.body.nodeInfo : null;
                 lines.push(await makeNodeLine({channelName, nodeId, nodeInfo}));
             }
             lines.push('');
@@ -1011,9 +1011,15 @@ class Node {
         this._validateSimpleObject(message.data.body.nodeInfo);
         this._validateNodeInfo(message.data.body.nodeInfo);
         assert(message.data.body.nodeInfo.nodeId === fromNodeId, 'Mismatch in node id');
-        const data0 = message.data;
         const channelName = message.channelName;
-        this._handleReceiveNodeInfo({channelName, data: data0});
+        if (channelName) {
+            this._validateChannelName(channelName);
+            if (channelName in this._channels) {
+                this._channels[channelName].nodes[fromNodeId] = {timestamp: new Date()};
+            }
+        }
+        const data0 = message.data;
+        this._handleReceiveNodeInfo({data: data0});
     }
     _createFindChannelNodesDataForSelf() {
         const body = {
@@ -1052,23 +1058,20 @@ class Node {
         if (!this._peers[fromNodeId].hasConnection()) {
             throw new Error('findChannelNodes must come from peer with aconnection. Peer connection not found.');
         }
-        if (!(channelName in this._findChannelNodesLookup)) {
-            this._findChannelNodesLookup[channelName] = { nodes: {} };
-        }
-        const x = this._findChannelNodesLookup[channelName];
-        x.nodes[fromNodeId] = {
+        const x = this._nodeInfoStore;
+        x[fromNodeId] = {
             internalTimestamp: new Date(),
             data
         };
         const nodes = {};
-        for (let nodeId in x.nodes) {
+        for (let nodeId in x) {
             if (nodeId !== fromNodeId) {
-                const elapsed = (new Date()) - x.nodes[nodeId].internalTimestamp;
+                const elapsed = (new Date()) - x[nodeId].internalTimestamp;
                 if (elapsed < 60000) {
-                    nodes[nodeId] = x.nodes[nodeId].data;
+                    nodes[nodeId] = x[nodeId].data;
                 }
                 else {
-                    delete x.nodes[nodeId];
+                    delete x[nodeId];
                 }
             }
         }
@@ -1084,11 +1087,9 @@ class Node {
             });
         }
     }
-    _handleReceiveNodeInfo({ channelName, data }) {
+    _handleReceiveNodeInfo({ data }) {
         // called by the two mechanisms for discovering nodes and getting updated nodeInfo data
         // This system allows us to trust that the node info is coming from the node itself
-        this._validateChannelName(channelName, {mustBeJoined: true});
-        let CH = this._channels[channelName];
         this._validateSimpleObject(data, {fields: {
             signature: {optional: false, type: 'string'},
             body: {optional: false}
@@ -1101,8 +1102,8 @@ class Node {
             throw new SignatureError({nodeId: data.body.nodeInfo.nodeId, fromNodeId});
         }
         let okayToReplace = false;
-        if (nodeId in CH.nodes) {
-            const difference = data.body.timestamp - CH.nodes[nodeId].data.body.timestamp;
+        if (nodeId in this._nodeInfoStore) {
+            const difference = data.body.timestamp - this._nodeInfoStore[nodeId].data.body.timestamp;
             if (difference > 0) {
                 okayToReplace = true;
             }
@@ -1111,9 +1112,9 @@ class Node {
             okayToReplace = true;
         }
         if (okayToReplace) {
-            CH.nodes[nodeId] = {
+            this._nodeInfoStore[nodeId] = {
                 internalTimestamp: new Date(), // for deciding when to delete it internal to this component -- don't use remote timestamp because it might be a different time zone - only use remote timestamp for comparing and determining most recent
-                data: data
+                data
             };
         }
     }
@@ -1131,7 +1132,10 @@ class Node {
         for (let nodeId in nodes) {
             this._validateNodeId(nodeId);
             const data0 = nodes[nodeId];
-            this._handleReceiveNodeInfo({channelName, data: data0});
+            this._handleReceiveNodeInfo({data: data0});
+            this._channels[channelName].nodes[nodeId] = {
+                timestamp: new Date()
+            }
         }
     }
     _nodeIsInOneOfOurChannels(nodeId) {
@@ -1161,6 +1165,18 @@ class Node {
                 console.info(`Removing peer: ${peerId.slice(0, 6)}`);
                 P.disconnect();
                 delete this._peers[peerId];
+            }
+        }
+    }
+    _cleanupChannels() {
+        for (let channelName in this._channels) {
+            const ch = this._channels[channelName];
+            for (let nodeId in ch.nodes) {
+                const n = ch.nodes[nodeId];
+                const elapsed = (new Date()) - n.timestamp;
+                if (elapsed > 60000) {
+                    delete ch.nodes[nodeId]
+                }
             }
         }
     }
@@ -1304,13 +1320,24 @@ class Node {
     }
 
     _announceSelfToAllChannels() {
+        const selfData = this._createFindChannelNodesDataForSelf();
         for (let channelName in this._channels) {
             const message = {
                 type: 'announcing',
-                data: this._createFindChannelNodesDataForSelf(),
+                data: selfData,
                 channelName
             };
             this.broadcastMessage({ channelName, message });
+        }
+        for (let peerId in this._peers) {
+            const P = this._peers[peerId];
+            if (P.hasConnection()) {
+                P.sendMessage({
+                    type: 'announcing',
+                    data: selfData,
+                    channelName: null
+                });
+            }
         }
     }
 
@@ -1329,13 +1356,36 @@ class Node {
         while (true) {
             await sleepMsec(delayMsec);
             if (this._halt) return;
+
+            const nodeIdsToTry = {};
             for (let channelName in this._channels) {
-                const CH = this._channels[channelName];
-                for (let nodeId in CH.nodes) {
-                    assert(CH.nodes[nodeId].internalTimestamp, 'Unexpected, missing internalTimestamp');
-                    const elapsed = (new Date()) - CH.nodes[nodeId].internalTimestamp;
+                const ch = this._channels[channelName];
+                const nodeIdsInChannel = Object.keys(ch.nodes);
+                for (let nodeId of nodeIdsInChannel) {
+                    let okay = false;
+                    if (nodeId in this._nodeInfoStore) {
+                        const elapsed = (new Date()) - this._nodeInfoStore[nodeId].internalTimestamp;
+                        if (elapsed < 120000) {
+                            okay = true;
+                        }
+                        else {
+                            delete ch.nodes[nodeId];
+                        }
+                    }
+                    if (okay) {
+                        nodeIdsToTry[nodeId] = true;
+                    }
+                }
+            }
+            for (let peerId in this._peers) {
+                nodeIdsToTry[peerId] = true;
+            }
+
+            for (let nodeId in nodeIdsToTry) {
+                if (nodeId in this._nodeInfoStore) {
+                    const elapsed = (new Date()) - this._nodeInfoStore[nodeId].internalTimestamp;
                     if (elapsed < 120000) {
-                        const nodeInfo = CH.nodes[nodeId].data.body.nodeInfo;
+                        const nodeInfo = this._nodeInfoStore[nodeId].data.body.nodeInfo;
                         this._validateNodeInfo(nodeInfo);
 
                         if ((nodeInfo.address) && (nodeInfo.port)) {
@@ -1392,9 +1442,6 @@ class Node {
                             }
                         }
                     }
-                    else {
-                        delete CH.nodes[nodeId];
-                    }
                 }
             }
             delayMsec *= 2;
@@ -1408,6 +1455,14 @@ class Node {
         while (true) {
             if (this._halt) return;
             this._cleanupPeers();
+            await sleepMsec(2000);
+        }
+    }
+    async _startCleanupChannels() {
+        await sleepMsec(1000);
+        while (true) {
+            if (this._halt) return;
+            this._cleanupChannels();
             await sleepMsec(2000);
         }
     }
@@ -1456,6 +1511,7 @@ class Node {
         this._startAnnouncingSelf();
         this._startOutgoingConnections();
         this._startCleanupPeers();
+        this._startCleanupChannels();
         this._startDiscoverNodes();
         this._startPrintInfo();
     }
