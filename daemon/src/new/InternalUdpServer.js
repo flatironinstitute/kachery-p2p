@@ -148,8 +148,9 @@ class InternalUdpServer {
         }
     }
     _prepareAndSendMessage({message, port, address, numTries=1, udpMessageId=undefined}) {
+        udpMessageId = udpMessageId ||  randomAlphaString(10);
         const message2 = {
-            udpMessageId: udpMessageId || randomAlphaString(10),
+            udpMessageId,
             message
         };
         this._outgoingMessagesWaitingForAcknowledgement[udpMessageId] = {
@@ -165,15 +166,17 @@ class InternalUdpServer {
     async _start() {
         while (true) {
             await sleepMsec(2000);
+            console.log('---- udp num outgoing messages', Object.keys(this._outgoingMessagesWaitingForAcknowledgement).length);
             for (let udpMessageId in this._outgoingMessagesWaitingForAcknowledgement) {
                 const x = this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
                 const elapsed = (new Date()) - x.timestamp;
-                if (elapsed > 2000) {
+                if (elapsed > 1000) {
                     if (x.numTries >= 3) {
                         console.warn(`Did not get acknowledgement of udp message after ${x.numTries} tries. Canceling.`)
                         delete this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
                         return;
                     }
+                    console.log('--- retrying udp message', udpMessageId);
                     this._prepareAndSendMessage({message: x.message, port: x.port, address: x.address, numTries: x.numTries + 1, udpMessageId});
                 }
             }
@@ -268,7 +271,7 @@ class UdpConnection {
         }
     }
     async _start() {
-        const delayMsec = 10000;
+        const delayMsec = 5000;
         while (true) {
             await sleepMsec(delayMsec);
             if (this._closed) {

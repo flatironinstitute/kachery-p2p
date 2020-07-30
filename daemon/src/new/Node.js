@@ -290,7 +290,7 @@ class Node {
             else if (message.type === 'requestToNodeFinished') {
                 // wait until we have received the expected number of responses
                 console.log('------------- requestToNodeFinished A', lastResponseIndex, message.numResponses);
-                while (lastResponseIndex + 1 < message.numResponses) {
+                while ((lastResponseIndex + 1 < message.numResponses) && (!isFinished)) {
                     await sleepMsec(10);
                 }
                 console.log('------------- requestToNodeFinished B', lastResponseIndex, message.numResponses);
@@ -439,7 +439,7 @@ class Node {
                 let finished = false;
                 let bytesDownloadedThisChunk = 0;
         
-                const req = this.makeRequestToNode({channelName, toNodeId: nodeId, requestBody, timeout: 10000});
+                const req = this.makeRequestToNode({channelName, toNodeId: nodeId, requestBody, timeout: 20000});
                 _currentReq = req;
                 req.onResponse(responseBody => {
                     if (finished) return;
@@ -708,7 +708,7 @@ class Node {
                 canceled = true;
             });
 
-            const AA = 10;
+            const AA = 50;
             const BB = 5000;
 
             const asyncOpen = util.promisify(fs.open);
@@ -727,7 +727,7 @@ class Node {
                     console.log('------ xxxx', numResponsesSent, numResponsesReceived);
                     let timer0 = new Date();
                     await sleepMsec(1);
-                    while (numResponsesSent - numResponsesReceived > AA) {
+                    while ((numResponsesSent - numResponsesReceived > AA) && (!canceled)) {
                         const elapsed0 = (new Date()) - timer0;
                         if (elapsed0 > BB) {
                             reportError('Timeout while waiting for confirmation of receipt of messages.')
@@ -746,10 +746,15 @@ class Node {
                     data_b64: buffer.slice(0, i2 - i1).toString('base64')
                 });
                 numResponsesSent ++;
+                console.log(`---- Sent ${numResponsesSent} responses.`);
 
                 i = i2;
             }
-            console.log('--------------- DEBUG 4', requestBody.startByte, requestBody.endByte);
+            console.log('--------------- DEBUG 4', numResponsesSent, numResponsesReceived);
+            while ((numResponsesSent - numResponsesReceived > 0) && (!canceled)) {
+                await sleepMsec(20);
+            }
+            console.log('--------------- DEBUG 5', numResponsesSent, numResponsesReceived);
             reportFinished();
 
             // const readStream = fs.createReadStream(fileSystemPath, {start: requestBody.startByte, end: requestBody.endByte - 1 /* notice the -1 here */});
@@ -1022,6 +1027,8 @@ class Node {
         const responseIndex = message.responseIndex;
         this._validateInteger(responseIndex);
 
+        console.log('------------ got requestToNodeResponseReceived', responseIndex);
+
         if (requestId in this._activeIncomingRequests) {
             this._activeIncomingRequests[requestId].onResponseReceivedCallbacks.forEach(cb => cb(responseIndex));
         }
@@ -1058,6 +1065,7 @@ class Node {
                 },
                 sendResponse: responseBody => {
                     this._validateSimpleObject(responseBody);
+                    console.log('---- sending requestToNodeResponse', requestId, numResponses);
                     this.sendMessageToNode({ channelName, toNodeId: fromNodeId, message: { type: 'requestToNodeResponse', requestId, responseBody, responseIndex: numResponses } });
                     numResponses++;
                     return numResponses - 1;
