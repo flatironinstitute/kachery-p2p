@@ -743,7 +743,6 @@ class Node {
                     data_b64: buffer.slice(0, i2 - i1).toString('base64')
                 });
                 numResponsesSent ++;
-                console.log(`---- Sent ${numResponsesSent} responses.`);
 
                 i = i2;
             }

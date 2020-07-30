@@ -170,7 +170,7 @@ class InternalUdpServer {
                 const x = this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
                 const elapsed = (new Date()) - x.timestamp;
                 if (elapsed > 1000) {
-                    if (x.numTries >= 3) {
+                    if (x.numTries >= 5) {
                         console.warn(`Did not get acknowledgement of udp message after ${x.numTries} tries. Canceling.`)
                         delete this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
                         return;
