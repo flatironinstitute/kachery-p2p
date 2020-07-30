@@ -4,13 +4,13 @@ import { randomString, sleepMsec } from "../common/util.js";
 class SmartyNode {
     constructor(node) {
         this._node = node;
+        this._remoteNodeManager = this._node._remoteNodeManager;
         this._optimalRoutesToNodes = {}; // {[channelName]: {[toNodeId]: {timestamp: ..., optimalRoute: ...}}}
         this._node.onRequest(({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) => {
             if (requestBody.type === 'routeLatencyTest') {
                 this._handleRouteLatencyTest({channelName, fromNodeId, requestBody, onResponse, onError, onFinished});
             }
         });
-        this._node.onR
     }
     async which_route_should_i_use_to_send_a_message_to_this_node({channelName, toNodeId, calculateIfNeeded}) {
         if (!(channelName in this._optimalRoutesToNodes)) {
@@ -23,8 +23,7 @@ class SmartyNode {
                 const elapsed0 = (new Date() - timestamp);
                 if ((elapsed0 < 10000) || ((!calculateIfNeeded) && (elapsed0 < 30000))) {
                     const firstPeerId = route[1];
-                    const firstPeerConnection = this._node._peers[firstPeerId];
-                    if ((firstPeerConnection) && (firstPeerConnection.hasConnection())) {
+                    if (this._remoteNodeManager.isPeer(firstPeerId)) {
                         return route;
                     }
                     else {
@@ -47,7 +46,7 @@ class SmartyNode {
     }
 
     async _estimateOptimalRouteToNode({channelName, toNodeId}) {
-        const candidatePeerIds = this._node.getPeerIdsForChannel(channelName);
+        const candidatePeerIds = this._remoteNodeManager.peerIdsForChannel(channelName);
         const timings = {};
         const routes = {};
         const testCandidate = (candidatePeerId) => {
@@ -62,7 +61,13 @@ class SmartyNode {
                 avoid: {[this._node.nodeId()]: true}
             };
             const timer = new Date();
-            const req = this._node.makeRequestToNode({channelName, toNodeId: candidatePeerId, requestBody, timeout: 5000});
+            const req = this._node.makeRequestToNode({
+                channelName,
+                toNodeId: candidatePeerId,
+                requestBody,
+                direct: true,
+                timeout: 5000
+            });
             let finished = false;
             let gotCorrectResponse = false;
             let responseRoute = null;
@@ -142,8 +147,7 @@ class SmartyNode {
         }
         // for now we only test routes of length 2
         // in future we can use the already-determined optimal route (and checking it does not contain the avoid stuff)
-        const pc = this._node._peers[toNodeId];
-        if ((pc) && (pc.hasConnection())) {
+        if (this._remoteNodeManager.isPeer(toNodeId)) {
             const req = this._node.makeRequestToNode({
                 channelName,
                 toNodeId: toNodeId,

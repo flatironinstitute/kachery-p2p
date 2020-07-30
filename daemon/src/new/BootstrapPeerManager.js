@@ -1,8 +1,9 @@
 import { sleepMsec } from '../common/util.js'
 
 class BootstrapPeerManager {
-    constructor(node, {address, port}) {
-        this._node = node;
+    constructor({remoteNodeManager, websocketServer, address, port}) {
+        this._remoteNodeManager = remoteNodeManager;
+        this._websocketServer = websocketServer;
         this._address = address;
         this._port = port;
         this._connected = false;
@@ -13,9 +14,8 @@ class BootstrapPeerManager {
     }
 
     _checkConnected() {
-        // todo - finish this
         if (!this._connected) return false;
-        if (this._peerId in this._node._peers) {
+        if (this._remoteNodeManager.isPeer(this._peerId)) {
             return true;
         }
         this._peerId = null;
@@ -26,7 +26,7 @@ class BootstrapPeerManager {
         if (this._connected) return;
         let C;
         try {
-            C = await this._node._websocketServer.createOutgoingWebsocketConnection({
+            C = await this._websocketServer.createOutgoingConnection({
                 address: this._address,
                 port: this._port,
                 remoteNodeId: null // we don't know it yet
@@ -50,17 +50,15 @@ class BootstrapPeerManager {
         console.info(`Connected to bootstrap node: ${this._address}:${this._port}`);
         this._printedError = false;
         const remoteNodeId = C.remoteNodeId();
-        if (!(remoteNodeId in this._node._peers)) {
-            this._node._createPeer(remoteNodeId);
-        }
-        const P = this._node._peers[remoteNodeId];
-        if (!P) {
-            console.warn('Problem connecting to bootstrap peer.');
-            C.disconnect();
-            return false;
-        }
-        P.setOutgoingConnection({type: 'websocket', connection: C});
-        P.setIsBootstrapPeer(true, {address: this._address, port: this._port});
+        this._remoteNodeManager.setOutgoingConnection({
+            nodeId: remoteNodeId,
+            type: 'websocket',
+            connection: C
+        });
+        this._remoteNodeManager.setRemoteNodeBootstrapPeerInfo(
+            remoteNodeId,
+            {address: this._address, port: this._port}
+        )
         this._connected = true;
         this._peerId = remoteNodeId;
         return true;

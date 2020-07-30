@@ -51,10 +51,10 @@ class WebsocketServer {
     onUdpPublicEndpointChanged(cb) {
         this._udpPublicEndpointChangedCallbacks.push(cb);
     }
-    async createOutgoingWebsocketConnection({address, port, remoteNodeId}) {
+    async createOutgoingConnection({address, port, remoteNodeId}) {
         return new Promise((resolve, reject) => {
             let finished = false;
-            const X = new OutgoingWebsocketConnection({
+            const X = new OutgoingConnection({
                 address,
                 port,
                 nodeId: this._nodeId,
@@ -185,7 +185,7 @@ class IncomingWebsocketConnection {
     }
 }
 
-class OutgoingWebsocketConnection {
+class OutgoingConnection {
     constructor({ address, port, nodeId, keyPair, remoteNodeId, useUdp=false, udpServer=null }) {
         this._nodeId = nodeId;
         this._keyPair = keyPair;
@@ -536,7 +536,7 @@ class UdpConnection {
             }
             const elapsed = (new Date()) - this._lastKeepAliveTimestamp;
             if (elapsed > 60000) {
-                console.warn(`Closing udp connection due to inactivity: ${this._connectionId}`);
+                //console.warn(`Closing udp connection due to inactivity: ${this._connectionId}`);
                 this.close();
             }
         }

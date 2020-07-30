@@ -2,7 +2,6 @@ import fs from 'fs';
 import { getSignature, verifySignature, hexToPublicKey } from '../common/crypto_util.js';
 import { sleepMsec, randomAlphaString } from '../common/util.js';
 import { getLocalFileInfo } from '../kachery.js';
-import Peer from './Peer.js';
 import SmartyNode from './SmartyNode.js';
 import { log } from '../common/log.js';
 import assert from 'assert';
@@ -10,6 +9,7 @@ import Stream from 'stream';
 import WebsocketServer from './WebsocketServer.js';
 import crypto from 'crypto';
 import BootstrapPeerManager from './BootstrapPeerManager.js';
+import RemoteNodeManager from './RemoteNodeManager.js';
 
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
@@ -27,14 +27,20 @@ class Node {
         log().info(`Starting kachery-p2p node`, { nodeId, address, port, udpAddress, udpPort, label });
         this._nodeId = nodeId;
         this._keyPair = keyPair;
-        this._address = address;
-        this._port = port;
-        this._udpAddress = udpAddress;
-        this._udpPort = udpPort;
+
+        this._nodeInfo = {
+            nodeId,
+            address,
+            port,
+            udpAddress,
+            udpPort,
+            label
+        }
+        this._channels = {}; // {[channelName]: true}}
+
         this._feedManager = feedManager;
-        this._label = label;
         this._handledBroadcastMessages = {};
-        this._messageListeners = {}; // listeners for incoming
+        this._messageListeners = {}; // listeners for incoming messages
         this._halt = false;
 
         this._bootstrapPeerManagers = [];
@@ -42,11 +48,12 @@ class Node {
         this._onProvidingCallbacks = [];
         this._onRequestCallbacks = [];
 
-        this._channels = {}; // by channel name ---- {[channelName]: true}}
-        this._peers = {}; // by peerId
-        this._nodeInfoStore = {}; // {[nodeId]: {internalTimestamp, body: {signature, body: {timestamp, channels: {[channelName]: true}, nodeInfo}}}}
+        this._remoteNodeManager = new RemoteNodeManager(this);
+        this._remoteNodeManager.setLocalNodeInfo(this._nodeInfo);
+        this._remoteNodeManager.onMessage(({fromNodeId, message}) => this._handleMessage({fromNodeId, message}));
+        this._remoteNodeManager.setLocalNodeInfo(this._nodeInfo);
 
-        this._websocketServer = this._initializeServer({ type: 'websocket', listenPort: this._port });
+        this._websocketServer = this._initializeServer({ type: 'websocket', listenPort: this._nodeInfo.port });
         this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._udpPort });
         this._udpServer.onUdpPublicEndpointChanged(() => this._handleUdpPublicEndpointChanged());
 
@@ -62,46 +69,21 @@ class Node {
         return this._nodeId;
     }
     nodeInfo() {
-        return {
-            nodeId: this._nodeId,
-            address: this._address,
-            port: this._port,
-            udpAddress: this._udpAddress,
-            udpPort: this._udpPort,
-            label: this._label
-        }
+        return cloneObject(this._nodeInfo);
     }
     halt() {
-        for (let channelName in this._channels) {
-            this.leaveChannel(channelName);
-        }
+        this._remoteNodeManager.halt();
         this._halt = true;
     }
     getPeerIdsForChannel(channelName) {
-        const ret = [];
-        for (let nodeId in this._nodeInfoStore) {
-            if (channelName in this._nodeInfoStore[nodeId].data.body.channels) {
-                if (nodeId in this._peers) {
-                    if (this._peers[nodeId].hasConnection()) {
-                        ret.push(nodeId);
-                    }
-                }
-            }
-        }
-        return ret;
+        return this._remoteNodeManager.peerIdsForChannel(channelName);
     }
     getNodeIdsForChannel(channelName) {
-        const ret = [];
-        for (let nodeId in this._nodeInfoStore) {
-            if (channelName in this._nodeInfoStore[nodeId].data.body.channels) {
-                ret.push(nodeId);
-            }
-        }
-        return ret;
+        return this._remoteNodeManager.remoteNodeIdsForChannel(channelName);
     }
     async addBootstrapPeer({address, port}) {
         this._bootstrapPeerManagers.push(
-            new BootstrapPeerManager(this, {address, port})
+            new BootstrapPeerManager({remoteNodeManager: this._remoteNodeManager, websocketServer: this._websocketServer, address, port})
         );
     }
     onProviding(cb) {
@@ -135,7 +117,6 @@ class Node {
         log().info('Leaving channel', { channelName });
         if (channelName in this._channels) {
             delete this._channels[channelName];
-            this._cleanupPeers();
         }
     }
     hasJoinedChannel(channelName) {
@@ -163,11 +144,9 @@ class Node {
 
         if ((!route) || (direct)) {
             //  check if we can send it directly to peer
-            if (toNodeId in this._peers) {
-                if (this._peers[toNodeId].hasConnection()) {
-                    this._peers[toNodeId].sendMessage(message);
-                    return;
-                }
+            if (this._remoteNodeManager.isPeer(toNodeId)) {
+                this._remoteNodeManager.sendMessageDirectlyToPeer(toNodeId, message);
+                return;
             }
         }
         if ((!route) && (!direct)) {
@@ -581,10 +560,23 @@ class Node {
         const remote = this._udpServer.udpPublicEndpoint();
         if (remote) {
             console.info('Setting udp public endpoint', remote);
-            this._udpAddress = remote.address || null;
-            this._udpPort = remote.port || null;
-            this._announceSelfToAllChannels();
+            if ((remote.address !== this._nodeInfo.udpAddress) || (remote.port !== this._nodeInfo.port)) {
+                this._nodeInfo.udpAddress = remote.address || null;
+                this._nodeInfo.port = remote.port || null;
+                this._remoteNodeManager.setLocalNodeInfo(this._nodeInfo);
+            }
         }
+    }
+
+    _announceSelfToPeersAndJoinedChannelsNow() {
+        const message = {
+            type: 'announcing',
+            data: this._createNodeData()
+        };
+        for (let channelName in this._channels) {
+            this.broadcastMessage({channelName, message});
+        }
+        this._remoteNodeManager.sendMessageToAllPeersNotInJoinedChannels(message);
     }
 
     async _hasRouteToNode({channelName, toNodeId}) {
@@ -595,20 +587,20 @@ class Node {
     async _getInfoText() {
         const makeNodeLine = async ({channelName, nodeId, nodeInfo}) => {
             const ni = nodeInfo || {};
-            const p = this._peers[nodeId];
-            const hasIn = p ? p.hasIncomingWebsocketConnection() : false;
-            const hasOut = p ? p.hasOutgoingWebsocketConnection() : false;
-            const hasUdpIn = p ? p.hasIncomingUdpConnection() : false;
-            const hasUdpOut = p ? p.hasOutgoingUdpConnection() : false;
-            const bootstrap = p ? p.isBootstrapPeer() : false;
+            const hasIn = this._remoteNodeManager.peerHasConnectionOfType(nodeId, {type: 'websocket', direction: 'incoming'});
+            const hasOut = this._remoteNodeManager.peerHasConnectionOfType(nodeId, {type: 'websocket', direction: 'outgoing'});
+            const hasUdpIn = this._remoteNodeManager.peerHasConnectionOfType(nodeId, {type: 'udp', direction: 'incoming'});
+            const hasUdpOut = this._remoteNodeManager.peerHasConnectionOfType(nodeId, {type: 'udp', direction: 'outgoing'});
+            const bootstrap = this._remoteNodeManager.peerIsBootstrap(nodeId);
+            const hasUdpAddress = (ni.udpAddress && ni.udpPort);
 
             if (bootstrap) {
-                ni.address = ni.address || p.bootstrapPeerInfo().address;
-                ni.port = ni.port || p.bootstrapPeerInfo().port;
+                ni.address = this._remoteNodeManager.bootstrapPeerInfo(nodeId).address;
+                ni.port = this._remoteNodeManager.bootstrapPeerInfo(nodeId).port;
             }
 
             let hasRoute = null;
-            if ((!p) || (!p.hasConnection())) {
+            if ((!hasIn) && (!hasOut) && (!hasUdpIn) && (!hasUdpOut)) {
                 hasRoute = channelName ? await this._hasRouteToNode({channelName, toNodeId: nodeId}) : false;
             }
             const items = [];
@@ -618,7 +610,7 @@ class Node {
             if (hasUdpIn) items.push('udp-in');
             if (hasUdpOut) items.push('udp-out');
             if (hasRoute) items.push('route');
-            return `Node ${nodeId.slice(0, 6)}... ${ni.label || ''}: ${ni.address || ""}:${ni.port || ""} ${items.join(' ')}`;
+            return `Node${hasUdpAddress ? '*' : ''} ${nodeId.slice(0, 6)}... ${ni.label || ''}: ${ni.address || ""}:${ni.port || ""} ${items.join(' ')}`;
         }
 
         const lines = [];
@@ -629,15 +621,17 @@ class Node {
             const nodeIdsInChannel = this.getNodeIdsForChannel(channelName); // todo
             for (let nodeId of nodeIdsInChannel) {
                 nodesIncluded[nodeId] = true;
-                const nodeInfo = this._nodeInfoStore[nodeId] ? this._nodeInfoStore[nodeId].data.body.nodeInfo : null;
+                const nodeInfo = this._remoteNodeManager.remoteNodeInfo(nodeId);
                 lines.push(await makeNodeLine({channelName, nodeId, nodeInfo}));
             }
             lines.push('');
         }
         lines.push('OTHER');
-        for (let nodeId in this._peers) {
+        const peerIds = this._remoteNodeManager.peerIds();
+        for (let nodeId of peerIds) {
             if (!nodesIncluded[nodeId]) {
-                lines.push(await makeNodeLine({channelName: null, nodeId, nodeInfo: null}));
+                const nodeInfo = this._remoteNodeManager.remoteNodeInfo(nodeId);
+                lines.push(await makeNodeLine({channelName: null, nodeId, nodeInfo}));
             }
         }
         return lines.join('\n');
@@ -669,9 +663,26 @@ class Node {
         if (fileInfo) {
             const fileSystemPath = fileInfo['path'];
             const readStream = fs.createReadStream(fileSystemPath, {start: requestBody.startByte, end: requestBody.endByte - 1 /* notice the -1 here */});
+
+            function splitIntoChunks(data, chunkSize) {
+                const ret = [];
+                let i = 0;
+                while (i < data.length) {
+                    ret.push(
+                        data.slice(i, Math.min(i + chunkSize, data.length))
+                    );
+                    i += chunkSize;
+                }
+                return ret;
+            }
+
             readStream.on('data', data => {
-                onResponse({
-                    data_b64: data.toString('base64')
+                const messageChunkSize = 30000; // need to worry about the max size of udp messages
+                let dataChunks = splitIntoChunks(data, messageChunkSize);
+                dataChunks.forEach(dataChunk => {
+                    onResponse({
+                        data_b64: dataChunk.toString('base64')
+                    });
                 });
             });
             readStream.on('end', () => {
@@ -760,19 +771,10 @@ class Node {
 
         X.onIncomingConnection(connection => {
             try {
-                this._validateConnectionObject(connection);
+                this._validateConnection(connection);
                 const nodeId = connection.remoteNodeId();
                 this._validateNodeId(nodeId);
-                if (!(nodeId in this._peers)) {
-                    this._createPeer(nodeId);                    
-                }
-                const P = this._peers[nodeId];
-                if (P) {
-                    P.setIncomingConnection({ type, connection });
-                }
-                else {
-                    throw new Error('Unable to create peer for connection. ');
-                }
+                this._remoteNodeManager.setIncomingConnection({nodeId, type, connection});
             }
             catch(err) {
                 console.warn(`Failed to handle incoming connection. Disconnecting. (${err.message})`);
@@ -826,17 +828,6 @@ class Node {
         }
     }
 
-    _createPeer(nodeId) {
-        console.info(`Adding peer: ${nodeId.slice(0, 6)}`);
-        this._validateNodeId(nodeId);
-        if (nodeId in this._peers) return;
-        const P = new Peer({ peerId: nodeId });
-        P.onMessage(message => {
-            this._handleMessage({ fromNodeId: nodeId, message });
-        });
-        this._peers[nodeId] = P;
-    }
-
     _handleBroadcastMessage({ fromNodeId, message }) {
         this._validateNodeId(fromNodeId);
         this._validateMessage(message);
@@ -869,13 +860,10 @@ class Node {
             // don't handle it ourselves if we are the ones sending it.
             this._handleMessage({ fromNodeId: body.fromNodeId, message: body.message })
         }
-        const nodeIdsInChannel = this.getNodeIdsForChannel(channelName);
-        for (let nodeId of nodeIdsInChannel) {
-            if ((nodeId !== fromNodeId) && (nodeId in this._peers)) {
-                const P = this._peers[nodeId];
-                if (P.hasConnection()) {
-                    P.sendMessage(message);
-                }
+        const peerIdsInChannel = this.getPeerIdsForChannel(channelName);
+        for (let peerId of peerIdsInChannel) {
+            if (peerId !== fromNodeId) {
+                this._remoteNodeManager.sendMessageDirectlyToPeer(peerId, message);
             }
         }
     }
@@ -909,15 +897,11 @@ class Node {
                 throw new RouteError('Final node in route is not toNodeId');
             }
             const nextNodeId = body.route[index + 1];
-            if (!(nextNodeId in this._peers)) {
-                throw new RouteError('No peer that is the next item in the route');
-            }
-            const P = this._peers[nextNodeId];
-            if (P.hasConnection()) {
-                P.sendMessage(message);
+            if (this._remoteNodeManager.isPeer(nextNodeId)) {
+                this._remoteNodeManager.sendMessageDirectlyToPeer(nextNodeId, message);
             }
             else {
-                throw new RouteError('Peer that is next in the route has no connection.');
+                throw new RouteError('Node that is next in the route is not a peer.');
             }
         }
         else {
@@ -1021,9 +1005,9 @@ class Node {
         this._validateNodeInfo(message.data.body.nodeInfo);
         assert(message.data.body.nodeInfo.nodeId === fromNodeId, 'Mismatch in node id');
         const data0 = message.data;
-        this._handleReceiveNodeInfo({data: data0});
+        this._remoteNodeManager.setRemoteNodeData(fromNodeId, data0);
     }
-    _createFindChannelNodesDataForSelf() {
+    _createNodeData() {
         const channels0 = {};
         for (let channelName in this._channels) {
             channels0[channelName] = true;
@@ -1059,74 +1043,32 @@ class Node {
             throw new SignatureError({fromNodeId});
         }
         
-        if (!this._peers[fromNodeId]) {
-            throw new Error('findChannelNodes must come from peer. Peer not found.');
+        if (!this._remoteNodeManager.isPeer(fromNodeId)) {
+            throw new Error('findChannelNodes must come from peer.');
         }
-        if (!this._peers[fromNodeId].hasConnection()) {
-            throw new Error('findChannelNodes must come from peer with aconnection. Peer connection not found.');
-        }
-        const x = this._nodeInfoStore;
-        x[fromNodeId] = {
-            internalTimestamp: new Date(),
-            data
-        };
+        this._remoteNodeManager.setRemoteNodeData(fromNodeId, data);
+        const nodeIds = this._remoteNodeManager.remoteNodeIdsForChannel(channelName);
         const nodes = {};
-        for (let nodeId in x) {
+        for (let nodeId of nodeIds) {
             if (nodeId !== fromNodeId) {
-                const elapsed = (new Date()) - x[nodeId].internalTimestamp;
-                if (elapsed < 60000) {
-                    const channels0 = x[nodeId].data.body.channels;
-                    if (channelName in channels0) {
-                        nodes[nodeId] = x[nodeId].data;
-                    }
-                }
-                else {
-                    delete x[nodeId];
+                const data0 = this._remoteNodeManager.remoteNodeData(nodeId);
+                if (data0) {
+                    nodes[nodeId] = data0;
                 }
             }
         }
-        const selfData = this._createFindChannelNodesDataForSelf();
+        const selfData = this._createNodeData();
         if (channelName in selfData.body.channels) {
             // report self
             nodes[this._nodeId] = selfData;
         }
         if (Object.keys(nodes).length > 0) {
-            this._peers[fromNodeId].sendMessage({
+            const responseMessage = {
                 type: 'findChannelNodesResponse',
                 channelName,
                 nodes
-            });
-        }
-    }
-    _handleReceiveNodeInfo({ data }) {
-        // called by the two mechanisms for discovering nodes and getting updated nodeInfo data
-        // This system allows us to trust that the node info is coming from the node itself
-        this._validateSimpleObject(data, {fields: {
-            signature: {optional: false, type: 'string'},
-            body: {optional: false}
-        }});
-        assert(data.body.timestamp, 'Missing timestamp');
-        this._validateNodeInfo(data.body.nodeInfo);
-        const nodeId = data.body.nodeInfo.nodeId;
-        this._validateNodeId(nodeId);
-        if (!verifySignature(data.body, data.signature, hexToPublicKey(data.body.nodeInfo.nodeId))) {
-            throw new SignatureError({nodeId: data.body.nodeInfo.nodeId, fromNodeId});
-        }
-        let okayToReplace = false;
-        if (nodeId in this._nodeInfoStore) {
-            const difference = data.body.timestamp - this._nodeInfoStore[nodeId].data.body.timestamp;
-            if (difference > 0) {
-                okayToReplace = true;
-            }
-        }
-        else {
-            okayToReplace = true;
-        }
-        if (okayToReplace) {
-            this._nodeInfoStore[nodeId] = {
-                internalTimestamp: new Date(), // for deciding when to delete it internal to this component -- don't use remote timestamp because it might be a different time zone - only use remote timestamp for comparing and determining most recent
-                data
             };
+            this._remoteNodeManager.sendMessageDirectlyToPeer(fromNodeId, responseMessage);
         }
     }
     _handleFindChannelNodesResponse({ fromNodeId, message }) {
@@ -1143,14 +1085,14 @@ class Node {
         for (let nodeId in nodes) {
             this._validateNodeId(nodeId);
             const data0 = nodes[nodeId];
-            this._handleReceiveNodeInfo({data: data0});
+            this._remoteNodeManager.setRemoteNodeData(nodeId, data0);
         }
     }
     _nodeIsInOneOfOurChannels(nodeId) {
         this._validateNodeId(nodeId);
-        const nodeInfoData = this._nodeInfoStore[nodeId] ? this._nodeInfoStore[nodeId].data : null;
-        if (!nodeInfoData) return false;
-        const nodeChannels = nodeInfoData.body.channels;
+        const nodeData = this._remoteNodeManager.remoteNodeData(nodeId);
+        if (!nodeData) return false;
+        const nodeChannels = nodeData.body.channels;
         for (let channelName in this._channels) {
             if (channelName in nodeChannels) {
                 return true;
@@ -1158,28 +1100,6 @@ class Node {
         }
         return false;
     }
-    _cleanupPeers() {
-        for (let peerId in this._peers) {
-            const P = this._peers[peerId];
-            if (!P.isBootstrapPeer()) {
-                if (!this._nodeIsInOneOfOurChannels(peerId)) {
-                    if (P.hasOutgoingConnection()) {
-                        console.info(`Removing outgoing connections to peer because it is not in any of our channels: ${peerId.slice(0, 6)}`);
-                        P.disconnectOutgoingConnections();
-                    }
-                }
-            }
-        }
-        for (let peerId in this._peers) {
-            const P = this._peers[peerId];
-            if (!P.hasConnection()) {
-                console.info(`Removing peer: ${peerId.slice(0, 6)}`);
-                P.disconnect();
-                delete this._peers[peerId];
-            }
-        }
-    }
-
     _validateChannelName(channelName, opts) {
         opts = opts || {};
         assert(typeof(channelName) === 'string', `Channel name must be a string`);
@@ -1191,7 +1111,7 @@ class Node {
             }
         }
     }
-    _validateConnectionObject(connection) {
+    _validateConnection(connection) {
         // todo
     }
     _validateFunction(f) {
@@ -1226,7 +1146,8 @@ class Node {
                         udpAddress: {optional: true,  type: 'string', nullOkay: true, minLength: 0, maxLength: 80},
                         udpPort: {optional: true, type: 'integer', nullOkay: true},
                         label: {optional: false, type: 'string', minLength: 0, maxLength: 160}
-                    }
+                    },
+                    additionalFieldsOkay: true
                 }
             )
         }
@@ -1288,10 +1209,14 @@ class Node {
         if (opts.fields) {
             for (let k in x) {
                 let val = x[k];
-                if (!(k in opts.fields)) {
-                    throw new Error(`Invalid field in object: ${k}`);
+                if (k in opts.fields) {
+                    validateField({field: opts.fields[k], value: val, key: k});
                 }
-                validateField({field: opts.fields[k], value: val, key: k});
+                else {
+                    if (!opts.additionalFieldsOkay) {
+                        throw new Error(`Invalid field in object: ${k}`);
+                    }
+                }
             }
             for (let k in opts.fields) {
                 if (!opts.fields[k].optional) {
@@ -1318,167 +1243,21 @@ class Node {
         assert(typeof(x) === 'boolean', `Not a boolean`);
     }
 
-    _announceSelfToAllChannels() {
-        const selfData = this._createFindChannelNodesDataForSelf();
-        for (let channelName in this._channels) {
-            const message = {
-                type: 'announcing',
-                data: selfData
-            };
-            this.broadcastMessage({ channelName, message });
-        }
-        for (let peerId in this._peers) {
-            const P = this._peers[peerId];
-            if (P.hasConnection()) {
-                P.sendMessage({
-                    type: 'announcing',
-                    data: selfData
-                });
-            }
-        }
-    }
-
-    async _startAnnouncingSelf() {
-        sleepMsec(1000);
-        while (true) {
-            if (this._halt) return;
-            this._announceSelfToAllChannels();
-            await sleepMsec(10000);
-        }
-    }
-
-    async _startOutgoingConnections() {
-        // start aggressively and then slow down
-        let delayMsec = 1000;
-        while (true) {
-            await sleepMsec(delayMsec);
-            if (this._halt) return;
-
-            const nodeIdsToTry = {};
-            for (let channelName in this._channels) {
-                const nodeIdsInChannel = this.getNodeIdsForChannel(channelName);
-                for (let nodeId of nodeIdsInChannel) {
-                    let okay = false;
-                    if (nodeId in this._nodeInfoStore) {
-                        const elapsed = (new Date()) - this._nodeInfoStore[nodeId].internalTimestamp;
-                        if (elapsed < 120000) {
-                            okay = true;
-                        }
-                        else {
-                            delete ch.nodes[nodeId];
-                        }
-                    }
-                    if (okay) {
-                        nodeIdsToTry[nodeId] = true;
-                    }
-                }
-            }
-            for (let peerId in this._peers) {
-                nodeIdsToTry[peerId] = true;
-            }
-
-            for (let nodeId in nodeIdsToTry) {
-                if (nodeId in this._nodeInfoStore) {
-                    const elapsed = (new Date()) - this._nodeInfoStore[nodeId].internalTimestamp;
-                    if (elapsed < 120000) {
-                        const nodeInfo = this._nodeInfoStore[nodeId].data.body.nodeInfo;
-                        this._validateNodeInfo(nodeInfo);
-
-                        if ((nodeInfo.address) && (nodeInfo.port)) {
-                            if ((!this._peers[nodeId]) || (!this._peers[nodeId].hasOutgoingWebsocketConnection())) {
-                                let C = null;
-                                try {
-                                    // todo: there is a problem where we may try the connection multiple times if the peer belongs to multiple channels that we are in
-                                    C = await this._websocketServer.createOutgoingWebsocketConnection({
-                                        address: nodeInfo.address,
-                                        port: nodeInfo.port,
-                                        remoteNodeId: nodeId
-                                    });
-                                }
-                                catch (err) {
-                                    // console.warn(`Problem creating outgoing connection to node. ${err.message}`);
-                                }
-                                if (C) {
-                                    if (!this._peers[nodeId]) {
-                                        this._createPeer(nodeId);
-                                    }
-                                    const P = this._peers[nodeId];
-                                    if (P) {
-                                        P.setOutgoingConnection({ type: 'websocket', connection: C });
-                                    }
-                                    else {
-                                        console.warn(`Unable to create peer for outgoing connection. Disconnecting.`);
-                                        C.disconnect();
-                                    }
-                                }
-                            }
-                        }
-
-                        if ((nodeInfo.udpAddress) && (nodeInfo.udpPort) && (this._udpServer)) {
-                            if ((!this._peers[nodeId]) || (!this._peers[nodeId].hasOutgoingUdpConnection())) {
-                                // todo: there is a problem where we may try the connection multiple times if the peer belongs to multiple channels that we are in
-                                let C = null;
-                                try {
-                                    C = await this._udpServer.createOutgoingWebsocketConnection({
-                                        address: nodeInfo.udpAddress,
-                                        port: nodeInfo.udpPort,
-                                        remoteNodeId: nodeId
-                                    });
-                                }
-                                catch(err) {
-                                    // todo: handle the error smartly
-                                }
-                                if (C) {
-                                    if (!this._peers[nodeId]) {
-                                        this._createPeer(nodeId);
-                                    }
-                                    const P = this._peers[nodeId];
-                                    if (P) {
-                                        P.setOutgoingConnection({ type: 'udp', connection: C });
-                                    }
-                                    else {
-                                        console.warn(`Unable to create peer for outgoing connection. Disconnecting.`);
-                                        C.disconnect();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            delayMsec *= 2;
-            if (delayMsec >= 10000) {
-                delayMsec = 10000;
-            }
-        }
-    }
-    async _startCleanupPeers() {
-        await sleepMsec(1000);
-        while (true) {
-            if (this._halt) return;
-            this._cleanupPeers();
-            await sleepMsec(2000);
-        }
-    }
+    
     async _startDiscoverNodes() {
         // start aggressively and then slow down
         let delayMsec = 1000;
         while (true) {
             await sleepMsec(delayMsec);
             if (this._halt) return;
-            const data0 = this._createFindChannelNodesDataForSelf();
+            const data0 = this._createNodeData();
             for (let channelName in this._channels) {
                 const message = {
                     type: 'findChannelNodes',
                     channelName,
                     data: data0
                 }
-                for (let peerId in this._peers) {
-                    const P = this._peers[peerId];
-                    if (P.hasConnection()) {
-                        P.sendMessage(message);
-                    }
-                }
+                this._remoteNodeManager.sendMessageToAllPeers(message);
             }
             delayMsec *= 2;
             if (delayMsec >= 20000) {
@@ -1502,9 +1281,6 @@ class Node {
         }
     }
     async _start() {
-        this._startAnnouncingSelf();
-        this._startOutgoingConnections();
-        this._startCleanupPeers();
         this._startDiscoverNodes();
         this._startPrintInfo();
     }
@@ -1564,6 +1340,11 @@ const fileKeysMatch = (k1, k2) => {
     else {
         return false;
     }
+}
+
+function cloneObject(obj) {
+    if (!obj) return obj;
+    return JSON.parse(JSON.stringify(obj));
 }
 
 export default Node;
