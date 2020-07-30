@@ -706,7 +706,7 @@ class Node {
                 canceled = true;
             });
 
-            const AA = 50;
+            const AA = 5;
             const BB = 5000;
 
             const asyncOpen = util.promisify(fs.open);

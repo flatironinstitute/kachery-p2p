@@ -31,6 +31,7 @@ class InternalUdpServer {
                 return;
             }
             if (message.receivedUdpMessageId) {
+                console.log('--------------- got receivedUdpMessage', message.receivedUdpMessageId);
                 this._handleReceivedUdpMessage(message.receivedUdpMessageId);
                 return;
             }
@@ -169,12 +170,13 @@ class InternalUdpServer {
             for (let udpMessageId in this._outgoingMessagesWaitingForAcknowledgement) {
                 const x = this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
                 const elapsed = (new Date()) - x.timestamp;
-                if (elapsed > 1000) {
+                if (elapsed > 2000) {
                     if (x.numTries >= 5) {
                         console.warn(`Did not get acknowledgement of udp message after ${x.numTries} tries. Canceling.`)
                         delete this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
                         return;
                     }
+                    console.log('--- retrying udp message', x.numTries, udpMessageId);
                     this._prepareAndSendMessage({message: x.message, port: x.port, address: x.address, numTries: x.numTries + 1, udpMessageId});
                 }
             }
