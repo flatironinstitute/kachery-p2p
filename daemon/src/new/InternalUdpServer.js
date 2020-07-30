@@ -45,7 +45,7 @@ class InternalUdpServer {
             const acknowledgeReceivedMsg = {
                 receivedUdpMessageId: udpMessageId
             };
-            _udpSocketSend(this._udpServer._socket, acknowledgeReceivedMsg, remote.port, remote.address);
+            _udpSocketSend(this._socket, acknowledgeReceivedMsg, remote.port, remote.address);
 
             this._handleIncomingMessage(message.message, remote);
         });
