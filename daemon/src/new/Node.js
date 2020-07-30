@@ -289,9 +289,11 @@ class Node {
             }
             else if (message.type === 'requestToNodeFinished') {
                 // wait until we have received the expected number of responses
+                console.log('------------- requestToNodeFinished A', lastResponseIndex, message.numResponses);
                 while (lastResponseIndex + 1 < message.numResponses) {
                     await sleepMsec(10);
                 }
+                console.log('------------- requestToNodeFinished B', lastResponseIndex, message.numResponses);
                 handleFinished();
             }
         });
@@ -721,10 +723,11 @@ class Node {
                     reportError('Download canceled by requester.');
                     return;
                 }
-                if (numResponsesSent - numResponsesSent > AA) {
+                if (numResponsesSent - numResponsesReceived > AA) {
+                    console.log('------ xxxx', numResponsesSent, numResponsesReceived);
                     let timer0 = new Date();
                     await sleepMsec(1);
-                    while (numResponsesSent - numResponsesSent > AA) {
+                    while (numResponsesSent - numResponsesReceived > AA) {
                         const elapsed0 = (new Date()) - timer0;
                         if (elapsed0 > BB) {
                             reportError('Timeout while waiting for confirmation of receipt of messages.')
@@ -746,6 +749,7 @@ class Node {
 
                 i = i2;
             }
+            console.log('--------------- DEBUG 4', requestBody.startByte, requestBody.endByte);
             reportFinished();
 
             // const readStream = fs.createReadStream(fileSystemPath, {start: requestBody.startByte, end: requestBody.endByte - 1 /* notice the -1 here */});
