@@ -31,7 +31,6 @@ class InternalUdpServer {
                 return;
             }
             if (message.receivedUdpMessageId) {
-                console.log('--------------- got receivedUdpMessage', message.receivedUdpMessageId);
                 this._handleReceivedUdpMessage(message.receivedUdpMessageId);
                 return;
             }
@@ -176,7 +175,6 @@ class InternalUdpServer {
                         delete this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
                         return;
                     }
-                    console.log('--- retrying udp message', x.numTries, udpMessageId);
                     this._prepareAndSendMessage({message: x.message, port: x.port, address: x.address, numTries: x.numTries + 1, udpMessageId});
                 }
             }
