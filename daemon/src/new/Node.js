@@ -10,6 +10,7 @@ import WebsocketServer from './WebsocketServer.js';
 import crypto from 'crypto';
 import BootstrapPeerManager from './BootstrapPeerManager.js';
 import RemoteNodeManager from './RemoteNodeManager.js';
+import util from 'util';
 
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
@@ -57,10 +58,12 @@ class Node {
         this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._nodeInfo.udpPort });
         this._udpServer.onUdpPublicEndpointChanged(() => this._handleUdpPublicEndpointChanged());
 
+        this._activeIncomingRequests = {}; // by request id
+
         this._smartyNode = new SmartyNode(this);
 
-        this.onRequest(({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) => {
-            this._handleRequestFromNode({channelName, fromNodeId, requestBody, onResponse, onError, onFinished});
+        this.onRequest(({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) => {
+            this._handleRequestFromNode({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived});
         });
 
         this._start();
@@ -196,7 +199,7 @@ class Node {
     }
     // Listen for requests and send responses
     // Note: it is possible to send more than one response before calling onFinished
-    // .onRequest(({fromNodeId, requestBody, onResponse, onError, onFinished})) => {...});
+    // .onRequest(({fromNodeId, requestBody, sendResponse, reportError, reportFinished})) => {...});
     onRequest(cb) {
         this._onRequestCallbacks.push(cb);
     }
@@ -240,6 +243,7 @@ class Node {
         let bufResponsesByIndex = {};
         const handleReceived = () => {
             requestReceived = true;
+            timestampLastResponse = new Date(); // reset the timer
         }
         const handleFinished = () => {
             if (isFinished) return;
@@ -249,7 +253,8 @@ class Node {
         }
         const handleResponse = (responseBody) => {
             if (isFinished) return;
-            timestampLastResponse = new Date();
+            timestampLastResponse = new Date(); // reset the timer
+
             onResponseCallbacks.forEach(cb => cb(responseBody));
         }
         const handleError = (errorString) => {
@@ -258,21 +263,20 @@ class Node {
             isFinished = true;
             listener.cancel();
         }
-
-        if (timeout) {
-            setTimeout(() => {
-                if (!isFinished) {
-                    handleError('Timeout while waiting for response.');
-                }
-            }, timeout);
-        }
-
         listener.onMessage(async ({ fromNodeId, message }) => {
             if (message.type === 'requestToNodeReceived') {
                 handleReceived();
             }
             else if (message.type === 'requestToNodeResponse') {
                 const responseIndex = message.responseIndex;
+                const receivedMessage = {
+                    type: 'requestToNodeResponseReceived',
+                    channelName,
+                    requestId,
+                    responseIndex
+                }
+                this.sendMessageToNode({ channelName, toNodeId, direct, route: null, message: receivedMessage });
+                
                 bufResponsesByIndex[responseIndex] = message.responseBody;
                 while (bufResponsesByIndex[lastResponseIndex + 1]) {
                     handleResponse(bufResponsesByIndex[lastResponseIndex + 1]);
@@ -291,13 +295,38 @@ class Node {
                 handleFinished();
             }
         });
+        const _doCancel = () => {
+            const cancelMessage = {
+                type: 'cancelRequestToNode',
+                channelName,
+                requestId
+            }
+            // we should get an error message coming back
+            this.sendMessageToNode({ channelName, toNodeId, direct, route: null, message: cancelMessage });
+        }
+        if (timeout) {
+            const checkTimeout = () => {
+                const elapsed = (new Date() - timestampLastResponse);
+                if (elapsed > timeout) {
+                    if (!isFinished) {
+                        handleError('Timeout while waiting for response.');
+                    }
+                }
+                else {
+                    setTimeout(() => {
+                        checkTimeout();
+                    }, timeout - elapsed + 10);
+                }
+            }
+            checkTimeout();
+        }
         return {
             requestId,
             onResponse: cb => onResponseCallbacks.push(cb),
             onError: cb => onErrorCallbacks.push(cb),
             onFinished: cb => onFinishedCallbacks.push(cb),
             // todo: think about doing more here - send out a cancel message to node
-            cancel: () => { handleFinished(); listener.cancel(); }
+            cancel: () => { _doCancel(); }
         }
     }
     findFileOrLiveFeed = ({channelName, fileKey, timeoutMsec=4000}) => {
@@ -532,26 +561,28 @@ class Node {
         });
     }
 
-    _handleRequestFromNode({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) {
+    _handleRequestFromNode({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
         this._validateChannelName(channelName, {mustBeInChannel: true});
         this._validateNodeId(fromNodeId);
         this._validateSimpleObject(requestBody);
-        this._validateFunction(onResponse);
-        this._validateFunction(onError);
-        this._validateFunction(onFinished);
+        this._validateFunction(sendResponse);
+        this._validateFunction(reportError);
+        this._validateFunction(reportFinished);
+        this._validateFunction(onCanceled);
+        this._validateFunction(onResponseReceived);
         if (requestBody.type === 'downloadFile') {
             this._handleDownloadFileRequest({
-                channelName, fromNodeId, requestBody, onResponse, onError, onFinished
+                channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived
             })
         }
         else if (requestBody.type === 'getLiveFeedSignedMessages') {
             this._handleGetLiveFeedSignedMessages({
-                channelName, fromNodeId, requestBody, onResponse, onError, onFinished
+                channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived
             })
         }
         else if (requestBody.type === 'submitMessageToLiveFeed') {
             this._handleSubmitMessagesToLiveFeed({
-                channelName, fromNodeId, requestBody, onResponse, onError, onFinished
+                channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived
             })
         }
     }
@@ -639,63 +670,119 @@ class Node {
         return lines.join('\n');
     }
 
-    async _handleDownloadFileRequest({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) {
+    async _handleDownloadFileRequest({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
         this._validateChannelName(channelName, {mustBeInChannel: true});
         this._validateNodeId(fromNodeId);
         this._validateSimpleObject(requestBody);
-        this._validateFunction(onResponse);
-        this._validateFunction(onError);
-        this._validateFunction(onFinished);
+        this._validateFunction(sendResponse);
+        this._validateFunction(reportError);
+        this._validateFunction(reportFinished);
         const fileInfo = await getLocalFileInfo({fileKey: requestBody.fileKey});
         const startByte = requestBody.startByte;
         const endByte = requestBody.endByte;
         if ((startByte === undefined) || (endByte === undefined) || (typeof(startByte) !== 'number') || (typeof(endByte) !== 'number')) {
-            onError('Missing or incorrect fields in request: startByte, endByte.');
+            reportError('Missing or incorrect fields in request: startByte, endByte.');
             return;
         }
         if (endByte <= startByte) {
-            onError(`Expected startByte < endByte, but got: ${startByte} ${endByte}`);
+            reportError(`Expected startByte < endByte, but got: ${startByte} ${endByte}`);
             return;
         }
         const numBytes = endByte - startByte;
         if (numBytes > MAX_BYTES_PER_DOWNLOAD_REQUEST) {
-            onError(`Too many bytes in single download request: ${numBytes} > ${MAX_BYTES_PER_DOWNLOAD_REQUEST}`);
+            reportError(`Too many bytes in single download request: ${numBytes} > ${MAX_BYTES_PER_DOWNLOAD_REQUEST}`);
             return;
         }
         if (fileInfo) {
             const fileSystemPath = fileInfo['path'];
-            const readStream = fs.createReadStream(fileSystemPath, {start: requestBody.startByte, end: requestBody.endByte - 1 /* notice the -1 here */});
 
-            function splitIntoChunks(data, chunkSize) {
-                const ret = [];
-                let i = 0;
-                while (i < data.length) {
-                    ret.push(
-                        data.slice(i, Math.min(i + chunkSize, data.length))
-                    );
-                    i += chunkSize;
+            let numResponsesReceived = 0;
+            let numResponsesSent = 0;
+            let canceled = false;
+            onResponseReceived((responseIndex) => {
+                numResponsesReceived ++;
+            });
+            onCanceled(() => {
+                canceled = true;
+            });
+
+            const AA = 10;
+            const BB = 5000;
+
+            const asyncOpen = util.promisify(fs.open);
+            const asyncRead = util.promisify(fs.read);
+
+            const file = await asyncOpen(fileSystemPath);
+            const messageChunkSize = 30000;
+            let i = requestBody.startByte;
+            const buffer = new Buffer(messageChunkSize);
+            while ( i < requestBody.endByte) {
+                if (canceled) {
+                    reportError('Download canceled by requester.');
+                    return;
                 }
-                return ret;
-            }
-
-            readStream.on('data', data => {
-                const messageChunkSize = 30000; // need to worry about the max size of udp messages
-                let dataChunks = splitIntoChunks(data, messageChunkSize);
-                dataChunks.forEach(dataChunk => {
-                    onResponse({
-                        data_b64: dataChunk.toString('base64')
-                    });
+                if (numResponsesSent - numResponsesSent > AA) {
+                    let timer0 = new Date();
+                    await sleepMsec(1);
+                    while (numResponsesSent - numResponsesSent > AA) {
+                        const elapsed0 = (new Date()) - timer0;
+                        if (elapsed0 > BB) {
+                            reportError('Timeout while waiting for confirmation of receipt of messages.')
+                            return;
+                        }
+                        await sleepMsec(20);
+                    }
+                }
+                const i1 = i;
+                const i2 = Math.min(i1 + messageChunkSize, requestBody.endByte);
+                const x = await asyncRead(file, buffer, 0, i2 - i1, i1);
+                if (x.bytesRead !== i2 - i1) {
+                    throw Error('Problem reading file. Unexpected number of bytes read.');
+                }
+                console.log('-- test1', i2-i1, buffer.length, buffer.slice(0, i2-i1).length);
+                console.log('-- test2', buffer.slice(0, i2-i1).toString('base64').length);
+                console.log('-- test4', Buffer.from(buffer.slice(0, i2-i1).toString('base64'), 'base64').length);
+                sendResponse({
+                    data_b64: buffer.slice(0, i2 - i1).toString('base64')
                 });
-            });
-            readStream.on('end', () => {
-                onFinished();
-            });
+                numResponsesSent ++;
+
+                i = i2;
+            }
+            reportFinished();
+
+            // const readStream = fs.createReadStream(fileSystemPath, {start: requestBody.startByte, end: requestBody.endByte - 1 /* notice the -1 here */});
+
+            // function splitIntoChunks(data, chunkSize) {
+            //     const ret = [];
+            //     let i = 0;
+            //     while (i < data.length) {
+            //         ret.push(
+            //             data.slice(i, Math.min(i + chunkSize, data.length))
+            //         );
+            //         i += chunkSize;
+            //     }
+            //     return ret;
+            // }
+
+            // readStream.on('data', data => {
+            //     const messageChunkSize = 30000; // need to worry about the max size of udp messages
+            //     let dataChunks = splitIntoChunks(data, messageChunkSize);
+            //     dataChunks.forEach(dataChunk => {
+            //         sendResponse({
+            //             data_b64: dataChunk.toString('base64')
+            //         });
+            //     });
+            // });
+            // readStream.on('end', () => {
+            //     reportFinished();
+            // });
         }
         else {
-            onError('Unable to find file.');
+            reportError('Unable to find file.');
         }
     }
-    async _handleGetLiveFeedSignedMessages({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) {
+    async _handleGetLiveFeedSignedMessages({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished}) {
         this._validateChannelName(channelName, {mustBeInChannel: true});
         this._validateNodeId(fromNodeId);
         this._validateSimpleObject(requestBody);
@@ -718,21 +805,21 @@ class Node {
             });
         }
         catch(err) {
-            onError(`Error getting signed messages: ${err.message}`);
+            reportError(`Error getting signed messages: ${err.message}`);
             return;
         }
-        onResponse({
+        sendResponse({
             signedMessages
         });
-        onFinished();
+        reportFinished();
     }
-    async _handleSubmitMessagesToLiveFeed({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) {
+    async _handleSubmitMessagesToLiveFeed({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished}) {
         this._validateChannelName(channelName, {mustBeInChannel: true});
         this._validateNodeId(fromNodeId);
         this._validateSimpleObject(requestBody);
-        this._validateFunction(onResponse);
-        this._validateFunction(onError);
-        this._validateFunction(onFinished);
+        this._validateFunction(sendResponse);
+        this._validateFunction(reportError);
+        this._validateFunction(reportFinished);
         
         this._validateSimpleObject(requestBody, {fields: {
             feedId: {optional: false, type: 'string'},
@@ -747,11 +834,11 @@ class Node {
             });
         }
         catch(err) {
-            onError(`Error submitting messages: ${err.message}`);
+            reportError(`Error submitting messages: ${err.message}`);
             return;
         }
         // mo response needed
-        onFinished();
+        reportFinished();
     }
 
     _initializeServer({ type, listenPort }) {
@@ -794,20 +881,14 @@ class Node {
     _handleMessage({ fromNodeId, message }) {
         this._validateNodeId(fromNodeId);
         this._validateMessage(message);
-        if (message.type === 'broadcast') {
+        if (message.type === 'announcing') {
+            this._handleAnnouncingMessage({ fromNodeId, message });
+        }
+        else if (message.type === 'broadcast') {
             this._handleBroadcastMessage({ fromNodeId, message });
         }
-        else if (message.type === 'messageToNode') {
-            this._handleMessageToNode({ fromNodeId, message });
-        }
-        else if (message.type === 'requestToNode') {
-            this._handleRequestToNode({ fromNodeId, message });
-        }
-        else if (message.type === 'seeking') {
-            this._handleSeekingMessage({ fromNodeId, message });
-        }
-        else if (message.type === 'providing') {
-            this._handleProvidingMessage({ fromNodeId, message });
+        else if (message.type === 'cancelRequestToNode') {
+            this._handleCancelRequestToNode({ fromNodeId, message });
         }
         else if (message.type === 'findChannelNodes') {
             this._handleFindChannelNodes({ fromNodeId, message });
@@ -815,8 +896,20 @@ class Node {
         else if (message.type === 'findChannelNodesResponse') {
             this._handleFindChannelNodesResponse({ fromNodeId, message });
         }
-        else if (message.type === 'announcing') {
-            this._handleAnnouncingMessage({ fromNodeId, message });
+        else if (message.type === 'messageToNode') {
+            this._handleMessageToNode({ fromNodeId, message });
+        }
+        else if (message.type === 'providing') {
+            this._handleProvidingMessage({ fromNodeId, message });
+        }
+        else if (message.type === 'requestToNode') {
+            this._handleRequestToNode({ fromNodeId, message });
+        }
+        else if (message.type === 'requestToNodeResponseReceived') {
+            this._handleRequestToNodeResponseReceived({ fromNodeId, message });
+        }
+        else if (message.type === 'seeking') {
+            this._handleSeekingMessage({ fromNodeId, message });
         }
         else {
             for (let name in this._messageListeners) {
@@ -910,6 +1003,28 @@ class Node {
             throw new RouteError(`No route in message to node.`);
         }
     }
+    _handleCancelRequestToNode({ fromNodeId, message }) {
+        this._validateNodeId(fromNodeId);
+        this._validateMessage(message);
+        const requestId = message.requestId;
+        this._validateString(requestId, {minLength: 10, maxLength: 10});
+
+        if (requestId in this._activeIncomingRequests) {
+            this._activeIncomingRequests[requestId].onCanceledCallbacks.forEach(cb => cb());
+        }
+    }
+    _handleRequestToNodeResponseReceived({ fromNodeId, message }) {
+        this._validateNodeId(fromNodeId);
+        this._validateMessage(message);
+        const requestId = message.requestId;
+        this._validateString(requestId, {minLength: 10, maxLength: 10});
+        const responseIndex = message.responseIndex;
+        this._validateInteger(responseIndex);
+
+        if (requestId in this._activeIncomingRequests) {
+            this._activeIncomingRequests[requestId].onResponseReceivedCallbacks.forEach(cb => cb(responseIndex));
+        }
+    }
     _handleRequestToNode({ fromNodeId, message }) {
         this._validateNodeId(fromNodeId);
         this._validateMessage(message);
@@ -924,23 +1039,40 @@ class Node {
 
         let numResponses = 0;
         this.sendMessageToNode({ channelName, toNodeId: fromNodeId, message: { type: 'requestToNodeReceived', requestId } });
+        this._activeIncomingRequests[requestId] = {
+            onCanceledCallbacks: [],
+            onResponseReceivedCallbacks: []
+        };
         this._onRequestCallbacks.forEach(cb => {
             cb({
                 channelName,
                 fromNodeId,
                 requestId,
                 requestBody,
-                onResponse: responseBody => {
+                onCanceled: (cb) => {
+                    this._activeIncomingRequests[requestId].onCanceledCallbacks.push(cb)
+                },
+                onResponseReceived: (cb) => {
+                    this._activeIncomingRequests[requestId].onResponseReceivedCallbacks.push(cb)
+                },
+                sendResponse: responseBody => {
                     this._validateSimpleObject(responseBody);
                     this.sendMessageToNode({ channelName, toNodeId: fromNodeId, message: { type: 'requestToNodeResponse', requestId, responseBody, responseIndex: numResponses } });
                     numResponses++;
+                    return numResponses - 1;
                 },
-                onError: errorString => {
+                reportError: errorString => {
                     this._validateString(errorString);
                     this.sendMessageToNode({ channelName, toNodeId: fromNodeId, message: { type: 'requestToNodeError', requestId, errorString } });
+                    if (requestId in this._activeIncomingRequests) {
+                        delete this._activeIncomingRequests[requestId];
+                    }
                 },
-                onFinished: () => {
+                reportFinished: () => {
                     this.sendMessageToNode({ channelName, toNodeId: fromNodeId, message: { type: 'requestToNodeFinished', numResponses, requestId } });
+                    if (requestId in this._activeIncomingRequests) {
+                        delete this._activeIncomingRequests[requestId];
+                    }
                 }
             })
         });

@@ -6,9 +6,9 @@ class SmartyNode {
         this._node = node;
         this._remoteNodeManager = this._node._remoteNodeManager;
         this._optimalRoutesToNodes = {}; // {[channelName]: {[toNodeId]: {timestamp: ..., optimalRoute: ...}}}
-        this._node.onRequest(({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) => {
+        this._node.onRequest(({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) => {
             if (requestBody.type === 'routeLatencyTest') {
-                this._handleRouteLatencyTest({channelName, fromNodeId, requestBody, onResponse, onError, onFinished});
+                this._handleRouteLatencyTest({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived});
             }
         });
     }
@@ -130,19 +130,19 @@ class SmartyNode {
             await sleepMsec(10);
         }
     }
-    async _handleRouteLatencyTest({channelName, fromNodeId, requestBody, onResponse, onError, onFinished}) {
+    async _handleRouteLatencyTest({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
         this._node._validateSimpleObject(requestBody);
         this._node._validateNodeId(requestBody.toNodeId);
         this._node._validateSimpleObject(requestBody.testData);
         this._node._validateSimpleObject(requestBody.avoid);
         const {toNodeId, testData, avoid} = requestBody;
         if (toNodeId === this._node.nodeId()) {
-            onResponse({
+            sendResponse({
                 route: [toNodeId],
                 testData,
                 testDataSignature: getSignature(testData, this._node._keyPair)
             });
-            onFinished();
+            reportFinished();
             return;
         }
         // for now we only test routes of length 2
@@ -161,22 +161,22 @@ class SmartyNode {
                 timestamp: 5000
             });
             req.onResponse(responseBody => {
-                onResponse({
+                sendResponse({
                     route: [this._node.nodeId(), ...responseBody.route],
                     testData: responseBody.testData,
                     testDataSignature: responseBody.testDataSignature
                 })
             });
             req.onError((e) => {
-                onError(e);
+                reportError(e);
             });
             req.onFinished(() => {
-                onFinished();
+                reportFinished();
             });
             return;
         }
         else {
-            onError('No route found.');
+            reportError('No route found.');
         }
     }
 }

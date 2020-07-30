@@ -85,7 +85,7 @@ class InternalUdpServer {
     _handleIncomingMessage(message, remote) {
         if ((message.type === 'openConnection') && (isValidConnectionId(message.connectionId))) {
             if (message.connectionId in this._incomingConnections) {
-                console.warn('openConnection: connection with id already exists.');
+                console.warn(`openConnection: connection with id already exists: ${message.connectionId}`);
                 return;
             }
             const C = new UdpConnection({
