@@ -54,7 +54,7 @@ class Node {
         this._remoteNodeManager.setLocalNodeInfo(this._nodeInfo);
 
         this._websocketServer = this._initializeServer({ type: 'websocket', listenPort: this._nodeInfo.port });
-        this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._udpPort });
+        this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._nodeInfo.udpPort });
         this._udpServer.onUdpPublicEndpointChanged(() => this._handleUdpPublicEndpointChanged());
 
         this._smartyNode = new SmartyNode(this);
