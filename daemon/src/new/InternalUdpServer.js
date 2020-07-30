@@ -166,7 +166,6 @@ class InternalUdpServer {
     async _start() {
         while (true) {
             await sleepMsec(2000);
-            console.log('---- udp num outgoing messages', Object.keys(this._outgoingMessagesWaitingForAcknowledgement).length);
             for (let udpMessageId in this._outgoingMessagesWaitingForAcknowledgement) {
                 const x = this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
                 const elapsed = (new Date()) - x.timestamp;
@@ -176,7 +175,6 @@ class InternalUdpServer {
                         delete this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
                         return;
                     }
-                    console.log('--- retrying udp message', udpMessageId);
                     this._prepareAndSendMessage({message: x.message, port: x.port, address: x.address, numTries: x.numTries + 1, udpMessageId});
                 }
             }

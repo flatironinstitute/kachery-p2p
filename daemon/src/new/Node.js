@@ -289,11 +289,9 @@ class Node {
             }
             else if (message.type === 'requestToNodeFinished') {
                 // wait until we have received the expected number of responses
-                console.log('------------- requestToNodeFinished A', lastResponseIndex, message.numResponses);
                 while ((lastResponseIndex + 1 < message.numResponses) && (!isFinished)) {
                     await sleepMsec(10);
                 }
-                console.log('------------- requestToNodeFinished B', lastResponseIndex, message.numResponses);
                 handleFinished();
             }
         });
@@ -724,7 +722,6 @@ class Node {
                     return;
                 }
                 if (numResponsesSent - numResponsesReceived > AA) {
-                    console.log('------ xxxx', numResponsesSent, numResponsesReceived);
                     let timer0 = new Date();
                     await sleepMsec(1);
                     while ((numResponsesSent - numResponsesReceived > AA) && (!canceled)) {
@@ -750,11 +747,9 @@ class Node {
 
                 i = i2;
             }
-            console.log('--------------- DEBUG 4', numResponsesSent, numResponsesReceived);
             while ((numResponsesSent - numResponsesReceived > 0) && (!canceled)) {
                 await sleepMsec(20);
             }
-            console.log('--------------- DEBUG 5', numResponsesSent, numResponsesReceived);
             reportFinished();
 
             // const readStream = fs.createReadStream(fileSystemPath, {start: requestBody.startByte, end: requestBody.endByte - 1 /* notice the -1 here */});
@@ -1027,8 +1022,6 @@ class Node {
         const responseIndex = message.responseIndex;
         this._validateInteger(responseIndex);
 
-        console.log('------------ got requestToNodeResponseReceived', responseIndex);
-
         if (requestId in this._activeIncomingRequests) {
             this._activeIncomingRequests[requestId].onResponseReceivedCallbacks.forEach(cb => cb(responseIndex));
         }
@@ -1065,7 +1058,6 @@ class Node {
                 },
                 sendResponse: responseBody => {
                     this._validateSimpleObject(responseBody);
-                    console.log('---- sending requestToNodeResponse', requestId, numResponses);
                     this.sendMessageToNode({ channelName, toNodeId: fromNodeId, message: { type: 'requestToNodeResponse', requestId, responseBody, responseIndex: numResponses } });
                     numResponses++;
                     return numResponses - 1;
