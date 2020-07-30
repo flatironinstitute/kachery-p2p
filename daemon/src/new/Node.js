@@ -615,9 +615,10 @@ class Node {
 
         const lines = [];
         const nodesIncluded = {};
+        const selfHasUdpAddress = ((this._nodeInfo.udpAddress) && (this._nodeInfo.udpPort));
         for (let channelName in this._channels) {
             lines.push(`CHANNEL: ${channelName}`);
-            lines.push(`self ${this._nodeId.slice(0, 6)}`);
+            lines.push(`self${selfHasUdpAddress ? '*' : ''} ${this._nodeId.slice(0, 6)}`);
             const nodeIdsInChannel = this.getNodeIdsForChannel(channelName); // todo
             for (let nodeId of nodeIdsInChannel) {
                 nodesIncluded[nodeId] = true;
@@ -627,6 +628,7 @@ class Node {
             lines.push('');
         }
         lines.push('OTHER');
+        lines.push(`self${selfHasUdpAddress ? '*' : ''} ${this._nodeId.slice(0, 6)}`);
         const peerIds = this._remoteNodeManager.peerIds();
         for (let nodeId of peerIds) {
             if (!nodesIncluded[nodeId]) {
