@@ -40,7 +40,6 @@ class InternalUdpServer {
             const udpMessageId = message.udpMessageId;
             // Note: it's important to acknowledge receipt before checking if we already handled it
             // that's because maybe the confirmation was lost the last time
-            this._handledUdpMessages[udpMessageId] = {timestamp: new Date()};
             const acknowledgeReceivedMsg = {
                 receivedUdpMessageId: udpMessageId
             };
@@ -49,6 +48,7 @@ class InternalUdpServer {
             if (udpMessageId in this._handledUdpMessages) {
                 return;
             }
+            this._handledUdpMessages[udpMessageId] = {timestamp: new Date()};
 
             this._handleIncomingMessage(message.message, remote);
         });
