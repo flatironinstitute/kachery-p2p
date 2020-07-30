@@ -352,10 +352,26 @@ class RemoteNode {
         }
     }
 
+    async _startAnnouncingSelf() {
+        // start aggressive and slow down
+        let delayMsec = 1000;
+        while (true) {
+            await sleepMsec(delayMsec);
+            if (this._halt) return;
+
+            this._node._announceSelfToPeersAndJoinedChannelsNow();
+            delayMsec *= 2;
+            if (delayMsec > 10000) {
+                delayMsec = 10000;
+            }
+        }
+    }
+
     async _start() {
         this._startCheckingExpired();
         this._startTryingOutgoingConnection({type: 'websocket'});
         this._startTryingOutgoingConnection({type: 'udp'});
+        this._startAnnouncingSelf();
     }
 }
 
