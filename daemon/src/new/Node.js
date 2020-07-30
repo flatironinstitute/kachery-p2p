@@ -739,9 +739,6 @@ class Node {
                 if (x.bytesRead !== i2 - i1) {
                     throw Error('Problem reading file. Unexpected number of bytes read.');
                 }
-                console.log('-- test1', i2-i1, buffer.length, buffer.slice(0, i2-i1).length);
-                console.log('-- test2', buffer.slice(0, i2-i1).toString('base64').length);
-                console.log('-- test4', Buffer.from(buffer.slice(0, i2-i1).toString('base64'), 'base64').length);
                 sendResponse({
                     data_b64: buffer.slice(0, i2 - i1).toString('base64')
                 });
@@ -786,9 +783,9 @@ class Node {
         this._validateChannelName(channelName, {mustBeInChannel: true});
         this._validateNodeId(fromNodeId);
         this._validateSimpleObject(requestBody);
-        this._validateFunction(onResponse);
-        this._validateFunction(onError);
-        this._validateFunction(onFinished);
+        this._validateFunction(sendResponse);
+        this._validateFunction(reportError);
+        this._validateFunction(reportFinished);
 
         this._validateSimpleObject(requestBody, {fields: {
             type: {optional: false},
