@@ -147,10 +147,9 @@ class InternalUdpServer {
             delete this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
         }
     }
-    _prepareAndSendMessage({message, port, address, numTries=1}) {
-        const udpMessageId = randomAlphaString(10);
+    _prepareAndSendMessage({message, port, address, numTries=1, udpMessageId=undefined}) {
         const message2 = {
-            udpMessageId,
+            udpMessageId: udpMessageId || randomAlphaString(10),
             message
         };
         this._outgoingMessagesWaitingForAcknowledgement[udpMessageId] = {
@@ -175,7 +174,7 @@ class InternalUdpServer {
                         delete this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
                         return;
                     }
-                    this._prepareAndSendMessage({message: x.message, port: x.port, address: x.address, numTries: x.numTries + 1});
+                    this._prepareAndSendMessage({message: x.message, port: x.port, address: x.address, numTries: x.numTries + 1, udpMessageId});
                 }
             }
             for (let udpMessageId in this._handledUdpMessages) {
