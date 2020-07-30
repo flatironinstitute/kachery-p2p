@@ -562,7 +562,7 @@ class Node {
             console.info('Setting udp public endpoint', remote);
             if ((remote.address !== this._nodeInfo.udpAddress) || (remote.port !== this._nodeInfo.port)) {
                 this._nodeInfo.udpAddress = remote.address || null;
-                this._nodeInfo.port = remote.port || null;
+                this._nodeInfo.udpPort = remote.port || null;
                 this._remoteNodeManager.setLocalNodeInfo(this._nodeInfo);
             }
         }
