@@ -137,6 +137,11 @@ class UdpConnection {
         this._closed = false;
         this._useUdp = true;
 
+        this._queuedMessages = new Queue();
+        this._priorityQueuedMessages = new Queue();
+        this._unconfirmedMessages = {};
+        this._numUnconfirmedMessages = 0;
+
         this._onOpenCallbacks = [];
         this._onCloseCallbacks = [];
         this._onErrorCallbacks = [];
@@ -147,12 +152,8 @@ class UdpConnection {
 
         this._handledIncomingUdpMessageIds = {};
 
-        this._queuedMessages = new Queue();
-        this._priorityQueuedMessages = new Queue();
-        this._unconfirmedMessages = {};
-        this._numUnconfirmedMessages = 0;
-        this._maxNumUnconfirmedMessages = 1; // adaptive - determines the speed of transmission
-        this._thresh = 1; // determines how we increase the maxNumUnconfirmedMessage whenever we receive confirmation
+        this._congestionManager = new UdpCongestionManager();
+        this._handleQueuedMessagesScheduled = false;
 
         this._start();
     }
@@ -180,26 +181,38 @@ class UdpConnection {
     }
     _handleQueuedMessages() {
         while (true) {
-            if (this._numUnconfirmedMessages >= this._maxNumUnconfirmedMessages) {
-                return;
-            }
+            if (!this._open) return;
             if ((this._priorityQueuedMessages.isEmpty()) && (this._queuedMessages.isEmpty())) {
                 return;
             }
+            let numBytesNextMessage, delayMsec;
             if (!this._priorityQueuedMessages.isEmpty()) {
-                this._sendQueuedMessage(this._priorityQueuedMessages.dequeue());
+                numBytesNextMessage = this._priorityQueuedMessages[0].numBytes();
+                delayMsec = this._congestionManager.estimateDelayForNextMessage(numBytesNextMessage);
+                if (!delayMsec) {
+                    this._sendQueuedMessage(this._priorityQueuedMessages.dequeue());
+                }
             }
             else if (!this._queuedMessages.isEmpty()) {
-                this._sendQueuedMessage(this._queuedMessages.dequeue());
+                numBytesNextMessage = this._queuedMessages[0].numBytes();
+                delayMsec = this._congestionManager.estimateDelayForNextMessage(numBytesNextMessage);
+                if (!delayMsec) {
+                    this._sendQueuedMessage(this._queuedMessages.dequeue());
+                }
+            }
+
+            if (delayMsec) {
+                // come back when we estimate we will be ready, if not already scheduled
+                if (!this._handleQueuedMessagesScheduled) {
+                    this._handleQueuedMessagesScheduled = true;
+                    setTimeout(() => {
+                        this._handleQueuedMessagesScheduled = false;
+                        this._handleQueuedMessages();
+                    }, delayMsec + 10);
+                }
+                return;
             }
         }
-    }
-    _handleMessageFail() {
-        this._thresh = this._maxNumUnconfirmedMessages / 2;
-        if (this._thresh < 1)
-            this._thresh = 1;
-        this._maxNumUnconfirmedMessages = this._thresh;
-        this._handleQueuedMessages();
     }
     _sendQueuedMessage(x) {
         const message = {
@@ -211,6 +224,8 @@ class UdpConnection {
             }
         };
         _udpSocketSend(this._udpServer._socket, message, this._remotePort, this._remoteAddress);
+        x.setSentTimestamp(new Date());
+        this._congestionManager.reportMessageSent({numBytes: x.numBytes(), udpMessageId: x.udpMessageId()});
         this._unconfirmedMessages[x.udpMessageId()] = x;
         this._numUnconfirmedMessages ++;
         setTimeout(() => {
@@ -222,9 +237,9 @@ class UdpConnection {
                 x.incrementNumTries();
                 this._priorityQueuedMessages.enqueue(x);
                 delete this._unconfirmedMessages[x.udpMessageId()];
-                this._handleMessageFail();
+                this._congestionManager.reportMessageLost({udpMessageId: x.udpMessageId()});
             }
-        }, 2000);
+        }, this._congestionManager.estimatedRoundtripLatencyMsec() * 3);
     }
     close() {
         if (this._closed) return;
@@ -237,6 +252,7 @@ class UdpConnection {
         _udpSocketSend(this._udpServer._socket, closeMessage, this._remotePort, this._remoteAddress);
         this._closed = true;
         this._open = false;
+        this._congestionManager.halt();
         this._onCloseCallbacks.forEach(cb => cb());
     }
     remoteAddress() {
@@ -289,6 +305,8 @@ class UdpConnection {
     }
     _handleConfirmUdpMessage(udpMessageId) {
         if (udpMessageId in this._unconfirmedMessages) {
+            const m = this._unconfirmedMessages[udpMessageId];
+            this._congestionManager.reportConfirmedMessage({numBytes: m.numBytes(), roundtripLatencyMsec: (new Date()) - m.sentTimestamp(), udpMessageId: m.udpMessageId()});
             delete this._unconfirmedMessages[udpMessageId];
             this._numUnconfirmedMessages --;
             if (this._thresh === 0) {
@@ -356,9 +374,13 @@ class Message {
         this._messageText = messageText;
         this._numTries = 1;
         this._udpMessageId = randomAlphaString(10);
+        this._sentTimestamp = null;
     }
     messageText() {
         return this._messageText;
+    }
+    numBytes() {
+        return this._messageText.length;
     }
     numTries() {
         return this._numTries;
@@ -368,6 +390,120 @@ class Message {
     }
     udpMessageId() {
         return this._udpMessageId;
+    }
+    setSentTimestamp(ts) {
+        this._sentTimestamp = ts;
+    }
+    sentTimestamp() {
+        return this._sentTimestamp;
+    }
+}
+
+class UdpCongestionManager {
+    constructor() {
+        this._numUnconfirmedMessages = 0;
+        this._numUnconfirmedBytes = 0;
+        this._halt = false;
+
+        this._maxNumBytesPerSecond = 1000000;
+        this._estimatedRoundtripLatencyMsec = 500;
+
+        this._trialDurationMsec = 5000;
+        this._currentTrialData = null;
+        this._resetTrialData();
+        this._start();
+    }
+
+    reportMessageSent({numBytes, udpMessageId}) {
+        this._currentTrialData.sentMessageIds[udpMessageId] = true;
+        this._currentTrialData.numSentMessages ++;
+        this._currentTrialData.numSentBytes += numBytes;
+        if (this._currentTrialData.numSentBytes - this._currentTrialData.numConfirmedBytes > this._currentTrialData.peakNumUnconfirmedBytes) {
+            this._currentTrialData.peakNumUnconfirmedBytes = this._currentTrialData.numSentBytes - this._currentTrialData.numConfirmedBytes;
+        }
+    }
+
+    reportMessageLost({udpMessageId}) {
+        if (!(udpMessageId in this._currentTrialData.sentMessageIds)) return;
+        this._currentTrialData.numLostMessages ++;
+    }
+
+    reportConfirmedMessage({numBytes, roundtripLatencyMsec, udpMessageId}) {
+        if (!(udpMessageId in this._currentTrialData.sentMessageIds)) return;
+        this._currentTrialData.numConfirmedMessages ++;
+        this._currentTrialData.numConfirmedBytes += numBytes;
+        this._currentTrialData.roundtripLatenciesMsec.push(roundtripLatencyMsec);
+    }
+
+    estimatedRoundtripLatencyMsec() {
+        return this._estimatedRoundtripLatencyMsec;
+    }
+
+    estimateDelayForNextMessage(numBytes) {
+        const maxNumUnconfirmedBytes = this._maxNumBytesPerSecond / 1000 * this._estimatedRoundtripLatencyMsec;
+        const numOutstandingBytes = this._currentTrialData.numSentBytes - this._currentTrialData.numConfirmedBytes;
+        if (!numOutstandingBytes) return 0;
+        if (numOutstandingBytes + numBytes <= maxNumUnconfirmedBytes) return 0;
+        const diffBytes = numOutstandingBytes + numBytes - maxNumUnconfirmedBytes;
+        const delayMsec = diffBytes / (this._maxNumBytesPerSecond / 1000);
+        return delayMsec;
+    }
+
+    halt() {
+        this._halt = true;
+    }
+
+    _resetTrialData() {
+        this._currentTrialData = {
+            sentMessageIds: {},
+            numSentMessages: 0,
+            numConfirmedMessages: 0,
+            numLostMessages: 0,
+            numSentBytes: 0,
+            numConfirmedBytes: 0,
+            roundtripLatenciesMsec: [],
+            peakNumUnconfirmedBytes: 0
+        }
+    }
+    _adjustCongestionParameters() {
+        const d = this._currentTrialData;
+        console.log(`--- ${d.numSentMessages} sent, ${d.numConfirmedMessages} confirmed, ${d.numLostMessages} lost`);
+        console.log(`--- ${d.numSentBytes} bytes sent, ${d.numConfirmedBytes} confirmed, ${d.peakNumUnconfirmedBytes} peak unconfirmed`);
+        
+        if (this._currentTrialData.roundtripLatenciesMsec.length >= 3) {
+            this._estimatedRoundtripLatencyMsec = (median(this._currentTrialData.roundtripLatenciesMsec) + this._estimatedRoundtripLatencyMsec) / 2;
+            if (this._estimatedRoundtripLatencyMsec < 200) this._estimatedRoundtripLatencyMsec = 200;
+            if (this._estimatedRoundtripLatencyMsec > 1000) this._estimatedRoundtripLatencyMsec = 1000;
+            console.log(`---- estimated roundtrip latency (msec): ${this._estimatedRoundtripLatencyMsec}`)
+        }
+        if (d.numLostMessages === 0) {
+            // didn't lose any messages... let's see if we were limited
+            const a = this._maxNumBytesPerSecond / 1000 * this._estimatedRoundtripLatencyMsec;
+            if (d.peakNumUnconfirmedBytes > 0.8 * a) {
+                // okay, let's increae the rate
+                this._maxNumBytesPerSecond *= 1.2;
+            }
+        }
+        else if (d.numLostMessages === 1) {
+            // lost a message. decrease the rate
+            this._maxNumBytesPerSecond /= 1.1;
+        }
+        else if (d.numLostMessages >= 2) {
+            // lost multiple messages, decrease the rate
+            this._maxNumBytesPerSecond /= 1.2;
+        }
+        console.log(`--- max megabytes per second: ${this._maxNumBytesPerSecond / 1000000}`);
+    }
+    async _startTrials() {
+        while (true) {
+            this._resetTrialData();
+            await sleepMsec(this._trialDurationMsec);
+            this._adjustCongestionParameters();
+            if (this._halt) return;
+        }
+    }
+    async _start() {
+        this._startTrials();
     }
 }
 
@@ -409,6 +545,16 @@ function isValidConnectionId(x) {
     if (x.length < 10) return false;
     if (x.length > 20) return false;
     return true;
+}
+
+function median(x) {
+    const values = [...x];
+    values.sort(function (a, b) { return a - b; });
+    var half = Math.floor(values.length / 2);
+    if (values.length % 2)
+        return values[half];
+    else
+        return (values[half - 1] + values[half]) / 2.0;
 }
 
 export default InternalUdpServer;
