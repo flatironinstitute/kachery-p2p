@@ -713,9 +713,9 @@ class Node {
             const asyncRead = util.promisify(fs.read);
 
             const file = await asyncOpen(fileSystemPath);
-            const messageChunkSize = 30000;
+            const messageChunkSize = 15000;
             let i = requestBody.startByte;
-            const buffer = new Buffer(messageChunkSize);
+            const buffer = Buffer.alloc(messageChunkSize);
             while ( i < requestBody.endByte) {
                 if (canceled) {
                     reportError('Download canceled by requester.');
