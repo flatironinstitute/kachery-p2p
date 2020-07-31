@@ -435,7 +435,9 @@ class RemoteNode {
                     }
                     x.numTries ++;
                     x.timestamp = new Date();
-                    this.sendMessage(x.message);
+                    if (this.hasConnection()) {
+                        this.sendMessage(x.message);
+                    }
                 }
             }
         }

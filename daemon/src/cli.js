@@ -5,6 +5,7 @@ import fs from 'fs';
 import yargs from 'yargs';
 import Daemon from './Daemon.js';
 import ApiServer from './ApiServer.js';
+import assert from 'assert';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
 process.on('uncaughtException', function (err) {
@@ -71,9 +72,17 @@ function main() {
           describe: 'Port to listen on.',
           type: 'string'
         })
+        yargs.option('bootstrap', {
+          describe: 'Override the default bootstrap node. Use --bootstrap ip:port',
+          type: 'array',
+        })
       },
       handler: (argv) => {
         let channelNames = argv.channel || [];
+        let bootstrapStrings = argv.bootstrap || null;
+        const bootstrapInfos = bootstrapStrings ? (
+          bootstrapStrings.map(x => parseBootstrapInfo(x))
+        ): null;
         const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
         if (!fs.existsSync(configDir)) {
           fs.mkdirSync(configDir);
@@ -84,6 +93,7 @@ function main() {
         startDaemon({
           configDir,
           channelNames,
+          bootstrapInfos,
           listenHost,
           listenPort,
           verbose: argv.verbose,
@@ -101,6 +111,15 @@ function main() {
     .argv
 }
 
+function parseBootstrapInfo(x) {
+  const a = x.split(':');
+  assert(a.length === 2, 'Improper bootstrap string')
+  return {
+    address: a[0],
+    port: Number(a[1])
+  };
+}
+
 const apiPort = process.env.KACHERY_P2P_API_PORT || 20431;
 
 class Log {
@@ -109,8 +128,8 @@ class Log {
   }
 }
 
-const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, verbose, discoveryVerbose, label, opts }) => {
-  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, udpListenPort: listenPort, label, opts});
+const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, verbose, discoveryVerbose, label, bootstrapInfos, opts }) => {
+  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, udpListenPort: listenPort, label, bootstrapInfos, opts});
 
   const apiServer = new ApiServer(daemon, {verbose});
   apiServer.listen(apiPort);

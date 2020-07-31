@@ -7,12 +7,13 @@ import FeedManager from './FeedManager.js';
 import { log, initializeLog } from './common/log.js';
 
 class Daemon {
-    constructor({ configDir, listenHost, listenPort, udpListenPort, verbose, discoveryVerbose, label, opts }) {
+    constructor({ configDir, listenHost, listenPort, udpListenPort, verbose, discoveryVerbose, label, bootstrapInfos, opts }) {
         this._configDir = configDir; // Directory where config information is stored (including names and keys for feeds)
         this._listenHost = listenHost; // The host where we are listening
         this._listenPort = listenPort; // The port where we are listening
         this._udpListenPort = udpListenPort; // Port where we are listening for udp messages. See below for more info.
         this._label = label;
+        this._bootstrapInfos = bootstrapInfos;
         this._opts = opts;
         
         const { publicKey, privateKey } = _loadKeypair(configDir); // The keypair for signing messages and the public key is used as the node id
@@ -37,19 +38,21 @@ class Daemon {
             label: this._label
         });
 
-        const bootstrapPeerInfos = [
-            {address: 'localhost', port: 3008},
-            {address: '45.33.92.31', port: 45001}
-        ].filter(bpi => {
-            if ((bpi.address === 'localhost') || (bpi.address === this._listenHost)) {
-                if (bpi.port === this._listenPort) {
-                    return false;
-                }
-            }
-            return true;
-        });
+        if (!bootstrapInfos) {
+            bootstrapInfos = [
+                    {address: '45.33.92.31', port: 45001}
+                ].filter(bpi => {
+                    if ((bpi.address === 'localhost') || (bpi.address === this._listenHost)) {
+                        if (bpi.port === this._listenPort) {
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+        }
+        console.log(bootstrapInfos);
 
-        for (let bpi of bootstrapPeerInfos) {
+        for (let bpi of bootstrapInfos) {
             this._node.addBootstrapPeer({address: bpi.address, port: bpi.port});
         }
 

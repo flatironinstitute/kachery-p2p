@@ -91,6 +91,7 @@ class IncomingWebsocketConnection {
         this._onInitializedCallbacks = [];
         this._remoteNodeId = null;
         this._initialized = false;
+        this._disconnecting = false;
 
         this._webSocket.on('close', () => {
             this._onDisconnectCallbacks.forEach(cb => cb());
@@ -112,22 +113,26 @@ class IncomingWebsocketConnection {
             if (!this._initialized) {
                 if (!body.fromNodeId) {
                     console.warn('IncomingSocketConnection: missing fromNodeId');
-                    this._webSocket.close();
+                    this.sendMessage({type: 'error', error: `Missing fromNodeId`});
+                    this.disconnectLater();
                     return;
                 }
                 if (body.message.type !== 'initial') {
                     console.warn(`IncomingSocketConnection: message type was expected to be initial, but got ${body.message.type}`);
-                    this._webSocket.close();
+                    this.sendMessage({type: 'error', error: 'Message type was expected to be initial.'});
+                    this.disconnectLater();
                     return;
                 }
                 if (body.message.protocolVersion !== protocolVersion()) {
-                    // console.warn(`IncomingSocketConnection: incorrect protocl version ${body.message.protocolVersion} <> ${protocolVersion()}`);
-                    this._webSocket.close();
+                    // console.warn(`IncomingSocketConnection: incorrect protocol version ${body.message.protocolVersion} <> ${protocolVersion()}`)\;
+                    this.sendMessage({type: 'error', error: `IncomingSocketConnection: incorrect protocol version ${body.message.protocolVersion} <> ${protocolVersion()}`});
+                    this.disconnectLater();
                     return;
                 }
                 if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId))) {
                     console.warn(`IncomingSocketConnection: problem verifying signature`);
-                    this._webSocket.close();
+                    this.sendMessage({type: 'error', error: `Problem verifying signature`});
+                    this.disconnectLater();
                     return;
                 }
                 this._remoteNodeId = body.fromNodeId;
@@ -163,6 +168,7 @@ class IncomingWebsocketConnection {
         this._onDisconnectCallbacks.push(cb);
     }
     sendMessage(msg) {
+        if (this._disconnecting) return;
         const body = {
             fromNodeId: this._nodeId,
             message: msg
@@ -175,6 +181,20 @@ class IncomingWebsocketConnection {
     }
     disconnect() {
         this._webSocket.close();
+    }
+    disconnectLater() {
+        this._disconnecting = true;
+        setTimeout(() => {
+            this.disconnect();
+        }, 2000);
+    }
+}
+
+export class OutgoingConnectionError extends Error {
+    constructor(errorString) {
+        super(errorString);
+        this.name = this.constructor.name
+        Error.captureStackTrace(this, this.constructor);
     }
 }
 
@@ -255,6 +275,11 @@ class OutgoingConnection {
                 if (message2.type === 'accepted') {
                     this._accepted = true;
                     this._onConnectCallbacks.forEach(cb => cb());
+                    return;
+                }
+                else if (message2.type === 'error') {
+                    this._onErrorCallbacks.forEach(cb => cb(new OutgoingConnectionError(`Problem connecting to remote node: ${message2.error}`)));
+                    this.disconnect();
                     return;
                 }
             }

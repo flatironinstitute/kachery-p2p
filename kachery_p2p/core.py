@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 from types import SimpleNamespace
 import numpy as np
 import subprocess
@@ -192,7 +192,7 @@ def _probe_daemon():
         return None
     return x
 
-def start_daemon(*, port=0, method='npx', channels=[], verbose=0, dverbose=0, host=''):
+def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verbose: int=0, dverbose: int=0, host: str='', bootstrap: List[str]):
     from kachery_p2p import __version__
 
     if _probe_daemon() is not None:
@@ -204,6 +204,8 @@ def start_daemon(*, port=0, method='npx', channels=[], verbose=0, dverbose=0, ho
     start_args = []
     for ch in channels:
         start_args.append(f'--channel {ch}')
+    for b in bootstrap:
+        start_args.append(f'--bootstrap {b}')
     start_args.append(f'--verbose {verbose}')
     start_args.append(f'--dverbose {dverbose}')
     if host:
@@ -216,7 +218,7 @@ def start_daemon(*, port=0, method='npx', channels=[], verbose=0, dverbose=0, ho
         except:
             raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
         
-        npm_package = 'kachery-p2p-daemon@0.4.4'
+        npm_package = 'kachery-p2p-daemon@0.4.5'
 
         if method == 'npx':
             ss = ShellScript(f'''

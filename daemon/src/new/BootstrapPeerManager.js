@@ -1,4 +1,5 @@
 import { sleepMsec } from '../common/util.js'
+import { OutgoingConnectionError } from './WebsocketServer.js';
 
 class BootstrapPeerManager {
     constructor({remoteNodeManager, websocketServer, address, port}) {
@@ -34,8 +35,20 @@ class BootstrapPeerManager {
         }
         catch(err) {
             if (!this._printedError) {
-                // console.warn(err);
-                console.warn(`Error connecting to bootstrap node: ${this._address}:${this._port}`);
+                if (err instanceof OutgoingConnectionError) {
+                    console.warn(`
+Error connecting to bootstrap node ${this._address}:${this._port}:
+${err.message}
+
+You may need to update to the latest version of kachery-p2p
+(perhaps the bootstrap node is on a more recent version). You
+could also manually specify your own bootstrap node.
+                    `)
+                }
+                else {
+                    // console.warn(err);
+                    console.warn(`Unable to connect to bootstrap node ${this._address}:${this._port}: ${err.message}`);
+                }
                 this._printedError = true;
             }
             return false;
