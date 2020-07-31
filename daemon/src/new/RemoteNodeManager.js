@@ -1,6 +1,7 @@
 import assert from 'assert';
 import RemoteNode from './RemoteNode.js';
 import { JSONStringifyDeterministic } from '../common/crypto_util.js';
+import { randomAlphaString } from '../common/util.js';
 
 class RemoteNodeManager {
     constructor(node) {

@@ -387,7 +387,8 @@ class Node {
 
         const numBytes = endByte - startByte;
 
-        const chunkSize = 4000000;
+        // split into chunks so that we won't have a memory overflow
+        const chunkSize = 4 * 1000 * 1000;
         const numChunks = Math.ceil(numBytes / chunkSize);
         let sha1_sum = crypto.createHash('sha1');
 

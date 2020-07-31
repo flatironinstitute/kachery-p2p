@@ -1,4 +1,5 @@
-import { sleepMsec } from "../common/util.js";
+import { sleepMsec, randomAlphaString } from "../common/util.js";
+import assert from 'assert';
 
 class RemoteNode {
     constructor({ remoteNodeManager, remoteNodeId }) {
@@ -27,6 +28,9 @@ class RemoteNode {
 
         this._tryOutgoingConnectionIntervalMsec = {websocket: null, udp: null};
         this._outgoingConnectionErrorReported = {websocket: false, udp: false};
+
+        this._handledIncomingMessageIds = {};
+        this._unconfirmedOutgoingMessages = {};
 
         // todo: establish outgoing connections
 
@@ -121,43 +125,49 @@ class RemoteNode {
         if (!this._remoteNodeData) return null;
         return cloneObject(this._remoteNodeData.body.channels);
     }
-    sendMessageUdpFirst(message) {
-        this._node._validateMessage(message);
-
-        if (this._outgoingUdpConnection) {
-            this._outgoingUdpConnection.sendMessage(message);
-        }
-        else if (this._incomingUdpConnection) {
-            this._incomingUdpConnection.sendMessage(message);
-        }
-        else if (this._outgoingWebsocketConnection) {
-            this._outgoingWebsocketConnection.sendMessage(message);
-        }
-        else if (this._incomingWebsocketConnection) {
-            this._incomingWebsocketConnection.sendMessage(message);
-        }
-        else {
-            throw Error('Could not send message. No connection.')
-        }
-    }
     sendMessage(message) {
         this._node._validateMessage(message);
 
+        if (!message._confirmId) {
+            if (!message._id) {
+                message._id = randomAlphaString(10);
+                this._unconfirmedOutgoingMessages[message.id] = {
+                    timestamp: new Date(),
+                    message,
+                    numTries: 1
+                };
+            }
+        }
+
+        let udpFirst = false;
+        if (udpFirst) {
+            if (this._outgoingUdpConnection) {
+                this._outgoingUdpConnection.sendMessage(message);
+                return;
+            }
+            if (this._incomingUdpConnection) {
+                this._incomingUdpConnection.sendMessage(message);
+                return;
+            }    
+        }
+
         if (this._outgoingWebsocketConnection) {
             this._outgoingWebsocketConnection.sendMessage(message);
+            return;
         }
-        else if (this._incomingWebsocketConnection) {
+        if (this._incomingWebsocketConnection) {
             this._incomingWebsocketConnection.sendMessage(message);
+            return;
         }
-        else if (this._outgoingUdpConnection) {
+        if (this._outgoingUdpConnection) {
             this._outgoingUdpConnection.sendMessage(message);
+            return;
         }
-        else if (this._incomingUdpConnection) {
+        if (this._incomingUdpConnection) {
             this._incomingUdpConnection.sendMessage(message);
+            return;
         }
-        else {
-            throw Error('Could not send message. No connection.')
-        }
+        throw Error('Could not send message. No connection.')
     }
     setIncomingConnection({ type, connection }) {
         this._node._validateString(type);
@@ -258,6 +268,26 @@ class RemoteNode {
         // todo: trigger events here?
     }
     _handleMessage(message) {
+        if (message._confirmId) {
+            if (message._confirmId in this._unconfirmedOutgoingMessages) {
+                delete this._unconfirmedOutgoingMessages[message._confirmId];
+            }
+            return;
+        }
+        assert(message._id, 'Missing message id');
+
+        // important to send confirmation even if we already handled it. Because maybe the last confirmation was not received.
+        this.sendMessage({_confirmId: message._id});
+
+        // check if already handled
+        if (message._id in this._handledIncomingMessageIds) {
+            // already handled
+            return
+        }
+
+        // todo: clean up this memory leak
+        this._handledIncomingMessageIds[message._id] = {timestamp: new Date()};
+
         this._onMessageCallbacks.forEach(cb => cb(message));
     }
 
@@ -388,11 +418,35 @@ class RemoteNode {
         }
     }
 
+    async _startResendingUnconfirmedMessages() {
+        let delayMsec = 2000;
+        while (true) {
+            await sleepMsec(delayMsec);
+            if (this._halt) return;
+
+            for (let id in this._unconfirmedOutgoingMessages) {
+                const x = this._unconfirmedOutgoingMessages[id];
+                const elapsed = (new Date()) - x.timestamp;
+                if (elapsed > 5000) {
+                    if (x.numTries >=4 ) {
+                        console.warn('Did not get confirmation for message after ${x.numTries} tries. Disconnecting peer.');
+                        this.disconnect();
+                        return;
+                    }
+                    x.numTries ++;
+                    x.timestamp = new Date();
+                    this.sendMessage(x.message);
+                }
+            }
+        }
+    }
+
     async _start() {
         this._startCheckingExpired();
         this._startTryingOutgoingConnection({type: 'websocket'});
         this._startTryingOutgoingConnection({type: 'udp'});
         this._startAnnouncingSelf();
+        this._startResendingUnconfirmedMessages();
     }
 }
 

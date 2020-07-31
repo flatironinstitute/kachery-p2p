@@ -9,6 +9,7 @@ import pathlib
 import json
 import time
 from typing import Optional
+from urllib.parse import parse_qs
 import kachery as ka
 from ._temporarydirectory import TemporaryDirectory
 from ._shellscript import ShellScript
@@ -45,15 +46,21 @@ def find_file(uri):
             raise Exception('Unable to find file.')
     port = _api_port()
     url = f'http://localhost:{port}/findFile'
-    protocol, algorithm, hash0, additional_path = _parse_kachery_uri(uri)
+    protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     assert algorithm == 'sha1'
     file_key = dict(
         sha1=hash0
     )
+    if 'manifest' in query:
+        file_key['manifestSha1'] = query['manifest']
     return _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
 
-def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str]:
+def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str, dict]:
     listA = uri.split('?')
+    if len(listA) > 1:
+        query = parse_qs(listA[1])
+    else:
+        query = {}
     list0 = listA[0].split('/')
     protocol = list0[0].replace(':', '')
     hash0 = list0[2]
@@ -66,7 +73,7 @@ def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str]:
             algorithm = alg
     if algorithm is None:
         raise Exception('Unexpected protocol: {}'.format(protocol))
-    return protocol, algorithm, hash0, additional_path
+    return protocol, algorithm, hash0, additional_path, query
 
 def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
     if uri.startswith('sha1dir://'):
@@ -134,7 +141,7 @@ def _load_bytes_helper(channel, node_id, file_key, file_info, start, end):
     )
 
 def read_dir(uri: str, p2p: bool=True):
-    protocol, algorithm, hash0, additional_path = _parse_kachery_uri(uri)
+    protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     assert protocol == algorithm + 'dir'
     dd = load_object(algorithm + '://' + hash0, p2p=p2p)
     if dd is None:
@@ -209,7 +216,7 @@ def start_daemon(*, port=0, method='npx', channels=[], verbose=0, dverbose=0, ho
         except:
             raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
         
-        npm_package = 'kachery-p2p-daemon@0.4.3'
+        npm_package = 'kachery-p2p-daemon@0.4.4'
 
         if method == 'npx':
             ss = ShellScript(f'''
@@ -267,7 +274,7 @@ def stop_daemon():
     return x.get('success')
 
 def _resolve_file_uri_from_dir_uri(dir_uri, p2p: bool=True):
-    protocol, algorithm, hash0, additional_path = _parse_kachery_uri(dir_uri)
+    protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(dir_uri)
     assert protocol == algorithm + 'dir'
     dd = load_object(algorithm + '://' + hash0, p2p=p2p)
     if dd is None:
