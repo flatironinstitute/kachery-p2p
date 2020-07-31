@@ -38,8 +38,8 @@ class Daemon {
         });
 
         const bootstrapPeerInfos = [
-            {address: 'localhost', port: 3008},
-            {address: '45.33.92.31', port: 45001}
+            {address: 'localhost', port: 3008}
+            // {address: '45.33.92.31', port: 45001}
         ].filter(bpi => {
             if ((bpi.address === 'localhost') || (bpi.address === this._listenHost)) {
                 if (bpi.port === this._listenPort) {

@@ -10,8 +10,6 @@ class InternalUdpServer {
         this._pendingOutgoingConnections = {}; // by connection id
         this._publicEndpoint = null;
         this._publicEndpointChangedCallbacks = [];
-        this._handledUdpMessages = {};
-        this._outgoingMessagesWaitingForAcknowledgement = {};
         
         const socket = dgram.createSocket('udp4');
         if (port)
@@ -21,7 +19,9 @@ class InternalUdpServer {
         socket.on('listening', () => {
             // console.info('Udp socket', socket.address());
         });
-        socket.on('message', (messageTxt, remote) => {
+        this._socket = socket;
+        this._socket.on('message', (messageTxt, remote) => {
+            // parse the json message
             let message;
             try {
                 message = JSON.parse(messageTxt);
@@ -30,29 +30,9 @@ class InternalUdpServer {
                 console.warn('Unable to parse udp message', {remote});
                 return;
             }
-            if (message.receivedUdpMessageId) {
-                this._handleReceivedUdpMessage(message.receivedUdpMessageId);
-                return;
-            }
-            if (!message.udpMessageId) {
-                return;
-            }
-            const udpMessageId = message.udpMessageId;
-            // Note: it's important to acknowledge receipt before checking if we already handled it
-            // that's because maybe the confirmation was lost the last time
-            const acknowledgeReceivedMsg = {
-                receivedUdpMessageId: udpMessageId
-            };
-            _udpSocketSend(this._socket, acknowledgeReceivedMsg, remote.port, remote.address);
 
-            if (udpMessageId in this._handledUdpMessages) {
-                return;
-            }
-            this._handledUdpMessages[udpMessageId] = {timestamp: new Date()};
-
-            this._handleIncomingMessage(message.message, remote);
+            this._handleIncomingMessage(message, remote);
         });
-        this._socket = socket;
 
         this._start();
     }
@@ -82,7 +62,7 @@ class InternalUdpServer {
             type: 'openConnection',
             connectionId
         };
-        this._prepareAndSendMessage({message: openMessage, port, address});
+        _udpSocketSend(this._socket, openMessage, port, address);
         return C;
     }
     _handleIncomingMessage(message, remote) {
@@ -108,7 +88,7 @@ class InternalUdpServer {
                 connectionId: message.connectionId,
                 initiatorPublicEndpoint: remote // the public endpoint of the initiator to the connection
             };
-            this._prepareAndSendMessage({message: acceptMessage, port: remote.port, address: remote.address});
+            _udpSocketSend(this._socket, acceptMessage, remote.port, remote.address);
             C._setOpen();
             this._onConnectionCallbacks.forEach(cb => {
                 cb(C);
@@ -142,50 +122,8 @@ class InternalUdpServer {
             // don't do anything
         }
     }
-    _handleReceivedUdpMessage(udpMessageId) {
-        if (udpMessageId in this._outgoingMessagesWaitingForAcknowledgement) {
-            delete this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
-        }
-    }
-    _prepareAndSendMessage({message, port, address, numTries=1, udpMessageId=undefined}) {
-        udpMessageId = udpMessageId ||  randomAlphaString(10);
-        const message2 = {
-            udpMessageId,
-            message
-        };
-        this._outgoingMessagesWaitingForAcknowledgement[udpMessageId] = {
-            port,
-            address,
-            message,
-            timestamp: new Date(),
-            numTries
-        };
-        _udpSocketSend(this._socket, message2, port, address);
-    }
 
     async _start() {
-        while (true) {
-            await sleepMsec(2000);
-            for (let udpMessageId in this._outgoingMessagesWaitingForAcknowledgement) {
-                const x = this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
-                const elapsed = (new Date()) - x.timestamp;
-                if (elapsed > 2000) {
-                    if (x.numTries >= 5) {
-                        console.warn(`Did not get acknowledgement of udp message after ${x.numTries} tries. Canceling.`)
-                        delete this._outgoingMessagesWaitingForAcknowledgement[udpMessageId];
-                        return;
-                    }
-                    this._prepareAndSendMessage({message: x.message, port: x.port, address: x.address, numTries: x.numTries + 1, udpMessageId});
-                }
-            }
-            for (let udpMessageId in this._handledUdpMessages) {
-                const x = this._handledUdpMessages[udpMessageId];
-                const elapsed = (new Date()) - x.timestamp;
-                if (elapsed > 60000) {
-                    delete this._handledUdpMessages[udpMessageId];
-                }
-            }
-        }
     }
 }
 
@@ -197,15 +135,24 @@ class UdpConnection {
         this._remotePort = remotePort;
         this._open = false;
         this._closed = false;
-        this._queuedMessages = [];
-        this._isUdp = true;
+        this._useUdp = true;
 
         this._onOpenCallbacks = [];
         this._onCloseCallbacks = [];
         this._onErrorCallbacks = [];
         this._onMessageCallbacks = [];
 
-        this._lastKeepAliveTimestamp = new Date();
+        this._lastIncomingMessageTimestamp = new Date();
+        this._lastOutgoingMessageTimestamp = new Date();
+
+        this._handledIncomingUdpMessageIds = {};
+
+        this._queuedMessages = new Queue();
+        this._priorityQueuedMessages = new Queue();
+        this._unconfirmedMessages = {};
+        this._numUnconfirmedMessages = 0;
+        this._maxNumUnconfirmedMessages = 1; // adaptive - determines the speed of transmission
+        this._thresh = 1; // determines how we increase the maxNumUnconfirmedMessage whenever we receive confirmation
 
         this._start();
     }
@@ -224,20 +171,70 @@ class UdpConnection {
             this._onMessageCallbacks.push(cb);
         }
     }
-    send(message) {
+    send(messageText) { // note: this message is text
         if (this._closed) return;
-        if (!this._open) {
-            this._queuedMessages.push(message);
-            return;
+
+        const x = new Message(messageText);
+        this._queuedMessages.enqueue(x);
+        this._handleQueuedMessages();
+    }
+    _handleQueuedMessages() {
+        while (true) {
+            if (this._numUnconfirmedMessages >= this._maxNumUnconfirmedMessages) {
+                return;
+            }
+            if ((this._priorityQueuedMessages.isEmpty()) && (this._queuedMessages.isEmpty())) {
+                return;
+            }
+            if (!this._priorityQueuedMessages.isEmpty()) {
+                this._sendQueuedMessage(this._priorityQueuedMessages.dequeue());
+            }
+            else if (!this._queuedMessages.isEmpty()) {
+                this._sendQueuedMessage(this._queuedMessages.dequeue());
+            }
         }
-        const message2 = {
+    }
+    _handleMessageFail() {
+        this._thresh = this._maxNumUnconfirmedMessages / 2;
+        if (this._thresh < 1)
+            this._thresh = 1;
+        this._maxNumUnconfirmedMessages = this._thresh;
+        this._handleQueuedMessages();
+    }
+    _sendQueuedMessage(x) {
+        const message = {
             connectionId: this._connectionId,
-            message
+            message: {
+                type: 'message',
+                udpMessageId: x.udpMessageId(),
+                messageText: x.messageText()
+            }
         };
-        this._udpServer._prepareAndSendMessage({message: message2, port: this._remotePort, address: this._remoteAddress});
+        _udpSocketSend(this._udpServer._socket, message, this._remotePort, this._remoteAddress);
+        this._unconfirmedMessages[x.udpMessageId()] = x;
+        this._numUnconfirmedMessages ++;
+        setTimeout(() => {
+            if (x.udpMessageId() in this._unconfirmedMessages) {
+                if (x.numTries() >= 5) {
+                    console.warn(`Udp message failed after ${x.numTries()} tries. Closing connection.`);
+                    this.close();
+                }
+                x.incrementNumTries();
+                this._priorityQueuedMessages.enqueue(x);
+                delete this._unconfirmedMessages[x.udpMessageId()];
+                this._handleMessageFail();
+            }
+        }, 2000);
     }
     close() {
         if (this._closed) return;
+        const closeMessage = {
+            connectionId: this._connectionId,
+            message: {
+                type: 'close'
+            }
+        };
+        _udpSocketSend(this._udpServer._socket, closeMessage, this._remotePort, this._remoteAddress);
         this._closed = true;
         this._open = false;
         this._onCloseCallbacks.forEach(cb => cb());
@@ -250,11 +247,60 @@ class UdpConnection {
     }
     _handleIncomingMessage(message) {
         if (this._closed) return;
-        if (message.type === 'keepAlive') {
-            this._lastKeepAliveTimestamp = new Date();
+
+        this._lastIncomingMessageTimestamp = new Date();
+
+        if (message.type === 'confirmUdpMessage') {
+            this._handleConfirmUdpMessage(message.udpMessageId);
+            return;
+        }
+        else if (message.type === 'close') {
+            this.close();
+            return;
+        }
+        else if (message.type === 'message') {
+            if (!message.udpMessageId) {
+                return;
+            }
+            const udpMessageId = message.udpMessageId;
+            // Note: it's important to confirm receipt before checking if we already handled it
+            // that's because maybe the confirmation was lost the last time
+            const confirmMsg = {
+                connectionId: this._connectionId,
+                message: {
+                    type: 'confirmUdpMessage',
+                    udpMessageId
+                }
+            };
+            _udpSocketSend(this._udpServer._socket, confirmMsg, this._remotePort, this._remoteAddress);
+
+            if (udpMessageId in this._handledIncomingUdpMessageIds) {
+                return;
+            }
+            this._handledIncomingUdpMessageIds[udpMessageId] = {timestamp: new Date()};
+
+            if (message.messageText !== 'udpKeepAlive') {
+                this._onMessageCallbacks.forEach(cb => cb(message.messageText));
+            }
         }
         else {
-            this._onMessageCallbacks.forEach(cb => cb(message));
+            // ignore
+        }
+    }
+    _handleConfirmUdpMessage(udpMessageId) {
+        if (udpMessageId in this._unconfirmedMessages) {
+            delete this._unconfirmedMessages[udpMessageId];
+            this._numUnconfirmedMessages --;
+            if (this._thresh === 0) {
+                this._maxNumUnconfirmedMessages ++;
+                if (this._maxNumUnconfirmedMessages > 20) {
+                    this._maxNumUnconfirmedMessages = 20;
+                }
+            }
+            else {
+                this._maxNumUnconfirmedMessages += 1/this._thresh;
+            }
+            this._handleQueuedMessages();
         }
     }
     _setOpen() {
@@ -262,32 +308,67 @@ class UdpConnection {
         if (this._closed) return;
         this._open = true;
         this._onOpenCallbacks.forEach(cb => cb());
-        const qm = this._queuedMessages;
-        this._queuedMessages = [];
-        for (let m of qm) {
-            this._sendMessage(m);
+        this._handleQueuedMessages();
+    }
+    async _startCleanup() {
+        while (true) {
+            await sleepMsec(3000);
+            // avoid memory leak
+            for (let udpMessageId in this._handledIncomingUdpMessageIds) {
+                const x = this._handledIncomingUdpMessageIds[udpMessageId];
+                const elapsed = (new Date()) - x.timestamp;
+                if (elapsed > 60000) {
+                    delete this._handledIncomingUdpMessageIds[udpMessageId];
+                }
+            }
+            if (this._closed) return;
         }
     }
-    async _start() {
-        const delayMsec = 5000;
+    async _startKeepAlive() {
+        const delayMsec = 1000;
         while (true) {
-            await sleepMsec(delayMsec);
             if (this._closed) {
                 return;
             }
-            if (this._open) {
-                this.send({
-                    type: 'keepAlive',
-                });
+            await sleepMsec(delayMsec);
+            const elapsed1 = (new Date()) - this._lastOutgoingMessageTimestamp;
+            if (elapsed1 > 5000) {
+                if (this._open) {
+                    this.send('udpKeepAlive');
+                }
             }
-            const elapsed = (new Date()) - this._lastKeepAliveTimestamp;
-            if (elapsed > 60000) {
+            const elapsed2 = (new Date()) - this._lastIncomingMessageTimestamp;
+            if (elapsed2 > 15000) {
                 //console.warn(`Closing udp connection due to inactivity: ${this._connectionId}`);
                 this.close();
             }
         }
     }
+    
+    async _start() {
+        this._startKeepAlive();
+        this._startCleanup();
+    }
+}
 
+class Message {
+    constructor(messageText) {
+        this._messageText = messageText;
+        this._numTries = 1;
+        this._udpMessageId = randomAlphaString(10);
+    }
+    messageText() {
+        return this._messageText;
+    }
+    numTries() {
+        return this._numTries;
+    }
+    incrementNumTries() {
+        this._numTries ++;
+    }
+    udpMessageId() {
+        return this._udpMessageId;
+    }
 }
 
 function _udpSocketSend(socket, message, port, address) {
@@ -302,6 +383,24 @@ function _udpSocketSend(socket, message, port, address) {
             return;
         }
     });
+}
+
+class Queue extends Array {
+    enqueue(val) {
+        this.push(val);
+    }
+
+    dequeue() {
+        return this.shift();
+    }
+
+    peek() {
+        return this[0];
+    }
+
+    isEmpty() {
+        return this.length === 0;
+    }
 }
 
 function isValidConnectionId(x) {

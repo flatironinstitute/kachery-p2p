@@ -1,10 +1,10 @@
 {
   "name": "kachery-p2p-daemon",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "engines": {
     "node": ">=12.0.0"
   },
-  "description": "Peer-to-peer content-addressable file sharing using hyperswarm",
+  "description": "Peer-to-peer content-addressable file sharing",
   "bin": "./lib/cli.js",
   "scripts": {
     "test": "echo \"No tests\" && exit 0",
@@ -18,7 +18,6 @@
   "dependencies": {
     "axios": "^0.19.2",
     "express": "^4.17.1",
-    "hyperswarm": "^2.15.0",
     "json-socket": "^0.3.0",
     "ws": "^7.3.1",
     "yargs": "^15.3.1"

@@ -53,7 +53,7 @@ function main() {
           default: 0
         })
         yargs.option('dverbose', {
-          describe: 'Verbosity level for hyperswarm discovery.',
+          describe: 'Verbosity level for discovery.',
           type: 'number',
           default: 0
         })

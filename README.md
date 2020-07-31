@@ -1,6 +1,6 @@
 # kachery-p2p
 
-Peer-to-peer file sharing using [kachery](https://github.com/flatironinstitute/kachery) and [hyperswarm](https://github.com/hyperswarm/hyperswarm).
+Peer-to-peer file sharing using [kachery](https://github.com/flatironinstitute/kachery).
 
 ## Overview
 
@@ -118,29 +118,9 @@ if local_path is not None:
 
 ## How it works
 
-Each running `kachery-p2p` daemon is a node in the distributed kachery-p2p network and has a unique public/private key pair. The ID of the node is equal to the public key. The system is built on top of [hyperswarm](https://github.com/hyperswarm/hyperswarm) which allows peers that share a common channel to find and connect to one another.
+Each running `kachery-p2p` daemon is a node in the distributed kachery-p2p network and has a unique public/private key pair. The ID of the node is equal to the public key. The system allows peers that share a common channel to find and connect to one another.
 
-Behind the scenes, `kachery-p2p` uses two types of hyperswarms: `lookup swarms` and `file transfer swarms`. The `lookup swarms` correspond to `kachery-p2p` channels and are used to determine which nodes contain which files. The `file transfer swarms` correspond to individual nodes and are used to perform the actual data transfer. Each node is the primary member of its own `file transfer swarm`. Other nodes can download files from the primary member by joining the swarm as secondary members.
-
-Each node is a member of the following swarms:
-* The lookup swarm `x` for each kachery-p2p channel `x` that the node belongs to
-* The file transfer swarm `ID` where `ID` is the node ID, as a primary member
-* Other file transfer swarms as needed for file download, as a secondary member
-
-When a node wants to download a file with hash `h` it takes the following steps:
-* Broadcasts a `seeking(h)` message to each lookup swarm it belongs to
-* Waits for `providing(h)` messages from other members of the lookup swarm
-* If at least one `providing(h)` message is received
-    - Chooses one of the nodes that is providing the file
-    - Joins the file transfer swarm for that node
-    - Tries to download the file in that file transfer swarm
-    - If failure, try again for a different `providing(h)` message
-
-When a node wants to share its files:
-* Listens for `seeking(h)` messages on each lookup swarm it belongs to
-* If `seeking(h)` message is received and the node has the file with hash `h`, it sends a `providing(h)` message back to the seeking node.
-* Provides files for download on its own file transfer swarm.
 
 ## Authors
 
-Jeremy Magland, Center for Computational Mathematics, Flatiron Institute
+Jeremy Magland and Jeff Soules, Center for Computational Mathematics, Flatiron Institute

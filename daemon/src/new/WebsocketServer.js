@@ -102,13 +102,7 @@ class IncomingWebsocketConnection {
         });
 
         this._webSocket.on('message', (message) => {
-            let msg;
-            if (this._webSocket._useUdp) {
-                msg = message;
-            }
-            else {
-                msg = JSON.parse(message);
-            }
+            const msg = JSON.parse(message);
             const body = msg.body;
             const signature = msg.signature;
             if (!body.message) {
