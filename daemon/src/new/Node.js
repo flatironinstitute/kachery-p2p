@@ -437,7 +437,7 @@ class Node {
                 let finished = false;
                 let bytesDownloadedThisChunk = 0;
         
-                const req = this.makeRequestToNode({channelName, toNodeId: nodeId, requestBody, timeout: 20000});
+                const req = this.makeRequestToNode({channelName, toNodeId: nodeId, requestBody, timeout: 10000});
                 _currentReq = req;
                 req.onResponse(responseBody => {
                     if (finished) return;

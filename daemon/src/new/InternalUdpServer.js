@@ -230,7 +230,7 @@ class UdpConnection {
         this._numUnconfirmedMessages ++;
         setTimeout(() => {
             if (x.udpMessageId() in this._unconfirmedMessages) {
-                if (x.numTries() >= 5) {
+                if (x.numTries() >= 6) {
                     console.warn(`Udp message failed after ${x.numTries()} tries. Closing connection.`);
                     this.close();
                 }
@@ -239,7 +239,7 @@ class UdpConnection {
                 delete this._unconfirmedMessages[x.udpMessageId()];
                 this._congestionManager.reportMessageLost({udpMessageId: x.udpMessageId()});
             }
-        }, this._congestionManager.estimatedRoundtripLatencyMsec() * 3);
+        }, this._congestionManager.estimatedRoundtripLatencyMsec() * 4);
     }
     close() {
         if (this._closed) return;
@@ -467,14 +467,10 @@ class UdpCongestionManager {
     }
     _adjustCongestionParameters() {
         const d = this._currentTrialData;
-        console.log(`--- ${d.numSentMessages} sent, ${d.numConfirmedMessages} confirmed, ${d.numLostMessages} lost`);
-        console.log(`--- ${d.numSentBytes} bytes sent, ${d.numConfirmedBytes} confirmed, ${d.peakNumUnconfirmedBytes} peak unconfirmed`);
-        
         if (this._currentTrialData.roundtripLatenciesMsec.length >= 3) {
             this._estimatedRoundtripLatencyMsec = (median(this._currentTrialData.roundtripLatenciesMsec) + this._estimatedRoundtripLatencyMsec) / 2;
-            if (this._estimatedRoundtripLatencyMsec < 200) this._estimatedRoundtripLatencyMsec = 200;
+            if (this._estimatedRoundtripLatencyMsec < 100) this._estimatedRoundtripLatencyMsec = 100;
             if (this._estimatedRoundtripLatencyMsec > 1000) this._estimatedRoundtripLatencyMsec = 1000;
-            console.log(`---- estimated roundtrip latency (msec): ${this._estimatedRoundtripLatencyMsec}`)
         }
         if (d.numLostMessages === 0) {
             // didn't lose any messages... let's see if we were limited
@@ -492,7 +488,6 @@ class UdpCongestionManager {
             // lost multiple messages, decrease the rate
             this._maxNumBytesPerSecond /= 1.2;
         }
-        console.log(`--- max megabytes per second: ${this._maxNumBytesPerSecond / 1000000}`);
     }
     async _startTrials() {
         while (true) {

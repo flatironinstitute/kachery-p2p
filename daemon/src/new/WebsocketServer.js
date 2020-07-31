@@ -121,7 +121,7 @@ class IncomingWebsocketConnection {
                     return;
                 }
                 if (body.message.protocolVersion !== protocolVersion()) {
-                    console.warn(`IncomingSocketConnection: incorrect protocl version ${body.message.protocolVersion} <> ${protocolVersion()}`);
+                    // console.warn(`IncomingSocketConnection: incorrect protocl version ${body.message.protocolVersion} <> ${protocolVersion()}`);
                     this._webSocket.close();
                     return;
                 }
