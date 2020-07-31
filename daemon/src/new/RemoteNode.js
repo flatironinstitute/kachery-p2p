@@ -123,17 +123,17 @@ class RemoteNode {
     }
     sendMessage(message) {
         this._node._validateMessage(message);
-        if (this._outgoingUdpConnection) {
-            this._outgoingUdpConnection.sendMessage(message);
-        }
-        else if (this._incomingUdpConnection) {
-            this._incomingUdpConnection.sendMessage(message);
-        }
-        else if (this._outgoingWebsocketConnection) {
+        if (this._outgoingWebsocketConnection) {
             this._outgoingWebsocketConnection.sendMessage(message);
         }
         else if (this._incomingWebsocketConnection) {
             this._incomingWebsocketConnection.sendMessage(message);
+        }
+        else if (this._outgoingUdpConnection) {
+            this._outgoingUdpConnection.sendMessage(message);
+        }
+        else if (this._incomingUdpConnection) {
+            this._incomingUdpConnection.sendMessage(message);
         }
         else {
             throw Error('Could not send message. No connection.')
@@ -322,8 +322,7 @@ class RemoteNode {
                     }
                     else if (type === 'udp') {
                         if ((remoteNodeInfo.udpAddress) && (remoteNodeInfo.udpPort)) {
-                            //if ((remoteNodeInfo.address) && (remoteNodeInfo.address !== 'localhost')) {
-                            if (remoteNodeInfo.address) {
+                            if ((remoteNodeInfo.address) && (remoteNodeInfo.address !== 'localhost')) {
                                 // the remote node has an exposed address, so let's try
                                 okayToTry = true;
                             }
