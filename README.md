@@ -1,41 +1,164 @@
 # kachery-p2p
 
-Peer-to-peer file sharing using [kachery](https://github.com/flatironinstitute/kachery).
+Kachery-p2p is a **peer-to-peer, content-addressable file storage and distribution framework** which can operate with minimal infrastructural requirements and offers both command-line and programmatic interfaces to file distribution. In short, it’s a way for you to distribute your data to collaborators with minimal fuss.
 
-## Overview
+## Motivation
 
-Kachery allows us to store files in a content-addressable storage database as in the following example:
+The immediate motivation for kachery-p2p is to distribute large data files for an upcoming conference. However, we envision this tool will be used regularly in neuroscience labs and for other applications--anywhere large data files are produced and consumed by multiple interested parties.
+
+### Why not sftp, rsync, google drive, or just a web server?
+
+With kachery, no central node is required. Anyone on the network can begin sharing data by setting up a channel and encouraging others to subscribe to it. Files can be stored (initially) on the machines where they are generated, and distributed directly without paying for a new server. This is especially advantageous when multiple peers are collaborating: everyone can produce data and store it locally, without needing to have a central server as a bottleneck. Servers are expensive, and building a central repository of all files is especially cumbersome when many files are only needed by a subset of the collaborators. The peer-to-peer model gets around both these challenges. Moreover, distributed networks are more resilient to the loss of individual nodes: if the FTP server is down, no one can get the files; but so long as one copy is visible on the peer-to-peer network (someone’s computer), it can still be spread to the parties who need to consume it.
+
+### Why not bittorrent?
+
+Kachery-p2p seeks to provide many of the same features that a conventional solution like Bittorrent would offer, and this (or perhaps resilio sync) is the closest similar software package in the ecosystem. However, kachery offers several other key features:
+Fully content-addressable: kachery is designed as content-addressable storage. Files are universally locatable by SHA1-based fingerprint.
+Entirely distributed: There is no requirement for a central “tracker” which registers files available on the network. (We do provide a matchmaking bootstrap server for initial peer discovery.)
+Programmatic interface: kachery offers python bindings for programmatic file transfer and is a key file access/distribution provider for hither, a companion tool which facilitates code portability
+File security model: files in kachery are made available to specific channels. To have access to a file, a user must belong to the same channel as someone sharing the file. Thus, kachery-based file distribution can be restricted to a subset of the entire kachery network.
+Feeds (collections of append-only logs): In addition to file distribution, kachery-p2p also provides features to facilitate ongoing communication between peers. This is achieved through the medium of feeds, which function like a journal to which other channel members subscribe. One use case for the feed is to record a series of modifications to a data file, and ensure that subscriber peers can replay the same actions to reach a state that is consistent with the state on the feed source.
+
+In addition, many ISPs actively block traffic using the bittorrent protocol’s standard channels. Kachery-p2p uses various hole-punching techniques, along with per-transfer port negotiation, to encourage a seamless connection between peers. Furthermore, traffic can be routed through a proxy server if the direct peer-to-peer communication fails.
+
+
+## Concepts
+
+### Channels
+
+A “channel” is a means of creating a communication subgroup among the peers on the kachery-p2p network. If multiple peers are subscribed to the same channel, they can share files and feeds that are available over that channel; and peers do not need to pay attention to any messages directed outside the channels they are subscribed to. This is essentially a restricted peer community.
+
+### File Storage
+
+Files in kachery may be stored on any disk accessible from a computer where a kachery daemon is running. Within the kachery-storage directory, data files are recorded according to their SHA-1 hash, making them easy to locate and providing an obvious checksum to ensure successful file transfer/file integrity. Feeds (collections of append-only logs) are similarly stored according to their unique public key.
+
+### Feeds
+
+A “feed” is a collection of write-only journals (or append-only logs) which can be shared between different peers on the network. Unlike static files, they can be amended over time, and applications may subscribe to changes to get real-time updates. This enables peer-to-peer communication between application components using the same network and channel mechanisms as file transfer.
+
+## Setup & Installation
+
+### Requirements:
+
+POSIX environment (Linux or Mac--currently tested with Ubuntu 16.04 and 18.04)
+
+We recommend that you use a conda environment with
+
+* Python >= 3.7
+* Numpy
+* Nodejs >=12 (available on conda-forge)
+
+Installation using conda:
 
 ```bash
-# Store a file in the local database
-> kachery-store /path/to/file.dat
-sha1://ad7fb868e59c495f355d83f61da1c32cc21571cf/file.dat
+export KACHERY_STORAGE_DIR=/desired/file/storage/location
+# also add that to .bashrc or wherever you keep your env vars
 
-# Load it later on
-> kachery-load sha1://ad7fb868e59c495f355d83f61da1c32cc21571cf/file.dat --dest file.dat
-file.dat
+conda create --name MYENV python=3.8 numpy
+conda activate MYENV
+conda install -c conda-forge nodejs
+pip install --upgrade kachery_p2p
 ```
 
-While it is possible to share these files between computers by hosting kachery storage servers, this is not always convenient, as it requires maintaining a running server and managing access. The `kachery-p2p` project allows you to share `kachery` files using a distributed, peer-to-peer protocol.
+## Usage
 
-In order to share files with another computer:
+### Running a daemon
 
-* Run the `kachery-p2p` daemon on both computers
-* Ensure that both daemons have at least one *channel* in common
-* Files stored in your local kachery database will be accessible from the other computer and vice versa
+Ensure you are in the correct conda environment, then:
 
-## Installation
-
-**Prerequisites**
-
-* Linux or MacOS
-* NodeJS version >=12 (to run the daemon)
-
-```
-pip install --upgrade kachery-p2p
+```bash
+kachery-p2p-start-daemon --channel CHANNELNAME
 ```
 
-## Configuration
+Where CHANNELNAME is something unique you’ve shared with your collaborators.
+
+Keep this daemon running in a terminal. You may want to use [tmux](https://github.com/tmux/tmux/wiki) or a similar tool to keep this daemon running even if the terminal is closed.
+
+### File Transfer
+
+kachery can transfer arbitrary files, and also serializes numpy data from memory when used with the python programmatic interface.
+
+From command line (in a separate terminal):
+
+```bash
+kachery-store /path/to/your/file.dat
+```
+
+This will copy the file to the kachery storage directory and will display a SHA1 URI, which you can then share with your collaborators. The file can then be retrieved from any computer running a kachery-p2p daemon on the same channel:
+
+```
+kachery-p2p-load sha1://ABC...XYZ/file.dat --dest file.dat
+```
+
+### From python:
+
+Where kachery really shines is in managing files that you want to manipulate in scripts. In fact, you can even hand off numpy arrays from one machine to another seamlessly.
+
+```python
+import kachery_p2p as kp
+import numpy as np
+
+filename = ‘/some/path/and/file.txt’
+with open(filename, ‘w’) as fh:
+	fh.write(“Here is my message”)
+sha1 = kp.store_file(filename)
+print(sha1) # this can now be shared with a collaborator
+
+# An equivalent shortcut for this is:
+kp.store_text("Here is my message")
+
+# You can also store python dicts or numpy arrays
+kp.store_object(dict(text="some text"))
+kp.store_npy([1, 2, 3])
+```
+
+
+Then, on your collaborator’s computer:
+
+```python
+import kachery_p2p as kp
+import numpy as np
+p = ‘sha1://....’ # paste in value from first party
+that_file = kp.load_file(p)
+with open(that_file, ‘r’) as fh:
+	print(fh.readlines())
+
+# Or an equivalent shortcut
+txt = kp.load_text(p)
+```
+
+For an example of numpy data sharing:
+
+```python
+import kachery_p2p as kp
+import numpy as np
+
+A = np.random.normal(0, 1, (3, 3))
+x = np.array([[3], [4], [5]])
+B = A.dot(x)
+pA = kp.store_npy(A)
+pB = kp.store_npy(B)
+```
+
+Share those hashes with your collaborator, and they run:
+
+```python
+import kachery_p2p as kp
+import numpy as np
+import numpy.linalg as lin
+
+sha1_A = ‘sha1://...value_from_collaborator’
+sha1_B = ‘sha1://...also_from_collaborator’
+A = kp.load_npy(sha1_A)
+B = kp.load_npy(sha1_B)
+recovered_x = lin.solve(A, B)
+
+print(recovered_x)
+
+# [[3.] [4.] [5.]]
+```
+
+## Advanced configuration
 
 Environment variables
 
@@ -43,83 +166,22 @@ Environment variables
 * `KACHERY_P2P_API_PORT` **(optional)** - Port that the Python client uses to communicate with the daemon. If not provided, a default port will be used.
 * `KACHERY_P2P_CONFIG_DIR` **(optional)** - Directory where configuration files will be stored, including the public/private keys for your node on the distributed system. The default location is ~/.kachery-p2p
 
-## Starting the daemon
+## Hosting a bootstrap node
 
-In order to share and/or access files, you must have a running daemon.
+In order for peers to find one another, they need to connect to a commmon bootstrap server. By default, kachery-p2p uses a hard-coded address to a node hosted by us. However, you can host your own bootstrap node.
 
 ```bash
-# Start the daemon and keep it running in a terminal
-kachery-p2p-start-daemon
+# Start the daemon on a computer in the cloud with an accessible port
+# The port must be open to both tcp and udp connections
+kachery-p2p-start-daemon --host <ip> --port <port>
+```
+
+```bash
+# Peers can then specify this bootstrap server
+kachery-p2p-start-daemon --bootstrap <ip>:<port>
 ```
 
 You may want to use [tmux](https://github.com/tmux/tmux/wiki) or a similar tool to keep this daemon running even if the terminal is closed. This gives you the ability to reattach from a different terminal at a later time.
-
-## Joining channels
-
-To join a `kachery-p2p` channel:
-
-```bash
-# Use any name you want for the channel
-kachery-p2p-join-channel name-of-channel
-```
-
-You can use any name for the channel. Two computers can share files if they have running daemons with at least one channel in common.
-
-List the current channels:
-
-```bash
-kachery-p2p-get-channels
-```
-
-Leave a channel:
-
-```bash
-kachery-p2p-leave-channel name-of-channel
-```
-
-## Sharing a file
-
-```bash
-# On your local computer
-> kachery-store /path/to/file.dat
-sha1://e0a72ba2311e36b60039ff643781a3eb43b23639/file.dat
-```
-
-Send this kachery URL to your friend. The hash uniquely identifies your file inside our universe (with extremely high probability).
-
-```bash
-# On the remote computer
-> kachery-p2p-load sha1://e0a72ba2311e36b60039ff643781a3eb43b23639/file.dat --dest file.dat
-```
-
-If it is a text file, you can write the contents to stdout:
-
-```bash
-kachery-p2p-cat sha1://e0a72ba2311e36b60039ff643781a3eb43b23639/file.dat
-```
-
-It is also possible to find files without downloading them:
-
-```bash
-kachery-p2p-find sha1://e0a72ba2311e36b60039ff643781a3eb43b23639/file.dat
-```
-
-## Python API
-
-It is also possible to use the Python API directory. For example:
-
-```python
-import kachery_p2p as kp
-
-local_path = kp.load_file('sha1://e0a72ba2311e36b60039ff643781a3eb43b23639/file.dat')
-if local_path is not None:
-    print(f'File downloaded to: {local_path}')
-```
-
-## How it works
-
-Each running `kachery-p2p` daemon is a node in the distributed kachery-p2p network and has a unique public/private key pair. The ID of the node is equal to the public key. The system allows peers that share a common channel to find and connect to one another.
-
 
 ## Authors
 
