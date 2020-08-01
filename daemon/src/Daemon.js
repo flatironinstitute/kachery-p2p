@@ -40,7 +40,8 @@ class Daemon {
 
         if (!bootstrapInfos) {
             bootstrapInfos = [
-                    {address: '45.33.92.31', port: 45001}
+                    {address: '45.33.92.31', port: 45001}, // kachery-p2p-spikeforest
+                    {address: '45.33.92.33', port: 45001} // kachery-p2p-flatiron1
                 ].filter(bpi => {
                     if ((bpi.address === 'localhost') || (bpi.address === this._listenHost)) {
                         if (bpi.port === this._listenPort) {

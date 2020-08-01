@@ -39,11 +39,15 @@ class BootstrapPeerManager {
                     console.warn(`
 Error connecting to bootstrap node ${this._address}:${this._port}:
 ${err.message}
+                    `)
+                    if (!err.message.includes('Cannot connect to self')) {
+                        console.warn(`
 
 You may need to update to the latest version of kachery-p2p
 (perhaps the bootstrap node is on a more recent version). You
 could also manually specify your own bootstrap node.
-                    `)
+                        `)
+                    }
                 }
                 else {
                     // console.warn(err);

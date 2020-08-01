@@ -87,12 +87,14 @@ def log():
     sf.print_messages()
 
 
+# Note that npx-latest/npm-latest uses the latest version of the daemon on npm, which may be desireable for some bootstrap nodes, but not adviseable if you want to be sure that kachery-p2p is constistent with the node daemon
+
 @click.command(help="Start the daemon.")
 @click.option('--channel', multiple=True, help='Channel to join')
 @click.option('--bootstrap', multiple=True, help='Override the default bootstrap node(s). Use --bootstrap ip:port')
 @click.option('--verbose', default=0, help='Verbosity level')
 @click.option('--dverbose', default=0, help='Discovery verbosity level')
-@click.option('--method', default='npx', help='Method for starting daemon: npx (default), npm, or dev')
+@click.option('--method', default='npx', help='Method for starting daemon: npx (default), npx-latest, npm, npm-latest or dev')
 @click.option('--host', default='', help='IP for connecting to this daemon')
 @click.option('--port', default=0, help='Port to listen on (0 means do not listen)')
 def start_daemon(method, channel, verbose, dverbose, host, port, bootstrap):

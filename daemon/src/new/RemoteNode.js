@@ -1,5 +1,6 @@
 import { sleepMsec, randomAlphaString } from "../common/util.js";
 import assert from 'assert';
+import { sha1sum } from "../common/crypto_util.js";
 
 class RemoteNode {
     constructor({ remoteNodeManager, remoteNodeId }) {
@@ -22,6 +23,11 @@ class RemoteNode {
         this._incomingWebsocketConnection = null;
         this._outgoingUdpConnection = null;
         this._outgoingWebsocketConnection = null;
+
+        this._incomingUdpDisconnectTimestamp = 0;
+        this._incomingWebsocketDisconnectTimestamp = 0;
+        this._outgoingUdpDisconnectTimestamp = 0;
+        this._outgoingWebsocketDisconnectTimestamp = 0;
 
         this._onMessageCallbacks = [];
         this._onExpiredCallbacks = [];
@@ -98,10 +104,10 @@ class RemoteNode {
         return this.hasIncomingConnection() || this.hasOutgoingConnection();
     }
     inAJoinedChannel() {
-        const channels = this.remoteNodeChannels();
-        if (!channels) return false;
+        const channelSha1s = this.remoteNodeChannelSha1s();
+        if (!channelSha1s) return false;
         for (let channelName in this._node._channels) {
-            if (channelName in channels) return true;
+            if (sha1sum(channelName) in channelSha1s) return true;
         }
         return false;
     }
@@ -121,9 +127,9 @@ class RemoteNode {
         if (!this._remoteNodeData) return null;
         return cloneObject(this._remoteNodeData.body.nodeInfo);
     }
-    remoteNodeChannels() {
+    remoteNodeChannelSha1s() {
         if (!this._remoteNodeData) return null;
-        return cloneObject(this._remoteNodeData.body.channels);
+        return cloneObject(this._remoteNodeData.body.channelSha1s);
     }
     sendMessage(message) {
         this._node._validateMessage(message);
@@ -185,6 +191,7 @@ class RemoteNode {
             connection.onDisconnect(() => {
                 if (connection === this._incomingWebsocketConnection) {
                     this._incomingWebsocketConnection = null;
+                    this._incomingWebsocketDisconnectTimestamp = new Date();
                 }
             });
         }
@@ -201,6 +208,7 @@ class RemoteNode {
             connection.onDisconnect(() => {
                 if (connection === this._incomingUdpConnection) {
                     this._incomingUdpConnection = null;
+                    this._incomingUdpDisconnectTimestamp = new Date();
                 }
             });
         }
@@ -221,6 +229,7 @@ class RemoteNode {
             connection.onDisconnect(() => {
                 if (connection === this._outgoingWebsocketConnection) {
                     this._outgoingWebsocketConnection = null;
+                    this._outgoingWebsocketDisconnectTimestamp = new Date();
                 }
             });
         }
@@ -237,6 +246,7 @@ class RemoteNode {
             connection.onDisconnect(() => {
                 if (connection === this._outgoingUdpConnection) {
                     this._outgoingUdpConnection = null;
+                    this._outgoingUdpDisconnectTimestamp = new Date();
                 }
             });
         }
@@ -369,6 +379,11 @@ class RemoteNode {
                 if ((remoteNodeInfo) && (this._localNodeInfo)) {
                     if (type === 'websocket') {
                         okayToTry = ((remoteNodeInfo.address) && (remoteNodeInfo.port));
+                        const elapsedFromDisconnect = (new Date()) - this._outgoingWebsocketDisconnectTimestamp;
+                        if (elapsedFromDisconnect < 10000) {
+                            // too soon from disconnect
+                            okayToTry = false;
+                        }
                     }
                     else if (type === 'udp') {
                         if ((remoteNodeInfo.udpAddress) && (remoteNodeInfo.udpPort)) {
@@ -380,6 +395,11 @@ class RemoteNode {
                             else {
                                 // we will try only if we have our own udp address (hole punching)
                                 okayToTry = ((this._localNodeInfo) && (this._localNodeInfo.udpAddress) && (this._localNodeInfo.udpPort));
+                            }
+                            const elapsedFromDisconnect = (new Date()) - this._outgoingUdpDisconnectTimestamp;
+                            if (elapsedFromDisconnect < 10000) {
+                                // too soon from disconnect
+                                okayToTry = false;
                             }
                         } 
                     }

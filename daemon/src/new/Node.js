@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { getSignature, verifySignature, hexToPublicKey } from '../common/crypto_util.js';
+import { getSignature, verifySignature, hexToPublicKey, sha1sum } from '../common/crypto_util.js';
 import { sleepMsec, randomAlphaString } from '../common/util.js';
 import { getLocalFileInfo } from '../kachery.js';
 import SmartyNode from './SmartyNode.js';
@@ -651,7 +651,7 @@ class Node {
         for (let channelName in this._channels) {
             lines.push(`CHANNEL: ${channelName}`);
             lines.push(`self${selfHasUdpAddress ? '*' : ''} ${this._nodeId.slice(0, 6)}`);
-            const nodeIdsInChannel = this.getNodeIdsForChannel(channelName); // todo
+            const nodeIdsInChannel = this.getNodeIdsForChannel(channelName);
             for (let nodeId of nodeIdsInChannel) {
                 nodesIncluded[nodeId] = true;
                 const nodeInfo = this._remoteNodeManager.remoteNodeInfo(nodeId);
@@ -1143,14 +1143,15 @@ class Node {
         this._remoteNodeManager.setRemoteNodeData(fromNodeId, data0);
     }
     _createNodeData() {
-        const channels0 = {};
+        // This info gets advertized on the network
+        const channelSha1s = {};
         for (let channelName in this._channels) {
-            channels0[channelName] = true;
+            channelSha1s[sha1sum(channelName)] = true;
         }
         const body = {
-            channels: channels0,
+            channelSha1s, // use hashes in order not to publicize private channel names as this info gets advertized on the network
             nodeInfo: this.nodeInfo(),
-            timestamp: (new Date()) - 0
+            timestamp: (new Date()) - 0 // this is how nodes know what is the most up-to-date info. It's okay if the clocks are out of sync somehow.
         };
         return {
             body,
@@ -1193,7 +1194,7 @@ class Node {
             }
         }
         const selfData = this._createNodeData();
-        if (channelName in selfData.body.channels) {
+        if (channelName in this._channels) {
             // report self
             nodes[this._nodeId] = selfData;
         }
@@ -1227,9 +1228,9 @@ class Node {
         this._validateNodeId(nodeId);
         const nodeData = this._remoteNodeManager.remoteNodeData(nodeId);
         if (!nodeData) return false;
-        const nodeChannels = nodeData.body.channels;
+        const nodeChannelSha1s = nodeData.body.channelSha1s;
         for (let channelName in this._channels) {
-            if (channelName in nodeChannels) {
+            if (sha1sum(channelName) in nodeChannelSha1s) {
                 return true;
             }
         }
@@ -1314,6 +1315,10 @@ class Node {
             }
         }
     }
+    _validateSha1(x) {
+        assert(typeof(x) === 'string', 'Expected sha1 hash. Not a string.');
+        assert(x.length === 40, 'Expected sha1 hash. Wrong length.');
+    }
     _validateSimpleObject(x, opts) {
 
         const validateField = ({field, value, key}) => {
@@ -1372,6 +1377,12 @@ class Node {
         if (opts.maxLength) {
             assert(x.length <= opts.maxLength, `Length of string must be at most ${x.length}`);
         }
+    }
+    _validateStringArray(x) {
+        assert(Array.isArray(), 'Not an array');
+        x.forEach(v => {
+            assert(typeof(v) === 'string', 'Not a string array');
+        });
     }
     _validateBool(x, opts) {
         opts = opts || {};

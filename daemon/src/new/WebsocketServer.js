@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from '../common/crypto_util.js'
 import { protocolVersion } from './protocolVersion.js';
 import InternalUdpServer from './InternalUdpServer.js';
+import { randomAlphaString } from '../common/util.js';
 
 // todo: monitor and clean up closed connections throughout file
 
@@ -112,13 +113,16 @@ class IncomingWebsocketConnection {
             }
             if (!this._initialized) {
                 if (!body.fromNodeId) {
-                    console.warn('IncomingSocketConnection: missing fromNodeId');
                     this.sendMessage({type: 'error', error: `Missing fromNodeId`});
                     this.disconnectLater();
                     return;
                 }
+                if (body.fromNodeId === this._nodeId) {
+                    this.sendMessage({type: 'error', error: `Cannot connect to self.`});
+                    this.disconnectLater();
+                    return;
+                }
                 if (body.message.type !== 'initial') {
-                    console.warn(`IncomingSocketConnection: message type was expected to be initial, but got ${body.message.type}`);
                     this.sendMessage({type: 'error', error: 'Message type was expected to be initial.'});
                     this.disconnectLater();
                     return;
@@ -130,7 +134,6 @@ class IncomingWebsocketConnection {
                     return;
                 }
                 if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId))) {
-                    console.warn(`IncomingSocketConnection: problem verifying signature`);
                     this.sendMessage({type: 'error', error: `Problem verifying signature`});
                     this.disconnectLater();
                     return;

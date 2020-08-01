@@ -1,6 +1,6 @@
 import assert from 'assert';
 import RemoteNode from './RemoteNode.js';
-import { JSONStringifyDeterministic } from '../common/crypto_util.js';
+import { JSONStringifyDeterministic, sha1sum } from '../common/crypto_util.js';
 import { randomAlphaString } from '../common/util.js';
 
 class RemoteNodeManager {
@@ -104,19 +104,19 @@ class RemoteNodeManager {
     remoteNodeInChannel(nodeId, channelName) {
         this._node._validateNodeId(nodeId);
         this._node._validateChannelName(channelName);
-        const channels = this.remoteNodeChannels(nodeId);
-        if (!channels) return;
-        return (channelName in channels);
+        const channelSha1s = this.remoteNodeChannelSha1s(nodeId);
+        if (!channelSha1s) return;
+        return (sha1sum(channelName) in channelSha1s);
     }
     remoteNodeInfo(nodeId) {
         this._node._validateNodeId(nodeId);
         if (!(nodeId in this._remoteNodes)) return null;
         return this._remoteNodes[nodeId].remoteNodeInfo();
     }
-    remoteNodeChannels(nodeId) {
+    remoteNodeChannelSha1s(nodeId) {
         this._node._validateNodeId(nodeId);
         if (!(nodeId in this._remoteNodes)) return null;
-        return this._remoteNodes[nodeId].remoteNodeChannels();
+        return this._remoteNodes[nodeId].remoteNodeChannelSha1s();
     }
     sendMessageDirectlyToPeer(peerId, message) {
         this._node._validateNodeId(peerId);
@@ -197,7 +197,7 @@ class RemoteNodeManager {
         this._node._validateSimpleObject(data.body);
         this._node._validateSimpleObject(data.body.nodeInfo);
         this._node._validateNodeInfo(data.body.nodeInfo);
-        this._node._validateSimpleObject(data.body.channels);
+        this._node._validateSimpleObject(data.body.channelSha1s);
         assert(data.body.timestamp, 'Missing timestamp in remote node data');
     }
     _createRemoteNodeIfNeeded(remoteNodeId) {
@@ -266,7 +266,7 @@ export default RemoteNodeManager;
     //     }
     //     if (okayToReplace) {
     //         this._nodeInfoStore[nodeId] = {
-    //             internalTimestamp: new Date(), // for deciding when to delete it internal to this component -- don't use remote timestamp because it might be a different time zone - only use remote timestamp for comparing and determining most recent
+    //             internalTimestamp: new Date(), // for deciding when to delete it internal to this component -- don't use remote timestamp because the clock may be out of sync or something - only use remote timestamp for comparing and determining most recent
     //             data
     //         };
     //     }
