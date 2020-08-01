@@ -467,8 +467,11 @@ class UdpCongestionManager {
     }
     _adjustCongestionParameters() {
         const d = this._currentTrialData;
+        const debugUdp = false;
+        let doPrint = ((debugUdp) && (d.numSentMessages > 10));
         if (this._currentTrialData.roundtripLatenciesMsec.length >= 3) {
             this._estimatedRoundtripLatencyMsec = (median(this._currentTrialData.roundtripLatenciesMsec) + this._estimatedRoundtripLatencyMsec) / 2;
+            if (doPrint) console.info(`Estimated round-trip latency: ${this._estimatedRoundtripLatencyMsec}`)
             if (this._estimatedRoundtripLatencyMsec < 100) this._estimatedRoundtripLatencyMsec = 100;
             if (this._estimatedRoundtripLatencyMsec > 1000) this._estimatedRoundtripLatencyMsec = 1000;
         }
@@ -488,6 +491,7 @@ class UdpCongestionManager {
             // lost multiple messages, decrease the rate
             this._maxNumBytesPerSecond /= 1.2;
         }
+        if (doPrint) console.info(`${d.numSentMessages} sent, ${d.numConfirmedMessages} confirmed, ${d.numLostMessages} lost, rate: ${this._maxNumBytesPerSecond / 1000000}, estLat: ${this._estimatedRoundtripLatencyMsec}`);
     }
     async _startTrials() {
         while (true) {

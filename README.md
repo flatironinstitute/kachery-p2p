@@ -4,23 +4,43 @@ Kachery-p2p is a **peer-to-peer, content-addressable file storage and distributi
 
 ## Motivation
 
-The immediate motivation for kachery-p2p is to distribute large data files for an upcoming conference. However, we envision this tool will be used regularly in neuroscience labs and for other applications--anywhere large data files are produced and consumed by multiple interested parties.
+Kachery-p2p has advantages for scientific communities that share large datasets. It is often inconvenient (and expensive) for individual labs to host such datasets. The idea of kachery-p2p is to relieve this burden by making it easy to share a data file with a community or individuals by submitting it to the distributed system. The simplest way to share a file is:
+
+```
+kachery-store /my/large-or-small/file.dat
+```
+
+Then distribute the unique kachery URI (identifier) to colleagues. For example, you could just paste the URI into a python script or a github README file.
+
+You also need to be running a kachery daemon on your computer (sort of like a dropbox daemon) and choose a channel name for distribution. But once another person (on your kachery channel) has the file, it's okay if you don't seed it any more. In this way it is similar to [BitTorrent](https://www.bittorrent.com/) or the [Dat Protocol](https://www.datprotocol.com/).
+
+There is also a very nice integration with python where you can share numpy arrays (or other files) with minimal effort:
+
+```python
+import kachery_p2p as kp
+uri = kp.store_npy(X)
+
+# Then on a different computer
+X = kp.load_npy(uri)
+```
+
+This is just the beginning of the capabilities. Because it is meant to power the spikeforest analysis pipeline and other web-based visualization tools, kachery-p2p supports sharing of live feeds (in addition to static content). This enables powerful functionality like running analysis jobs on a remote compute resource and creating universal (reproducible) scripts that can run from anywhere. The work of transferring input/output files to/from the remote resource is automatically handled by the p2p system and the communication (job submission) is handled via the kachery live feeds.
 
 ### Why not sftp, rsync, google drive, or just a web server?
 
-With kachery, no central node is required. Anyone on the network can begin sharing data by setting up a channel and encouraging others to subscribe to it. Files can be stored (initially) on the machines where they are generated, and distributed directly without paying for a new server. This is especially advantageous when multiple peers are collaborating: everyone can produce data and store it locally, without needing to have a central server as a bottleneck. Servers are expensive, and building a central repository of all files is especially cumbersome when many files are only needed by a subset of the collaborators. The peer-to-peer model gets around both these challenges. Moreover, distributed networks are more resilient to the loss of individual nodes: if the FTP server is down, no one can get the files; but so long as one copy is visible on the peer-to-peer network (someone’s computer), it can still be spread to the parties who need to consume it.
+With kachery, no central node is required. Anyone on the network can begin sharing data by setting up a channel and encouraging others to subscribe to it. Files can be stored (initially) on the machines where they are generated, and distributed directly without paying for or maintaining a new server. This is especially advantageous when multiple peers are collaborating: everyone can produce data and store it locally, without needing to have a central server as a bottleneck. Servers are expensive, and building a central repository of all files is especially cumbersome when many files are only needed by a subset of the collaborators. The peer-to-peer model gets around both these challenges. Moreover, distributed networks are more resilient to the loss of individual nodes: if the FTP server is down, no one can get the files; but so long as one copy is visible on the peer-to-peer network (someone’s computer), it can still be spread to the parties who need to consume it.
 
 ### Why not bittorrent?
 
-Kachery-p2p seeks to provide many of the same features that a conventional solution like Bittorrent would offer, and this (or perhaps resilio sync) is the closest similar software package in the ecosystem. However, kachery offers several other key features:
-Fully content-addressable: kachery is designed as content-addressable storage. Files are universally locatable by SHA1-based fingerprint.
-Entirely distributed: There is no requirement for a central “tracker” which registers files available on the network. (We do provide a matchmaking bootstrap server for initial peer discovery.)
-Programmatic interface: kachery offers python bindings for programmatic file transfer and is a key file access/distribution provider for hither, a companion tool which facilitates code portability
-File security model: files in kachery are made available to specific channels. To have access to a file, a user must belong to the same channel as someone sharing the file. Thus, kachery-based file distribution can be restricted to a subset of the entire kachery network.
-Feeds (collections of append-only logs): In addition to file distribution, kachery-p2p also provides features to facilitate ongoing communication between peers. This is achieved through the medium of feeds, which function like a journal to which other channel members subscribe. One use case for the feed is to record a series of modifications to a data file, and ensure that subscriber peers can replay the same actions to reach a state that is consistent with the state on the feed source.
+Kachery-p2p seeks to provide many of the same features that a conventional solution like BitTorrent would offer, and this (or perhaps [resilio sync](https://www.resilio.com/individuals/)) is the closest similar software package in the ecosystem. However, kachery offers several other key features:
+
+* Simple addressing scheme. Kachery is designed as content-addressable storage in that files are universally locatable by SHA1-based fingerprints.
+* Python integration with an emphasis on data science and supports portable analysis pipelines using a companion tool called hither.
+* Entirely distributed. There is no requirement for a central “tracker” which registers files available on the network. (We do provide a matchmaking bootstrap server for initial peer discovery.)
+* File security model. Files in kachery are made available to specific channels. To have access to a file, a user must belong to the same channel as someone sharing the file. Thus, kachery-based file distribution can be restricted to a subset of the entire kachery network.
+* Feeds (collections of append-only logs). In addition to file distribution, kachery-p2p also provides features to facilitate ongoing communication between peers. This is achieved through the medium of feeds, which function like a journal to which other channel members subscribe. One use case for the feed is to record a series of modifications to a data file, and ensure that subscriber peers can replay the same actions to reach a state that is consistent with the state on the feed source.
 
 In addition, many ISPs actively block traffic using the bittorrent protocol’s standard channels. Kachery-p2p uses various hole-punching techniques, along with per-transfer port negotiation, to encourage a seamless connection between peers. Furthermore, traffic can be routed through a proxy server if the direct peer-to-peer communication fails.
-
 
 ## Concepts
 
@@ -74,9 +94,12 @@ Where CHANNELNAME is something unique you’ve shared with your collaborators.
 
 Keep this daemon running in a terminal. You may want to use [tmux](https://github.com/tmux/tmux/wiki) or a similar tool to keep this daemon running even if the terminal is closed.
 
+Other more advanced options are available, such as specifying non-default bootstrap nodes and specifying listen ports (see below)
+.
+
 ### File Transfer
 
-kachery can transfer arbitrary files, and also serializes numpy data from memory when used with the python programmatic interface.
+Kachery-p2p can transfer arbitrary files, and also serializes numpy data from memory when used with the python programmatic interface.
 
 From command line (in a separate terminal):
 
@@ -92,7 +115,7 @@ kachery-p2p-load sha1://ABC...XYZ/file.dat --dest file.dat
 
 ### From python:
 
-Where kachery really shines is in managing files that you want to manipulate in scripts. In fact, you can even hand off numpy arrays from one machine to another seamlessly.
+Where kachery really shines is in managing files that you want to manipulate in scripts. In fact, you can even hand off NumPy arrays from one machine to another seamlessly.
 
 ```python
 import kachery_p2p as kp
