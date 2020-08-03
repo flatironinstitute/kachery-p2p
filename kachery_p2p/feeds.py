@@ -254,7 +254,7 @@ class Subfeed:
             messages=messages
         ))
         if not x['success']:
-            raise Exception('Unable to submit messages.')
+            raise Exception(f'Unable to submit messages: {x.get("error")}')
 
     def set_access_rules(self, rules):
         if not self._is_writeable:

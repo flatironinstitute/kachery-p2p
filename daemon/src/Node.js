@@ -587,7 +587,7 @@ class Node {
                 channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived
             })
         }
-        else if (requestBody.type === 'submitMessageToLiveFeed') {
+        else if (requestBody.type === 'submitMessagesToLiveFeed') {
             this._handleSubmitMessagesToLiveFeed({
                 channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived
             })
