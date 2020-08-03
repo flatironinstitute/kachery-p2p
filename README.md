@@ -84,6 +84,12 @@ conda install -c conda-forge nodejs
 pip install --upgrade kachery_p2p
 ```
 
+Or you could use the `environment.yaml` file included in this repo to create a new conda environment, and then pip install kachery_p2p as above in the new environment.
+
+Installation without conda:
+
+It is also possible to install without conda. Just make sure that the above requirements are met on your system, and then pip install kachery_p2p as above.
+
 ## Usage
 
 ### Running a daemon
