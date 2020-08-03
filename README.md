@@ -1,6 +1,10 @@
 # kachery-p2p
 
+**This project is at an early stage. We welcome contributors and testers**
+
 Kachery-p2p is a **peer-to-peer, content-addressable file storage and distribution framework** which can operate with minimal infrastructural requirements and offers both command-line and programmatic interfaces to file distribution. In short, it’s a way for you to distribute your data to collaborators with minimal fuss.
+
+[Instructions for beta testers](./doc/beta_testing_instructions.md)
 
 ## Motivation
 
@@ -14,7 +18,7 @@ Then distribute the unique kachery URI (identifier) to colleagues. For example, 
 
 You also need to be running a kachery daemon on your computer (sort of like a dropbox daemon) and choose a channel name for distribution. But once another person (on your kachery channel) has the file, it's okay if you don't seed it any more. In this way it is similar to [BitTorrent](https://www.bittorrent.com/) or the [Dat Protocol](https://www.datprotocol.com/).
 
-There is also a very nice integration with python where you can share numpy arrays (or other files) with minimal effort:
+There is also a very nice integration with python where you can share NumPy arrays (or other files) with minimal effort:
 
 ```python
 import kachery_p2p as kp
@@ -24,13 +28,13 @@ uri = kp.store_npy(X)
 X = kp.load_npy(uri)
 ```
 
-This is just the beginning of the capabilities. Because it is meant to power the spikeforest analysis pipeline and other web-based visualization tools, kachery-p2p supports sharing of live feeds (in addition to static content). This enables powerful functionality like running analysis jobs on a remote compute resource and creating universal (reproducible) scripts that can run from anywhere. The work of transferring input/output files to/from the remote resource is automatically handled by the p2p system and the communication (job submission) is handled via the kachery live feeds.
+This is just the beginning of the capabilities. Because it is meant to power the SpikeForest analysis pipeline and other web-based visualization tools, kachery-p2p supports sharing of live feeds (in addition to static content). This enables powerful functionality like running analysis jobs on a remote compute resource and creating universal (reproducible) scripts that can run from anywhere. The work of transferring input/output files to/from the remote resource is automatically handled by the p2p system and the communication (job submission) is handled via the kachery live feeds.
 
 ### Why not sftp, rsync, google drive, or just a web server?
 
 With kachery, no central node is required. Anyone on the network can begin sharing data by setting up a channel and encouraging others to subscribe to it. Files can be stored (initially) on the machines where they are generated, and distributed directly without paying for or maintaining a new server. This is especially advantageous when multiple peers are collaborating: everyone can produce data and store it locally, without needing to have a central server as a bottleneck. Servers are expensive, and building a central repository of all files is especially cumbersome when many files are only needed by a subset of the collaborators. The peer-to-peer model gets around both these challenges. Moreover, distributed networks are more resilient to the loss of individual nodes: if the FTP server is down, no one can get the files; but so long as one copy is visible on the peer-to-peer network (someone’s computer), it can still be spread to the parties who need to consume it.
 
-### Why not bittorrent?
+### Why not BitTorrent?
 
 Kachery-p2p seeks to provide many of the same features that a conventional solution like BitTorrent would offer, and this (or perhaps [resilio sync](https://www.resilio.com/individuals/)) is the closest similar software package in the ecosystem. However, kachery offers several other key features:
 
@@ -40,7 +44,7 @@ Kachery-p2p seeks to provide many of the same features that a conventional solut
 * File security model. Files in kachery are made available to specific channels. To have access to a file, a user must belong to the same channel as someone sharing the file. Thus, kachery-based file distribution can be restricted to a subset of the entire kachery network.
 * Feeds (collections of append-only logs). In addition to file distribution, kachery-p2p also provides features to facilitate ongoing communication between peers. This is achieved through the medium of feeds, which function like a journal to which other channel members subscribe. One use case for the feed is to record a series of modifications to a data file, and ensure that subscriber peers can replay the same actions to reach a state that is consistent with the state on the feed source.
 
-In addition, many ISPs actively block traffic using the bittorrent protocol’s standard channels. Kachery-p2p uses various hole-punching techniques, along with per-transfer port negotiation, to encourage a seamless connection between peers. Furthermore, traffic can be routed through a proxy server if the direct peer-to-peer communication fails.
+In addition, many ISPs actively block traffic using the BitTorrent protocol’s standard channels. Kachery-p2p uses various hole-punching techniques, along with per-transfer port negotiation, to encourage a seamless connection between peers. Furthermore, traffic can be routed through a proxy server if the direct peer-to-peer communication fails.
 
 ## Concepts
 
@@ -65,7 +69,7 @@ POSIX environment (Linux or Mac--currently tested with Ubuntu 16.04 and 18.04)
 We recommend that you use a conda environment with
 
 * Python >= 3.7
-* Numpy
+* NumPy
 * Nodejs >=12 (available on conda-forge)
 
 Installation using conda:
@@ -99,7 +103,7 @@ Other more advanced options are available, such as specifying non-default bootst
 
 ### File Transfer
 
-Kachery-p2p can transfer arbitrary files, and also serializes numpy data from memory when used with the python programmatic interface.
+Kachery-p2p can transfer arbitrary files, and also serializes NumPy data from memory when used with the python programmatic interface.
 
 From command line (in a separate terminal):
 
@@ -191,7 +195,7 @@ Environment variables
 
 ## Hosting a bootstrap node
 
-In order for peers to find one another, they need to connect to a commmon bootstrap server. By default, kachery-p2p uses a hard-coded address to a node hosted by us. However, you can host your own bootstrap node.
+In order for peers to find one another, they need to connect to a common bootstrap server. By default, kachery-p2p uses a hard-coded address to a node hosted by us. However, you can host your own bootstrap node.
 
 ```bash
 # Start the daemon on a computer in the cloud with an accessible port
