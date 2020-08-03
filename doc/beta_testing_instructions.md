@@ -4,7 +4,7 @@ Thank you for helping to test the kachery-p2p software!
 
 ## Installation
 
-Please follow the conda installation instructions on the main README document (or the non-conda instructions if you want).
+Please follow the Conda installation instructions on the main README document (or the non-Conda instructions if you prefer).
 
 Open a terminal and verify that you have the following commands available:
 
@@ -27,7 +27,7 @@ kachery-p2p version
 
 By running a daemon on your computer you are creating a node on the kachery-p2p network.
 
-In a new terminal, start the daemon and join the flatiron1 channel:
+In a new terminal (activate the conda environment), start the daemon and join the flatiron1 channel:
 
 ```
 kachery-p2p-start-daemon --channel flatiron1
@@ -39,7 +39,7 @@ If you are able to do so, pleaes keep this daemon open even after you have run t
 
 ## Downloading files
 
-In a new terminal, run:
+In a new terminal (activate the conda environment), run:
 
 ```
 kachery-p2p-load sha1://18330303c3861bb286dabb94dd5f0bb81d04107f/example1.txt --dest /tmp/example1.txt
@@ -85,7 +85,7 @@ a = kp.load_npy('sha1://35fb45d5703ab320e3a0caadad5a2d7f06f3b71b/file_200MB.npy'
 print(a.shape)
 ```
 
-This should take around 1-2 minutes (depending on the speed of your internet connection). The shape of the downloaded array should be `(500, 500, 100)`.
+This should take around 1-2 minutes (depending on the speed of your internet connection). The shape of the downloaded array should be `(500, 500, 100)`. While you wait, you could move on to the next tests in a new terminal.
 
 ## Sharing files
 
@@ -108,7 +108,7 @@ Copy the URI that is printed it will have the form `sha1://.../tmp.txt`
 
 Now anyone with that URI (on the flatiron1 channel) will be able to download that file directly from your computer (or from another computer if it was downloaded elsewhere).
 
-To test that this worked, you will need to install kachery-p2p on a different computer. From the other computer (with a running daemon on the flatiron1 channel) try:
+To test that this worked, you will need to install kachery-p2p on a different computer, and email/slack yourself the URI. From the other computer (with a running daemon on the flatiron1 channel) try:
 
 ```bash
 kachery-p2p-cat sha1://.../tmp.txt

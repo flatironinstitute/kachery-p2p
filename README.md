@@ -66,13 +66,13 @@ A “feed” is a collection of write-only journals (or append-only logs) which 
 
 POSIX environment (Linux or Mac--currently tested with Ubuntu 16.04 and 18.04)
 
-We recommend that you use a conda environment with
+We recommend that you use a Conda environment with
 
 * Python >= 3.7
 * NumPy
 * Nodejs >=12 (available on conda-forge)
 
-Installation using conda:
+Installation using Conda:
 
 ```bash
 export KACHERY_STORAGE_DIR=/desired/file/storage/location
@@ -80,7 +80,7 @@ export KACHERY_STORAGE_DIR=/desired/file/storage/location
 
 conda create --name MYENV python=3.8 numpy
 conda activate MYENV
-conda install -c conda-forge nodejs
+conda install -c conda-forge/label/cf202003 nodejs
 pip install --upgrade kachery_p2p
 ```
 
