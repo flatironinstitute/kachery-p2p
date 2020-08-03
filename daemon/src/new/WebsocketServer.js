@@ -2,15 +2,16 @@ import WebSocket from 'ws';
 import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from '../common/crypto_util.js'
 import { protocolVersion } from './protocolVersion.js';
 import InternalUdpServer from './InternalUdpServer.js';
-import { randomAlphaString } from '../common/util.js';
+import ip from 'ip';
 
 // todo: monitor and clean up closed connections throughout file
 
 class WebsocketServer {
-    constructor({nodeId, keyPair, useUdp=false}) {
+    constructor({nodeId, keyPair, useUdp=false, onListen}) {
         this._nodeId = nodeId;
         this._keyPair = keyPair;
         this._useUdp = useUdp;
+        this._onListen = onListen;
         this._websocketServer = null; // or InternaludpServer
         this._onIncomingConnectionCallbacks = [];
         this._udpPublicEndpointChangedCallbacks = [];
@@ -22,6 +23,9 @@ class WebsocketServer {
         ///////////////////////////////////////////////////////////////////////////////
         if (!this._useUdp) {
             this._websocketServer = new WebSocket.Server({ port });
+            this._websocketServer.on('listening', () => {
+                this._onListen && this._onListen();
+            });
         }
         else {
             this._websocketServer = new InternalUdpServer({ port });
@@ -50,6 +54,12 @@ class WebsocketServer {
     }
     onUdpPublicEndpointChanged(cb) {
         this._udpPublicEndpointChangedCallbacks.push(cb);
+    }
+    listenAddress() {
+        return ip.address();
+    }
+    listenPort() {
+        return this._websocketServer ? this._websocketServer.address().port : null;
     }
     async createOutgoingConnection({address, port, remoteNodeId}) {
         return new Promise((resolve, reject) => {
@@ -133,7 +143,7 @@ class IncomingWebsocketConnection {
                     this.disconnectLater();
                     return;
                 }
-                if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId))) {
+                if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId), {checkTimestamp: true})) {
                     this.sendMessage({type: 'error', error: `Problem verifying signature`});
                     this.disconnectLater();
                     return;
@@ -149,7 +159,7 @@ class IncomingWebsocketConnection {
                 this._webSocket.close();
                 return;
             }
-            if (!verifySignature(body, signature, hexToPublicKey(this._remoteNodeId))) {
+            if (!verifySignature(body, signature, hexToPublicKey(this._remoteNodeId), {checkTimestamp: true})) {
                 this._webSocket.close();
                 return;
             }
@@ -174,7 +184,8 @@ class IncomingWebsocketConnection {
         if (this._disconnecting) return;
         const body = {
             fromNodeId: this._nodeId,
-            message: msg
+            message: msg,
+            timestamp: (new Date()) - 0
         }
         const message = {
             body,
@@ -269,7 +280,7 @@ class OutgoingConnection {
             else {
                 this._remoteNodeId = fromNodeId;
             }            this._
-            if (!verifySignature(body, signature, hexToPublicKey(fromNodeId))) {
+            if (!verifySignature(body, signature, hexToPublicKey(fromNodeId), {checkTimestamp: true})) {
                 console.warn('OutgoingSocketConnection: Problem verifying signature');
                 this.disconnect();
                 return;
@@ -328,12 +339,16 @@ class OutgoingConnection {
             }
             const body = {
                 fromNodeId: this._nodeId,
-                message: msg
+                message: msg,
+                timestamp: (new Date()) - 0
             };
             const message = {
                 body,
                 signature: getSignature(body, this._keyPair)
             };
+            if (!verifySignature(message.body, message.signature, hexToPublicKey(this._nodeId))) {
+                throw Error('Unexpected problem verifying outgoing signature');
+            }
             this._ws.send(JSONStringifyDeterministic(message));
         }
         else {

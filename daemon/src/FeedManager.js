@@ -612,7 +612,8 @@ class Subfeed {
             let body = {
                 message: msg,
                 previousSignature,
-                messageNumber
+                messageNumber,
+                timestamp: (new Date()) - 0
             };
             if (opts.metaData) {
                 body.metaData = opts.metaData;

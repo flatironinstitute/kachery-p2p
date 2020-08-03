@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { getSignature, verifySignature, hexToPublicKey, sha1sum } from '../common/crypto_util.js';
+import { getSignature, verifySignature, hexToPublicKey, sha1sum, JSONStringifyDeterministic } from '../common/crypto_util.js';
 import { sleepMsec, randomAlphaString } from '../common/util.js';
 import { getLocalFileInfo } from '../kachery.js';
 import SmartyNode from './SmartyNode.js';
@@ -11,6 +11,8 @@ import crypto from 'crypto';
 import BootstrapPeerManager from './BootstrapPeerManager.js';
 import RemoteNodeManager from './RemoteNodeManager.js';
 import util from 'util';
+import dgram from 'dgram';
+import { protocolVersion } from './protocolVersion.js';
 
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
@@ -53,8 +55,6 @@ class Node {
         this._remoteNodeManager.setLocalNodeInfo(this._nodeInfo);
         this._remoteNodeManager.onMessage(({fromNodeId, message}) => this._handleMessage({fromNodeId, message}));
         this._remoteNodeManager.setLocalNodeInfo(this._nodeInfo);
-
-        this._websocketServer = this._initializeServer({ type: 'websocket', listenPort: this._nodeInfo.port });
         this._udpServer = this._initializeServer({ type: 'udp', listenPort: this._nodeInfo.udpPort });
         this._udpServer.onUdpPublicEndpointChanged(() => this._handleUdpPublicEndpointChanged());
 
@@ -66,7 +66,11 @@ class Node {
             this._handleRequestFromNode({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived});
         });
 
-        this._start();
+        this._websocketServer = this._initializeServer({ type: 'websocket', listenPort: this._nodeInfo.port, onListen: () => {
+            this._nodeInfo.address = this._nodeInfo.listenAddress || this._websocketServer.listenAddress();
+            this._nodeInfo.port = this._websocketServer.listenPort();
+            this._start();
+        }});
     }
     nodeId() {
         return this._nodeId;
@@ -98,7 +102,8 @@ class Node {
             channelName,
             broadcastMessageId,
             fromNodeId: this._nodeId,
-            message
+            message,
+            timestamp: (new Date()) - 0
         };
         const message2 = {
             type: 'broadcast',
@@ -165,7 +170,8 @@ class Node {
             fromNodeId: this._nodeId,
             toNodeId,
             route,
-            message
+            message,
+            timestamp: (new Date()) - 0
         }
         const message2 = {
             type: 'messageToNode',
@@ -603,7 +609,7 @@ class Node {
     _announceSelfToPeersAndJoinedChannelsNow() {
         const message = {
             type: 'announcing',
-            data: this._createNodeData()
+            nodeData: this._createNodeData()
         };
         for (let channelName in this._channels) {
             this.broadcastMessage({channelName, message});
@@ -842,7 +848,7 @@ class Node {
         reportFinished();
     }
 
-    _initializeServer({ type, listenPort }) {
+    _initializeServer({ type, listenPort, onListen }) {
         this._validateString(type, {choices: ['websocket', 'udp']});
         if (listenPort) {
             this._validateInteger(listenPort);
@@ -850,7 +856,7 @@ class Node {
 
         let X;
         if (type === 'websocket') {
-            X = new WebsocketServer({ nodeId: this._nodeId, keyPair: this._keyPair });
+            X = new WebsocketServer({ nodeId: this._nodeId, keyPair: this._keyPair, onListen });
         }
         else if (type === 'udp') {
             X = new WebsocketServer({ nodeId: this._nodeId, keyPair: this._keyPair, useUdp: true });
@@ -872,9 +878,7 @@ class Node {
             }
         });
 
-        if ((listenPort) || (type === 'udp')) {
-            X.listen(listenPort);
-        }
+        X.listen(listenPort);
 
         return X;
     }
@@ -949,7 +953,7 @@ class Node {
         this._validateChannelName(channelName, {mustBeJoined: true});
 
         const signature = message.signature;
-        if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId))) {
+        if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId), {checkTimestamp: true})) {
             throw new SignatureError({fromNodeId: body.fromNodeId});
         }
         if (fromNodeId !== this._nodeId) {
@@ -977,7 +981,7 @@ class Node {
         this._validateChannelName(channelName, {mustBeJoined: true});
 
         const signature = message.signature;
-        if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId))) {
+        if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId), {checkTimestamp: true})) {
             throw new SignatureError({fromNodeId: body.fromNodeId});
         }
         if (body.toNodeId === this._nodeId) {
@@ -1132,14 +1136,14 @@ class Node {
         // one of two mechanisms to discover nodes and get updated info
         this._validateNodeId(fromNodeId);
         this._validateMessage(message);
-        this._validateSimpleObject(message.data);
-        this._validateString(message.data.signature);
-        this._validateSimpleObject(message.data.body);
-        assert(message.data.body.timestamp, 'Missing timestamp');
-        this._validateSimpleObject(message.data.body.nodeInfo);
-        this._validateNodeInfo(message.data.body.nodeInfo);
-        assert(message.data.body.nodeInfo.nodeId === fromNodeId, 'Mismatch in node id');
-        const data0 = message.data;
+        this._validateSimpleObject(message.nodeData);
+        this._validateString(message.nodeData.signature);
+        this._validateSimpleObject(message.nodeData.body);
+        assert(message.nodeData.body.timestamp, 'Missing timestamp');
+        this._validateSimpleObject(message.nodeData.body.nodeInfo);
+        this._validateNodeInfo(message.nodeData.body.nodeInfo);
+        assert(message.nodeData.body.nodeInfo.nodeId === fromNodeId, 'Mismatch in node id');
+        const data0 = message.nodeData;
         this._remoteNodeManager.setRemoteNodeData(fromNodeId, data0);
     }
     _createNodeData() {
@@ -1166,7 +1170,7 @@ class Node {
         const channelName = message.channelName;
         this._validateChannelName(channelName);
 
-        const data = message.data;
+        const data = message.nodeData;
         this._validateSimpleObject(data);
         this._validateString(data.signature);
         this._validateSimpleObject(data.body);
@@ -1401,7 +1405,7 @@ class Node {
                 const message = {
                     type: 'findChannelNodes',
                     channelName,
-                    data: data0
+                    nodeData: data0
                 }
                 this._remoteNodeManager.sendMessageToAllPeers(message);
             }
@@ -1426,9 +1430,61 @@ class Node {
             await sleepMsec(500);
         }
     }
+    async _startDiscoverLocalNodes() {
+        // to find nodes on the local network
+        const multicastSocket = dgram.createSocket({ type: "udp4", reuseAddr: true });
+        const multicastAddress = '233.0.0.0'; // not sure how to choose this
+        const multicastPort = 21009;
+        multicastSocket.bind(multicastPort);
+        multicastSocket.on("listening", function() {
+            multicastSocket.addMembership(multicastAddress);
+        });
+        multicastSocket.on("message", (message, rinfo) => {
+            let msg  = null;
+            try {
+                msg = JSON.parse(message)
+            }
+            catch(err) {
+            }
+            if ((msg) && (msg.kacheryProtocolVersion == protocolVersion()) && (msg.body) && (msg.signature) && (msg.body.fromNodeId) && (msg.body.fromNodeId !== this._nodeId)) {
+                if (verifySignature(msg.body, msg.signature, hexToPublicKey(msg.body.fromNodeId), {checkTimestamp: true})) {
+                    if ((msg.body.message) && (msg.body.message.type === 'announcing')) {
+                        this._handleAnnouncingMessage({ fromNodeId: msg.body.fromNodeId, message: msg.body.message });
+                    }
+                }
+            }
+        });
+        await sleepMsec(1000);
+        while (true) {
+            if (this._halt) return;
+            const body = {
+                fromNodeId: this._nodeId,
+                message: {
+                    type: 'announcing',
+                    nodeData: this._createNodeData()
+                },
+                timestamp: (new Date()) - 0
+            };
+            const m = {
+                kacheryProtocolVersion: protocolVersion(),
+                body,
+                signature: getSignature(body, this._keyPair)
+            };
+            const mjson = JSONStringifyDeterministic(m);
+            multicastSocket.send(
+                mjson,
+                0,
+                mjson.length,
+                multicastPort,
+                multicastAddress
+            );
+            await sleepMsec(10000);
+        }
+    }
     async _start() {
         this._startDiscoverNodes();
         this._startPrintInfo();
+        this._startDiscoverLocalNodes();
     }
 }
 

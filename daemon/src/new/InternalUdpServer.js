@@ -1,6 +1,7 @@
 import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from '../common/crypto_util.js'
 import dgram from 'dgram';
 import { randomAlphaString, sleepMsec } from '../common/util.js';
+import { timeStamp } from 'console';
 
 class InternalUdpServer {
     constructor(port) {

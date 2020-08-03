@@ -15,7 +15,21 @@ export const getSignature = (obj, keyPair) => {
     }
 }
 
-export const verifySignature = (obj, signature, publicKey) => {
+export const verifySignature = (obj, signature, publicKey, opts) => {
+    opts = opts || {};
+    if (opts.checkTimestamp) {
+        if (!obj.timestamp) {
+            console.log('--- missing timestamp.');
+            return false;
+        }
+        const elapsed = (new Date()) - obj.timestamp;
+        // needs to be less than 30 minutes old
+        const numMinutes = 30;
+        if (elapsed > numMinutes * 60 * 1000) {
+            console.log('--- timestamp too old.');
+            return false;
+        }
+    }
     try {
         return crypto.verify(null, Buffer.from(JSONStringifyDeterministic(obj), 'utf-8'), publicKey, Buffer.from(signature, 'hex'));
     }
