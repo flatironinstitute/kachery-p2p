@@ -413,16 +413,16 @@ export default class ApiServer {
         const {
             feedId, subfeedName
         } = reqData;
-        const rules = await this._daemon.feedManager().getAccessRules({feedId, subfeedName});
-        res.json({ success: true, rules });
+        const accessRules = await this._daemon.feedManager().getAccessRules({feedId, subfeedName});
+        res.json({ success: true, accessRules });
     }
     // /feed/setAccessRules - set access rules for a local writeable subfeed
     async _feedApiSetAccessRules(req, res) {
         const reqData = req.body;
         const {
-            feedId, subfeedName, rules
+            feedId, subfeedName, accessRules
         } = reqData;
-        await this._daemon.feedManager().setAccessRules({feedId, subfeedName, rules});
+        await this._daemon.feedManager().setAccessRules({feedId, subfeedName, accessRules});
         res.json({ success: true });
     }
     // Helper function for returning http request with an error response

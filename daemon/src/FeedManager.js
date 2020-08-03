@@ -5,6 +5,7 @@ import { JSONStringifyDeterministic } from './common/crypto_util.js';
 import { kacheryStorageDir } from './kachery.js';
 import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSignature, hexToPublicKey, hexToPrivateKey, sha1sum } from './common/crypto_util.js'
 import { log } from './common/log.js';
+import { assert } from 'console';
 
 class FeedManager {
     // Manages the local feeds and access to the remote feeds in the p2p network
@@ -168,7 +169,7 @@ class FeedManager {
         }
         return await subfeed.getAccessRules();
     }
-    async setAccessRules({ feedId, subfeedName, rules }) {
+    async setAccessRules({ feedId, subfeedName, accessRules }) {
         // Set the access rules for a local writeable subfeed
         // These determine which remote nodes have permission to submit messages to this subfeed
         // to this subfeed.
@@ -176,7 +177,7 @@ class FeedManager {
         if (!subfeed.isWriteable) {
             throw Error('Cannot set access rules for subfeed that is not writeable')
         }
-        await subfeed.setAccessRules(rules);
+        await subfeed.setAccessRules(accessRules);
     }
     async watchForNewMessages({ subfeedWatches, waitMsec, maxNumMessages=0 }) {
         return new Promise((resolve, reject) => {
@@ -660,12 +661,13 @@ class Subfeed {
     async getAccessRules() {
         return this._accessRules;
     }
-    async setAccessRules(rules) {
+    async setAccessRules(accessRules) {
         if (!this.isWriteable()) {
             throw Error(`Cannot set access rules for not writeable subfeed.`);
         }
-        await writeJsonFile(this._subfeedDir + '/access', rules);
-        this._accessRules = rules;
+        assert(accessRules.rules, 'Missing rules field');
+        await writeJsonFile(this._subfeedDir + '/access', accessRules);
+        this._accessRules = accessRules;
     }
 }
 

@@ -256,7 +256,7 @@ class Subfeed:
         if not x['success']:
             raise Exception(f'Unable to submit messages: {x.get("error")}')
 
-    def set_access_rules(self, rules):
+    def set_access_rules(self, access_rules):
         if not self._is_writeable:
             raise Exception('Cannot set access rules for non-writeable feed')
         port = _api_port()
@@ -264,7 +264,7 @@ class Subfeed:
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
             subfeedName=self._subfeed_name,
-            rules=rules
+            accessRules=access_rules
         ))
         if not x['success']:
             raise Exception('Unable to set access rules.')
@@ -281,37 +281,37 @@ class Subfeed:
         if not x['success']:
             raise Exception('Unable to get access rules.')
         print(x)
-        return x['rules']
+        return x['accessRules']
     
     def grant_write_access(self, *, node_id):
-        rules = self.get_access_rules()
+        access_rules = self.get_access_rules()
         changed = False
         found = False
-        for r in rules['rules']:
+        for r in access_rules['rules']:
             if r.get('nodeId', None) == node_id:
                 if r.get('write', None) is not True:
                     changed = True
                     r['write'] = True
                 found = True
         if not found:
-            rules['rules'].append(dict(
+            access_rules['rules'].append(dict(
                 nodeId=node_id,
                 write=True
             ))
             changed = True
         if changed:
-            self.set_access_rules(rules)
+            self.set_access_rules(access_rules)
     
     def revoke_write_access(self, *, node_id):
-        rules = self.get_access_rules()
+        access_rules = self.get_access_rules()
         changed = False
-        for r in rules['rules']:
+        for r in access_rules['rules']:
             if r.get('nodeId', None) == node_id:
                 if r.get('write', None) is True:
                     changed = True
                     r['write'] = False
         if changed:
-            self.set_access_rules(rules)
+            self.set_access_rules(access_rules)
 
 def create_feed(feed_name=None):
     port = _api_port()

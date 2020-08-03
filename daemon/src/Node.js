@@ -569,6 +569,7 @@ class Node {
     }
 
     _handleRequestFromNode({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
+
         this._validateChannelName(channelName, {mustBeInChannel: true});
         this._validateNodeId(fromNodeId);
         this._validateSimpleObject(requestBody);
@@ -829,6 +830,7 @@ class Node {
         this._validateFunction(reportFinished);
         
         this._validateSimpleObject(requestBody, {fields: {
+            type: {optional: false, type: 'string'},
             feedId: {optional: false, type: 'string'},
             subfeedName: {optional: false, type: 'string'},
             messages: {optional: false}
