@@ -1,7 +1,7 @@
 import fs from 'fs'
 import { sleepMsec } from './common/util.js'
 import { JSONStringifyDeterministic } from './common/crypto_util.js';
-import Node from './new/Node.js';
+import Node from './Node.js';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util.js';
 import FeedManager from './FeedManager.js';
 import { log, initializeLog } from './common/log.js';
