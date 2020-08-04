@@ -8,7 +8,7 @@ Kachery-p2p is a **peer-to-peer, content-addressable file storage and distributi
 
 ## Motivation
 
-Kachery-p2p has advantages for scientific communities that share large datasets. It is often inconvenient (and expensive) for individual labs to host such datasets. The idea of kachery-p2p is to relieve this burden by making it easy to share a data file with a community or individuals by submitting it to the distributed system. The simplest way to share a file is:
+Kachery-p2p has advantages for scientific communities that share large datasets. It is often inconvenient (and expensive) for individual labs to host such datasets. The idea of kachery-p2p is to relieve this burden by making it easy to share a data file with a community or individuals by submitting it to the distributed system. The simplest way to share a snapshot (or copy) of a file is:
 
 ```
 kachery-store /my/large-or-small/file.dat
@@ -32,7 +32,7 @@ This is just the beginning of the capabilities. Because it is meant to power the
 
 ### Why not sftp, rsync, google drive, or just a web server?
 
-With kachery, no central node is required. Anyone on the network can begin sharing data by setting up a channel and encouraging others to subscribe to it. Files can be stored (initially) on the machines where they are generated, and distributed directly without paying for or maintaining a new server. This is especially advantageous when multiple peers are collaborating: everyone can produce data and store it locally, without needing to have a central server as a bottleneck. Servers are expensive, and building a central repository of all files is especially cumbersome when many files are only needed by a subset of the collaborators. The peer-to-peer model gets around both these challenges. Moreover, distributed networks are more resilient to the loss of individual nodes: if the FTP server is down, no one can get the files; but so long as one copy is visible on the peer-to-peer network (someone’s computer), it can still be spread to the parties who need to consume it.
+With kachery, no central node is required. Anyone on the network can begin sharing data by setting up a channel and encouraging others to subscribe to it. Snapshots of files can be stored (initially) on the machines where they are generated, and distributed directly without paying for or maintaining a new server. This is especially advantageous when multiple peers are collaborating: everyone can produce data and store it locally, without needing to have a central server as a bottleneck. Servers are expensive, and building a central repository of all files is especially cumbersome when many files are only needed by a subset of the collaborators. The peer-to-peer model gets around both these challenges. Moreover, distributed networks are more resilient to the loss of individual nodes: if the FTP server is down, no one can get the files; but so long as one copy is visible on the peer-to-peer network (someone’s computer), it can still be spread to the parties who need to consume it.
 
 ### Why not BitTorrent?
 

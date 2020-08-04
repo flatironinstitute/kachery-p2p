@@ -57,7 +57,7 @@ Also verify that this gives you the same output:
 kachery-p2p-cat sha1://18330303c3861bb286dabb94dd5f0bb81d04107f/example1.txt
 ```
 
-Now do something similar in Python (for example use `ipython`):
+Now do something similar in Python (for example use `ipython` which can be installed via `pip install ipython`):
 
 ```python
 import kachery_p2p as kp
@@ -89,7 +89,7 @@ This should take around 1-2 minutes (depending on the speed of your internet con
 
 ## Sharing files
 
-Sharing a file on the kachery-p2p network is as simple as storing the file in your local kachery database (located at `$KACHERY_STORAGE_DIR`).
+Sharing a snapshot of a file on the kachery-p2p network is as simple as storing the file in your local kachery database (located at `$KACHERY_STORAGE_DIR`).
 
 Create a test text file with some unique content
 
@@ -98,7 +98,7 @@ Create a test text file with some unique content
 echo -e "My unique content\nwith multiple lines\n" > tmp.txt
 ```
 
-Then store it locally:
+Then store a copy locally:
 
 ```bash
 kachery-store tmp.txt
@@ -116,7 +116,7 @@ kachery-p2p-cat sha1://.../tmp.txt
 
 Or, if you only have one computer, you could also email your link to the authors and we can verify that it worked.
 
-You can also store things directly from Python.
+You can also store snapshots of items directly from Python.
 
 ```python
 import kachery_p2p as kp
