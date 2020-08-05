@@ -67,8 +67,6 @@ class Node {
         });
 
         this._websocketServer = this._initializeServer({ type: 'websocket', listenPort: this._nodeInfo.port, onListen: () => {
-            this._nodeInfo.address = this._nodeInfo.listenAddress || this._websocketServer.listenAddress();
-            this._nodeInfo.port = this._websocketServer.listenPort();
             this._start();
         }});
     }
@@ -631,6 +629,7 @@ class Node {
             const hasUdpIn = this._remoteNodeManager.peerHasConnectionOfType(nodeId, {type: 'udp', direction: 'incoming'});
             const hasUdpOut = this._remoteNodeManager.peerHasConnectionOfType(nodeId, {type: 'udp', direction: 'outgoing'});
             const bootstrap = this._remoteNodeManager.peerIsBootstrap(nodeId);
+            const isLocal = this._remoteNodeManager.remoteNodeHasLocalAddress(nodeId);
             const hasUdpAddress = (ni.udpAddress && ni.udpPort);
 
             if (bootstrap) {
@@ -649,6 +648,7 @@ class Node {
             if (hasUdpIn) items.push('udp-in');
             if (hasUdpOut) items.push('udp-out');
             if (hasRoute) items.push('route');
+            if (isLocal) items.push('local');
             return `Node${hasUdpAddress ? '*' : ''} ${nodeId.slice(0, 6)}... ${ni.label || ''}: ${ni.address || ""}:${ni.port || ""} ${items.join(' ')}`;
         }
 
@@ -1147,6 +1147,9 @@ class Node {
         assert(message.nodeData.body.nodeInfo.nodeId === fromNodeId, 'Mismatch in node id');
         const data0 = message.nodeData;
         this._remoteNodeManager.setRemoteNodeData(fromNodeId, data0);
+        if ((message.localAddress) && (message.localPort)) {
+            this._remoteNodeManager.setRemoteNodeLocalAddress(fromNodeId, {localAddress: message.localAddress, localPort: message.localPort});
+        }
     }
     _createNodeData() {
         // This info gets advertized on the network
@@ -1463,7 +1466,9 @@ class Node {
                 fromNodeId: this._nodeId,
                 message: {
                     type: 'announcing',
-                    nodeData: this._createNodeData()
+                    nodeData: this._createNodeData(),
+                    localAddress: this._websocketServer.listenAddress(),
+                    localPort: this._websocketServer.listenPort()
                 },
                 timestamp: (new Date()) - 0
             };

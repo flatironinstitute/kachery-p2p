@@ -67,7 +67,7 @@ class RemoteNodeManager {
     peerIds() {
         const ret = [];
         for (let nodeId in this._remoteNodes) {
-            if (this._remoteNodes[nodeId].hasConnection()) {
+            if ((this._remoteNodes[nodeId].hasConnection()) && (!this._remoteNodes[nodeId].isExpired())) {
                 ret.push(nodeId);
             }
         }
@@ -88,13 +88,17 @@ class RemoteNodeManager {
         if (!(nodeId in this._remoteNodes)) return null;
         return this._remoteNodes[nodeId].remoteNodeData();
     }
+    remoteNodeHasLocalAddress(nodeId) {
+        if (!(nodeId in this._remoteNodes)) return false;
+        return ((this._remoteNodes[nodeId].remoteNodeLocalAddress()) && (this._remoteNodes[nodeId].remoteNodeLocalPort())) ? true : false;
+    }
     remoteNodeIds() {
         return Object.keys(this._remoteNodes);
     }
     remoteNodeIdsForChannel(channelName) {
         this._node._validateChannelName(channelName);
         const nodeIds = this.remoteNodeIds();
-        return nodeIds.filter(nodeId => (this.remoteNodeInChannel(nodeId, channelName)));
+        return nodeIds.filter(nodeId => ((this.remoteNodeInChannel(nodeId, channelName)) && (!this._remoteNodes[nodeId].isExpired())));
     }
     remoteNodeInAJoinedChannel(nodeId) {
         this._node._validateNodeId(nodeId);
@@ -191,6 +195,14 @@ class RemoteNodeManager {
         this._createRemoteNodeIfNeeded(nodeId);
         this._remoteNodes[nodeId].setRemoteNodeData(data);
     }
+    setRemoteNodeLocalAddress(nodeId, {localAddress, localPort}) {
+        this._node._validateNodeId(nodeId);
+        this._node._validateString(localAddress);
+        this._node._validateInteger(localPort);
+        if (nodeId in this._remoteNodes) {
+            this._remoteNodes[nodeId].setRemoteNodeLocalAddress({localAddress, localPort});
+        }
+    }
     _validateRemoteNodeData(data) {
         this._node._validateSimpleObject(data);
         this._node._validateString(data.signature);
@@ -212,8 +224,8 @@ class RemoteNodeManager {
             })
             X.onExpired(() => {
                 if (this._remoteNodes[remoteNodeId] === X) {
-                    X.halt();
                     delete this._remoteNodes[remoteNodeId];
+                    X.halt();
                 }
             });
             X.setLocalNodeInfo(this._localNodeInfo);

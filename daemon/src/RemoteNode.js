@@ -1,6 +1,7 @@
 import { sleepMsec, randomAlphaString } from "./common//util.js";
 import assert from 'assert';
 import { sha1sum } from "./common//crypto_util.js";
+import { timeStamp } from "console";
 
 class RemoteNode {
     constructor({ remoteNodeManager, remoteNodeId }) {
@@ -15,6 +16,9 @@ class RemoteNode {
         this._remoteNodeData = null;
         this._remoteNodeDataTimestamp = null;
         this._remoteNodeDataInternalTimestamp = new Date();
+
+        this._remoteNodeLocalAddress = null;
+        this._remoteNodeLocalPort = null;
 
         // todo: figure out when to set these
         this._bootstrapPeerInfo = null;
@@ -113,6 +117,16 @@ class RemoteNode {
     }
     isBootstrap() {
         return this._bootstrapPeerInfo ? true : false;
+    }
+    remoteNodeLocalAddress() {
+        return this._remoteNodeLocalAddress;
+    }
+    remoteNodeLocalPort() {
+        return this._remoteNodeLocalPort;
+    }
+    isExpired() {
+        const elapsed = (new Date()) - this._remoteNodeDataInternalTimestamp;
+        return (elapsed > 60000);
     }
     onExpired(cb) {
         this._onExpiredCallbacks.push(cb);
@@ -267,10 +281,31 @@ class RemoteNode {
             doSet = true;
         }
         if (doSet) {
+            const oldRemoteNodeData = cloneObject(this._remoteNodeData);
             this._remoteNodeData = data;
             this._remoteNodeDataInternalTimestamp = new Date();
             this._tryOutgoingConnectionIntervalMsec = {websocket: 1000, udp: 1000}; // trigger connection attempt soon
+            if (oldRemoteNodeData) {
+                if ((this._remoteNodeData.udpAddress !== oldRemoteNodeData.udpAddress) || (this._remoteNodeData.udpPort !== oldRemoteNodeData.udpPort)) {
+                    if (this._outgoingUdpConnection) {
+                        // disconnect because we have new connetion information
+                        this._outgoingUdpConnection.disconnect();
+                    }                    
+                }
+                if ((this._remoteNodeData.address !== oldRemoteNodeData.address) || (this._remoteNodeData.port !== oldRemoteNodeData.port)) {
+                    if (this._outgoingWebsocketConnection) {
+                        // disconnect because we have new connetion information
+                        this._outgoingWebsocketConnection.disconnect();
+                    }                    
+                }
+            }
         }
+    }
+    setRemoteNodeLocalAddress({localAddress, localPort}) {
+        this._node._validateString(localAddress);
+        this._node._validateInteger(localPort);
+        this._remoteNodeLocalAddress = localAddress;
+        this._remoteNodeLocalPort = localPort;
     }
     setLocalNodeInfo(nodeInfo) {
         this._node._validateNodeInfo(nodeInfo);
@@ -306,8 +341,7 @@ class RemoteNode {
         while (true) {
             await sleepMsec(delayMsec);
             if (this._halt) return;
-            const elapsed = (new Date()) - this._remoteNodeDataInternalTimestamp;
-            if (elapsed > 60000) {
+            if (this.isExpired()) {
                 this._onExpiredCallbacks.forEach(cb => cb());
             }
         }
@@ -318,8 +352,8 @@ class RemoteNode {
         let server, address, port;
         if (type === 'websocket') {
             server = this._websocketServer;
-            address = remoteNodeInfo.address;
-            port = remoteNodeInfo.port;
+            address = remoteNodeInfo.address || this._remoteNodeLocalAddress;
+            port = remoteNodeInfo.port || this._remoteNodeLocalPort;
         }
         else if (type === 'udp') {
             server = this._udpServer;
@@ -378,7 +412,7 @@ class RemoteNode {
                 let okayToTry = false;
                 if ((remoteNodeInfo) && (this._localNodeInfo)) {
                     if (type === 'websocket') {
-                        okayToTry = ((remoteNodeInfo.address) && (remoteNodeInfo.port));
+                        okayToTry = ((remoteNodeInfo.address || this._remoteNodeLocalAddress) && (remoteNodeInfo.port || this._remoteNodeLocalPort));
                         const elapsedFromDisconnect = (new Date()) - this._outgoingWebsocketDisconnectTimestamp;
                         if (elapsedFromDisconnect < 10000) {
                             // too soon from disconnect
@@ -449,7 +483,7 @@ class RemoteNode {
                 const elapsed = (new Date()) - x.timestamp;
                 if (elapsed > 5000) {
                     if (x.numTries >=4 ) {
-                        console.warn('Did not get confirmation for message after ${x.numTries} tries. Disconnecting peer.');
+                        console.warn(`Did not get confirmation for message after ${x.numTries} tries. Disconnecting peer.`);
                         this.disconnect();
                         return;
                     }
