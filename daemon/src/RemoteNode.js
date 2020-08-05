@@ -107,14 +107,6 @@ class RemoteNode {
     hasConnection() {
         return this.hasIncomingConnection() || this.hasOutgoingConnection();
     }
-    inAJoinedChannel() {
-        const channelSha1s = this.remoteNodeChannelSha1s();
-        if (!channelSha1s) return false;
-        for (let channelName in this._node._channels) {
-            if (sha1sum(channelName) in channelSha1s) return true;
-        }
-        return false;
-    }
     isBootstrap() {
         return this._bootstrapPeerInfo ? true : false;
     }
@@ -140,10 +132,6 @@ class RemoteNode {
     remoteNodeInfo() {
         if (!this._remoteNodeData) return null;
         return cloneObject(this._remoteNodeData.body.nodeInfo);
-    }
-    remoteNodeChannelSha1s() {
-        if (!this._remoteNodeData) return null;
-        return cloneObject(this._remoteNodeData.body.channelSha1s);
     }
     sendMessage(message) {
         this._node._validateMessage(message);
@@ -372,19 +360,19 @@ class RemoteNode {
         }
         catch (err) {
             if (!this._outgoingConnectionErrorReported[type]) {
-                console.warn(`Problem creating outgoing ${type} connection to ${remoteNodeId.slice(0, 6)} ${address}:${port}. ${err.message}`);
+                // console.warn(`Problem creating outgoing ${type} connection to ${remoteNodeId.slice(0, 6)} ${address}:${port}. ${err.message}`);
                 this._outgoingConnectionErrorReported[type] = true;
             }
             return false;
         }
         if (!C) {
             if (!this._outgoingConnectionErrorReported[type]) {
-                console.warn(`Unable to create outgoing ${type} connection to ${remoteNodeId.slice(0, 6)} ${address}:${port}.`);
+                // console.warn(`Unable to create outgoing ${type} connection to ${remoteNodeId.slice(0, 6)} ${address}:${port}.`);
                 this._outgoingConnectionErrorReported[type] = true;
             }
             return false;
         }
-        console.info(`Created outgoing ${type} connection to ${remoteNodeId.slice(0, 6)} ${address}:${port}.`);
+        // console.info(`Created outgoing ${type} connection to ${remoteNodeId.slice(0, 6)} ${address}:${port}.`);
         this._outgoingConnectionErrorReported[type] = false;
         this.setOutgoingConnection({type, connection: C});
         return true;

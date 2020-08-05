@@ -361,7 +361,7 @@ class Node {
         this.onProviding((x) => { // todo: fix this memory leak
             if (isFinished) return;
             this._validateSimpleObject(x);
-            this._validateChannelName(x.channelName);
+            this._validateChannelName(x.channelName, {mustBeJoined: true});
             this._validateNodeId(x.nodeId);
             this._validateSimpleObject(x.fileKey);
             if (x.fileInfo) {
@@ -596,8 +596,8 @@ class Node {
     _handleUdpPublicEndpointChanged() {
         const remote = this._udpServer.udpPublicEndpoint();
         if (remote) {
-            console.info('Setting udp public endpoint', remote);
-            if ((remote.address !== this._nodeInfo.udpAddress) || (remote.port !== this._nodeInfo.port)) {
+            if ((remote.address !== this._nodeInfo.udpAddress) || (remote.port !== this._nodeInfo.udpPort)) {
+                console.info('Setting udp public endpoint', remote);
                 this._nodeInfo.udpAddress = remote.address || null;
                 this._nodeInfo.udpPort = remote.port || null;
                 this._remoteNodeManager.setLocalNodeInfo(this._nodeInfo);
@@ -652,29 +652,52 @@ class Node {
             return `Node${hasUdpAddress ? '*' : ''} ${nodeId.slice(0, 6)}... ${ni.label || ''}: ${ni.address || ""}:${ni.port || ""} ${items.join(' ')}`;
         }
 
+        const sortByConnectivity = (nodeIds) => {
+            const mm = this._remoteNodeManager;
+            return nodeIds.sort((n1, n2) => {
+                const i1 = mm.peerIsBootstrap(n1) * 1000 + mm.peerHasConnectionOfType(n1, {type: 'websocket'}) * 100 + mm.peerHasConnectionOfType(n1, {type: 'udp'}) * 10;
+                const i2 = mm.peerIsBootstrap(n2) * 1000 + mm.peerHasConnectionOfType(n2, {type: 'websocket'}) * 100 + mm.peerHasConnectionOfType(n2, {type: 'udp'}) * 10;
+                return (i1 < i2) ? 1 : ((i1 > i2) ? -1 : 0);
+            })
+        }
+
         const lines = [];
+        lines.push(`PROTOCOL VERSION: ${protocolVersion()}`)
+        lines.push('');
         const nodesIncluded = {};
         const selfHasUdpAddress = ((this._nodeInfo.udpAddress) && (this._nodeInfo.udpPort));
+        const maxToDisplay = 12;
         for (let channelName in this._channels) {
-            lines.push(`CHANNEL: ${channelName}`);
+            const nodeIdsInChannel = sortByConnectivity(this.getNodeIdsForChannel(channelName));
+            lines.push(`CHANNEL: ${channelName} (${nodeIdsInChannel.length + 1} ${(nodeIdsInChannel.length + 1 === 1) ? "node": "nodes"})`);
             lines.push(`self${selfHasUdpAddress ? '*' : ''} ${this._nodeId.slice(0, 6)}`);
-            const nodeIdsInChannel = this.getNodeIdsForChannel(channelName);
-            for (let nodeId of nodeIdsInChannel) {
+            for (let ii = 0; ii < nodeIdsInChannel.length; ii ++) {
+                const nodeId = nodeIdsInChannel[ii];
                 nodesIncluded[nodeId] = true;
-                const nodeInfo = this._remoteNodeManager.remoteNodeInfo(nodeId);
-                lines.push(await makeNodeLine({channelName, nodeId, nodeInfo}));
+                if (ii < maxToDisplay) {
+                    const nodeInfo = this._remoteNodeManager.remoteNodeInfo(nodeId);
+                    lines.push(await makeNodeLine({channelName, nodeId, nodeInfo}));
+                }
+            }
+            if (nodeIdsInChannel.length > maxToDisplay) {
+                lines.push(`... and ${nodeIdsInChannel.length - maxToDisplay} others`)
             }
             lines.push('');
         }
         lines.push('OTHER');
         lines.push(`self${selfHasUdpAddress ? '*' : ''} ${this._nodeId.slice(0, 6)}`);
-        const peerIds = this._remoteNodeManager.peerIds();
-        for (let nodeId of peerIds) {
-            if (!nodesIncluded[nodeId]) {
+        const otherPeerIds = sortByConnectivity(this._remoteNodeManager.peerIds().filter(nodeId => (!nodesIncluded[nodeId])));
+        for (let ii = 0; ii < otherPeerIds.length; ii ++) {
+            const nodeId = otherPeerIds[ii];
+            if (ii < maxToDisplay) {
                 const nodeInfo = this._remoteNodeManager.remoteNodeInfo(nodeId);
                 lines.push(await makeNodeLine({channelName: null, nodeId, nodeInfo}));
             }
         }
+        if (otherPeerIds.length > maxToDisplay) {
+            lines.push(`... and ${otherPeerIds.length - maxToDisplay} others`)
+        }
+        
         return lines.join('\n');
     }
 
@@ -897,11 +920,11 @@ class Node {
         else if (message.type === 'cancelRequestToNode') {
             this._handleCancelRequestToNode({ fromNodeId, message });
         }
-        else if (message.type === 'findChannelNodes') {
-            this._handleFindChannelNodes({ fromNodeId, message });
+        else if (message.type === 'findChannelPeers') {
+            this._handleFindChannelPeers({ fromNodeId, message });
         }
-        else if (message.type === 'findChannelNodesResponse') {
-            this._handleFindChannelNodesResponse({ fromNodeId, message });
+        else if (message.type === 'findChannelPeersResponse') {
+            this._handleFindChannelPeersResponse({ fromNodeId, message });
         }
         else if (message.type === 'messageToNode') {
             this._handleMessageToNode({ fromNodeId, message });
@@ -1145,21 +1168,30 @@ class Node {
         this._validateSimpleObject(message.nodeData.body.nodeInfo);
         this._validateNodeInfo(message.nodeData.body.nodeInfo);
         assert(message.nodeData.body.nodeInfo.nodeId === fromNodeId, 'Mismatch in node id');
+        const transformedChannelNames = message.nodeData.body.transformedChannelNames;
+        assert(Array.isArray(transformedChannelNames));
+
         const data0 = message.nodeData;
         this._remoteNodeManager.setRemoteNodeData(fromNodeId, data0);
         if ((message.localAddress) && (message.localPort)) {
             this._remoteNodeManager.setRemoteNodeLocalAddress(fromNodeId, {localAddress: message.localAddress, localPort: message.localPort});
         }
+        for (let transformedChannelName of transformedChannelNames) {
+            for (let channelName in this._channels) {
+                if (this._gettransformedChannelNameForAnnounce({channelName, nodeId: fromNodeId}) === transformedChannelName) {
+                    const transformedChannelName2 = this._gettransformedChannelNameForDiscovery({channelName, nodeId: this._nodeId});
+                    this._remoteNodeManager.associateNodeWithTransformedChannelName({nodeId: fromNodeId, transformedChannelName: transformedChannelName2});
+                }
+            }
+        }
     }
     _createNodeData() {
         // This info gets advertized on the network
-        const channelSha1s = {};
-        for (let channelName in this._channels) {
-            channelSha1s[sha1sum(channelName)] = true;
-        }
+        const channelNames = Object.keys(this._channels);
+        const transformedChannelNames = channelNames.map(channelName => (this._gettransformedChannelNameForAnnounce({channelName, nodeId: this._nodeId})));
         const body = {
-            channelSha1s, // use hashes in order not to publicize private channel names as this info gets advertized on the network
             nodeInfo: this.nodeInfo(),
+            transformedChannelNames,
             timestamp: (new Date()) - 0 // this is how nodes know what is the most up-to-date info. It's okay if the clocks are out of sync somehow.
         };
         return {
@@ -1167,13 +1199,12 @@ class Node {
             signature: getSignature(body, this._keyPair)
         };
     }
-    _handleFindChannelNodes({ fromNodeId, message }) {
-        // This system allows us to trust that the node info is coming from the node itself
+    _handleFindChannelPeers({ fromNodeId, message }) {
         this._validateNodeId(fromNodeId);
         this._validateMessage(message);
 
-        const channelName = message.channelName;
-        this._validateChannelName(channelName);
+        const transformedChannelName = message.transformedChannelName;
+        this._validateString(transformedChannelName);
 
         const data = message.nodeData;
         this._validateSimpleObject(data);
@@ -1189,10 +1220,11 @@ class Node {
         }
         
         if (!this._remoteNodeManager.isPeer(fromNodeId)) {
-            throw new Error('findChannelNodes must come from peer.');
+            throw new Error('findChannelPeers must come from peer.');
         }
         this._remoteNodeManager.setRemoteNodeData(fromNodeId, data);
-        const nodeIds = this._remoteNodeManager.remoteNodeIdsForChannel(channelName);
+        this._remoteNodeManager.associateNodeWithTransformedChannelName({nodeId: fromNodeId, transformedChannelName});
+        const nodeIds = this._remoteNodeManager.getNodeIdsForTransformedChannelName(transformedChannelName);
         const nodes = {};
         for (let nodeId of nodeIds) {
             if (nodeId !== fromNodeId) {
@@ -1202,44 +1234,45 @@ class Node {
                 }
             }
         }
-        const selfData = this._createNodeData();
-        if (channelName in this._channels) {
-            // report self
-            nodes[this._nodeId] = selfData;
+        for (let channelName in this._channels) {
+            if (transformedChannelName === this._gettransformedChannelNameForDiscovery({channelName, nodeId: this._nodeId})) {
+                // report self
+                const selfData = this._createNodeData();
+                nodes[this._nodeId] = selfData;
+            }
         }
         if (Object.keys(nodes).length > 0) {
             const responseMessage = {
-                type: 'findChannelNodesResponse',
-                channelName,
+                type: 'findChannelPeersResponse',
+                transformedChannelName,
                 nodes
             };
             this._remoteNodeManager.sendMessageDirectlyToPeer(fromNodeId, responseMessage);
         }
     }
-    _handleFindChannelNodesResponse({ fromNodeId, message }) {
+    _handleFindChannelPeersResponse({ fromNodeId, message }) {
         // one of two mechanisms to discover nodes and get updated info
         this._validateNodeId(fromNodeId);
         this._validateMessage(message);
 
-        const channelName = message.channelName;
-        const nodes = message.nodes;
-
-        this._validateChannelName(channelName, {mustBeJoined: true});
-        this._validateSimpleObject(nodes);
-
-        for (let nodeId in nodes) {
-            this._validateNodeId(nodeId);
-            const data0 = nodes[nodeId];
-            this._remoteNodeManager.setRemoteNodeData(nodeId, data0);
+        // this response should only come from a bootstrap peer.
+        for (let bpm of this._bootstrapPeerManagers) {
+            if (bpm.peerId() === fromNodeId) {
+                bpm.handleFindChannelPeersResponse(message);
+            }
         }
+    }
+    _gettransformedChannelNameForDiscovery({channelName, nodeId}) {
+        return sha1sum(`discovery:${channelName}:${nodeId}`);
+    }
+    _gettransformedChannelNameForAnnounce({channelName, nodeId}) {
+        return sha1sum(`announce:${channelName}:${nodeId}`);
     }
     _nodeIsInOneOfOurChannels(nodeId) {
         this._validateNodeId(nodeId);
-        const nodeData = this._remoteNodeManager.remoteNodeData(nodeId);
-        if (!nodeData) return false;
-        const nodeChannelSha1s = nodeData.body.channelSha1s;
         for (let channelName in this._channels) {
-            if (sha1sum(channelName) in nodeChannelSha1s) {
+            const ids = this.getNodeIdsForChannel(channelName);
+            if (ids.includes(nodeId)) {
                 return true;
             }
         }
@@ -1399,27 +1432,27 @@ class Node {
     }
 
     
-    async _startDiscoverNodes() {
-        // start aggressively and then slow down
-        let delayMsec = 1000;
-        while (true) {
-            await sleepMsec(delayMsec);
-            if (this._halt) return;
-            const data0 = this._createNodeData();
-            for (let channelName in this._channels) {
-                const message = {
-                    type: 'findChannelNodes',
-                    channelName,
-                    nodeData: data0
-                }
-                this._remoteNodeManager.sendMessageToAllPeers(message);
-            }
-            delayMsec *= 2;
-            if (delayMsec >= 20000) {
-                delayMsec = 20000;
-            }
-        }
-    }
+    // async _startDiscoverNodes() {
+    //     // start aggressively and then slow down
+    //     let delayMsec = 1000;
+    //     while (true) {
+    //         await sleepMsec(delayMsec);
+    //         if (this._halt) return;
+    //         const data0 = this._createNodeData();
+    //         for (let channelName in this._channels) {
+    //             const message = {
+    //                 type: 'findChannelNodes',
+    //                 channelName,
+    //                 nodeData: data0
+    //             }
+    //             this._remoteNodeManager.sendMessageToAllPeers(message);
+    //         }
+    //         delayMsec *= 2;
+    //         if (delayMsec >= 20000) {
+    //             delayMsec = 20000;
+    //         }
+    //     }
+    // }
     async _startPrintInfo() {
         let lastInfoText = '';
         while (true) {
@@ -1489,7 +1522,7 @@ class Node {
         }
     }
     async _start() {
-        this._startDiscoverNodes();
+        // this._startDiscoverNodes();
         this._startPrintInfo();
         this._startDiscoverLocalNodes();
     }
