@@ -51,7 +51,6 @@ class Daemon {
                     return true;
                 });
         }
-        console.log(bootstrapInfos);
 
         for (let bpi of bootstrapInfos) {
             this._node.addBootstrapPeer({address: bpi.address, port: bpi.port});

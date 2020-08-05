@@ -350,12 +350,23 @@ class Node {
             onFinished: cb => {onFinishedCallbacks.push(cb)},
             cancel: handleCancel
         }
+        let transformedFileKey;
+        if (fileKey.sha1) {
+            transformedFileKey = {
+                sha1Head: fileKey.sha1.slice(0, 10),
+                transformNodeId: this._nodeId,
+                transformedSha1: sha1sum(this._nodeId + fileKey.sha1)
+            };
+        }
+        else {
+            transformedFileKey = fileKey;
+        }
         this.broadcastMessage({
             channelName,
             message: {
                 type: 'seeking',
                 channelName,
-                fileKey
+                fileKey: transformedFileKey
             }
         });
         this.onProviding((x) => { // todo: fix this memory leak
@@ -367,7 +378,7 @@ class Node {
             if (x.fileInfo) {
                 this._validateSimpleObject(x.fileInfo);
             }
-            if ((x.channelName === channelName) && (fileKeysMatch(x.fileKey, fileKey))) {
+            if ((x.channelName === channelName) && (fileKeysMatch(x.fileKey, transformedFileKey))) {
                 const result = {
                     channel: x.channelName,
                     nodeId: x.nodeId,
@@ -1114,7 +1125,11 @@ class Node {
         const channelName = message.channelName;
         this._validateSimpleObject(fileKey);
         this._validateChannelName(channelName, {mustBeJoined: true});
-        if (fileKey.sha1) {
+        if (fileKey.transformedSha1) {
+            // this is important
+            assert(fileKey.transformNodeId === fromNodeId);
+        }
+        if ((fileKey.sha1) || (fileKey.transformedSha1)) {
             const fileInfo = await getLocalFileInfo({ fileKey });
             if (fileInfo) {
                 if ('path' in fileInfo)
@@ -1575,6 +1590,9 @@ class InvalidNodeInfoError extends Error {
 const fileKeysMatch = (k1, k2) => {
     if (k1.sha1) {
         return k1.sha1 === k2.sha1;
+    }
+    else if (k1.transformedSha1) {
+        return k1.transformedSha1 === k2.transformedSha1;
     }
     else if (k1.type === 'liveFeed') {
         return ((k1.type === k2.type) && (k1.feedId === k2.feedId));
