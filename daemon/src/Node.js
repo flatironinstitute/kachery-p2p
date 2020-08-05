@@ -358,6 +358,14 @@ class Node {
                 transformedSha1: sha1sum(this._nodeId + fileKey.sha1)
             };
         }
+        else if (fileKey.feedId) {
+            transformedFileKey = {
+                type: fileKey.type,
+                feedIdHead: fileKey.feedId.slice(0, 10),
+                transformNodeId: this._nodeId,
+                transformedFeedId: sha1sum(this._nodeId + fileKey.feedId)
+            };
+        }
         else {
             transformedFileKey = fileKey;
         }
@@ -1143,9 +1151,22 @@ class Node {
                 this.sendMessageToNode({ channelName, toNodeId: fromNodeId, message: message2 });
             }
         }
-        else if (fileKey.feedId) {
-            this._validateString(fileKey.feedId);
-            if (await this._feedManager.hasWriteableFeed({ feedId: fileKey.feedId })) {
+        else if ((fileKey.feedId) || (fileKey.transformedFeedId)) {
+            this._validateString(fileKey.feedId || fileKey.transformedFeedId);
+            let feedId;
+            if (fileKey.feedId) {
+                feedId = fileKey.feedId
+            }
+            else {
+                assert(fileKey.transformedFeedId)
+                assert(fileKey.transformNodeId);
+                assert(fileKey.feedIdHead);
+                feedId = await this._feedManager.findFeedIdFromTransformedFeedId({ transformedFeedId: fileKey.transformedFeedId, transformNodeId: fileKey.transformNodeId, feedIdHead: fileKey.feedIdHead });
+                if (!feedId) {
+                    return;
+                }
+            }
+            if (await this._feedManager.hasWriteableFeed({ feedId })) {
                 const message2 = {
                     type: 'providing',
                     channelName,
@@ -1595,7 +1616,15 @@ const fileKeysMatch = (k1, k2) => {
         return k1.transformedSha1 === k2.transformedSha1;
     }
     else if (k1.type === 'liveFeed') {
-        return ((k1.type === k2.type) && (k1.feedId === k2.feedId));
+        if (k1.feedId) {
+            return ((k1.type === k2.type) && (k1.feedId === k2.feedId));
+        }
+        else if (k1.transformedFeedId) {
+            return ((k1.type === k2.type) && (k1.transformedFeedId === k2.transformedFeedId));
+        }
+        else {
+            return false;
+        }
     }
     else {
         return false;

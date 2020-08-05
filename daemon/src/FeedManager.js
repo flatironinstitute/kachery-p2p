@@ -67,6 +67,24 @@ class FeedManager {
         }
         return feedId;
     }
+    async findFeedIdFromTransformedFeedId({ transformedFeedId, transformNodeId, feedIdHead }) {
+        const path = _feedParentDirectory(feedIdHead);
+        let names;
+        try {
+            names = await fs.promises.readdir(path);
+        }
+        catch(err) {
+            return null;
+        }
+        for (let name of names) {
+            if (name.startsWith(feedIdHead)) {
+                if (sha1sum(transformNodeId + name) === transformedFeedId) {
+                    return name;
+                }
+            }
+        }
+        return null;
+    }
     async hasWriteableFeed({ feedId }) {
         // Check whether this node has a writeable feed.
         // We do this by ensuring that we have the associated private key and that the feed directory exists
@@ -715,8 +733,12 @@ const _createFeedDirectoryIfNeeded = async (feedId) => {
     }
 }
 
+const _feedParentDirectory = (feedId) => {
+    return kacheryStorageDir() + `/feeds/${feedId[0]}${feedId[1]}/${feedId[2]}${feedId[3]}/${feedId[4]}${feedId[5]}`;
+}
+
 const _feedDirectory = (feedId) => {
-    return kacheryStorageDir() + `/feeds/${feedId[0]}${feedId[1]}/${feedId[2]}${feedId[3]}/${feedId[4]}${feedId[5]}/${feedId}`;
+    return `${_feedParentDirectory(feedId)}/${feedId}`;
 }
 
 const _subfeedHash = (subfeedName) => {
