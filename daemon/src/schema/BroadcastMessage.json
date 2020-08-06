@@ -1,0 +1,22 @@
+{
+    "$id": "/BroadcastMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "broadcast"},
+        "body": {
+            "type": "object",
+            "properties": {
+                "channelName": {"$ref": "/ChannelName"},
+                "broadcastMessageId": {"$ref": "/MessageId"},
+                "fromNodeId": {"$ref": "/NodeId"},
+                "message": {"$ref": "/NodeToNodeMessage"},
+                "timestamp": {"$ref": "/Timestamp"}
+            },
+            "required": ["channelName", "broadcastMessageId", "fromNodeId", "message", "timestamp"],
+            "additionalProperties": false
+        },
+        "signature": {"$ref": "/Signature"}
+    },
+    "required": ["type", "body", "signature"],
+    "additionalProperties": false
+}

@@ -1,0 +1,11 @@
+{
+    "$id": "/RequestToNode",
+    "type": "object",
+    "properties": {
+        "channelName": {"$ref": "/ChannelName"},
+        "requestId": {"$ref": "/MessageId"},
+        "requestBody": {"$ref": "/RequestBody"} // todo
+    },
+    "required": ["channelName", "requestId", "requestBody"],
+    "additionalProperties": false
+}

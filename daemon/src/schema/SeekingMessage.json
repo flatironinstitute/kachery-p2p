@@ -1,0 +1,11 @@
+{
+    "$id": "/SeekingMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "seeking"},
+        "channelName": {"$ref": "/ChannelName"},
+        "fileKey": {"$ref": "/FileKey"}
+    },
+    "required": ["type", "channelName", "fileKey"],
+    "additionalProperties": false
+}

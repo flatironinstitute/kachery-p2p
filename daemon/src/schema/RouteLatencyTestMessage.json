@@ -1,0 +1,16 @@
+{
+    "$id": "/RouteLatencyTestMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "routeLatencyTest"},
+        "channelName": {"$ref": "/ChannelName"},
+        "toNodeId": {"$ref": "/NodeId"},
+        "testData": {"type": "string"},
+        "avoid": {
+            "type": "array",
+            "items": {"$ref": "/NodeId"}
+        }
+    },
+    "required": ["type", "channelName", "toNodeId", "testData", "avoid"],
+    "additionalProperties": false
+}

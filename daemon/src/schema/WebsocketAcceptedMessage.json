@@ -1,0 +1,9 @@
+{
+    "$id": "/WebsocketAcceptedMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "accepted"}
+    },
+    "required": ["type"],
+    "additionalProperties": false
+}

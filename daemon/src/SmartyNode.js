@@ -58,7 +58,7 @@ class SmartyNode {
                 channelName,
                 toNodeId,
                 testData,
-                avoid: {[this._node.nodeId()]: true}
+                avoid: [this._node.nodeId()]
             };
             const timer = new Date();
             const req = this._node.makeRequestToNode({
@@ -134,7 +134,7 @@ class SmartyNode {
         this._node._validateSimpleObject(requestBody);
         this._node._validateNodeId(requestBody.toNodeId);
         this._node._validateSimpleObject(requestBody.testData);
-        this._node._validateSimpleObject(requestBody.avoid);
+        assert(requestBody.avoid);
         const {toNodeId, testData, avoid} = requestBody;
         if (toNodeId === this._node.nodeId()) {
             sendResponse({
@@ -156,7 +156,7 @@ class SmartyNode {
                     type: 'routeLatencyTest',
                     toNodeId,
                     testData,
-                    avoid: {...avoid, [this._node.nodeId()]: true}
+                    avoid: [...avoid, this._node.nodeId()]
                 },
                 timestamp: 5000
             });

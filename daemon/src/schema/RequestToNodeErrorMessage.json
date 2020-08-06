@@ -1,0 +1,11 @@
+{
+    "$id": "/RequestToNodeErrorMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "requestToNodeError"},
+        "requestId": {"$ref": "/MessageId"},
+        "errorString": {"type": "string"}
+    },
+    "required": ["type", "requestId", "errorString"],
+    "additionalProperties": false
+}

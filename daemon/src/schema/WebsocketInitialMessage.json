@@ -1,0 +1,10 @@
+{
+    "$id": "/WebsocketInitialMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "initial"},
+        "protocolVersion": {"type": "string"}
+    },
+    "required": ["type", "protocolVersion"],
+    "additionalProperties": false
+}

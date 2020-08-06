@@ -1,0 +1,15 @@
+{
+    "$id": "/SubmitMessagesToLiveFeedMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "submitMessagesToLiveFeed"},
+        "feedId": {"$ref": "/FeedId"},
+        "subfeedName": {"$ref": "/SubfeedName"},
+        "messages": {
+            "type": "array",
+            "items": {"$ref": "/FeedMessage"}
+        }
+    },
+    "required": ["type", "feedId", "subfeedName", "messages"],
+    "additionalProperties": false
+}

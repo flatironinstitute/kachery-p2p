@@ -1,0 +1,10 @@
+{
+    "$id": "/AnnouncingMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "announcing"},
+        "nodeData": {"$ref": "/NodeData"}
+    },
+    "required": ["type", "nodeData"],
+    "additionalProperties": false
+}

@@ -1,0 +1,10 @@
+{
+    "$id": "/FileInfo",
+    "type": "object",
+    "properties": {
+        "sha1": {"$ref": "/Sha1Hash"},
+        "size": {"type": "integer"}
+    },
+    "required": ["sha1", "size"],
+    "additionalProperties": false
+}

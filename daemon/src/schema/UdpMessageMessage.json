@@ -1,0 +1,12 @@
+{
+    "$id": "/UdpMessageMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "message"},
+        "udpMessageId": {"$ref": "/MessageId"},
+        "messageText": {"type": "string"},
+        "connectionId": {"$ref": "/MessageId"}
+    },
+    "required": ["type", "udpMessageId", "messageText", "connectionId"],
+    "additionalProperties": false
+}

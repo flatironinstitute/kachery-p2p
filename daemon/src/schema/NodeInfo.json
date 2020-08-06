@@ -1,0 +1,14 @@
+{
+    "$id": "/NodeInfo",
+    "type": "object",
+    "properties": {
+        "nodeId": {"$ref": "/NodeId"},
+        "address": {"$ref": "/Address"},
+        "port": {"$ref": "/Port"},
+        "udpAddress": {"$ref": "/Address"},
+        "udpPort": {"$ref": "/Port"},
+        "label": {"$ref": "/Label"}
+    },
+    "required": ["nodeId", "address", "port", "udpAddress", "udpPort", "label"],
+    "additionalProperties": false
+}

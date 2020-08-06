@@ -1,0 +1,11 @@
+{
+    "$id": "/DownloadFileMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "downloadFile"},
+        "startByte": {"type": "integer"},
+        "endByte": {"type": "integer"}
+    },
+    "required": ["type", "startByte", "endByte"],
+    "additionalProperties": false
+}

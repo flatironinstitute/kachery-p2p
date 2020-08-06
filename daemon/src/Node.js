@@ -1261,12 +1261,12 @@ class Node {
         this._remoteNodeManager.setRemoteNodeData(fromNodeId, data);
         this._remoteNodeManager.associateNodeWithTransformedChannelName({nodeId: fromNodeId, transformedChannelName});
         const nodeIds = this._remoteNodeManager.getNodeIdsForTransformedChannelName(transformedChannelName);
-        const nodes = {};
+        const nodes = [];
         for (let nodeId of nodeIds) {
             if (nodeId !== fromNodeId) {
                 const data0 = this._remoteNodeManager.remoteNodeData(nodeId);
                 if (data0) {
-                    nodes[nodeId] = data0;
+                    nodes.push(data0);
                 }
             }
         }
@@ -1274,7 +1274,7 @@ class Node {
             if (transformedChannelName === this._gettransformedChannelNameForDiscovery({channelName, nodeId: this._nodeId})) {
                 // report self
                 const selfData = this._createNodeData();
-                nodes[this._nodeId] = selfData;
+                nodes.push(selfData);
             }
         }
         if (Object.keys(nodes).length > 0) {

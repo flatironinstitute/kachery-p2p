@@ -1,0 +1,20 @@
+{
+    "$id": "/FeedSignedMessage",
+    "type": "object",
+    "properties": {
+        "body": {
+            "type": "object",
+            "properties": {
+                "message": {"$ref": "/FeedMessage"},
+                "previousSignature": {"$ref": "/Signature"},
+                "messageNumber": "integer",
+                "timestamp": {"$ref": "/Timestamp"}
+            },
+            "required": ["message", "previousSignature", "messageNumber", "timestamp"],
+            "additionalProperties": false        
+        },
+        "signature": {"$ref": "/Signature"}
+    },
+    "required": ["body", "signature"],
+    "additionalProperties": false
+}

@@ -36,9 +36,9 @@ class BootstrapPeerManager {
             }
         }
 
-        for (let nodeId in nodes) {
+        for (let data0 of nodes) {
+            const nodeId = data0.nodeInfo.nodeId;
             this._node._validateNodeId(nodeId);
-            const data0 = nodes[nodeId];
             this._remoteNodeManager.setRemoteNodeData(nodeId, data0);
             if (channelName) {
                 // this is tricky... we store it based on transformed for our own id

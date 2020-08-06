@@ -1,0 +1,12 @@
+{
+    "$id": "/RequestToNodeResponseReceivedMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "requestToNodeResponseReceived"},
+        "channelName": {"$ref": "/ChannelName"},
+        "requestId": {"$ref": "/MessageId"},
+        "responseIndex": {"type": "integer"}
+    },
+    "required": ["type", "channelName", "requestId", "responseIndex"],
+    "additionalProperties": false
+}

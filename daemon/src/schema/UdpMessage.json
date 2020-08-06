@@ -1,0 +1,9 @@
+{
+    "$id": "/UdpMessage",
+    "oneOf": [
+        {"$ref": "/UdpAcceptConnectionMessage"},
+        {"$ref": "/UdpCloseMessage"},
+        {"$ref": "/UdpMessageMessage"},
+        {"$ref": "/UdpOpenConnectionMessage"}
+    ]
+}

@@ -1,0 +1,9 @@
+{
+    "$id": "/UdpCloseMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "close"}
+    },
+    "required": ["type"],
+    "additionalProperties": false
+}

@@ -1,0 +1,11 @@
+{
+    "$id": "/RequestToNodeFinishedMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "requestToNodeFinished"},
+        "requestId": {"$ref": "/MessageId"},
+        "numResponses": {"type": "integer"}
+    },
+    "required": ["type", "requestId", "numResponses"],
+    "additionalProperties": false
+}

@@ -1,0 +1,19 @@
+{
+    "$id": "/NodeToNodeMessage",
+    "oneOf": [
+        {"$ref": "/CancelRequestToNodeMessage"},
+        {"$ref": "/DownloadFileMessage"},
+        {"$ref": "/FindChannelPeersMessage"},
+        {"$ref": "/FindChannelPeersResponseMessage"},
+        {"$ref": "/GetLiveFeedSignedMessagesMessage"},
+        {"$ref": "/ProvidingMessage"},
+        {"$ref": "/RequestToNodeErrorMessage"},
+        {"$ref": "/RequestToNodeFinishedMessage"},
+        {"$ref": "/RequestToNodeReceivedMessage"},
+        {"$ref": "/RequestToNodeResponseMessage"},
+        {"$ref": "/RequestToNodeResponseReceivedMessage"},
+        {"$ref": "/RouteLatencyTestMessage"},
+        {"$ref": "/SeekingMessage"},
+        {"$ref": "/SubmitMessageToLiveFeedMessage"}
+    ]
+}
