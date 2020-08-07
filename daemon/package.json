@@ -1,6 +1,6 @@
 {
   "name": "kachery-p2p-daemon",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "engines": {
     "node": ">=12.0.0"
   },
@@ -9,8 +9,8 @@
   "scripts": {
     "test": "echo \"No tests\" && exit 0",
     "babel": "babel src --out-dir lib --ignore node_modules",
-    "publish-dry": "npm run babel && npm publish --dry-run",
-    "publish-go": "npm run babel && npm publish"
+    "publish-dry": "rm -r lib && npm run babel && cp src/schema/*.json lib/schema/ && npm publish --dry-run",
+    "publish-go": "rm -r lib && npm run babel && cp src/schema/*.json lib/schema/ && npm publish"
   },
   "repository": "https://github.com/flatironinstitute/kachery_p2p",
   "author": "Jeremy Magland",
