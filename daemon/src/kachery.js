@@ -1,12 +1,32 @@
 import { exec } from 'child_process'
 import fs from 'fs';
 import { sha1sum } from './common/crypto_util.js';
+import { assert } from 'console';
+import { randomAlphaString } from './common/util.js';
 
-// const _getTemporaryDirectory = () => {
-//     const ret = process.env['KACHERY_STORAGE_DIR'] + '/tmp';
-//     mkdirIfNeeded(ret);
-//     return ret;
-// }
+const _getTemporaryDirectory = () => {
+    const ret = process.env['KACHERY_STORAGE_DIR'] + '/tmp';
+    mkdirIfNeeded(ret);
+    return ret;
+}
+
+export const createTemporaryFilePath = ({prefix}) => {
+    assert(typeof(prefix) === 'string', 'prefix is not a string');
+    const dirpath = _getTemporaryDirectory();
+    return `${dirpath}/${prefix}-${randomAlphaString(10)}`;
+}
+
+export const moveFileIntoKacheryStorage = ({path, sha1}) => {
+    const s = sha1;
+    const destParentPath = `${kacheryStorageDir()}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`;
+    const destPath = `${destParentPath}/${s}`;
+    if (fs.existsSync(destPath)) {
+        fs.unlinkSync(path);
+        return;
+    }
+    fs.mkdirSync(destPath, {recursive: true});
+    fs.renameSync(path, destPath);
+}
 
 export const kacheryStorageDir = () => {
     const ret = process.env['KACHERY_STORAGE_DIR'];
@@ -78,18 +98,18 @@ const executeAndGetStdout = async (command) => {
     });
 }
 
-// const mkdirIfNeeded = (path) => {
-//     if (!fs.existsSync(path)) {
-//         try {
-//             fs.mkdirSync(path);
-//         }
-//         catch(err) {
-//             if (!fs.existsSync(path)) {
-//                 fs.mkdirSync(path);
-//             }
-//         }
-//     }
-// }
+const mkdirIfNeeded = (path) => {
+    if (!fs.existsSync(path)) {
+        try {
+            fs.mkdirSync(path);
+        }
+        catch(err) {
+            if (!fs.existsSync(path)) {
+                fs.mkdirSync(path);
+            }
+        }
+    }
+}
 
 export const getLocalFileInfo = async ({fileKey}) => {
     if (fileKey.sha1) {

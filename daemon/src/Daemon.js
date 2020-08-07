@@ -97,6 +97,12 @@ class Daemon {
     // returns on object:
     //    {onFound, onFinished, cancel}
     findFile = ({fileKey, timeoutMsec}) => (this._findFile({fileKey, timeoutMsec}));
+
+    // Find a file from remote, and store in kachery storage
+    // returns on object:
+    //    {onError, onFinished, cancel}
+    loadFile = ({fileKey}) => (this._loadFile({fileKey}));
+
     // returns {stream, cancel}
     downloadFile = async ({channelName, nodeId, fileKey, fileSize, opts}) => (await this._downloadFile({channelName, nodeId, fileKey, fileSize, opts}));
     downloadFileBytes = async ({channelName, nodeId, fileKey, startByte, endByte, opts}) => (await this._downloadFileBytes({channelName, nodeId, fileKey, startByte, endByte, opts}));
@@ -119,63 +125,20 @@ class Daemon {
     _findFile = ({fileKey, timeoutMsec}) => {
         validateObject(fileKey, '/FileKey');
 
-        return this._findFileOrLiveFeed({fileKey, timeoutMsec});
+        return this._node._findFileOrLiveFeed({fileKey, timeoutMsec});
     }
 
     _findLiveFeed = ({feedId, timeoutMsec}) => {
         validateObject(feedId, '/FeedId');
         // assert(typeof(timeoutMsec) === 'number');
 
-        return this._findFileOrLiveFeed({fileKey: {type: 'liveFeed', feedId}, timeoutMsec});
+        return this._node._findFileOrLiveFeed({fileKey: {type: 'liveFeed', feedId}, timeoutMsec});
     }
 
-    _findFileOrLiveFeed = ({fileKey, timeoutMsec}) => {
+    _loadFile = ({fileKey}) => {
         validateObject(fileKey, '/FileKey');
-        // assert(typeof(timeoutMsec) === 'number');
 
-        const findOutputs = [];
-        const foundCallbacks = [];
-        const finishedCallbacks = [];
-        let isFinished = false;
-        const handleCancel = () => {
-            if (isFinished) return;
-            for (let x of findOutputs) {
-                x.cancel();
-            }
-            isFinished = true;
-            finishedCallbacks.forEach(cb => cb());
-        }
-        const ret = {
-            onFound: cb => {foundCallbacks.push(cb)},
-            onFinished: cb => {finishedCallbacks.push(cb)},
-            cancel: handleCancel
-        };
-
-        if (fileKey.type === 'liveFeed')
-            log().info(`Finding live feed`, {fileKey});
-        else
-            log().info(`Finding file`, {fileKey});
-
-        const channelNames = this.joinedChannelNames();
-        channelNames.forEach(channelName => {
-            const x = this._node.findFileOrLiveFeed({channelName, fileKey, timeoutMsec});
-            findOutputs.push(x);
-            x.onFound(result => {
-                if (isFinished) return;
-                foundCallbacks.forEach(cb => cb(result));
-            });
-            x.onFinished(() => {x.finished=true; checkFinished();});
-        });
-        const checkFinished = () => {
-            if (isFinished) return;
-            for (let x of findOutputs) {
-                if (!x.finished) return;
-            }
-            isFinished = true;
-            finishedCallbacks.forEach(cb => cb());
-        }
-        checkFinished();
-        return ret;
+        return this._node.loadFile({fileKey});
     }
 
     // returns {stream, cancel}

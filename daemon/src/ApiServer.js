@@ -86,6 +86,17 @@ export default class ApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
+        // /loadFile - download file from remote node(s) and store in kachery storage
+        this._app.post('/loadFile', async (req, res) => {
+            log().info('/loadFile');
+            try {
+                await this._apiLoadFile(req, res)
+            }
+            catch(err) {
+                console.warn(err.stack);
+                res.status(500).send('Error loading file.');
+            }
+        });
         // /downloadFile - download a previously-found file from a remote node
         this._app.post('/downloadFile', async (req, res) => {
             log().info('/downloadFile');
@@ -283,6 +294,7 @@ export default class ApiServer {
         let isDone = false;
         x.onFound(result => {
             if (isDone) return;
+            validateObject(result, '/FindFileOrLiveFeedResult');
             // may return more than one result
             // we send them one-by-one
             jsonSocket.sendMessage(result);
@@ -293,6 +305,36 @@ export default class ApiServer {
             isDone = true;
             res.end();
         })
+        req.on('close', () => {
+            // if the request socket is closed, we cancel the find request
+            isDone = true;
+            x.cancel();
+        });
+    }
+    // /loadFile - load a file from remote kachery node(s) and store in kachery storage
+    async _apiLoadFile(req, res) {
+        const reqData = req.body;
+        validateObject(reqData.fileKey, '/FileKey');
+        const x = this._daemon.loadFile({
+            fileKey: reqData.fileKey,
+            opts: reqData.opts || {}
+        });
+        const jsonSocket = new JsonSocket(res);
+        let isDone = false;
+        // todo: track progress
+        x.onFinished(() => {
+            if (isDone) return;
+            // we are done
+            isDone = true;
+            jsonSocket.sendMessage({success: true});
+            res.end();
+        });
+        x.onError((err) => {
+            if (isDone) return;
+            isDone = true;
+            jsonSocket.sendMessage({success: false, error: err.message});
+            res.end();
+        });
         req.on('close', () => {
             // if the request socket is closed, we cancel the find request
             isDone = true;

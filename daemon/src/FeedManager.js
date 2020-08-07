@@ -481,6 +481,7 @@ class RemoteFeedManager {
                 let resolved = false;
                 x.onFound(result => {
                     if (resolved) return;
+                    validateObject(result, '/FindFileOrLiveFeedResult');
 
                     // We found it! The result will contain channel and nodeId
                     resolved = true;

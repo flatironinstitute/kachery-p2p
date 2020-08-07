@@ -96,6 +96,40 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
     )
     if 'manifest' in query:
         file_key['manifestSha1'] = query['manifest']
+    sock = _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
+    for r in sock:
+        print(r)
+        if 'success' in r:
+            if r['success']:
+                # wow
+                return ka.load_file(uri=uri, dest=dest)
+            else:
+                raise Exception(f'Error loading file: {r["error"]}')
+        else:
+            print(r)
+    raise Exception('Unable to download file. Response closed before finished.')
+
+def load_file_old(uri: str, dest: Union[str, None]=None, p2p: bool=True):
+    if uri.startswith('sha1dir://'):
+        uri0 = _resolve_file_uri_from_dir_uri(uri)
+        if uri0 is None:
+            return None
+        uri = uri0
+    local_path = ka.load_file(uri, dest=dest)
+    if local_path is not None:
+        return local_path
+    if not p2p:
+        return None
+
+    port = _api_port()
+    url = f'http://localhost:{port}/loadFile' # todo: finish
+    protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
+    assert algorithm == 'sha1'
+    file_key = dict(
+        sha1=hash0
+    )
+    if 'manifest' in query:
+        file_key['manifestSha1'] = query['manifest']
     # sock = _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
     # for r in sock:
     #     if r['type'] == 'progress':

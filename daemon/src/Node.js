@@ -14,7 +14,8 @@ import util from 'util';
 import dgram from 'dgram';
 import { protocolVersion } from './protocolVersion.js';
 import { validateObject, validateChannelName, validateNodeId, validateNodeToNodeMessage, validateNodeData, validateSha1Hash, validatePort } from './schema/index.js';
-import validator from './schema/validator.js';
+import FileProvider from './download/FileProvider.js';
+import FileLoader from './download/FileLoader.js';
 
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
@@ -357,7 +358,56 @@ class Node {
             cancel: () => { _doCancel(); }
         }
     }
-    findFileOrLiveFeed = ({channelName, fileKey, timeoutMsec=4000}) => {
+    _findFileOrLiveFeed = ({fileKey, timeoutMsec}) => {
+        validateObject(fileKey, '/FileKey');
+        // assert(typeof(timeoutMsec) === 'number');
+
+        const findOutputs = [];
+        const foundCallbacks = [];
+        const finishedCallbacks = [];
+        let isFinished = false;
+        const handleCancel = () => {
+            if (isFinished) return;
+            for (let x of findOutputs) {
+                x.cancel();
+            }
+            isFinished = true;
+            finishedCallbacks.forEach(cb => cb());
+        }
+        const ret = {
+            onFound: cb => {foundCallbacks.push(cb)},
+            onFinished: cb => {finishedCallbacks.push(cb)},
+            cancel: handleCancel
+        };
+
+        if (fileKey.type === 'liveFeed')
+            log().info(`Finding live feed`, {fileKey});
+        else
+            log().info(`Finding file`, {fileKey});
+
+        const channelNames = this.joinedChannelNames();
+        channelNames.forEach(channelName => {
+            const x = this._findFileOrLiveFeedOnChannel({channelName, fileKey, timeoutMsec});
+            findOutputs.push(x);
+            x.onFound(result => {
+                if (isFinished) return;
+                validateObject(result, '/FindFileOrLiveFeedResult');
+                foundCallbacks.forEach(cb => cb(result));
+            });
+            x.onFinished(() => {x.finished=true; checkFinished();});
+        });
+        const checkFinished = () => {
+            if (isFinished) return;
+            for (let x of findOutputs) {
+                if (!x.finished) return;
+            }
+            isFinished = true;
+            finishedCallbacks.forEach(cb => cb());
+        }
+        checkFinished();
+        return ret;
+    }
+    _findFileOrLiveFeedOnChannel = ({channelName, fileKey, timeoutMsec=4000}) => {
         validateChannelName(channelName);
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
         validateObject(fileKey, '/FileKey');
@@ -417,6 +467,7 @@ class Node {
                     fileKey: x.fileKey,
                     fileInfo: x.fileInfo
                 }
+                validateObject(result, '/FindFileOrLiveFeedResult');
                 onFoundCallbacks.forEach(cb => {cb(result);});
             }
         });
@@ -424,6 +475,46 @@ class Node {
             handleCancel();
         }, timeoutMsec);
         return ret;
+    }
+    loadFile({fileKey}) {
+        validateObject(fileKey, '/FileKey');
+        const fileLoader = new FileLoader({fileKey});
+
+        assert((fileKey.sha1) || (fileKey.transformedSha1), 'Incorrect type of fileKey.');
+        const finder = this._findFileOrLiveFeed({fileKey});
+        finder.onFound(findFileResult => {
+            validateObject(findFileResult, '/FindFileOrLiveFeedResult');
+            const provider = new FileProvider({node: this, findFileResult});
+            fileLoader.addFileProvider(provider);
+        });
+        finder.onFinished(() => {
+            fileLoader.reportFinishedFindingProviders();
+        });
+
+        const onFinishedCallbacks = [];
+        const onErrorCallbacks = [];
+
+        fileLoader.onFinished(async () => {
+            finder.cancel();
+            onFinishedCallbacks.forEach(cb => cb());
+        });
+        fileLoader.onError((err) => {
+            finder.cancel();
+
+            onErrorCallbacks.forEach(cb => cb(err));
+        });
+
+        const _handleCancel = () => {
+            finder.cancel();
+            fileLoader.cancel();
+        }
+
+        return {
+            onProgress: fileLoader.onProgress,
+            onFinished: cb => onFinishedCallbacks.push(cb),
+            onError: cb => onErrorCallbacks.push(cb),
+            cancel: _handleCancel
+        }
     }
     async downloadFile({channelName, nodeId, fileKey, startByte, endByte}) {
         validateChannelName(channelName);
