@@ -143,7 +143,7 @@ class SmartyNode {
         validateChannelName(channelName);
         validateObject(requestBody, '/RouteLatencyTestRequest');
         validateNodeId(requestBody.toNodeId);
-        assert(typeof(requestBody.testData) === 'string');
+        assert(typeof(requestBody.testData) === 'object');
         assert(Array.isArray(requestBody.avoid));
 
         const {toNodeId, testData, avoid} = requestBody;
