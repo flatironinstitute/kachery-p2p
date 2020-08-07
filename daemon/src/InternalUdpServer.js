@@ -2,6 +2,7 @@ import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignatu
 import dgram from 'dgram';
 import { randomAlphaString, sleepMsec } from './common/util.js';
 import { timeStamp } from 'console';
+import { validateObject } from './schema/index.js';
 
 class InternalUdpServer {
     constructor(port) {
@@ -232,7 +233,7 @@ class UdpConnection {
         setTimeout(() => {
             if (x.udpMessageId() in this._unconfirmedMessages) {
                 if (x.numTries() >= 6) {
-                    console.warn(`Udp message failed after ${x.numTries()} tries. Closing connection.`);
+                    // console.warn(`Udp message failed after ${x.numTries()} tries. Closing connection.`);
                     this.close();
                 }
                 x.incrementNumTries();
@@ -357,7 +358,7 @@ class UdpConnection {
                 }
             }
             const elapsed2 = (new Date()) - this._lastIncomingMessageTimestamp;
-            if (elapsed2 > 15000) {
+            if (elapsed2 > 60000) {
                 //console.warn(`Closing udp connection due to inactivity: ${this._connectionId}`);
                 this.close();
             }
@@ -508,6 +509,7 @@ class UdpCongestionManager {
 }
 
 function _udpSocketSend(socket, message, port, address) {
+    validateObject(message, '/UdpMessage');
     const messageText = JSONStringifyDeterministic(message);
     socket.send(messageText, port, address, (err, numBytesSent) => {
         if (err) {

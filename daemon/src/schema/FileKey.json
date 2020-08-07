@@ -1,0 +1,45 @@
+{
+    "$id": "/FileKey",
+    "oneOf": [
+        {
+            "type": "object",
+            "properties": {
+                "sha1": {"$ref": "/Sha1Hash"},
+                "manifestSha1": {"$ref": "/Sha1Hash"}
+            },
+            "required": ["sha1"],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "transformedSha1": {"$ref": "/Sha1Hash"},
+                "transformNodeId": {"$ref": "/NodeId"},
+                "sha1Head": {"$ref": "/Sha1Head"},
+                "manifestSha1": {"$ref": "/Sha1Hash"}
+            },
+            "required": ["transformedSha1", "transformNodeId", "sha1Head"],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "type": {"const": "liveFeed"},
+                "feedId": {"$ref": "/FeedId"}
+            },
+            "required": ["type", "feedId"],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "type": {"const": "liveFeed"},
+                "feedIdHead": {"$ref": "/FeedIdHead"},
+                "transformNodeId": {"$ref": "NodeId"},
+                "transformedFeedId": {"$ref": "/Sha1Hash"}
+            },
+            "required": ["type", "feedIdHead", "transformNodeId", "transformedFeedId"],
+            "additionalProperties": false
+        }
+    ]
+}

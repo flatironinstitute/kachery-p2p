@@ -1,0 +1,21 @@
+{
+    "$id": "/UdpAcceptConnectionMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "acceptConnection"},
+        "connectionId": {"$ref": "/MessageId"},
+        "initiatorPublicEndpoint": {
+            "type": "object",
+            "properties": {
+                "address": {"$ref": "/Address"},
+                "port": {"$ref": "/Port"},
+                "family": {"type": "string"},
+                "size": {"type": "number"}
+            },
+            "required": ["address", "port"],
+            "additionalProperties": false
+        }
+    },
+    "required": ["type", "connectionId", "initiatorPublicEndpoint"],
+    "additionalProperties": false
+}

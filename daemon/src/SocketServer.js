@@ -1,18 +1,20 @@
+import assert from 'assert';
 import WebSocket from 'ws';
 import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from './common/crypto_util.js'
 import { protocolVersion } from './protocolVersion.js';
 import InternalUdpServer from './InternalUdpServer.js';
 import ip from 'ip';
+import { validateObject, validateNodeToNodeMessage, validateNodeId } from './schema/index.js';
 
 // todo: monitor and clean up closed connections throughout file
 
-class WebsocketServer {
+class SocketServer {
     constructor({nodeId, keyPair, useUdp=false, onListen}) {
         this._nodeId = nodeId;
         this._keyPair = keyPair;
         this._useUdp = useUdp;
         this._onListen = onListen;
-        this._websocketServer = null; // or InternaludpServer
+        this._websocketServerOrInternalUdpServer = null; // or InternaludpServer
         this._onIncomingConnectionCallbacks = [];
         this._udpPublicEndpointChangedCallbacks = [];
     }
@@ -22,19 +24,19 @@ class WebsocketServer {
     async listen(port) {
         ///////////////////////////////////////////////////////////////////////////////
         if (!this._useUdp) {
-            this._websocketServer = new WebSocket.Server({ port });
-            this._websocketServer.on('listening', () => {
+            this._websocketServerOrInternalUdpServer = new WebSocket.Server({ port });
+            this._websocketServerOrInternalUdpServer.on('listening', () => {
                 this._onListen && this._onListen();
             });
         }
         else {
-            this._websocketServer = new InternalUdpServer({ port });
-            this._websocketServer.onPublicEndpointChanged(() => {
+            this._websocketServerOrInternalUdpServer = new InternalUdpServer({ port });
+            this._websocketServerOrInternalUdpServer.onPublicEndpointChanged(() => {
                 this._udpPublicEndpointChangedCallbacks.forEach(cb => cb());
             })
         }
-        this._websocketServer.on('connection', (ws) => {
-            let X = new IncomingWebsocketConnection(ws, {nodeId: this._nodeId, keyPair: this._keyPair});
+        this._websocketServerOrInternalUdpServer.on('connection', (ws) => {
+            let X = new IncomingConnection(ws, {nodeId: this._nodeId, keyPair: this._keyPair});
             X.onInitialized(() => {
                 this._onIncomingConnectionCallbacks.forEach(cb => {
                     cb(X);
@@ -45,23 +47,31 @@ class WebsocketServer {
     }
     udpPublicEndpoint() {
         if (!this._useUdp) return null;
-        if (this._websocketServer) {
-            return this._websocketServer.publicEndpoint();
+        if (this._websocketServerOrInternalUdpServer) {
+            return this._websocketServerOrInternalUdpServer.publicEndpoint();
         }
         else {
             return null;
         }
     }
     onUdpPublicEndpointChanged(cb) {
+        // assert(typeof(cb) === 'function');
+
         this._udpPublicEndpointChangedCallbacks.push(cb);
     }
     listenAddress() {
         return ip.address();
     }
     listenPort() {
-        return this._websocketServer ? this._websocketServer.address().port : null;
+        return this._websocketServerOrInternalUdpServer ? this._websocketServerOrInternalUdpServer.address().port : null;
     }
     async createOutgoingConnection({address, port, remoteNodeId}) {
+        validateObject(address, '/Address');
+        validateObject(port, '/Port');
+        if (remoteNodeId !== null) {
+            validateNodeId(remoteNodeId);
+        }
+
         return new Promise((resolve, reject) => {
             let finished = false;
             const X = new OutgoingConnection({
@@ -71,7 +81,7 @@ class WebsocketServer {
                 keyPair: this._keyPair,
                 remoteNodeId,
                 useUdp: this._useUdp,
-                udpServer: this._useUdp ? this._websocketServer : null
+                udpServer: this._useUdp ? this._websocketServerOrInternalUdpServer : null
             });
             X.onConnect(() => {
                 if (finished) return;
@@ -92,7 +102,7 @@ class WebsocketServer {
     }
 }
 
-class IncomingWebsocketConnection {
+class IncomingConnection {
     constructor(webSocket, {nodeId, keyPair}) {
         this._nodeId = nodeId;
         this._keyPair = keyPair;
@@ -113,20 +123,32 @@ class IncomingWebsocketConnection {
             // question: do we need to do something here? will 'close' be called also?
         });
 
-        this._webSocket.on('message', (message) => {
-            const msg = JSON.parse(message);
-            const body = msg.body;
-            const signature = msg.signature;
-            if (!body.message) {
+        this._webSocket.on('message', (messageText) => {
+            let messageParsed;
+            try {
+                messageParsed = JSON.parse(messageText);
+            }
+            catch(err) {
                 this._webSocket.close();
                 return;
             }
+            if (messageParsed.type === 'error') {
+                console.warn(`Socket message error: ${messageParsed.error}`);
+                this._webSocket.close();
+                return;
+            }
+            if (!validateObject(messageParsed, '/RawSocketMessage', {noThrow: true})) {
+                this.disconnect();
+                return;
+            }
+            const {body, signature} = messageParsed;
+            validateNodeId(body.fromNodeId);
+            validateObject(body.message, '/SocketMessage');
+            if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId), {checkTimestamp: true})) {
+                this._webSocket.close();
+                return;
+            }            
             if (!this._initialized) {
-                if (!body.fromNodeId) {
-                    this.sendMessage({type: 'error', error: `Missing fromNodeId`});
-                    this.disconnectLater();
-                    return;
-                }
                 if (body.fromNodeId === this._nodeId) {
                     this.sendMessage({type: 'error', error: `Cannot connect to self.`});
                     this.disconnectLater();
@@ -143,11 +165,6 @@ class IncomingWebsocketConnection {
                     this.disconnectLater();
                     return;
                 }
-                if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId), {checkTimestamp: true})) {
-                    this.sendMessage({type: 'error', error: `Problem verifying signature`});
-                    this.disconnectLater();
-                    return;
-                }
                 this._remoteNodeId = body.fromNodeId;
                 this._initialized = true;
                 this._onInitializedCallbacks.forEach(cb => cb());
@@ -159,28 +176,37 @@ class IncomingWebsocketConnection {
                 this._webSocket.close();
                 return;
             }
-            if (!verifySignature(body, signature, hexToPublicKey(this._remoteNodeId), {checkTimestamp: true})) {
+            if (body.message.type === 'error') {
+                console.warn(`Socket message error: ${body.message.error}`);
                 this._webSocket.close();
                 return;
             }
             this._onMessageCallbacks.forEach(cb => {
-                cb(msg.body.message);
+                validateNodeToNodeMessage(body.message);
+                cb(body.message);
             });
         });
     }
     onInitialized(cb) {
+        // assert(typeof(cb) === 'function');
+
         this._onInitializedCallbacks.push(cb);
     }
     remoteNodeId() {
         return this._remoteNodeId;
     }
     onMessage(cb) {
+        // assert(typeof(cb) === 'function');
+
         this._onMessageCallbacks.push(cb);
     }
     onDisconnect(cb) {
+        // assert(typeof(cb) === 'function');
         this._onDisconnectCallbacks.push(cb);
     }
     sendMessage(msg) {
+        validateObject(msg, '/SocketMessage');
+
         if (this._disconnecting) return;
         const body = {
             fromNodeId: this._nodeId,
@@ -228,6 +254,7 @@ class OutgoingConnection {
         this._isOpen = false;
         this._isClosed = false;
         this._accepted = false;
+        this._disconnecting = false;
 
         if (!this._useUdp) {
             this._ws = new WebSocket(`ws://${this._address}:${this._port}`);
@@ -254,51 +281,62 @@ class OutgoingConnection {
             // question: do we need to do something here? will 'close' be called also?
         });
 
-        this._ws.on('message', msg => {
-            const message = JSON.parse(msg);
-            const body = message.body;
-            const signature = message.signature;
-            if ((!body) || (!signature)) {
-                console.warn('OutgoingSocketConnection: Missing body or signature in message');
+        this._ws.on('message', messageText => {
+            let messageParsed;
+            try {
+                messageParsed = JSON.parse(messageText);
+            }
+            catch(err) {
+                this._webSocket.close();
+                return;
+            }
+            if (messageParsed.type === 'error') {
+                console.warn(`Socket message error: ${messageParsed.error}`);
+                this._webSocket.close();
+                return;
+            }
+            if (!validateObject(messageParsed, '/RawSocketMessage', {noThrow: true})) {
                 this.disconnect();
                 return;
             }
-            const message2 = message.body.message;
-            const fromNodeId = message.body.fromNodeId;
-            if (!message2) {
-                console.warn('OutgoingSocketConnection: Missing message in body');
-                this.disconnect();
-                return;
-            }
+            const {body, signature} = messageParsed;
+            validateNodeId(body.fromNodeId);
+            validateObject(body.message, '/SocketMessage');
             if (this._remoteNodeId) {
-                if (fromNodeId !== this._remoteNodeId) {
-                    console.warn('OutgoingSocketConnection: Mismatch in fromNodeId/remoteNodeId');
+                if (body.fromNodeId !== this._remoteNodeId) {
                     this.disconnect();
                     return;
                 }
             }
-            else {
-                this._remoteNodeId = fromNodeId;
-            }            this._
-            if (!verifySignature(body, signature, hexToPublicKey(fromNodeId), {checkTimestamp: true})) {
-                console.warn('OutgoingSocketConnection: Problem verifying signature');
-                this.disconnect();
+            if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId), {checkTimestamp: true})) {
+                this._ws.close();
                 return;
-            }
+            }            
             if (!this._accepted) {
-                if (message2.type === 'accepted') {
+                if (body.message.type === 'accepted') {
                     this._accepted = true;
+                    this._remoteNodeId = body.fromNodeId;
                     this._onConnectCallbacks.forEach(cb => cb());
                     return;
                 }
-                else if (message2.type === 'error') {
-                    this._onErrorCallbacks.forEach(cb => cb(new OutgoingConnectionError(`Problem connecting to remote node: ${message2.error}`)));
+                else if (body.message.type === 'error') {
+                    this._onErrorCallbacks.forEach(cb => cb(new OutgoingConnectionError(`Problem connecting to remote node: ${body.message.error}`)));
+                    this.disconnect();
+                    return;
+                }
+                else {
                     this.disconnect();
                     return;
                 }
             }
+            if (body.message.type === 'error') {
+                console.warn(`Socket message error: ${body.message.error}`);
+                this._webSocket.close();
+                return;
+            }
             this._onMessageCallbacks.forEach(cb => {
-                cb(message2);
+                validateNodeToNodeMessage(body.message);
+                cb(body.message);
             });
         });
         this.sendMessage({
@@ -320,18 +358,30 @@ class OutgoingConnection {
         this._ws.close();
     }
     onConnect(cb) {
+        // assert(typeof(cb) === 'function');
+
         this._onConnectCallbacks.push(cb);
     }
     onError(cb) {
+        // assert(typeof(cb) === 'function');
+
         this._onErrorCallbacks.push(cb);
     }
     onMessage(cb) {
+        // assert(typeof(cb) === 'function');
+
         this._onMessageCallbacks.push(cb);
     }
     onDisconnect(cb) {
+        // assert(typeof(cb) === 'function');
+
         this._onDisconnectCallbacks.push(cb);
     }
     sendMessage(msg) {
+        validateObject(msg, '/SocketMessage');
+
+        if (this._disconnecting) return;
+
         if (this._isOpen) {
             if (this._isClosed) {
                 // log().warning('Cannot send message. Websocket is closed.', {address: this._address, port: this._port});
@@ -362,6 +412,12 @@ class OutgoingConnection {
             this.sendMessage(msg);
         });
     }
+    disconnectLater() {
+        this._disconnecting = true;
+        setTimeout(() => {
+            this.disconnect();
+        }, 2000);
+    }
 }
 
-export default WebsocketServer;
+export default SocketServer;

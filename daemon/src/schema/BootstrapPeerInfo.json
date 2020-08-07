@@ -1,0 +1,10 @@
+{
+    "$id": "/BootstrapPeerInfo",
+    "type": "object",
+    "properties": {
+        "address": {"$ref": "/Address"},
+        "port": {"$ref": "/Port"}
+    },
+    "required": ["address", "port"],
+    "additionalProperties": false
+}

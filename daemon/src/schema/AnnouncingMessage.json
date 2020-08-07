@@ -1,0 +1,13 @@
+{
+    "$id": "/AnnouncingMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "announcing"},
+        "nodeData": {"$ref": "/NodeData"},
+        "localAddress": {"$ref": "/Address"},
+        "localPort": {"$ref": "/Port"},
+        "_id": {"$ref": "/MessageId"}
+    },
+    "required": ["type", "nodeData"],
+    "additionalProperties": false
+}

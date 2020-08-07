@@ -1,5 +1,7 @@
+import assert from 'assert';
 import { getSignature, JSONStringifyDeterministic, verifySignature, hexToPublicKey } from "./common//crypto_util.js";
 import { randomString, sleepMsec } from "./common//util.js";
+import { validateObject, validateChannelName, validateNodeId } from "./schema/index.js";
 
 class SmartyNode {
     constructor(node) {
@@ -13,6 +15,10 @@ class SmartyNode {
         });
     }
     async which_route_should_i_use_to_send_a_message_to_this_node({channelName, toNodeId, calculateIfNeeded}) {
+        validateChannelName(channelName);
+        validateNodeId(toNodeId);
+        // assert(typeof(calculateIfNeeded) === 'boolean');
+
         if (!(channelName in this._optimalRoutesToNodes)) {
             this._optimalRoutesToNodes[channelName] = {};
         }
@@ -46,6 +52,9 @@ class SmartyNode {
     }
 
     async _estimateOptimalRouteToNode({channelName, toNodeId}) {
+        validateChannelName(channelName);
+        validateNodeId(toNodeId);
+
         const candidatePeerIds = this._remoteNodeManager.peerIdsForChannel(channelName);
         const timings = {};
         const routes = {};
@@ -58,7 +67,7 @@ class SmartyNode {
                 channelName,
                 toNodeId,
                 testData,
-                avoid: {[this._node.nodeId()]: true}
+                avoid: [this._node.nodeId()]
             };
             const timer = new Date();
             const req = this._node.makeRequestToNode({
@@ -131,10 +140,12 @@ class SmartyNode {
         }
     }
     async _handleRouteLatencyTest({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
-        this._node._validateSimpleObject(requestBody);
-        this._node._validateNodeId(requestBody.toNodeId);
-        this._node._validateSimpleObject(requestBody.testData);
-        this._node._validateSimpleObject(requestBody.avoid);
+        validateChannelName(channelName);
+        validateObject(requestBody, '/RouteLatencyTestRequest');
+        validateNodeId(requestBody.toNodeId);
+        assert(typeof(requestBody.testData) === 'object', 'testData is not an object');
+        assert(Array.isArray(requestBody.avoid), 'avoid is not an array');
+
         const {toNodeId, testData, avoid} = requestBody;
         if (toNodeId === this._node.nodeId()) {
             sendResponse({
@@ -154,9 +165,10 @@ class SmartyNode {
                 direct: true, // ensure that we are going directly to the node
                 requestBody: {
                     type: 'routeLatencyTest',
+                    channelName,
                     toNodeId,
                     testData,
-                    avoid: {...avoid, [this._node.nodeId()]: true}
+                    avoid: [...avoid, this._node.nodeId()]
                 },
                 timestamp: 5000
             });

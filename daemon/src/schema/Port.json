@@ -1,0 +1,11 @@
+{
+    "$id": "/Port",
+    "anyOf": [
+        {
+            "type": "integer"
+        },
+        {
+            "type": "null"
+        }
+    ]
+}

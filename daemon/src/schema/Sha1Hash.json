@@ -1,0 +1,6 @@
+{
+    "$id": "/Sha1Hash",
+    "type": "string",
+    "minLength": 40,
+    "maxLength": 40
+}

@@ -1,0 +1,10 @@
+{
+    "$id": "/UdpOpenConnectionMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "openConnection"},
+        "connectionId": {"$ref": "/MessageId"}
+    },
+    "required": ["type", "connectionId"],
+    "additionalProperties": false
+}

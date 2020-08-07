@@ -1,0 +1,9 @@
+{
+    "$id": "/FeedSignedMessageMetaData",
+    "type": "object",
+    "properties": {
+        "submittedByNodeId": {"$ref": "/NodeId"}
+    },
+    "required": ["submittedByNodeId"],
+    "additionalProperties": false        
+}

@@ -1,0 +1,11 @@
+{
+    "$id": "/RequestToNodeReceivedMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "requestToNodeReceived"},
+        "requestId": {"$ref": "/MessageId"},
+        "_id": {"$ref": "/MessageId"}
+    },
+    "required": ["type", "requestId"],
+    "additionalProperties": false
+}

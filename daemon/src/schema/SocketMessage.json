@@ -1,0 +1,8 @@
+{
+    "$id": "/SocketMessage",
+    "oneOf": [
+        {"$ref": "/SocketAcceptedMessage"},
+        {"$ref": "/SocketErrorMessage"},
+        {"$ref": "/NodeToNodeMessage"}
+    ]
+}

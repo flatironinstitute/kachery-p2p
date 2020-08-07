@@ -1,0 +1,12 @@
+{
+    "$id": "/GetLiveFeedSignedMessagesResponse",
+    "type": "object",
+    "properties": {
+        "signedMessages": {
+            "type": "array",
+            "items": {"$ref": "/FeedSignedMessage"}
+        }
+    },
+    "required": ["signedMessages"],
+    "additionalProperties": false
+}

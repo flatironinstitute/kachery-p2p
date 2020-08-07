@@ -1,0 +1,20 @@
+{
+    "$id": "/AccessRules",
+    "type": "object",
+    "properties": {
+        "rules": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "nodeId": {"$ref": "/NodeId"},
+                    "write": {"type": "boolean"}
+                },
+                "required": ["nodeId", "write"],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": ["rules"],
+    "additionalProperties": false
+}

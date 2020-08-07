@@ -1,0 +1,13 @@
+{
+    "$id": "/GetLiveFeedSignedMessagesRequest",
+    "type": "object",
+    "properties": {
+        "type": {"const": "getLiveFeedSignedMessages"},
+        "feedId": {"$ref": "/FeedId"},
+        "subfeedName": {"$ref": "/SubfeedName"},
+        "position": {"type": "integer"},
+        "waitMsec": {"type": "integer"}
+    },
+    "required": ["type", "feedId", "subfeedName", "position", "waitMsec"],
+    "additionalProperties": false
+}

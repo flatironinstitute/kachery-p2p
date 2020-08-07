@@ -1,0 +1,13 @@
+{
+    "$id": "/RequestToNodeResponseMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "requestToNodeResponse"},
+        "requestId": {"$ref": "/MessageId"},
+        "responseBody": {"$ref": "/ResponseBody"},
+        "responseIndex": {"type": "integer"},
+        "_id": {"$ref": "/MessageId"}
+    },
+    "required": ["type", "requestId", "responseBody", "responseIndex"],
+    "additionalProperties": false
+}

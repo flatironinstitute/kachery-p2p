@@ -1,0 +1,10 @@
+{
+    "$id": "/SocketErrorMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "error"},
+        "error": {"type": "string"}
+    },
+    "required": ["type", "error"],
+    "additionalProperties": false
+}

@@ -1,0 +1,13 @@
+{
+    "$id": "/Address",
+    "anyOf": [
+        {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 80
+        },
+        {
+            "type": "null"
+        }
+    ]
+}

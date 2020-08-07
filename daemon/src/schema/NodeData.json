@@ -1,0 +1,22 @@
+{
+    "$id": "/NodeData",
+    "type": "object",
+    "properties": {
+        "body": {
+            "type": "object",
+            "properties": {
+                "nodeInfo": {"$ref": "/NodeInfo"},
+                "transformedChannelNames": {
+                    "type": "array",
+                    "items": {"$ref": "/Sha1Hash"}
+                },
+                "timestamp": {"$ref": "/Timestamp"}
+            },
+            "required": ["nodeInfo", "transformedChannelNames", "timestamp"],
+            "additionalProperties": false
+        },
+        "signature": {"$ref": "/Signature"}
+    },
+    "required": ["body", "signature"],
+    "additionalProperties": false
+}

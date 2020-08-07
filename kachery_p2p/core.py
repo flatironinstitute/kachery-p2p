@@ -86,9 +86,33 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
         return local_path
     if not p2p:
         return None
+
+    port = _api_port()
+    url = f'http://localhost:{port}/loadFile' # todo: finish
+    protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
+    assert algorithm == 'sha1'
+    file_key = dict(
+        sha1=hash0
+    )
+    if 'manifest' in query:
+        file_key['manifestSha1'] = query['manifest']
+    # sock = _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
+    # for r in sock:
+    #     if r['type'] == 'progress':
+    #         print(r['message'])
+    #     elif r['type'] == 'finished':
+    #         local_path = ka.load_file(uri, dest=dest)
+    #         assert local_path is not None, 'Unexpected. Loaded file, but unable to find it in kachery directory.'
+    #         return
+    #     elif r['type'] == 'error':
+    #         raise Exception(f'Error loading file: {r["error"]}')
+    #     else:
+    #         raise Exception(f'Unexpected response type in load_file: {r["type"]}')
+    # raise Exception('Unable to download file. Response closed before finished.')
+
     for r in find_file(uri):
         timer = time.time()
-        a = _load_file_helper(node_id=r['nodeId'], channel=r['channel'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
+        a = _load_file_helper(uri=uri, node_id=r['nodeId'], channel=r['channel'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
         if a is not None:
             elapsed = time.time() - timer
             size = r["fileInfo"]["size"]
@@ -351,10 +375,9 @@ def _resolve_file_uri_from_dir_uri(dir_uri, p2p: bool=True):
     return None
     
 
-def _load_file_helper(channel, node_id, file_key, file_info, dest):
+def _load_file_helper(uri, channel, node_id, file_key, file_info, dest):
     port = _api_port()
     url = f'http://localhost:{port}/downloadFile'
-    uri = _get_kachery_uri_from_file_key(file_key)
     with TemporaryDirectory() as tmpdir:
         fname = tmpdir + '/download.dat'
         _http_post_download_file(
@@ -369,7 +392,7 @@ def _load_file_helper(channel, node_id, file_key, file_info, dest):
             dest_path=fname
         )
         with ka.config(use_hard_links=True):
-            expected_hash = file_key['sha1']
+            _protocol, _algorithm, expected_hash, _additional_path, _query = _parse_kachery_uri(uri)
             hash0 = ka.get_file_hash(fname)
             if hash0 != expected_hash:
                 print(f'Unexpected: hashes do not match: {expected_hash} <> {hash0}')
@@ -377,8 +400,8 @@ def _load_file_helper(channel, node_id, file_key, file_info, dest):
             ka.store_file(fname)
             return ka.load_file(uri, dest=dest)
 
-def _get_kachery_uri_from_file_key(file_key):
-    return f'sha1://{file_key["sha1"]}'
+# def _get_kachery_uri_from_file_key(file_key):
+#     return f'sha1://{file_key["sha1"]}'
 
 def _http_post_download_file(url: str, data: dict, total_size: int, dest_path: str):
     try:
