@@ -8,7 +8,8 @@
                 "message": {"$ref": "/FeedMessage"},
                 "previousSignature": {"oneOf": [{"type": "null"}, {"$ref": "/Signature"}]},
                 "messageNumber": {"type": "integer"},
-                "timestamp": {"$ref": "/Timestamp"}
+                "timestamp": {"$ref": "/Timestamp"},
+                "metaData": {"$ref": "/FeedSignedMessageMetaData"}
             },
             "required": ["message", "previousSignature", "messageNumber", "timestamp"],
             "additionalProperties": false        

@@ -1,0 +1,26 @@
+{
+    "$id": "/MessageToNodeMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "messageToNode"},
+        "body": {
+            "type": "object",
+            "properties": {
+                "channelName": {"$ref": "/ChannelName"},
+                "fromNodeId": {"$ref": "/NodeId"},
+                "toNodeId": {"$ref": "/NodeId"},
+                "route": {
+                    "type": "array",
+                    "items": {"$ref": "/NodeId"}
+                },
+                "message": {"$ref": "/NodeToNodeMessage"},
+                "timestamp": {"$ref": "/Timestamp"}
+            },
+            "required": ["channelName", "fromNodeId", "toNodeId", "route", "message", "timestamp"],
+            "additionalProperties": false
+        },
+        "signature": {"$ref": "/Signature"}
+    },
+    "required": ["type", "body", "signature"],
+    "additionalProperties": false
+}
