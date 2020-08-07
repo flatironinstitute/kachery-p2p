@@ -277,7 +277,7 @@ export default class ApiServer {
         const reqData = req.body;
         // Returns the find request
         validateObject(reqData.fileKey, '/FileKey');
-        assert(typeof(reqData.timeoutMsec) === 'number');
+        assert(typeof(reqData.timeoutMsec) === 'number', 'timeoutMsec is not a number');
         const x = this._daemon.findFile({fileKey: reqData.fileKey, timeoutMsec: reqData.timeoutMsec});
         const jsonSocket = new JsonSocket(res);
         let isDone = false;
@@ -304,7 +304,7 @@ export default class ApiServer {
         const reqData = req.body;
         validateNodeId(reqData.nodeId);
         validateObject(reqData.fileKey, '/FileKey');
-        assert(typeof(reqData.fileSize) === 'number');
+        assert(typeof(reqData.fileSize) === 'number', 'fileSize is not a number');
         const {stream, cancel} = await this._daemon.downloadFile({
             channelName: reqData.channel,
             nodeId: reqData.nodeId,
@@ -320,8 +320,8 @@ export default class ApiServer {
         const reqData = req.body;
         validateNodeId(reqData.nodeId);
         validateObject(reqData.fileKey, '/FileKey');
-        assert(typeof(reqData.startByte) === 'number');
-        assert(typeof(reqData.endByte) === 'number');
+        assert(typeof(reqData.startByte) === 'number', 'startByte is not a number');
+        assert(typeof(reqData.endByte) === 'number', 'endByte is not a number');
         const {stream, cancel} = await this._daemon.downloadFileBytes({
             channelName: reqData.channel,
             nodeId: reqData.nodeId,
@@ -338,7 +338,7 @@ export default class ApiServer {
         const reqData = req.body;
         const feedName = reqData.feedName || null;
         if (feedName) {
-            assert(typeof(feedName) === 'string');
+            assert(typeof(feedName) === 'string', 'feedName is not a string');
         }
         const feedId = await this._daemon.feedManager().createFeed({feedName});
         res.json({ success: true, feedId });
@@ -357,7 +357,7 @@ export default class ApiServer {
     async _feedApiGetFeedId(req, res) {
         const reqData = req.body;
         const feedName = reqData.feedName;
-        assert(typeof(feedName) === 'string');
+        assert(typeof(feedName) === 'string', 'feedName is not a string');
         const feedId = await this._daemon.feedManager().getFeedId({feedName});
         if (!feedId) {
             res.json({ success: false });
@@ -373,7 +373,7 @@ export default class ApiServer {
         } = reqData;
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(Array.isArray(messages));
+        assert(Array.isArray(messages), 'messages is not an array');
         await this._daemon.feedManager().appendMessages({
             feedId, subfeedName, messages
         });
@@ -387,7 +387,7 @@ export default class ApiServer {
         } = reqData;
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(Array.isArray(messages));
+        assert(Array.isArray(messages), 'messages is not an array');
         await this._daemon.feedManager().submitMessages({feedId, subfeedName, messages});
         res.json({ success: true })
     }
@@ -399,9 +399,9 @@ export default class ApiServer {
         } = reqData;
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(typeof(position) === 'number');
-        assert(typeof(maxNumMessages) === 'number');
-        assert(typeof(waitMsec) === 'number');
+        // assert(typeof(position) === 'number');
+        // assert(typeof(maxNumMessages) === 'number');
+        // assert(typeof(waitMsec) === 'number');
         const messages = await this._daemon.feedManager().getMessages({
             feedId, subfeedName, position, maxNumMessages, waitMsec
         });
@@ -415,9 +415,9 @@ export default class ApiServer {
         } = reqData;
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(typeof(position) === 'number');
-        assert(typeof(maxNumMessages) === 'number');
-        assert(typeof(waitMsec) === 'number');
+        // assert(typeof(position) === 'number');
+        // assert(typeof(maxNumMessages) === 'number');
+        // assert(typeof(waitMsec) === 'number');
         const signedMessages = await this._daemon.feedManager().getSignedMessages({
             feedId, subfeedName, position, maxNumMessages, waitMsec
         });
@@ -493,7 +493,7 @@ export default class ApiServer {
         const {
             subfeedWatches, waitMsec
         } = reqData;
-        assert(typeof(waitMsec) === 'number');
+        // assert(typeof(waitMsec) === 'number');
         const messages = await this._daemon.feedManager().watchForNewMessages({
             subfeedWatches, waitMsec
         });

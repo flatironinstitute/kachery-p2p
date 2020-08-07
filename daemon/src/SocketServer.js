@@ -55,7 +55,7 @@ class SocketServer {
         }
     }
     onUdpPublicEndpointChanged(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
 
         this._udpPublicEndpointChangedCallbacks.push(cb);
     }
@@ -188,7 +188,7 @@ class IncomingConnection {
         });
     }
     onInitialized(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
 
         this._onInitializedCallbacks.push(cb);
     }
@@ -196,12 +196,12 @@ class IncomingConnection {
         return this._remoteNodeId;
     }
     onMessage(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
 
         this._onMessageCallbacks.push(cb);
     }
     onDisconnect(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
         this._onDisconnectCallbacks.push(cb);
     }
     sendMessage(msg) {
@@ -358,22 +358,22 @@ class OutgoingConnection {
         this._ws.close();
     }
     onConnect(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
 
         this._onConnectCallbacks.push(cb);
     }
     onError(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
 
         this._onErrorCallbacks.push(cb);
     }
     onMessage(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
 
         this._onMessageCallbacks.push(cb);
     }
     onDisconnect(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
 
         this._onDisconnectCallbacks.push(cb);
     }

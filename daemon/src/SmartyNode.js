@@ -17,7 +17,7 @@ class SmartyNode {
     async which_route_should_i_use_to_send_a_message_to_this_node({channelName, toNodeId, calculateIfNeeded}) {
         validateChannelName(channelName);
         validateNodeId(toNodeId);
-        assert(typeof(calculateIfNeeded) === 'boolean');
+        // assert(typeof(calculateIfNeeded) === 'boolean');
 
         if (!(channelName in this._optimalRoutesToNodes)) {
             this._optimalRoutesToNodes[channelName] = {};
@@ -143,8 +143,8 @@ class SmartyNode {
         validateChannelName(channelName);
         validateObject(requestBody, '/RouteLatencyTestRequest');
         validateNodeId(requestBody.toNodeId);
-        assert(typeof(requestBody.testData) === 'object');
-        assert(Array.isArray(requestBody.avoid));
+        assert(typeof(requestBody.testData) === 'object', 'testData is not an object');
+        assert(Array.isArray(requestBody.avoid), 'avoid is not an array');
 
         const {toNodeId, testData, avoid} = requestBody;
         if (toNodeId === this._node.nodeId()) {

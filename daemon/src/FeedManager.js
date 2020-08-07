@@ -60,7 +60,7 @@ class FeedManager {
         await this._saveFeedsConfig(config);
     }
     async getFeedId({ feedName }) {
-        assert(typeof(feedName) === 'string');
+        // assert(typeof(feedName) === 'string');
         // Look up the feed ID for a particular feed name by consulting the config file
         const config = await this._loadFeedsConfig();
         const feedId = config['feedIdsByName'][feedName] || null;
@@ -107,7 +107,7 @@ class FeedManager {
     async appendMessages({ feedId, subfeedName, messages}) {
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(Array.isArray(messages));
+        // assert(Array.isArray(messages));
         // Append messages to a subfeed (must be in a writeable feed on this node)
 
         // Load the subfeed and make sure it is writeable
@@ -128,7 +128,7 @@ class FeedManager {
     async submitMessages({ feedId, subfeedName, messages}) {
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(Array.isArray(messages));
+        // assert(Array.isArray(messages));
 
         // Same as appendMessages, except if we don't have a writeable feed, we submit it to the p2p network
         // and then, on success, it will append the messages on the node where the feed is writeable
@@ -145,7 +145,7 @@ class FeedManager {
     async appendSignedMessages({ feedId, subfeedName, signedMessages}) {
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(Array.isArray(signedMessages));
+        // assert(Array.isArray(signedMessages));
         signedMessages.forEach(sm => {
             validateObject(sm, '/FeedSignedMessage');
         });
@@ -159,9 +159,9 @@ class FeedManager {
     async getMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(typeof(position) === 'number');
-        assert(typeof(maxNumMessages) === 'number');
-        assert(typeof(waitMsec) === 'number');
+        // assert(typeof(position) === 'number');
+        // assert(typeof(maxNumMessages) === 'number');
+        // assert(typeof(waitMsec) === 'number');
 
         // Load messages from a subfeed.
         // If there are no messages available locally, and waitMsec > 0, then we will search
@@ -176,9 +176,9 @@ class FeedManager {
     async getSignedMessages({ feedId, subfeedName, position, maxNumMessages, waitMsec }) {
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(typeof(position) === 'number');
-        assert(typeof(maxNumMessages) === 'number');
-        assert(typeof(waitMsec) === 'number');
+        // assert(typeof(position) === 'number');
+        // assert(typeof(maxNumMessages) === 'number');
+        // assert(typeof(waitMsec) === 'number');
 
         // Same as getMessages() except we return the signed messages. This is also called by getMessages().
         const subfeed = await this._loadSubfeed({feedId, subfeedName});
@@ -247,8 +247,8 @@ class FeedManager {
         await subfeed.setAccessRules(accessRules);
     }
     async watchForNewMessages({ subfeedWatches, waitMsec, maxNumMessages=0 }) {
-        assert(typeof(waitMsec) === 'number');
-        assert(typeof(waxNumMessages) === 'number');
+        // assert(typeof(waitMsec) === 'number');
+        // assert(typeof(waxNumMessages) === 'number');
         return new Promise((resolve, reject) => {
             // Wait until new messages are received on one or more subfeeds, and return information on which watches were triggered
 
@@ -287,7 +287,7 @@ class FeedManager {
         validateNodeId(fromNodeId);
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(Array.isArray(messages));
+        // assert(Array.isArray(messages));
 
         // Some messages have been submitted from a remote node
         // Determine whether they can been written, and if so, append them
@@ -344,7 +344,7 @@ class FeedManager {
     async _loadSubfeed({feedId, subfeedName}) {
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        
+
         // Load a subfeed (Subfeed() instance
 
         // If we have already loaded it into memory, then do not reload

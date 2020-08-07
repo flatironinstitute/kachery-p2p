@@ -10,13 +10,13 @@ import { validateObject, validatePort, validateChannelName, validateNodeId } fro
 
 class Daemon {
     constructor({ configDir, listenHost, listenPort, udpListenPort, verbose, discoveryVerbose, label, bootstrapInfos, opts }) {
-        assert(typeof(configDir) === 'string');
+        // assert(typeof(configDir) === 'string');
         if (listenHost) validateObject(listenHost, '/Address');
         if (listenPort) validatePort(listenPort);
         if (udpListenPort) validatePort(udpListenPort);
         validateObject(label, '/Label');
         if (bootstrapInfos) {
-            assert(Array.isArray(bootstrapInfos));
+            // assert(Array.isArray(bootstrapInfos));
             bootstrapInfos.forEach(bi => {
                 validateObject(bi, '/BootstrapPeerInfo');
             });
@@ -124,14 +124,14 @@ class Daemon {
 
     _findLiveFeed = ({feedId, timeoutMsec}) => {
         validateObject(feedId, '/FeedId');
-        assert(typeof(timeoutMsec) === 'number');
+        // assert(typeof(timeoutMsec) === 'number');
 
         return this._findFileOrLiveFeed({fileKey: {type: 'liveFeed', feedId}, timeoutMsec});
     }
 
     _findFileOrLiveFeed = ({fileKey, timeoutMsec}) => {
         validateObject(fileKey, '/FileKey');
-        assert(typeof(timeoutMsec) === 'number');
+        // assert(typeof(timeoutMsec) === 'number');
 
         const findOutputs = [];
         const foundCallbacks = [];
@@ -183,7 +183,7 @@ class Daemon {
         validateChannelName(channelName);
         validateNodeId(nodeId);
         validateObject(fileKey, '/FileKey');
-        assert(typeof(fileSize) === 'number');
+        // assert(typeof(fileSize) === 'number');
 
         log().info(`downloadFile`, {channelName, nodeId, fileKey, fileSize});
         return await this._node.downloadFile({channelName, nodeId, fileKey, startByte: 0, endByte: fileSize});
@@ -193,8 +193,8 @@ class Daemon {
         validateChannelName(channelName);
         validateNodeId(nodeId);
         validateObject(fileKey, '/FileKey');
-        assert(typeof(startByte) === 'number');
-        assert(typeof(endByte) === 'number');
+        // assert(typeof(startByte) === 'number');
+        // assert(typeof(endByte) === 'number');
 
         log().info(`downloadFileBytes`, {channelName, nodeId, fileKey, startByte, endByte});
         return await this._node.downloadFile({channelName, nodeId, fileKey, startByte, endByte});
@@ -204,8 +204,8 @@ class Daemon {
         validateNodeId(nodeId);
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(typeof(position) === 'number');
-        assert(typeof(waitMsec) === 'number');
+        // assert(typeof(position) === 'number');
+        // assert(typeof(waitMsec) === 'number');
 
         log().info(`getLiveFeedSignedMessages`, {channelName, nodeId, feedId, subfeedName, position});
         const signedMessages = await this._node.getLiveFeedSignedMessages({channelName, nodeId, feedId, subfeedName, position, waitMsec, opts});

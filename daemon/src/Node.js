@@ -103,12 +103,12 @@ class Node {
         );
     }
     onProviding(cb) {
-        assert(typeof(cb) === 'function');
+        assert(typeof(cb) === 'function', 'onProviding callback is not a function');
         this._onProvidingCallbacks.push(cb);
     }
     broadcastMessage({ channelName, message }) {
         validateChannelName(channelName);
-        assert(channelName in this._channels);
+        assert(channelName in this._channels, 'Cannot broadcast message. Not in channel.');
         validateNodeToNodeMessage(message);
 
         const broadcastMessageId = randomAlphaString(10);
@@ -159,9 +159,9 @@ class Node {
         validateChannelName(channelName);
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
         validateNodeId(toNodeId);
-        assert(typeof(direct) === 'boolean')
+        // assert(typeof(direct) === 'boolean')
         if (route) {
-            assert(Array.isArray(route));
+            // assert(Array.isArray(route));
             for (let x of route) {
                 validateNodeId(x);
             }
@@ -207,7 +207,7 @@ class Node {
     // the callbacks registered in ret.onMessage(...)
     // Cancel the listener via ret.cancel()
     createMessageListener(testFunction) {
-        assert(typeof(testFunction) === 'function', 'Not a function.');
+        assert(typeof(testFunction) === 'function', 'testFunction is not a function.');
 
         const x = {
             name: randomAlphaString(10),
@@ -226,20 +226,20 @@ class Node {
     // Note: it is possible to send more than one response before calling onFinished
     // .onRequest(({fromNodeId, requestBody, sendResponse, reportError, reportFinished})) => {...});
     onRequest(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
         this._onRequestCallbacks.push(cb);
     }
     makeRequestToNode = ({ channelName, toNodeId, requestBody, direct=false, timeout, requestId }) => {
         validateChannelName(channelName);
-        assert(channelName in this._channels);
+        assert(channelName in this._channels, 'Cannot make request to node. Node in channel.');
         validateNodeId(toNodeId);
         validateObject(requestBody, '/RequestBody');
         timeout = timeout || null;
         requestId = requestId || randomAlphaString(10);
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
-        assert(typeof(direct) === 'boolean');
+        // assert(typeof(direct) === 'boolean');
         if (timeout !== null) {
-            assert(typeof(timeout) === 'number');
+            // assert(typeof(timeout) === 'number');
         }
         validateObject(requestId, '/MessageId');
 
@@ -361,7 +361,7 @@ class Node {
         validateChannelName(channelName);
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
         validateObject(fileKey, '/FileKey');
-        assert(typeof(timeoutMsec) === 'number');
+        assert(typeof(timeoutMsec) === 'number', 'timeoutMsec is not a number');
 
         const onFoundCallbacks = [];
         const onFinishedCallbacks = [];
@@ -430,8 +430,8 @@ class Node {
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
         validateNodeId(nodeId);
         validateObject(fileKey, '/FileKey');
-        assert(typeof(startByte) === 'number');
-        assert(typeof(endByte) === 'number');
+        // assert(typeof(startByte) === 'number');
+        // assert(typeof(endByte) === 'number');
 
         const numBytes = endByte - startByte;
 
@@ -551,12 +551,12 @@ class Node {
     }
     async getLiveFeedSignedMessages({channelName, nodeId, feedId, subfeedName, position, waitMsec}) {
         validateChannelName(channelName);
-        assert(channelName in this._channels);
+        assert(channelName in this._channels, 'Cannot getLiveFeedSignedMessages. Not in channel.');
         validateNodeId(nodeId);
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(typeof(position) === 'number');
-        assert(typeof(waitMsec) === 'number');
+        // assert(typeof(position) === 'number');
+        // assert(typeof(waitMsec) === 'number');
 
         return new Promise((resolve, reject) => {
             const requestBody = {
@@ -591,11 +591,11 @@ class Node {
 
     async submitMessagesToLiveFeed({channelName, nodeId, feedId, subfeedName, messages}) {
         validateChannelName(channelName);
-        assert(channelName in this._channels);
-        validateNodeData(nodeId);
+        assert(channelName in this._channels, 'Cannot submit messages to live feed. Not in channel.');
+        validateNodeId(nodeId);
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(Array.isArray(messages));
+        // assert(Array.isArray(messages));
 
         return new Promise((resolve, reject) => {
             const requestBody = {
@@ -894,8 +894,8 @@ class Node {
         const {feedId, subfeedName, position, waitMsec} = requestBody;
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(typeof(position) === 'number');
-        assert(typeof(waitMsec) === 'number');
+        // assert(typeof(position) === 'number');
+        // assert(typeof(waitMsec) === 'number');
         let signedMessages;
         try {
             signedMessages = await this._feedManager.getSignedMessages({
@@ -926,7 +926,7 @@ class Node {
         const {feedId, subfeedName, messages} = requestBody;
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(Array.isArray(messages));
+        // assert(Array.isArray(messages));
         try {
             await this._feedManager._submitMessagesToLiveFeedFromRemoteNode({
                 fromNodeId, feedId, subfeedName, messages
@@ -941,9 +941,9 @@ class Node {
     }
 
     _initializeServer({ type, listenPort, onListen }) {
-        assert(['websocket', 'udp'].includes(type));
+        assert(['websocket', 'udp'].includes(type), 'Invalid connection type.');
         validatePort(listenPort);
-        assert(typeof(onListen) === 'function');
+        assert(typeof(onListen) === 'function', 'onListen is not a function.');
 
         let X;
         if (type === 'websocket') {
@@ -1061,7 +1061,7 @@ class Node {
     }
     _handleMessageToNode({ fromNodeId, message }) {
         validateNodeId(fromNodeId);
-        validateObject(message, '/MessageToNode');
+        validateObject(message, '/MessageToNodeMessage');
 
         const body = message.body;
         const channelName = body.channelName;
@@ -1120,7 +1120,7 @@ class Node {
         const requestId = message.requestId;
         validateObject(requestId, '/MessageId');
         const responseIndex = message.responseIndex;
-        assert(typeof(responseIndex) === 'number');
+        assert(typeof(responseIndex) === 'number', 'responseIndex is not a number');
 
         if (requestId in this._activeIncomingRequests) {
             this._activeIncomingRequests[requestId].onResponseReceivedCallbacks.forEach(cb => cb(responseIndex));
@@ -1163,7 +1163,7 @@ class Node {
                     return numResponses - 1;
                 },
                 reportError: errorString => {
-                    assert(typeof(errorString) === 'string');
+                    assert(typeof(errorString) === 'string', 'errorString is not a string.');
                     this.sendMessageToNode({ channelName, toNodeId: fromNodeId, message: { type: 'requestToNodeError', requestId, errorString } });
                     if (requestId in this._activeIncomingRequests) {
                         delete this._activeIncomingRequests[requestId];
@@ -1187,7 +1187,7 @@ class Node {
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
         if (fileKey.transformedSha1) {
             // this is important
-            assert(fileKey.transformNodeId === fromNodeId);
+            assert(fileKey.transformNodeId === fromNodeId, 'transformNodeId is not fromNodeId');
         }
         if ((fileKey.sha1) || (fileKey.transformedSha1)) {
             const fileInfo = await getLocalFileInfo({ fileKey });
@@ -1211,9 +1211,9 @@ class Node {
                 feedId = fileKey.feedId
             }
             else {
-                assert(fileKey.transformedFeedId)
-                assert(fileKey.transformNodeId);
-                assert(fileKey.feedIdHead);
+                // assert(fileKey.transformedFeedId)
+                // assert(fileKey.transformNodeId);
+                // assert(fileKey.feedIdHead);
                 feedId = await this._feedManager.findFeedIdFromTransformedFeedId({ transformedFeedId: fileKey.transformedFeedId, transformNodeId: fileKey.transformNodeId, feedIdHead: fileKey.feedIdHead });
                 if (!feedId) {
                     return;

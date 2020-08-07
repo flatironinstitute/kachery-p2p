@@ -124,12 +124,12 @@ class RemoteNode {
         return (elapsed > 60000);
     }
     onExpired(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
 
         this._onExpiredCallbacks.push(cb);
     }
     onMessage(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
 
         this._onMessageCallbacks.push(cb);
     }
@@ -185,8 +185,8 @@ class RemoteNode {
         throw Error('Could not send message. No connection.')
     }
     setIncomingConnection({ type, connection }) {
-        assert(['websocket', 'udp'].includes(type));
-        assert(connection);
+        assert(['websocket', 'udp'].includes(type), 'Invalid connection type.');
+        assert(connection, 'Missing connection.');
 
         if (type === 'websocket') {
             if ((this._incomingWebsocketConnection) && (this._incomingWebsocketConnection !== connection)) {
@@ -224,8 +224,8 @@ class RemoteNode {
         }
     }
     setOutgoingConnection({ type, connection }) {
-        assert(['websocket', 'udp'].includes(type));
-        assert(connection);
+        assert(['websocket', 'udp'].includes(type), 'Invalid connection type');
+        assert(connection, 'Missing connection');
 
         if (type === 'websocket') {
             if ((this._outgoingWebsocketConnection) && (this._outgoingWebsocketConnection !== connection)) {
@@ -351,7 +351,7 @@ class RemoteNode {
         }
     }
     async _tryOutgoingConnection({type}) {
-        assert(['websocket', 'udp'].includes(type));
+        assert(['websocket', 'udp'].includes(type), 'Invalid connection type');
 
         const remoteNodeInfo = this.remoteNodeInfo();
         if (!remoteNodeInfo) return false;
@@ -397,8 +397,8 @@ class RemoteNode {
     }
 
     async _startTryingOutgoingConnection({type}) {
-        assert(['websocket', 'udp'].includes(type));
-        
+        assert(['websocket', 'udp'].includes(type), 'Invalid connection type.');
+
         // start aggressively and slow down on failure
         // this can be reduced elsewhere in the code
         this._tryOutgoingConnectionIntervalMsec[type] = 1000;

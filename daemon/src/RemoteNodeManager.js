@@ -57,15 +57,15 @@ class RemoteNodeManager {
         return X.hasConnection();
     }
     onMessage(cb) {
-        assert(typeof(cb) === 'function');
+        // assert(typeof(cb) === 'function');
 
         this._onMessageCallbacks.push(cb);
     }
     peerHasConnectionOfType(peerId, {type, direction}) {
         validateNodeId(peerId);
-        assert(['websocket', 'udp'].includes(type));
+        assert(['websocket', 'udp'].includes(type), 'Invalid connection type');
         if (direction) {
-            assert(['incoming', 'outgoing'].includes(direction));
+            assert(['incoming', 'outgoing'].includes(direction), 'Invalid connection direction.');
         }
 
         if (!(peerId in this._remoteNodes)) return false;
@@ -202,14 +202,14 @@ class RemoteNodeManager {
     }
     setIncomingConnection({nodeId, type, connection}) {
         validateNodeId(nodeId);
-        assert(['websocket', 'udp'].includes(type));
+        assert(['websocket', 'udp'].includes(type), 'Invalid connection type');
 
         this._createRemoteNodeIfNeeded(nodeId);
         this._remoteNodes[nodeId].setIncomingConnection({type, connection});
     }
     setOutgoingConnection({nodeId, type, connection}) {
         validateNodeId(nodeId);
-        assert(['websocket', 'udp'].includes(type));
+        assert(['websocket', 'udp'].includes(type), 'Invalid connection type');
 
         this._createRemoteNodeIfNeeded(nodeId);
         this._remoteNodes[nodeId].setOutgoingConnection({type, connection});
@@ -262,7 +262,7 @@ class RemoteNodeManager {
     }
     _createRemoteNodeIfNeeded(remoteNodeId) {
         validateNodeId(remoteNodeId);
-        
+
         if (!(remoteNodeId in this._remoteNodes)) {
             const X = new RemoteNode({remoteNodeManager: this, remoteNodeId});
             X.onMessage(message => {
