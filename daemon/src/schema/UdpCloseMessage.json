@@ -8,7 +8,7 @@
             "properties": {
                 "type": {"const": "close"}
             },
-            "required": ["type", "close"],
+            "required": ["type"],
             "additionalProperties": false
         }
     },
