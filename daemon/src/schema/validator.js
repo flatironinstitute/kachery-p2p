@@ -11,7 +11,6 @@ const validator = new JsonSchema.Validator();
 const loadSchema = (fileName) => {
     const txt = fs.readFileSync(`${__dirname}/${fileName}`, 'utf-8'); 
     const obj = JSON.parse(txt);
-    console.log(obj['$id']);
     validator.addSchema(obj, obj['$id']);
 }
 const fileNames = fs.readdirSync(__dirname);

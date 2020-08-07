@@ -2,9 +2,17 @@
     "$id": "/UdpConfirmUdpMessageMessage",
     "type": "object",
     "properties": {
-        "type": {"const": "confirmUdpMessage"},
-        "udpMessageId": {"$ref": "/MessageId"}
+        "connectionId": {"$ref": "/MessageId"},
+        "message": {
+            "type": "object",
+            "properties": {
+                "type": {"const": "confirmUdpMessage"},
+                "udpMessageId": {"$ref": "/MessageId"}
+            },
+            "required": ["type", "udpMessageId"],
+            "additionalProperties": false
+        }
     },
-    "required": ["type", "udpMessageId"],
+    "required": ["connectionId", "message"],
     "additionalProperties": false
 }

@@ -5,9 +5,20 @@ import Node from './Node.js';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util.js';
 import FeedManager from './FeedManager.js';
 import { log, initializeLog } from './common/log.js';
+import { assert } from 'console';
+import { validateObject, validatePort, validateChannelName, validateNodeId } from './schema/index.js';
 
 class Daemon {
     constructor({ configDir, listenHost, listenPort, udpListenPort, verbose, discoveryVerbose, label, bootstrapInfos, opts }) {
+        assert(typeof(configDir) === 'string');
+        if (listenHost) validateObject(listenHost, '/Address');
+        if (listenPort) validatePort(listenPort);
+        if (udpListenPort) validatePort(udpListenPort);
+        validateObject(label, '/Label');
+        assert(Array.isArray(bootstrapInfos));
+        bootstrapInfos.forEach(bi => {
+            validateObject(bi, '/BootstrapPeerInfo');
+        });
         this._configDir = configDir; // Directory where config information is stored (including names and keys for feeds)
         this._listenHost = listenHost; // The host where we are listening
         this._listenPort = listenPort; // The port where we are listening
@@ -40,8 +51,8 @@ class Daemon {
 
         if (!bootstrapInfos) {
             bootstrapInfos = [
-                    {address: '45.33.92.31', port: 45001}, // kachery-p2p-spikeforest
-                    {address: '45.33.92.33', port: 45001} // kachery-p2p-flatiron1
+                    {address: '45.33.92.31', port: 45002}, // kachery-p2p-spikeforest
+                    {address: '45.33.92.33', port: 45002} // kachery-p2p-flatiron1
                 ].filter(bpi => {
                     if ((bpi.address === 'localhost') || (bpi.address === this._listenHost)) {
                         if (bpi.port === this._listenPort) {
@@ -104,14 +115,22 @@ class Daemon {
     ///////////////////////////xxxxxxxxxxxxxxxxxxxxxxxxxx
 
     _findFile = ({fileKey, timeoutMsec}) => {
+        validateObject(fileKey, '/FileKey');
+
         return this._findFileOrLiveFeed({fileKey, timeoutMsec});
     }
 
     _findLiveFeed = ({feedId, timeoutMsec}) => {
+        validateObject(feedId, '/FeedId');
+        assert(typeof(timeoutMsec) === 'number');
+
         return this._findFileOrLiveFeed({fileKey: {type: 'liveFeed', feedId}, timeoutMsec});
     }
 
     _findFileOrLiveFeed = ({fileKey, timeoutMsec}) => {
+        validateObject(fileKey, '/FileKey');
+        assert(typeof(timeoutMsec) === 'number');
+
         const findOutputs = [];
         const foundCallbacks = [];
         const finishedCallbacks = [];
@@ -159,20 +178,44 @@ class Daemon {
 
     // returns {stream, cancel}
     _downloadFile = async ({channelName, nodeId, fileKey, fileSize}) => {
+        validateChannelName(channelName);
+        validateNodeId(nodeId);
+        validateObject(fileKey, '/FileKey');
+        assert(typeof(fileSize) === 'number');
+
         log().info(`downloadFile`, {channelName, nodeId, fileKey, fileSize});
         return await this._node.downloadFile({channelName, nodeId, fileKey, startByte: 0, endByte: fileSize});
     }
     // returns {stream, cancel}
     _downloadFileBytes = async ({channelName, nodeId, fileKey, startByte, endByte}) => {
+        validateChannelName(channelName);
+        validateNodeId(nodeId);
+        validateObject(fileKey, '/FileKey');
+        assert(typeof(startByte) === 'number');
+        assert(typeof(endByte) === 'number');
+
         log().info(`downloadFileBytes`, {channelName, nodeId, fileKey, startByte, endByte});
         return await this._node.downloadFile({channelName, nodeId, fileKey, startByte, endByte});
     }
     _getLiveFeedSignedMessages = async ({channelName, nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
+        validateChannelName(channelName);
+        validateNodeId(nodeId);
+        validateObject(feedId, '/FeedId');
+        validateObject(subfeedName, '/SubfeedName');
+        assert(typeof(position) === 'number');
+        assert(typeof(waitMsec) === 'number');
+
         log().info(`getLiveFeedSignedMessages`, {channelName, nodeId, feedId, subfeedName, position});
         const signedMessages = await this._node.getLiveFeedSignedMessages({channelName, nodeId, feedId, subfeedName, position, waitMsec, opts});
         return signedMessages;
     }
     _submitMessagesToLiveFeed = async ({channelName, nodeId, feedId, subfeedName, messages}) => {
+        validateChannelName(channelName);
+        validateNodeId(nodeId);
+        validateObject(feedId, '/FeedId');
+        validateObject(subfeedName, '/SubfeedName');
+        assert(typeof(position) === 'number');
+
         log().info(`submitMessagesToLiveFeed`, {channelName, nodeId, feedId, subfeedName, numMessages: messages.length});
         await this._node.submitMessagesToLiveFeed({channelName, nodeId, feedId, subfeedName, messages});
     }

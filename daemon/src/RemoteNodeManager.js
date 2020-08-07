@@ -2,7 +2,7 @@ import assert from 'assert';
 import RemoteNode from './RemoteNode.js';
 import { JSONStringifyDeterministic, sha1sum } from './common/crypto_util.js';
 import { randomAlphaString, sleepMsec } from './common/util.js';
-import { validateChannelName, validateNodeToNodeMessage, validateNodeId, validateObject, validateNodeData } from './schema/index.js';
+import { validateChannelName, validateNodeToNodeMessage, validateNodeId, validateObject, validateNodeData, validatePort, validateSha1Hash } from './schema/index.js';
 
 class RemoteNodeManager {
     constructor(node) {
@@ -17,12 +17,17 @@ class RemoteNodeManager {
         this._start();
     }
     associateNodeWithTransformedChannelName({nodeId, transformedChannelName}) {
+        validateNodeId(nodeId);
+        validateSha1Hash(transformedChannelName);
+
         if (!(transformedChannelName in this._nodeIdsByTransformedChannelName)) {
             this._nodeIdsByTransformedChannelName[transformedChannelName] = {};
         }
         this._nodeIdsByTransformedChannelName[transformedChannelName][nodeId] = {timestamp: new Date()};
     }
     getNodeIdsForTransformedChannelName(transformedChannelName) {
+        validateSha1Hash(transformedChannelName);
+
         const ret = [];
         const x = this._nodeIdsByTransformedChannelName[transformedChannelName];
         if (x) {
@@ -34,6 +39,7 @@ class RemoteNodeManager {
     }
     bootstrapPeerInfo(peerId) {
         validateNodeId(peerId);
+
         assert(peerId in this._remoteNodes, 'bootstrapPeerInfo: no remote node');
         return this._remoteNodes[peerId].bootstrapPeerInfo();
     }
@@ -45,19 +51,23 @@ class RemoteNodeManager {
     }
     isPeer(nodeId) {
         validateNodeId(nodeId);
+
         if (!(nodeId in this._remoteNodes)) return false;
         const X = this._remoteNodes[nodeId];
         return X.hasConnection();
     }
     onMessage(cb) {
+        assert(typeof(cb) === 'function');
+
         this._onMessageCallbacks.push(cb);
     }
     peerHasConnectionOfType(peerId, {type, direction}) {
         validateNodeId(peerId);
-        this._node._validateString(type);
+        assert(['websocket', 'udp'].includes(type));
         if (direction) {
-            this._node._validateString(direction);
+            assert(['incoming', 'outgoing'].includes(direction));
         }
+
         if (!(peerId in this._remoteNodes)) return false;
         const X = this._remoteNodes[peerId];
         if (type === 'websocket') {
@@ -103,20 +113,25 @@ class RemoteNodeManager {
     }
     peerIdsForChannel(channelName) {
         validateChannelName(channelName);
+
         const peerIds = this.peerIds();
         return peerIds.filter(peerId => (this.remoteNodeInChannel(peerId, channelName)));
     }
     peerIsBootstrap(peerId) {
         validateNodeId(peerId);
+
         if (!(peerId in this._remoteNodes)) return false;
         return this._remoteNodes[peerId].isBootstrap();
     }
     remoteNodeData(nodeId) {
         validateNodeId(nodeId);
+
         if (!(nodeId in this._remoteNodes)) return null;
         return this._remoteNodes[nodeId].remoteNodeData();
     }
     remoteNodeHasLocalAddress(nodeId) {
+        validateNodeId(nodeId);
+
         if (!(nodeId in this._remoteNodes)) return false;
         return ((this._remoteNodes[nodeId].remoteNodeLocalAddress()) && (this._remoteNodes[nodeId].remoteNodeLocalPort())) ? true : false;
     }
@@ -125,11 +140,13 @@ class RemoteNodeManager {
     }
     remoteNodeIdsForChannel(channelName) {
         validateChannelName(channelName);
+
         const nodeIds = this.remoteNodeIds();
         return nodeIds.filter(nodeId => ((this.remoteNodeInChannel(nodeId, channelName)) && (!this._remoteNodes[nodeId].isExpired())));
     }
     remoteNodeInAJoinedChannel(nodeId) {
         validateNodeId(nodeId);
+
         if (!(nodeId in this._remoteNodes)) return false;
         for (let ch in this._node._channels) {
             if (this.remoteNodeInChannel(nodeId, ch)) {
@@ -141,6 +158,7 @@ class RemoteNodeManager {
     remoteNodeInChannel(nodeId, channelName) {
         validateNodeId(nodeId);
         validateChannelName(channelName);
+
         const transformedChannelName = this._node._gettransformedChannelNameForDiscovery({channelName, nodeId: this._node._nodeId});
         if (transformedChannelName in this._nodeIdsByTransformedChannelName) {
             if (nodeId in this._nodeIdsByTransformedChannelName[transformedChannelName]) {
@@ -151,19 +169,22 @@ class RemoteNodeManager {
     }
     remoteNodeInfo(nodeId) {
         validateNodeId(nodeId);
+
         if (!(nodeId in this._remoteNodes)) return null;
         return this._remoteNodes[nodeId].remoteNodeInfo();
     }
     sendMessageDirectlyToPeer(peerId, message) {
         validateNodeId(peerId);
-        assert(peerId in this._remoteNodes, 'sendMessageDirectlyToPeer: no peer');
         validateNodeToNodeMessage(message);
+
+        assert(peerId in this._remoteNodes, 'sendMessageDirectlyToPeer: no peer');
         const X = this._remoteNodes[peerId];
         assert(X.hasConnection(), 'sendMessageDirectlyToPeer: no connection');
         X.sendMessage(message);
     }
     sendMessageToAllPeers(message) {
         validateNodeToNodeMessage(message);
+
         const peerIds = this.peerIds();
         for (let peerId of peerIds) {
             this.sendMessageDirectlyToPeer(peerId, message);
@@ -171,6 +192,7 @@ class RemoteNodeManager {
     }
     sendMessageToAllPeersNotInJoinedChannels(message) {
         validateNodeToNodeMessage(message);
+
         const peerIds = this.peerIds();
         for (let peerId of peerIds) {
             if (!this.remoteNodeInAJoinedChannel(peerId)) {
@@ -180,29 +202,30 @@ class RemoteNodeManager {
     }
     setIncomingConnection({nodeId, type, connection}) {
         validateNodeId(nodeId);
-        this._node._validateString(type);
-        this._node._validateConnection(connection);
+        assert(['websocket', 'udp'].includes(type));
+
         this._createRemoteNodeIfNeeded(nodeId);
         this._remoteNodes[nodeId].setIncomingConnection({type, connection});
     }
     setOutgoingConnection({nodeId, type, connection}) {
         validateNodeId(nodeId);
-        this._node._validateString(type);
-        this._node._validateConnection(connection);
+        assert(['websocket', 'udp'].includes(type));
+
         this._createRemoteNodeIfNeeded(nodeId);
         this._remoteNodes[nodeId].setOutgoingConnection({type, connection});
     }
     setRemoteNodeBootstrapPeerInfo(remoteNodeId, bootstrapPeerInfo) {
-        if (!(remoteNodeId in this._remoteNodes)) return;
+        validateNodeId(remoteNodeId);
         if (bootstrapPeerInfo) {
-            this._node._validateSimpleObject(bootstrapPeerInfo);
-            this._node._validateString(bootstrapPeerInfo.address);
-            this._node._validateInteger(bootstrapPeerInfo.port);
+            validateObject(bootstrapPeerInfo, '/BootstrapPeerInfo');
         }
+
+        if (!(remoteNodeId in this._remoteNodes)) return;
         this._remoteNodes[remoteNodeInfo].setBootstrapPeerInfo(bootstrapPeerInfo);
     }
     setLocalNodeInfo(nodeInfo) {
         validateObject(nodeInfo, '/NodeInfo');
+
         if (this._localNodeInfo) {
             if (JSONStringifyDeterministic(nodeInfo) === JSONStringifyDeterministic(this._localNodeInfo))
                 return;
@@ -213,29 +236,33 @@ class RemoteNodeManager {
         }
     }
     setRemoteNodeBootstrapPeerInfo(remoteNodeId, bootstrapPeerInfo) {
-        if (!(remoteNodeId in this._remoteNodes)) return;
+        validateNodeId(remoteNodeId);
         if (bootstrapPeerInfo) {
-            this._node._validateSimpleObject(bootstrapPeerInfo);
-            this._node._validateString(bootstrapPeerInfo.address);
-            this._node._validateInteger(bootstrapPeerInfo.port);
+            validateObject(bootstrapPeerInfo, '/BootstrapPeerInfo');
         }
+
+        if (!(remoteNodeId in this._remoteNodes)) return;
         this._remoteNodes[remoteNodeId].setBootstrapPeerInfo(bootstrapPeerInfo);
     }
     setRemoteNodeData(nodeId, data) {
         validateNodeId(nodeId);
         validateNodeData(data);
+
         this._createRemoteNodeIfNeeded(nodeId);
         this._remoteNodes[nodeId].setRemoteNodeData(data);
     }
     setRemoteNodeLocalAddress(nodeId, {localAddress, localPort}) {
         validateNodeId(nodeId);
-        this._node._validateString(localAddress);
-        this._node._validateInteger(localPort);
+        validateObject(localAddress, '/Address');
+        validatePort(localPort);
+
         if (nodeId in this._remoteNodes) {
             this._remoteNodes[nodeId].setRemoteNodeLocalAddress({localAddress, localPort});
         }
     }
     _createRemoteNodeIfNeeded(remoteNodeId) {
+        validateNodeId(remoteNodeId);
+        
         if (!(remoteNodeId in this._remoteNodes)) {
             const X = new RemoteNode({remoteNodeManager: this, remoteNodeId});
             X.onMessage(message => {

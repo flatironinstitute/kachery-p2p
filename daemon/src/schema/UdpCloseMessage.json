@@ -2,8 +2,16 @@
     "$id": "/UdpCloseMessage",
     "type": "object",
     "properties": {
-        "type": {"const": "close"}
+        "connectionId": {"$ref": "/MessageId"},
+        "message": {
+            "type": "object",
+            "properties": {
+                "type": {"const": "close"}
+            },
+            "required": ["type", "close"],
+            "additionalProperties": false
+        }
     },
-    "required": ["type"],
+    "required": ["connectionId", "message"],
     "additionalProperties": false
 }

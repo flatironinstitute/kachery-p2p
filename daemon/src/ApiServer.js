@@ -5,6 +5,8 @@ import fs from 'fs';
 import JsonSocket from 'json-socket';
 import { sleepMsec } from './common/util.js';
 import { log } from './common/log.js';
+import { validateChannelName, validateObject, validateNodeId } from './schema/index.js';
+import { assert } from 'console';
 
 export default class ApiServer {
     // This is the API server for the local daemon
@@ -166,7 +168,7 @@ export default class ApiServer {
                 await this._feedApiGetMessages(req, res)
             }
             catch(err) {
-                console.warn(err);
+                console.warn(`Error in getMessages: ${err.message}`);
                 log().warning('Error in getMessages', {error: err.message});
                 res.status(500).send('Error getting messages.');
             }
@@ -258,6 +260,7 @@ export default class ApiServer {
     async _apiJoinChannel(req, res) {
         const reqData = req.body;
         const channelName = reqData.channelName;
+        validateChannelName(channelName);
         await this._daemon.joinChannel(channelName);
         res.json({ success: true });
     }
@@ -265,6 +268,7 @@ export default class ApiServer {
     async _apiLeaveChannel(req, res) {
         const reqData = req.body;
         const channelName = reqData.channelName;
+        validateChannelName(channelName);
         await this._daemon.leaveChannel(channelName);
         res.json({ success: true });
     }
@@ -272,6 +276,8 @@ export default class ApiServer {
     async _apiFindFile(req, res) {
         const reqData = req.body;
         // Returns the find request
+        validateObject(reqData.fileKey, '/FileKey');
+        assert(typeof(reqData.timeoutMsec) === 'number');
         const x = this._daemon.findFile({fileKey: reqData.fileKey, timeoutMsec: reqData.timeoutMsec});
         const jsonSocket = new JsonSocket(res);
         let isDone = false;
@@ -296,6 +302,9 @@ export default class ApiServer {
     // /downloadFile - download a previously-found file from a remote node
     async _apiDownloadFile(req, res) {
         const reqData = req.body;
+        validateNodeId(reqData.nodeId);
+        validateObject(reqData.fileKey, '/FileKey');
+        assert(typeof(reqData.fileSize) === 'number');
         const {stream, cancel} = await this._daemon.downloadFile({
             channelName: reqData.channel,
             nodeId: reqData.nodeId,
@@ -309,6 +318,10 @@ export default class ApiServer {
     // /downloadFile - download a previously-found file from a remote node
     async _apiDownloadFileBytes(req, res) {
         const reqData = req.body;
+        validateNodeId(reqData.nodeId);
+        validateObject(reqData.fileKey, '/FileKey');
+        assert(typeof(reqData.startByte) === 'number');
+        assert(typeof(reqData.endByte) === 'number');
         const {stream, cancel} = await this._daemon.downloadFileBytes({
             channelName: reqData.channel,
             nodeId: reqData.nodeId,
@@ -324,6 +337,9 @@ export default class ApiServer {
     async _feedApiCreateFeed(req, res) {
         const reqData = req.body;
         const feedName = reqData.feedName || null;
+        if (feedName) {
+            assert(typeof(feedName) === 'string');
+        }
         const feedId = await this._daemon.feedManager().createFeed({feedName});
         res.json({ success: true, feedId });
     }
@@ -331,6 +347,9 @@ export default class ApiServer {
     async _feedApiDeleteFeed(req, res) {
         const reqData = req.body;
         const feedId = reqData.feedId || null;
+        if (feedId) {
+            validateObject(feedId, '/FeedId');
+        }
         await this._daemon.feedManager().deleteFeed({feedId});
         res.json({ success: true });
     }
@@ -338,6 +357,7 @@ export default class ApiServer {
     async _feedApiGetFeedId(req, res) {
         const reqData = req.body;
         const feedName = reqData.feedName;
+        assert(typeof(feedName) === 'string');
         const feedId = await this._daemon.feedManager().getFeedId({feedName});
         if (!feedId) {
             res.json({ success: false });
@@ -351,6 +371,9 @@ export default class ApiServer {
         const {
             feedId, subfeedName, messages
         } = reqData;
+        validateObject(feedId, '/FeedId');
+        validateObject(subfeedName, '/SubfeedName');
+        assert(Array.isArray(messages));
         await this._daemon.feedManager().appendMessages({
             feedId, subfeedName, messages
         });
@@ -362,6 +385,9 @@ export default class ApiServer {
         const {
             feedId, subfeedName, messages
         } = reqData;
+        validateObject(feedId, '/FeedId');
+        validateObject(subfeedName, '/SubfeedName');
+        assert(Array.isArray(messages));
         await this._daemon.feedManager().submitMessages({feedId, subfeedName, messages});
         res.json({ success: true })
     }
@@ -371,6 +397,11 @@ export default class ApiServer {
         const {
             feedId, subfeedName, position, maxNumMessages, waitMsec
         } = reqData;
+        validateObject(feedId, '/FeedId');
+        validateObject(subfeedName, '/SubfeedName');
+        assert(typeof(position) === 'number');
+        assert(typeof(maxNumMessages) === 'number');
+        assert(typeof(waitMsec) === 'number');
         const messages = await this._daemon.feedManager().getMessages({
             feedId, subfeedName, position, maxNumMessages, waitMsec
         });
@@ -382,6 +413,11 @@ export default class ApiServer {
         const {
             feedId, subfeedName, position, maxNumMessages, waitMsec
         } = reqData;
+        validateObject(feedId, '/FeedId');
+        validateObject(subfeedName, '/SubfeedName');
+        assert(typeof(position) === 'number');
+        assert(typeof(maxNumMessages) === 'number');
+        assert(typeof(waitMsec) === 'number');
         const signedMessages = await this._daemon.feedManager().getSignedMessages({
             feedId, subfeedName, position, maxNumMessages, waitMsec
         });
@@ -393,6 +429,8 @@ export default class ApiServer {
         const {
             feedId, subfeedName
         } = reqData;
+        validateObject(feedId, '/FeedId');
+        validateObject(subfeedName, '/SubfeedName');
         const numMessages = await this._daemon.feedManager().getNumMessages({
             feedId, subfeedName
         });
@@ -404,6 +442,7 @@ export default class ApiServer {
         const {
             feedId
         } = reqData;
+        validateObject(feedId, '/FeedId');
         const info = await this._daemon.feedManager().getFeedInfo({feedId});
         res.json({ success: true, info });
     }
@@ -413,7 +452,10 @@ export default class ApiServer {
         const {
             feedId, subfeedName
         } = reqData;
+        validateObject(feedId, '/FeedId');
+        validateObject(subfeedName, '/SubfeedName');
         const accessRules = await this._daemon.feedManager().getAccessRules({feedId, subfeedName});
+        validateObject(accessRules, '/AccessRules');
         res.json({ success: true, accessRules });
     }
     // /feed/setAccessRules - set access rules for a local writeable subfeed
@@ -422,6 +464,9 @@ export default class ApiServer {
         const {
             feedId, subfeedName, accessRules
         } = reqData;
+        validateObject(feedId, '/FeedId');
+        validateObject(subfeedName, '/SubfeedName');
+        validateObject(accessRules, '/AccessRules');
         await this._daemon.feedManager().setAccessRules({feedId, subfeedName, accessRules});
         res.json({ success: true });
     }
@@ -448,6 +493,7 @@ export default class ApiServer {
         const {
             subfeedWatches, waitMsec
         } = reqData;
+        assert(typeof(waitMsec) === 'number');
         const messages = await this._daemon.feedManager().watchForNewMessages({
             subfeedWatches, waitMsec
         });

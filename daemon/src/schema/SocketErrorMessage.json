@@ -1,5 +1,5 @@
 {
-    "$id": "/WebsocketErrorMessage",
+    "$id": "/SocketErrorMessage",
     "type": "object",
     "properties": {
         "type": {"const": "error"},

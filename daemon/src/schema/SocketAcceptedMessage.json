@@ -1,5 +1,5 @@
 {
-    "$id": "/WebsocketAcceptedMessage",
+    "$id": "/SocketAcceptedMessage",
     "type": "object",
     "properties": {
         "type": {"const": "accepted"}

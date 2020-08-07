@@ -25,6 +25,15 @@
             "type": "object",
             "properties": {
                 "type": {"const": "liveFeed"},
+                "feedId": {"$ref": "/FeedId"}
+            },
+            "required": ["type", "feedId"],
+            "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "type": {"const": "liveFeed"},
                 "feedIdHead": {"$ref": "/FeedIdHead"},
                 "transformNodeId": {"$ref": "NodeId"},
                 "transformedFeedId": {"$ref": "/Sha1Hash"}

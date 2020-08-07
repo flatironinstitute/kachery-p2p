@@ -1,8 +1,0 @@
-{
-    "$id": "/WebsocketMessage",
-    "oneOf": [
-        {"$ref": "/WebsocketAcceptedMessage"},
-        {"$ref": "/WebsocketErrorMessage"},
-        {"$ref": "/NodeToNodeMessage"}
-    ]
-}

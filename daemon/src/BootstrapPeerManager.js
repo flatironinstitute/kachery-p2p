@@ -1,10 +1,11 @@
 import { sleepMsec } from './common/util.js'
-import { OutgoingConnectionError } from './WebsocketServer.js';
-import { sha1sum } from './common/crypto_util.js';
-import { validateObject, validateChannelName, validateSha1Hash, validateNodeData, validateNodeId } from './schema/index.js';
+import { OutgoingConnectionError } from './SocketServer.js';
+import { validateObject, validateSha1Hash, validateNodeData, validateNodeId, validatePort } from './schema/index.js';
 
 class BootstrapPeerManager {
     constructor({remoteNodeManager, websocketServer, address, port}) {
+        validateObject(address, '/Address');
+        validatePort(port);
         this._remoteNodeManager = remoteNodeManager;
         this._node = remoteNodeManager._node;
         this._websocketServer = websocketServer;
@@ -38,7 +39,7 @@ class BootstrapPeerManager {
 
         for (let data0 of nodes) {
             validateNodeData(data0);
-            const nodeId = data0.nodeInfo.nodeId;
+            const nodeId = data0.body.nodeInfo.nodeId;
             validateNodeId(nodeId);
             this._remoteNodeManager.setRemoteNodeData(nodeId, data0);
             if (channelName) {
@@ -111,10 +112,15 @@ could also manually specify your own bootstrap node.
             type: 'websocket',
             connection: C
         });
+        const bootstrapPeerInfo = {
+            address: this._address,
+            port: this._port
+        };
+        validateObject(bootstrapPeerInfo, '/BootstrapPeerInfo');
         this._remoteNodeManager.setRemoteNodeBootstrapPeerInfo(
             remoteNodeId,
-            {address: this._address, port: this._port}
-        )
+            bootstrapPeerInfo
+        );
         this._connected = true;
         this._peerId = remoteNodeId;
         return true;

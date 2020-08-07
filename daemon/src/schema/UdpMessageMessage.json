@@ -2,11 +2,18 @@
     "$id": "/UdpMessageMessage",
     "type": "object",
     "properties": {
-        "type": {"const": "message"},
-        "udpMessageId": {"$ref": "/MessageId"},
-        "messageText": {"type": "string"},
-        "connectionId": {"$ref": "/MessageId"}
+        "connectionId": {"$ref": "/MessageId"},
+        "message": {
+            "type": "object",
+            "properties": {
+                "type": {"const": "message"},
+                "udpMessageId": {"$ref": "/MessageId"},
+                "messageText": {"type": "string"}
+            },
+            "required": ["type", "udpMessageId", "messageText"],
+            "additionalProperties": false
+        }
     },
-    "required": ["type", "udpMessageId", "messageText", "connectionId"],
+    "required": ["connectionId", "message"],
     "additionalProperties": false
 }

@@ -8,7 +8,9 @@
             "type": "object",
             "properties": {
                 "address": {"$ref": "/Address"},
-                "port": {"$ref": "/Port"}
+                "port": {"$ref": "/Port"},
+                "family": {"type": "string"},
+                "size": {"type": "number"}
             },
             "required": ["address", "port"],
             "additionalProperties": false

@@ -2,10 +2,12 @@ import { sleepMsec, randomAlphaString } from "./common//util.js";
 import assert from 'assert';
 import { sha1sum } from "./common//crypto_util.js";
 import { timeStamp } from "console";
-import { validateObject, validateNodeToNodeMessage, validateNodeData } from "./schema/index.js";
+import { validateObject, validateNodeToNodeMessage, validateNodeData, validatePort, validateNodeId } from "./schema/index.js";
 
 class RemoteNode {
     constructor({ remoteNodeManager, remoteNodeId }) {
+        validateNodeId(remoteNodeId);
+
         this._remoteNodeManager = remoteNodeManager;
         this._node = this._remoteNodeManager._node;
         this._websocketServer = this._node._websocketServer;
@@ -122,9 +124,13 @@ class RemoteNode {
         return (elapsed > 60000);
     }
     onExpired(cb) {
+        assert(typeof(cb) === 'function');
+
         this._onExpiredCallbacks.push(cb);
     }
     onMessage(cb) {
+        assert(typeof(cb) === 'function');
+
         this._onMessageCallbacks.push(cb);
     }
     remoteNodeData() {
@@ -136,6 +142,7 @@ class RemoteNode {
     }
     sendMessage(message) {        
         validateNodeToNodeMessage(message);
+
         if (!message._confirmId) {
             if (!message._id) {
                 message._id = randomAlphaString(10);
@@ -178,8 +185,9 @@ class RemoteNode {
         throw Error('Could not send message. No connection.')
     }
     setIncomingConnection({ type, connection }) {
-        this._node._validateString(type);
-        this._node._validateConnection(connection);
+        assert(['websocket', 'udp'].includes(type));
+        assert(connection);
+
         if (type === 'websocket') {
             if ((this._incomingWebsocketConnection) && (this._incomingWebsocketConnection !== connection)) {
                 this._incomingWebsocketConnection.disconnect();
@@ -216,8 +224,9 @@ class RemoteNode {
         }
     }
     setOutgoingConnection({ type, connection }) {
-        this._node._validateString(type);
-        this._node._validateConnection(connection);
+        assert(['websocket', 'udp'].includes(type));
+        assert(connection);
+
         if (type === 'websocket') {
             if ((this._outgoingWebsocketConnection) && (this._outgoingWebsocketConnection !== connection)) {
                 this._outgoingWebsocketConnection.disconnect();
@@ -254,10 +263,13 @@ class RemoteNode {
         }
     }
     setBootstrapPeerInfo(bootstrapPeerInfo) {
+        validateObject(bootstrapPeerInfo, '/BootstrapPeerInfo');
+
         this._bootstrapPeerInfo = cloneObject(bootstrapPeerInfo);
     }
     setRemoteNodeData(data) {
         validateNodeData(data);
+
         let doSet = false;
         if (this._remoteNodeData) {
             const difference = data.body.timestamp - this._remoteNodeData.body.timestamp;
@@ -290,28 +302,25 @@ class RemoteNode {
         }
     }
     setRemoteNodeLocalAddress({localAddress, localPort}) {
-        this._node._validateString(localAddress);
-        this._node._validateInteger(localPort);
+        validateObject(localAddress, '/Address');
+        validatePort(localPort);
+
         this._remoteNodeLocalAddress = localAddress;
         this._remoteNodeLocalPort = localPort;
     }
     setLocalNodeInfo(nodeInfo) {
         validateObject(nodeInfo, '/NodeInfo');
+
         this._localNodeInfo = nodeInfo;
         // todo: trigger events here?
     }
     _handleMessage(message) {
+        validateNodeToNodeMessage(message);
+
         if (message._confirmId) {
             if (message._confirmId in this._unconfirmedOutgoingMessages) {
                 delete this._unconfirmedOutgoingMessages[message._confirmId];
             }
-            return;
-        }
-        try {
-            validateNodeToNodeMessage(message);
-        }
-        catch(err) {
-            this.halt();
             return;
         }
         assert(message._id, 'Missing message id');
@@ -342,6 +351,8 @@ class RemoteNode {
         }
     }
     async _tryOutgoingConnection({type}) {
+        assert(['websocket', 'udp'].includes(type));
+
         const remoteNodeInfo = this.remoteNodeInfo();
         if (!remoteNodeInfo) return false;
         let server, address, port;
@@ -386,6 +397,8 @@ class RemoteNode {
     }
 
     async _startTryingOutgoingConnection({type}) {
+        assert(['websocket', 'udp'].includes(type));
+        
         // start aggressively and slow down on failure
         // this can be reduced elsewhere in the code
         this._tryOutgoingConnectionIntervalMsec[type] = 1000;
