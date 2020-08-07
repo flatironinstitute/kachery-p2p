@@ -165,6 +165,7 @@ class SmartyNode {
                 direct: true, // ensure that we are going directly to the node
                 requestBody: {
                     type: 'routeLatencyTest',
+                    channelName,
                     toNodeId,
                     testData,
                     avoid: [...avoid, this._node.nodeId()]

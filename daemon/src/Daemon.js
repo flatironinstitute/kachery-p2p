@@ -216,7 +216,6 @@ class Daemon {
         validateNodeId(nodeId);
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
-        assert(typeof(position) === 'number');
 
         log().info(`submitMessagesToLiveFeed`, {channelName, nodeId, feedId, subfeedName, numMessages: messages.length});
         await this._node.submitMessagesToLiveFeed({channelName, nodeId, feedId, subfeedName, messages});
