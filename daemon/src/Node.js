@@ -1035,7 +1035,11 @@ class Node {
         this._handledBroadcastMessages[broadcastMessageId] = true;
 
         const channelName = body.channelName;
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        if (!(channelName in this._channels)) {
+            // if we aren't in the channel, then we aren't going to broadcast the message
+            console.warn(`Not broadcasting message. Not in channel: ${channelName}`);
+            return;
+        }
 
         validateNodeId(body.fromNodeId);
         validateNodeToNodeMessage(body.message);
@@ -1066,7 +1070,11 @@ class Node {
         validateNodeId(body.toNodeId);
         validateNodeToNodeMessage(body.message);
 
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        if (!(channelName in this._channels)) {
+            // if we aren't in the channel, then we aren't going to send the message to the node
+            console.warn(`Not sending message to node. Not in channel: ${channelName}`);
+            return;
+        }
 
         const signature = message.signature;
         if (!verifySignature(body, signature, hexToPublicKey(body.fromNodeId), {checkTimestamp: true})) {
