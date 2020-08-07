@@ -3,6 +3,8 @@ import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignatu
 import { protocolVersion } from './protocolVersion.js';
 import InternalUdpServer from './InternalUdpServer.js';
 import ip from 'ip';
+import { validateObject, validateNodeToNodeMessage } from './schema/index.js';
+import validator from './schema/validator.js';
 
 // todo: monitor and clean up closed connections throughout file
 
@@ -163,6 +165,14 @@ class IncomingWebsocketConnection {
                 this._webSocket.close();
                 return;
             }
+            try {
+                validateObject(msg.body.message, '/WebsocketMessage');
+            }
+            catch(err) {
+                this.sendMessage({type: 'error', error: `Error validating websocket message: ${err.message}`});
+                this.disconnectLater();
+                return;
+            }
             this._onMessageCallbacks.forEach(cb => {
                 cb(msg.body.message);
             });
@@ -181,6 +191,7 @@ class IncomingWebsocketConnection {
         this._onDisconnectCallbacks.push(cb);
     }
     sendMessage(msg) {
+        validateObject(msg, '/WebsocketMessage');
         if (this._disconnecting) return;
         const body = {
             fromNodeId: this._nodeId,
@@ -285,6 +296,14 @@ class OutgoingConnection {
                 this.disconnect();
                 return;
             }
+            try {
+                validateObject(message2, '/WebsocketMessage');
+            }
+            catch(err) {
+                console.warn(`OutgoingSocketConnection: Problem validating message: ${err.message}`);
+                this.disconnect();
+                return;
+            }
             if (!this._accepted) {
                 if (message2.type === 'accepted') {
                     this._accepted = true;
@@ -332,6 +351,7 @@ class OutgoingConnection {
         this._onDisconnectCallbacks.push(cb);
     }
     sendMessage(msg) {
+        validateNodeToNodeMessage(msg);
         if (this._isOpen) {
             if (this._isClosed) {
                 // log().warning('Cannot send message. Websocket is closed.', {address: this._address, port: this._port});

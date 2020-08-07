@@ -5,7 +5,8 @@
         "type": {"const": "requestToNodeResponseReceived"},
         "channelName": {"$ref": "/ChannelName"},
         "requestId": {"$ref": "/MessageId"},
-        "responseIndex": {"type": "integer"}
+        "responseIndex": {"type": "integer"},
+        "_id": {"$ref": "/MessageId"}
     },
     "required": ["type", "channelName", "requestId", "responseIndex"],
     "additionalProperties": false

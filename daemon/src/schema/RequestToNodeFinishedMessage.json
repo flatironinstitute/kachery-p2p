@@ -4,7 +4,8 @@
     "properties": {
         "type": {"const": "requestToNodeFinished"},
         "requestId": {"$ref": "/MessageId"},
-        "numResponses": {"type": "integer"}
+        "numResponses": {"type": "integer"},
+        "_id": {"$ref": "/MessageId"}
     },
     "required": ["type", "requestId", "numResponses"],
     "additionalProperties": false

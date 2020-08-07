@@ -20,6 +20,17 @@
             },
             "required": ["transformedSha1", "transformNodeId", "sha1Head"],
             "additionalProperties": false
+        },
+        {
+            "type": "object",
+            "properties": {
+                "type": {"const": "liveFeed"},
+                "feedIdHead": {"$ref": "/FeedIdHead"},
+                "transformNodeId": {"$ref": "NodeId"},
+                "transformedFeedId": {"$ref": "/Sha1Hash"}
+            },
+            "required": ["type", "feedIdHead", "transformNodeId", "transformedFeedId"],
+            "additionalProperties": false
         }
     ]
 }

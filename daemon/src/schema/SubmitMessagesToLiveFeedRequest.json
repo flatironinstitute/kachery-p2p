@@ -1,5 +1,5 @@
 {
-    "$id": "/SubmitMessagesToLiveFeedMessage",
+    "$id": "/SubmitMessagesToLiveFeedRequest",
     "type": "object",
     "properties": {
         "type": {"const": "submitMessagesToLiveFeed"},

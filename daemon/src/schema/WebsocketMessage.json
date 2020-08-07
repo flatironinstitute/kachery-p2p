@@ -3,6 +3,6 @@
     "oneOf": [
         {"$ref": "/WebsocketAcceptedMessage"},
         {"$ref": "/WebsocketErrorMessage"},
-        {"$ref": "/WebsocketInitialMessage"}
+        {"$ref": "/NodeToNodeMessage"}
     ]
 }

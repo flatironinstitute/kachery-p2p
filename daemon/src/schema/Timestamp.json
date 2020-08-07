@@ -1,4 +1,4 @@
 {
     "$id": "/Timestamp",
-    "type": "number"
+    "type": "integer"
 }

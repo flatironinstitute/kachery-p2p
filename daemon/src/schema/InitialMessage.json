@@ -1,5 +1,5 @@
 {
-    "$id": "/WebsocketInitialMessage",
+    "$id": "/InitialMessage",
     "type": "object",
     "properties": {
         "type": {"const": "initial"},

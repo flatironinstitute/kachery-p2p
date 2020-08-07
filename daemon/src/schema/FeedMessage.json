@@ -2,7 +2,7 @@
     "$id": "/FeedMessage",
     "oneOf": [
         {"type": "string"},
-        {"type": "number"},
+        {"type": "integer"},
         {"type": "object"},
         {"type": "array"}
     ]

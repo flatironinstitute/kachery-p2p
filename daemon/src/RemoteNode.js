@@ -2,6 +2,7 @@ import { sleepMsec, randomAlphaString } from "./common//util.js";
 import assert from 'assert';
 import { sha1sum } from "./common//crypto_util.js";
 import { timeStamp } from "console";
+import { validateObject, validateNodeToNodeMessage, validateNodeData } from "./schema/index.js";
 
 class RemoteNode {
     constructor({ remoteNodeManager, remoteNodeId }) {
@@ -133,9 +134,8 @@ class RemoteNode {
         if (!this._remoteNodeData) return null;
         return cloneObject(this._remoteNodeData.body.nodeInfo);
     }
-    sendMessage(message) {
-        this._node._validateMessage(message);
-
+    sendMessage(message) {        
+        validateNodeToNodeMessage(message);
         if (!message._confirmId) {
             if (!message._id) {
                 message._id = randomAlphaString(10);
@@ -257,7 +257,7 @@ class RemoteNode {
         this._bootstrapPeerInfo = cloneObject(bootstrapPeerInfo);
     }
     setRemoteNodeData(data) {
-        this._remoteNodeManager._validateRemoteNodeData(data);
+        validateNodeData(data);
         let doSet = false;
         if (this._remoteNodeData) {
             const difference = data.body.timestamp - this._remoteNodeData.body.timestamp;
@@ -296,7 +296,7 @@ class RemoteNode {
         this._remoteNodeLocalPort = localPort;
     }
     setLocalNodeInfo(nodeInfo) {
-        this._node._validateNodeInfo(nodeInfo);
+        validateObject(nodeInfo, '/NodeInfo');
         this._localNodeInfo = nodeInfo;
         // todo: trigger events here?
     }
@@ -305,6 +305,13 @@ class RemoteNode {
             if (message._confirmId in this._unconfirmedOutgoingMessages) {
                 delete this._unconfirmedOutgoingMessages[message._confirmId];
             }
+            return;
+        }
+        try {
+            validateNodeToNodeMessage(message);
+        }
+        catch(err) {
+            this.halt();
             return;
         }
         assert(message._id, 'Missing message id');

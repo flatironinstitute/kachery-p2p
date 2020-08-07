@@ -1,0 +1,14 @@
+{
+    "$id": "/RouteLatencyTestResponse",
+    "type": "object",
+    "properties": {
+        "route": {
+            "type": "array",
+            "items": {"$ref": "/NodeId"}
+        },
+        "testData": {"type": "string"},
+        "testDataSignature": {"$ref": "/Signature"}
+    },
+    "required": ["route", "testData", "testDataSignature"],
+    "additionalProperties": false
+}

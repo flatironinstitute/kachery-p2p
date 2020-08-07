@@ -6,8 +6,8 @@
             "type": "object",
             "properties": {
                 "message": {"$ref": "/FeedMessage"},
-                "previousSignature": {"$ref": "/Signature"},
-                "messageNumber": "integer",
+                "previousSignature": {"oneOf": [{"type": "null"}, {"$ref": "/Signature"}]},
+                "messageNumber": {"type": "integer"},
                 "timestamp": {"$ref": "/Timestamp"}
             },
             "required": ["message", "previousSignature", "messageNumber", "timestamp"],

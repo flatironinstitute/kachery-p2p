@@ -1,6 +1,7 @@
 import { sleepMsec } from './common/util.js'
 import { OutgoingConnectionError } from './WebsocketServer.js';
 import { sha1sum } from './common/crypto_util.js';
+import { validateObject, validateChannelName, validateSha1Hash, validateNodeData, validateNodeId } from './schema/index.js';
 
 class BootstrapPeerManager {
     constructor({remoteNodeManager, websocketServer, address, port}) {
@@ -21,13 +22,12 @@ class BootstrapPeerManager {
         return this._peerId;
     }
     handleFindChannelPeersResponse(message) {
-        this._node._validateMessage(message);
+        validateObject(message, '/FindChannelPeersResponseMessage');
 
         const transformedChannelName = message.transformedChannelName;
         const nodes = message.nodes;
 
-        this._node._validateString(transformedChannelName);
-        this._node._validateSimpleObject(nodes);
+        validateSha1Hash(transformedChannelName);
 
         let channelName = null;
         for (let ch in this._node._channels) {
@@ -37,8 +37,9 @@ class BootstrapPeerManager {
         }
 
         for (let data0 of nodes) {
+            validateNodeData(data0);
             const nodeId = data0.nodeInfo.nodeId;
-            this._node._validateNodeId(nodeId);
+            validateNodeId(nodeId);
             this._remoteNodeManager.setRemoteNodeData(nodeId, data0);
             if (channelName) {
                 // this is tricky... we store it based on transformed for our own id

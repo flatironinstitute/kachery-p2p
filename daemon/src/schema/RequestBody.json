@@ -1,0 +1,9 @@
+{
+    "$id": "/RequestBody",
+    "oneOf": [
+        {"$ref": "/DownloadFileRequest"},
+        {"$ref": "/GetLiveFeedSignedMessagesRequest"},
+        {"$ref": "/SubmitMessagesToLiveFeedRequest"},
+        {"$ref": "/RouteLatencyTestRequest"}
+    ]
+}

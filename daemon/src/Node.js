@@ -13,6 +13,7 @@ import RemoteNodeManager from './RemoteNodeManager.js';
 import util from 'util';
 import dgram from 'dgram';
 import { protocolVersion } from './protocolVersion.js';
+import { validateObject, validateChannelName, validateNodeId, validateNodeToNodeMessage, validateNodeData } from './schema/index.js';
 
 const MAX_BYTES_PER_DOWNLOAD_REQUEST = 20e6;
 
@@ -111,7 +112,7 @@ class Node {
         this._handleBroadcastMessage({ fromNodeId: this._nodeId, message: message2 });
     }
     joinChannel(channelName) {
-        this._validateChannelName(channelName);
+        validateChannelName(channelName);
         log().info('Joining channel', { channelName });
         if (channelName in this._channels) {
             return;
@@ -119,14 +120,14 @@ class Node {
         this._channels[channelName] = true;
     }
     leaveChannel(channelName) {
-        this._validateChannelName(channelName);
+        validateChannelName(channelName);
         log().info('Leaving channel', { channelName });
         if (channelName in this._channels) {
             delete this._channels[channelName];
         }
     }
     hasJoinedChannel(channelName) {
-        this._validateChannelName(channelName);
+        validateChannelName(channelName);
         return (channelName in this._channels);
     }
     joinedChannelNames() {
@@ -137,16 +138,19 @@ class Node {
         return ret;
     }
     async sendMessageToNode({ channelName, toNodeId, direct=false, route, message }) {
+        validateNodeToNodeMessage(message);
         this._validateChannelName(channelName, { mustBeJoined: true });
-        this._validateNodeId(toNodeId);
+        validateNodeId(toNodeId);
         this._validateBool(direct);
         if (route) {
-            this._validateRoute(route, { mustEndWithNode: toNodeId, mustContainNode: this._nodeId });
+            assert(Array.isArray(route));
+            for (let x of route) {
+                validateNodeId(x);
+            }
             if (direct) {
                 throw Error('Cannot provide route with direct=true');
             }
         }
-        this._validateMessage(message);
 
         if ((!route) || (direct)) {
             //  check if we can send it directly to peer
@@ -211,13 +215,13 @@ class Node {
         timeout = timeout || null;
         requestId = requestId || randomAlphaString(10);
         this._validateChannelName(channelName, { mustBeJoined: true });
-        this._validateNodeId(toNodeId);
-        this._validateRequestBody(requestBody);
+        validateNodeId(toNodeId);
+        validateObject(requestBody, '/RequestBody');
         this._validateBool(direct);
         if (timeout !== null) {
             this._validateInteger(timeout);
         }
-        this._validateString(requestId, { minLength: 10, maxLength: 10 });
+        validateObject(requestId, '/MessageId');
 
         // Send a request to node
         const onResponseCallbacks = [];
@@ -381,7 +385,7 @@ class Node {
             if (isFinished) return;
             this._validateSimpleObject(x);
             this._validateChannelName(x.channelName, {mustBeJoined: true});
-            this._validateNodeId(x.nodeId);
+            validateNodeId(x.nodeId);
             this._validateSimpleObject(x.fileKey);
             if (x.fileInfo) {
                 this._validateSimpleObject(x.fileInfo);
@@ -403,7 +407,7 @@ class Node {
     }
     async downloadFile({channelName, nodeId, fileKey, startByte, endByte}) {
         this._validateChannelName(channelName, {mustBeJoined: true});
-        this._validateNodeId(nodeId);
+        validateNodeId(nodeId);
         this._validateSimpleObject(fileKey);
         this._validateInteger(startByte);
         this._validateInteger(endByte);
@@ -588,7 +592,7 @@ class Node {
     _handleRequestFromNode({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
 
         this._validateChannelName(channelName, {mustBeInChannel: true});
-        this._validateNodeId(fromNodeId);
+        validateNodeId(fromNodeId);
         this._validateSimpleObject(requestBody);
         this._validateFunction(sendResponse);
         this._validateFunction(reportError);
@@ -629,6 +633,7 @@ class Node {
             type: 'announcing',
             nodeData: this._createNodeData()
         };
+        validateObject(message, '/AnnouncingMessage');
         for (let channelName in this._channels) {
             this.broadcastMessage({channelName, message});
         }
@@ -722,7 +727,7 @@ class Node {
 
     async _handleDownloadFileRequest({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
         this._validateChannelName(channelName, {mustBeInChannel: true});
-        this._validateNodeId(fromNodeId);
+        validateNodeId(fromNodeId);
         this._validateSimpleObject(requestBody);
         this._validateFunction(sendResponse);
         this._validateFunction(reportError);
@@ -834,7 +839,7 @@ class Node {
     }
     async _handleGetLiveFeedSignedMessages({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished}) {
         this._validateChannelName(channelName, {mustBeInChannel: true});
-        this._validateNodeId(fromNodeId);
+        validateNodeId(fromNodeId);
         this._validateSimpleObject(requestBody);
         this._validateFunction(sendResponse);
         this._validateFunction(reportError);
@@ -865,7 +870,7 @@ class Node {
     }
     async _handleSubmitMessagesToLiveFeed({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished}) {
         this._validateChannelName(channelName, {mustBeInChannel: true});
-        this._validateNodeId(fromNodeId);
+        validateNodeId(fromNodeId);
         this._validateSimpleObject(requestBody);
         this._validateFunction(sendResponse);
         this._validateFunction(reportError);
@@ -913,7 +918,7 @@ class Node {
             try {
                 this._validateConnection(connection);
                 const nodeId = connection.remoteNodeId();
-                this._validateNodeId(nodeId);
+                validateNodeId(nodeId);
                 this._remoteNodeManager.setIncomingConnection({nodeId, type, connection});
             }
             catch(err) {
@@ -928,8 +933,8 @@ class Node {
     }
 
     _handleMessage({ fromNodeId, message }) {
-        this._validateNodeId(fromNodeId);
-        this._validateMessage(message);
+        validateNodeId(fromNodeId);
+        validateNodeToNodeMessage(message);
         if (message.type === 'announcing') {
             this._handleAnnouncingMessage({ fromNodeId, message });
         }
@@ -973,14 +978,13 @@ class Node {
     }
 
     _handleBroadcastMessage({ fromNodeId, message }) {
-        this._validateNodeId(fromNodeId);
-        this._validateMessage(message);
+        validateObject(message, '/BroadcastMessage');
+        validateNodeId(fromNodeId);
 
         const body = message.body;
-        this._validateSimpleObject(body);
         
         const broadcastMessageId = body.broadcastMessageId
-        this._validateString(broadcastMessageId, {minLength: 10, maxLength: 10});
+        validateObject(broadcastMessageId, '/MessageId');
 
         if (this._handledBroadcastMessages[broadcastMessageId]) {
             return;
@@ -991,8 +995,8 @@ class Node {
         const channelName = body.channelName;
         this._validateChannelName(channelName, {mustBeJoined: true});
 
-        this._validateNodeId(body.fromNodeId);
-        this._validateMessage(body.message);
+        validateNodeId(body.fromNodeId);
+        validateNodeToNodeMessage(body.message);
 
         this._validateChannelName(channelName, {mustBeJoined: true});
 
@@ -1012,15 +1016,15 @@ class Node {
         }
     }
     _handleMessageToNode({ fromNodeId, message }) {
-        this._validateNodeId(fromNodeId);
-        this._validateMessage(message);
+        validateNodeId(fromNodeId);
+        validateObject(message, '/MessageToNode');
 
         const body = message.body;
         const channelName = body.channelName;
 
-        this._validateNodeId(body.fromNodeId);
-        this._validateNodeId(body.toNodeId);
-        this._validateMessage(body.message);
+        validateNodeId(body.fromNodeId);
+        validateNodeId(body.toNodeId);
+        validateNodeToNodeMessage(body.message);
 
         this._validateChannelName(channelName, {mustBeJoined: true});
 
@@ -1053,8 +1057,8 @@ class Node {
         }
     }
     _handleCancelRequestToNode({ fromNodeId, message }) {
-        this._validateNodeId(fromNodeId);
-        this._validateMessage(message);
+        validateNodeId(fromNodeId);
+        validateObject(message, '/CancelRequestToNodeMessage');
         const requestId = message.requestId;
         this._validateString(requestId, {minLength: 10, maxLength: 10});
 
@@ -1063,8 +1067,8 @@ class Node {
         }
     }
     _handleRequestToNodeResponseReceived({ fromNodeId, message }) {
-        this._validateNodeId(fromNodeId);
-        this._validateMessage(message);
+        validateNodeId(fromNodeId);
+        validateObject(message, '/RequestToNodeResponseReceivedMessage');
         const requestId = message.requestId;
         this._validateString(requestId, {minLength: 10, maxLength: 10});
         const responseIndex = message.responseIndex;
@@ -1075,8 +1079,8 @@ class Node {
         }
     }
     _handleRequestToNode({ fromNodeId, message }) {
-        this._validateNodeId(fromNodeId);
-        this._validateMessage(message);
+        validateNodeId(fromNodeId);
+        validateObject(message, '/RequestToNodeMessage');
 
         const requestId = message.requestId;
         const requestBody = message.requestBody;
@@ -1127,8 +1131,8 @@ class Node {
         });
     }
     async _handleSeekingMessage({ fromNodeId, message }) {
-        this._validateNodeId(fromNodeId);
-        this._validateMessage(message);
+        validateNodeId(fromNodeId);
+        validateObject(message, '/SeekingMessage');
         const fileKey = message.fileKey;
         const channelName = message.channelName;
         this._validateSimpleObject(fileKey);
@@ -1177,8 +1181,8 @@ class Node {
         }
     }
     async _handleProvidingMessage({ fromNodeId, message }) {
-        this._validateNodeId(fromNodeId);
-        this._validateMessage(message);
+        validateNodeId(fromNodeId);
+        validateObject(message, '/ProvidingMessage');
         const fileKey = message.fileKey;
         const fileInfo = message.fileInfo || null;
         const channelName = message.channelName;
@@ -1195,17 +1199,10 @@ class Node {
     }
     async _handleAnnouncingMessage({ fromNodeId, message }) {
         // one of two mechanisms to discover nodes and get updated info
-        this._validateNodeId(fromNodeId);
-        this._validateMessage(message);
-        this._validateSimpleObject(message.nodeData);
-        this._validateString(message.nodeData.signature);
-        this._validateSimpleObject(message.nodeData.body);
-        assert(message.nodeData.body.timestamp, 'Missing timestamp');
-        this._validateSimpleObject(message.nodeData.body.nodeInfo);
-        this._validateNodeInfo(message.nodeData.body.nodeInfo);
+        validateObject(message, '/AnnouncingMessage');
+        validateObject(fromNodeId, '/NodeId');
         assert(message.nodeData.body.nodeInfo.nodeId === fromNodeId, 'Mismatch in node id');
         const transformedChannelNames = message.nodeData.body.transformedChannelNames;
-        assert(Array.isArray(transformedChannelNames));
 
         const data0 = message.nodeData;
         this._remoteNodeManager.setRemoteNodeData(fromNodeId, data0);
@@ -1236,18 +1233,14 @@ class Node {
         };
     }
     _handleFindChannelPeers({ fromNodeId, message }) {
-        this._validateNodeId(fromNodeId);
-        this._validateMessage(message);
+        validateNodeId(fromNodeId);
+        validateObject(message, '/FindChannelPeersMessage');
 
         const transformedChannelName = message.transformedChannelName;
         this._validateString(transformedChannelName);
 
         const data = message.nodeData;
-        this._validateSimpleObject(data);
-        this._validateString(data.signature);
-        this._validateSimpleObject(data.body);
-        this._validateSimpleObject(data.body.nodeInfo);
-        this._validateNodeInfo(data.body.nodeInfo);
+        validateNodeData(data);
         assert(fromNodeId === data.body.nodeInfo.nodeId, 'Mismatch with node id');
         assert(data.body.timestamp, 'Missing timestamp');
 
@@ -1288,8 +1281,8 @@ class Node {
     }
     _handleFindChannelPeersResponse({ fromNodeId, message }) {
         // one of two mechanisms to discover nodes and get updated info
-        this._validateNodeId(fromNodeId);
-        this._validateMessage(message);
+        validateNodeId(fromNodeId);
+        validateObject(message, '/FindChannelPeersResponseMessage');
 
         // this response should only come from a bootstrap peer.
         for (let bpm of this._bootstrapPeerManagers) {
@@ -1305,7 +1298,7 @@ class Node {
         return sha1sum(`announce:${channelName}:${nodeId}`);
     }
     _nodeIsInOneOfOurChannels(nodeId) {
-        this._validateNodeId(nodeId);
+        validateNodeId(nodeId);
         for (let channelName in this._channels) {
             const ids = this.getNodeIdsForChannel(channelName);
             if (ids.includes(nodeId)) {
@@ -1316,9 +1309,7 @@ class Node {
     }
     _validateChannelName(channelName, opts) {
         opts = opts || {};
-        assert(typeof(channelName) === 'string', `Channel name must be a string`);
-        assert(channelName.length >= 3, `Length of channel name must be at least 3`);
-        assert(channelName.length <= 80, `Length of channel name must be at most 80`);
+        validateChannelName(channelName);
         if (opts.mustBeJoined) {
             if (!(channelName in this._channels)) {
                 throw new Error(`Not joined to channel: ${channelName}`);
@@ -1334,68 +1325,6 @@ class Node {
     _validateInteger(x) {
         assert(typeof(x) === 'number', 'Not an integer.');
         assert(Math.floor(x) === x, 'Not an integer.')
-    }
-    _validateMessage(msg) {
-        try {
-            this._validateSimpleObject(msg);
-        }
-        catch(err) {
-            throw new Error(`Message is not an object.`);
-        }
-    }
-    _validateNodeId(nodeId, opts) {
-        opts = opts || {};
-        assert(typeof(nodeId) === 'string', `Node ID must be a string`);
-        assert(nodeId.length == 64, `Length of node ID must be 64`);
-    }
-    _validateNodeInfo(nodeInfo) {
-        try {
-            this._validateSimpleObject(
-                nodeInfo,
-                {
-                    fields: {
-                        nodeId: {optional: false, type: 'string', minLength: 64, maxLength: 64},
-                        address: {optional: true, type: 'string', nullOkay: true, minLength: 0, maxLength: 80},
-                        port: {optional: true, type: 'integer', nullOkay: true},
-                        udpAddress: {optional: true,  type: 'string', nullOkay: true, minLength: 0, maxLength: 80},
-                        udpPort: {optional: true, type: 'integer', nullOkay: true},
-                        label: {optional: false, type: 'string', minLength: 0, maxLength: 160}
-                    },
-                    additionalFieldsOkay: true
-                }
-            )
-        }
-        catch(error) {
-            throw new InvalidNodeInfoError({nodeInfo, error});
-        }
-    }
-    _validateRequestBody(x) {
-        try {
-            this._validateSimpleObject(x);
-        }
-        catch(err) {
-            throw new Error('Invalid request body');
-        }
-    }
-    _validateRoute(route, opts) {
-        opts = opts || {};
-        if (!Array.isArray(route)) {
-            throw new Error(`Invalid route`);
-        }
-        if (opts.mustEndWithNode) {
-            if (route[route.length - 1] !== opts.mustEndWithNode) {
-                throw new Error(`Route does not end with node: ${opts.mustEndWithNode}`);
-            }
-        }
-        if (opts.mustContainNode) {
-            if (route.indexOf(opts.mustContainNode) < 0) {
-                throw new Error(`Route does not contain node: ${opts.mustContainNode}`);
-            }
-        }
-    }
-    _validateSha1(x) {
-        assert(typeof(x) === 'string', 'Expected sha1 hash. Not a string.');
-        assert(x.length === 40, 'Expected sha1 hash. Wrong length.');
     }
     _validateSimpleObject(x, opts) {
 
@@ -1455,12 +1384,6 @@ class Node {
         if (opts.maxLength) {
             assert(x.length <= opts.maxLength, `Length of string must be at most ${x.length}`);
         }
-    }
-    _validateStringArray(x) {
-        assert(Array.isArray(), 'Not an array');
-        x.forEach(v => {
-            assert(typeof(v) === 'string', 'Not a string array');
-        });
     }
     _validateBool(x, opts) {
         opts = opts || {};
@@ -1523,6 +1446,13 @@ class Node {
             if ((msg) && (msg.kacheryProtocolVersion == protocolVersion()) && (msg.body) && (msg.signature) && (msg.body.fromNodeId) && (msg.body.fromNodeId !== this._nodeId)) {
                 if (verifySignature(msg.body, msg.signature, hexToPublicKey(msg.body.fromNodeId), {checkTimestamp: true})) {
                     if ((msg.body.message) && (msg.body.message.type === 'announcing')) {
+                        try {
+                            validateObject(msg.body.message, '/AnnouncingMessage');
+                        }
+                        catch(err) {
+                            console.warn(`Problem in message from local node: ${err.message}`);
+                            return;
+                        }
                         this._handleAnnouncingMessage({ fromNodeId: msg.body.fromNodeId, message: msg.body.message });
                     }
                 }
@@ -1541,6 +1471,7 @@ class Node {
                 },
                 timestamp: (new Date()) - 0
             };
+            validateObject(body.message, '/AnnouncingMessage');
             const m = {
                 kacheryProtocolVersion: protocolVersion(),
                 body,

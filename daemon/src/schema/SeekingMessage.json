@@ -4,7 +4,8 @@
     "properties": {
         "type": {"const": "seeking"},
         "channelName": {"$ref": "/ChannelName"},
-        "fileKey": {"$ref": "/FileKey"}
+        "fileKey": {"$ref": "/FileKey"},
+        "_id": {"$ref": "/MessageId"}
     },
     "required": ["type", "channelName", "fileKey"],
     "additionalProperties": false

@@ -2,6 +2,7 @@ import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignatu
 import dgram from 'dgram';
 import { randomAlphaString, sleepMsec } from './common/util.js';
 import { timeStamp } from 'console';
+import { validateObject } from './schema/index.js';
 
 class InternalUdpServer {
     constructor(port) {
@@ -508,6 +509,7 @@ class UdpCongestionManager {
 }
 
 function _udpSocketSend(socket, message, port, address) {
+    validateObject(message, '/UdpMessage');
     const messageText = JSONStringifyDeterministic(message);
     socket.send(messageText, port, address, (err, numBytesSent) => {
         if (err) {

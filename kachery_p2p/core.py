@@ -96,30 +96,30 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
     )
     if 'manifest' in query:
         file_key['manifestSha1'] = query['manifest']
-    sock = _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
-    for r in sock:
-        if r['type'] == 'progress':
-            print(r['message'])
-        elif r['type'] == 'finished':
-            local_path = ka.load_file(uri, dest=dest)
-            assert local_path is not None, 'Unexpected. Loaded file, but unable to find it in kachery directory.'
-            return
-        elif r['type'] == 'error':
-            raise Exception(f'Error loading file: {r["error"]}')
-        else:
-            raise Exception(f'Unexpected response type in load_file: {r["type"]}')
-    raise Exception('Unable to download file. Response closed before finished.')
+    # sock = _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
+    # for r in sock:
+    #     if r['type'] == 'progress':
+    #         print(r['message'])
+    #     elif r['type'] == 'finished':
+    #         local_path = ka.load_file(uri, dest=dest)
+    #         assert local_path is not None, 'Unexpected. Loaded file, but unable to find it in kachery directory.'
+    #         return
+    #     elif r['type'] == 'error':
+    #         raise Exception(f'Error loading file: {r["error"]}')
+    #     else:
+    #         raise Exception(f'Unexpected response type in load_file: {r["type"]}')
+    # raise Exception('Unable to download file. Response closed before finished.')
 
-    # for r in find_file(uri):
-    #     timer = time.time()
-    #     a = _load_file_helper(uri=uri, node_id=r['nodeId'], channel=r['channel'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
-    #     if a is not None:
-    #         elapsed = time.time() - timer
-    #         size = r["fileInfo"]["size"]
-    #         rate = size / elapsed / (1024 * 1024)
-    #         print(f'Downloaded {size} bytes in {elapsed} sec ({rate} MB/sec)')
-    #         return a
-    # return None
+    for r in find_file(uri):
+        timer = time.time()
+        a = _load_file_helper(uri=uri, node_id=r['nodeId'], channel=r['channel'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
+        if a is not None:
+            elapsed = time.time() - timer
+            size = r["fileInfo"]["size"]
+            rate = size / elapsed / (1024 * 1024)
+            print(f'Downloaded {size} bytes in {elapsed} sec ({rate} MB/sec)')
+            return a
+    return None
 
 def load_bytes(uri: str, start: Union[int, None]=None, end: Union[int, None]=None, write_to_stdout=False, p2p: bool=True) -> Union[bytes, None]:
     if uri.startswith('sha1dir://'):

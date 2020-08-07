@@ -1,0 +1,8 @@
+{
+    "$id": "/ResponseBody",
+    "oneOf": [
+        {"$ref": "/DownloadFileResponse"},
+        {"$ref": "/GetLiveFeedSignedMessagesResponse"},
+        {"$ref": "/RouteLatencyTestResponse"}
+    ]
+}

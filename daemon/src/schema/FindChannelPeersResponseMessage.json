@@ -7,8 +7,9 @@
         "nodes": {
             "type": "array",
             "items": {"$ref": "/NodeData"}
-        }
+        },
+        "_id": {"$ref": "/MessageId"}
     },
-    "required": ["type", "transformedChannelName", "nodeData"],
+    "required": ["type", "transformedChannelName", "nodes"],
     "additionalProperties": false
 }

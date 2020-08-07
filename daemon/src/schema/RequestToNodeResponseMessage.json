@@ -4,45 +4,9 @@
     "properties": {
         "type": {"const": "requestToNodeResponse"},
         "requestId": {"$ref": "/MessageId"},
-        "responseBody": {
-            "anyOf": [
-                {
-                    "type": "object",
-                    "properties": {
-                        "data_b64": {
-                            "type": "string"
-                        }
-                    },
-                    "required": ["data_b64"],
-                    "additionalProperties": false
-                },
-                {
-                    "type": "object",
-                    "properties": {
-                        "signedMessages": {
-                            "type": "array",
-                            "items": {"$ref": "/FeedSignedMessage"}
-                        }
-                    },
-                    "required": ["signedMessages"],
-                    "additionalProperties": false
-                },
-                {
-                    "type": "object",
-                    "properties": {
-                        "route": {
-                            "type": "array",
-                            "items": {"$ref": "/NodeId"}
-                        },
-                        "testData": {"type": "string"},
-                        "testDataSignature": {"$ref": "/Signature"}
-                    },
-                    "required": ["route", "testData", "testDataSignature"],
-                    "additionalProperties": false
-                }
-            ]
-        },
-        "responseIndex": {"type": "integer"}
+        "responseBody": {"$ref": "/ResponseBody"},
+        "responseIndex": {"type": "integer"},
+        "_id": {"$ref": "/MessageId"}
     },
     "required": ["type", "requestId", "responseBody", "responseIndex"],
     "additionalProperties": false

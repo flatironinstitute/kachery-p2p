@@ -132,7 +132,7 @@ class SmartyNode {
     }
     async _handleRouteLatencyTest({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
         this._node._validateSimpleObject(requestBody);
-        this._node._validateNodeId(requestBody.toNodeId);
+        validateNodeId(requestBody.toNodeId);
         this._node._validateSimpleObject(requestBody.testData);
         assert(requestBody.avoid);
         const {toNodeId, testData, avoid} = requestBody;

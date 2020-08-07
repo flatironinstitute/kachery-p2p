@@ -1,5 +1,5 @@
 {
-    "$id": "/RouteLatencyTestMessage",
+    "$id": "/RouteLatencyTestRequest",
     "type": "object",
     "properties": {
         "type": {"const": "routeLatencyTest"},

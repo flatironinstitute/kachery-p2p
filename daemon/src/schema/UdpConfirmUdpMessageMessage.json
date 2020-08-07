@@ -1,0 +1,10 @@
+{
+    "$id": "/UdpConfirmUdpMessageMessage",
+    "type": "object",
+    "properties": {
+        "type": {"const": "confirmUdpMessage"},
+        "udpMessageId": {"$ref": "/MessageId"}
+    },
+    "required": ["type", "udpMessageId"],
+    "additionalProperties": false
+}

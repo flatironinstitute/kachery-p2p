@@ -15,7 +15,8 @@
             "required": ["channelName", "broadcastMessageId", "fromNodeId", "message", "timestamp"],
             "additionalProperties": false
         },
-        "signature": {"$ref": "/Signature"}
+        "signature": {"$ref": "/Signature"},
+        "_id": {"$ref": "/MessageId"}
     },
     "required": ["type", "body", "signature"],
     "additionalProperties": false
