@@ -15,10 +15,12 @@ class Daemon {
         if (listenPort) validatePort(listenPort);
         if (udpListenPort) validatePort(udpListenPort);
         validateObject(label, '/Label');
-        assert(Array.isArray(bootstrapInfos));
-        bootstrapInfos.forEach(bi => {
-            validateObject(bi, '/BootstrapPeerInfo');
-        });
+        if (bootstrapInfos) {
+            assert(Array.isArray(bootstrapInfos));
+            bootstrapInfos.forEach(bi => {
+                validateObject(bi, '/BootstrapPeerInfo');
+            });
+        }
         this._configDir = configDir; // Directory where config information is stored (including names and keys for feeds)
         this._listenHost = listenHost; // The host where we are listening
         this._listenPort = listenPort; // The port where we are listening
