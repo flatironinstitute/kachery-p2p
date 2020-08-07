@@ -5,7 +5,7 @@
         "type": {"const": "routeLatencyTest"},
         "channelName": {"$ref": "/ChannelName"},
         "toNodeId": {"$ref": "/NodeId"},
-        "testData": {"type": "string"},
+        "testData": {"type": "object"},
         "avoid": {
             "type": "array",
             "items": {"$ref": "/NodeId"}
