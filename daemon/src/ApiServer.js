@@ -277,7 +277,7 @@ export default class ApiServer {
         const reqData = req.body;
         // Returns the find request
         validateObject(reqData.fileKey, '/FileKey');
-        assert(typeof(reqData.timeoutMsec) === 'number', 'timeoutMsec is not a number');
+        assert(typeof(reqData.timeoutMsec) === 'number', 'apiFindFile: timeoutMsec is not a number');
         const x = this._daemon.findFile({fileKey: reqData.fileKey, timeoutMsec: reqData.timeoutMsec});
         const jsonSocket = new JsonSocket(res);
         let isDone = false;
@@ -371,12 +371,16 @@ export default class ApiServer {
         const {
             feedId, subfeedName, messages
         } = reqData;
+        console.log('api 1', feedId, subfeedName);
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
+        console.log('api 2');
         assert(Array.isArray(messages), 'messages is not an array');
+        console.log('api 3');
         await this._daemon.feedManager().appendMessages({
             feedId, subfeedName, messages
         });
+        console.log('api 4');
         res.json({ success: true })
     }
     // /feed/submitMessages - submit messages to a remote live subfeed (must have permission)

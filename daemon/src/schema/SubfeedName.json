@@ -1,4 +1,7 @@
 {
     "$id": "/SubfeedName",
-    "type": "string"
+    "oneOf": [
+        {"type": "string"},
+        {"type": "object"}
+    ]
 }
