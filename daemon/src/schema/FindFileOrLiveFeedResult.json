@@ -1,11 +1,11 @@
 {
-    "$id": "/FindFileOrLiveFeed",
+    "$id": "/FindFileOrLiveFeedResult",
     "type": "object",
     "properties": {
         "channel": {"$ref": "/ChannelName"},
         "nodeId": {"$ref": "/NodeId"},
         "fileKey": {"$ref": "/FileKey"},
-        "fileInfo": {"$ref": "/FileInfo"}
+        "fileSize": {"type": "integer"}
     },
     "required": ["channel", "nodeId", "fileKey"],
     "additionalProperties": false

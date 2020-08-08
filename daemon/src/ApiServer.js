@@ -288,7 +288,9 @@ export default class ApiServer {
         const reqData = req.body;
         // Returns the find request
         validateObject(reqData.fileKey, '/FileKey');
-        assert(typeof(reqData.timeoutMsec) === 'number', 'apiFindFile: timeoutMsec is not a number');
+        if (reqData.timeoutMsec) {
+            assert(typeof(reqData.timeoutMsec) === 'number', 'apiFindFile: timeoutMsec is not a number');
+        }
         const x = this._daemon.findFile({fileKey: reqData.fileKey, timeoutMsec: reqData.timeoutMsec});
         const jsonSocket = new JsonSocket(res);
         let isDone = false;
@@ -326,14 +328,22 @@ export default class ApiServer {
             if (isDone) return;
             // we are done
             isDone = true;
-            jsonSocket.sendMessage({success: true});
+            jsonSocket.sendMessage({type: 'finished'});
             res.end();
         });
         x.onError((err) => {
             if (isDone) return;
             isDone = true;
-            jsonSocket.sendMessage({success: false, error: err.message});
+            jsonSocket.sendMessage({type: 'error', error: err.message});
             res.end();
+        });
+        x.onProgress((prog) => {
+            jsonSocket.sendMessage({
+                type: 'progress',
+                bytesLoaded: prog.bytesLoaded,
+                bytesTotal: prog.bytesTotal,
+                nodeId: prog.nodeId || ''
+            });
         });
         req.on('close', () => {
             // if the request socket is closed, we cancel the find request
@@ -347,7 +357,7 @@ export default class ApiServer {
         validateNodeId(reqData.nodeId);
         validateObject(reqData.fileKey, '/FileKey');
         assert(typeof(reqData.fileSize) === 'number', 'fileSize is not a number');
-        const {stream, cancel} = await this._daemon.downloadFile({
+        const {stream, cancel} = this._daemon.downloadFile({
             channelName: reqData.channel,
             nodeId: reqData.nodeId,
             fileKey: reqData.fileKey,
@@ -364,7 +374,7 @@ export default class ApiServer {
         validateObject(reqData.fileKey, '/FileKey');
         assert(typeof(reqData.startByte) === 'number', 'startByte is not a number');
         assert(typeof(reqData.endByte) === 'number', 'endByte is not a number');
-        const {stream, cancel} = await this._daemon.downloadFileBytes({
+        const {stream, cancel} = this._daemon.downloadFileBytes({
             channelName: reqData.channel,
             nodeId: reqData.nodeId,
             fileKey: reqData.fileKey,

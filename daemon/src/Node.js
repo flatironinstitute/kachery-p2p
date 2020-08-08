@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { getSignature, verifySignature, hexToPublicKey, sha1sum, JSONStringifyDeterministic } from './common/crypto_util.js';
-import { sleepMsec, randomAlphaString } from './common/util.js';
-import { getLocalFileInfo } from './kachery.js';
+import { sleepMsec, randomAlphaString, sha1MatchesFileKey, readJsonFile } from './common/util.js';
+import { getLocalFileInfo, moveFileIntoKacheryStorage, concatenateFilesIntoTemporaryFile } from './kachery.js';
 import SmartyNode from './SmartyNode.js';
 import { log } from './common/log.js';
 import assert from 'assert';
@@ -407,7 +407,10 @@ class Node {
         checkFinished();
         return ret;
     }
-    _findFileOrLiveFeedOnChannel = ({channelName, fileKey, timeoutMsec=4000}) => {
+    _findFileOrLiveFeedOnChannel = ({channelName, fileKey, timeoutMsec}) => {
+        if ((timeoutMsec === undefined) || (timeoutMsec === null)) {
+            timeoutMsec = 4000;
+        }
         validateChannelName(channelName);
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
         validateObject(fileKey, '/FileKey');
@@ -426,25 +429,7 @@ class Node {
             onFinished: cb => {onFinishedCallbacks.push(cb)},
             cancel: handleCancel
         }
-        let transformedFileKey;
-        if (fileKey.sha1) {
-            transformedFileKey = {
-                sha1Head: fileKey.sha1.slice(0, 10),
-                transformNodeId: this._nodeId,
-                transformedSha1: sha1sum(this._nodeId + fileKey.sha1)
-            };
-        }
-        else if (fileKey.feedId) {
-            transformedFileKey = {
-                type: fileKey.type,
-                feedIdHead: fileKey.feedId.slice(0, 10),
-                transformNodeId: this._nodeId,
-                transformedFeedId: sha1sum(this._nodeId + fileKey.feedId)
-            };
-        }
-        else {
-            transformedFileKey = fileKey;
-        }
+        let transformedFileKey = _transformFileKey({fileKey, nodeId: this._nodeId});
         this.broadcastMessage({
             channelName,
             message: {
@@ -458,14 +443,13 @@ class Node {
             validateChannelName(x.channelName);
             validateNodeId(x.nodeId);
             validateObject(x.fileKey, '/FileKey');
-            if (x.fileInfo) validateObject(x.fileInfo, '/FileInfo');
             assert(x.channelName in this._channels, `Not in channel: ${x.channelName}`);
             if ((x.channelName === channelName) && (fileKeysMatch(x.fileKey, transformedFileKey))) {
                 const result = {
                     channel: x.channelName,
                     nodeId: x.nodeId,
                     fileKey: x.fileKey,
-                    fileInfo: x.fileInfo
+                    fileSize: x.fileSize
                 }
                 validateObject(result, '/FindFileOrLiveFeedResult');
                 onFoundCallbacks.forEach(cb => {cb(result);});
@@ -476,47 +460,179 @@ class Node {
         }, timeoutMsec);
         return ret;
     }
-    loadFile({fileKey}) {
+    _loadFileWithManifest({fileKey}) {
         validateObject(fileKey, '/FileKey');
-        const fileLoader = new FileLoader({fileKey});
-
-        assert((fileKey.sha1) || (fileKey.transformedSha1), 'Incorrect type of fileKey.');
-        const finder = this._findFileOrLiveFeed({fileKey});
-        finder.onFound(findFileResult => {
-            validateObject(findFileResult, '/FindFileOrLiveFeedResult');
-            const provider = new FileProvider({node: this, findFileResult});
-            fileLoader.addFileProvider(provider);
-        });
-        finder.onFinished(() => {
-            fileLoader.reportFinishedFindingProviders();
-        });
+        validateSha1Hash(fileKey.manifestSha1);
 
         const onFinishedCallbacks = [];
         const onErrorCallbacks = [];
+        const onProgressCallbacks = [];
 
-        fileLoader.onFinished(async () => {
-            finder.cancel();
-            onFinishedCallbacks.forEach(cb => cb());
-        });
-        fileLoader.onError((err) => {
-            finder.cancel();
-
-            onErrorCallbacks.forEach(cb => cb(err));
-        });
+        let done = false;
 
         const _handleCancel = () => {
-            finder.cancel();
-            fileLoader.cancel();
+            _reportError(new Error('canceled'));
+        }
+
+        const _reportError = (err) => {
+            if (done) return;
+            done = true;
+            onErrorCallbacks.forEach(cb => cb(err));
+        }
+
+        const _reportFinished = ({path}) => {
+            if (done) return;
+            done = true;
+            onFinishedCallbacks.forEach(cb => cb({path}));
+        }
+
+        let bytesLoaded = 0;
+        let progressTimer = new Date();
+
+        try {
+            (async () => {
+                const manifestFileKey = {sha1: fileKey.manifestSha1};
+                const manifestPath = await this._loadFileAsync({fileKey: manifestFileKey});
+                const manifest = await readJsonFile(manifestPath);
+                if (!sha1MatchesFileKey({sha1: manifest.sha1, fileKey})) {
+                    throw new Error(`Manifest sha1 does not match file key: ${manifest.sha1}`);
+                }
+                const chunkPaths = [];
+                for (let ichunk = 0; ichunk < manifest.chunks.length; ichunk++) {
+                    if (done) return;
+                    const chunk = manifest.chunks[ichunk];
+                    console.info(`Loading chunk ${ichunk + 1} of ${manifest.chunks.length} (${chunk.end - chunk.start} bytes)`);
+                    // todo: report progress here
+                    const chunkFileKey = {
+                        sha1: chunk.sha1,
+                        chunkOf: {
+                            fileKey: {
+                                sha1: manifest.sha1
+                            },
+                            startByte: chunk.start,
+                            endByte: chunk.end
+                        }
+                    };
+                    const _handleChunkProgress = ((prog) => {
+                        const pr0 = {
+                            bytesLoaded: bytesLoaded + prog.bytesLoaded,
+                            bytesTotal: manifest.size
+                        }
+                        onProgressCallbacks.forEach(cb => cb(pr0));
+                        progressTimer = new Date();
+                    });
+                    const chunkPath = await this._loadFileAsync({fileKey: chunkFileKey, onProgress: _handleChunkProgress});
+                    bytesLoaded += chunk.end - chunk.start;
+                    const pr = {
+                        bytesLoaded,
+                        bytesTotal: manifest.size
+                    }
+                    const progressElapsed = (new Date()) - progressTimer;
+                    if (progressElapsed >= 1000) {
+                        onProgressCallbacks.forEach(cb => cb(pr));
+                        progressTimer = new Date();
+                    }
+                    chunkPaths.push(chunkPath);                    
+                }
+                console.info(`Concatenating ${manifest.chunks.length} chunks.`);
+                const {sha1, path: concatPath} = await concatenateFilesIntoTemporaryFile(chunkPaths);
+                if (sha1 !== manifest.sha1) {
+                    fs.unlinkSync(concatPath);
+                    throw Error('Unexpected SHA-1 of concatenated file.');
+                }
+                moveFileIntoKacheryStorage({path: concatPath, sha1: manifest.sha1});
+                _reportFinished({path: concatPath});
+            })();
+        }
+        catch(err) {
+            _reportError(err);
         }
 
         return {
-            onProgress: fileLoader.onProgress,
+            onProgress: cb => onProgressCallbacks.push(cb),
             onFinished: cb => onFinishedCallbacks.push(cb),
             onError: cb => onErrorCallbacks.push(cb),
-            cancel: _handleCancel
+            cancel: () => _handleCancel()
         }
     }
-    async downloadFile({channelName, nodeId, fileKey, startByte, endByte}) {
+    async _loadFileAsync({fileKey, onProgress=undefined}) {
+        validateObject(fileKey, '/FileKey');
+        return new Promise((resolve, reject) => {
+            const x = this.loadFile({fileKey});
+            x.onFinished(({path}) => {
+                resolve(path);
+            });
+            if (onProgress) {
+                x.onProgress(prog => onProgress(prog));
+            }
+            x.onError(err => {
+                reject(err);
+            })
+        });
+    }
+    loadFile({fileKey}) {
+        validateObject(fileKey, '/FileKey');
+
+        const onFinishedCallbacks = [];
+        const onErrorCallbacks = [];
+        const onProgressCallbacks = [];
+        let finder = null;
+        let fileLoader = null;
+        let _handleCancel = () => { // this is replace below in the case of manifest chunks
+            if (finder) finder.cancel();
+            if (fileLoader) fileLoader.cancel();
+        }
+
+        (async () => {
+            const fileInfo = await getLocalFileInfo({fileKey});
+            if (fileInfo) {
+                onFinishedCallbacks.forEach(cb => cb({path: fileInfo.path}));
+                return;
+            }
+            if (fileKey.manifestSha1) {
+                const x = this._loadFileWithManifest({fileKey});
+                x.onFinished(({path}) => onFinishedCallbacks.forEach(cb => cb({path})));
+                x.onError(err => onErrorCallbacks.forEach(cb => cb(err)));
+                x.onProgress(prog => onProgressCallbacks.forEach(cb => cb(prog)));
+                _handleCancel = () => x.cancel();
+                return;
+            }
+
+            fileLoader = new FileLoader({fileKey});
+            fileLoader.onProgress(prog => {
+                onProgressCallbacks.forEach(cb => cb(prog))
+            });
+
+            assert((fileKey.sha1) || (fileKey.transformedSha1), 'Incorrect type of fileKey.');
+            finder = this._findFileOrLiveFeed({fileKey});
+            finder.onFound(findFileResult => {
+                validateObject(findFileResult, '/FindFileOrLiveFeedResult');
+                const provider = new FileProvider({node: this, findFileResult});
+                fileLoader.addFileProvider(provider);
+            });
+            finder.onFinished(() => {
+                fileLoader.reportFinishedFindingProviders();
+            });
+
+            fileLoader.onFinished(({path}) => {
+                finder.cancel();
+                onFinishedCallbacks.forEach(cb => cb({path}));
+            });
+            fileLoader.onError((err) => {
+                finder.cancel();
+
+                onErrorCallbacks.forEach(cb => cb(err));
+            });
+        })();
+
+        return {
+            onProgress: cb => onProgressCallbacks.push(cb),
+            onFinished: cb => onFinishedCallbacks.push(cb),
+            onError: cb => onErrorCallbacks.push(cb),
+            cancel: () => _handleCancel()
+        }
+    }
+    downloadFile({channelName, nodeId, fileKey, startByte, endByte}) {
         validateChannelName(channelName);
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
         validateNodeId(nodeId);
@@ -556,12 +672,13 @@ class Node {
 
         let _currentReq = null;
         let _cancelled = false;
-        const _handleCancel = () => {
+        const _handleCancel = (errorString) => {
             if (_cancelled) return;
             _cancelled = true;
             if (_currentReq) {
                 _currentReq.cancel();
             }
+            stream.destroy(new Error(errorString));
         }
 
         const downloadChunk = async (chunkNum) => {
@@ -626,8 +743,9 @@ class Node {
                         await downloadChunk(chunkNum);
                     }
                     catch(err) {
-                        console.warn(`Problem in downloadChunks: ${err.message}`);
-                        _handleCancel();
+                        const errstr = `Problem in downloadChunks: ${err.message}`;
+                        _handleCancel(errstr);
+                        return;
                     }
                 }
             }
@@ -637,8 +755,8 @@ class Node {
         downloadChunks();
         return {
             stream,
-            cancel: _handleCancel
-        }
+            cancel: () => _handleCancel('DownloadCanceled')
+        };
     }
     async getLiveFeedSignedMessages({channelName, nodeId, feedId, subfeedName, position, waitMsec}) {
         validateChannelName(channelName);
@@ -867,6 +985,40 @@ class Node {
         assert(typeof(onResponseReceived) === 'function', 'onResponseReceived is not a function.');
 
         const fileInfo = await getLocalFileInfo({fileKey: requestBody.fileKey});
+
+        if (!fileInfo) {
+            if (requestBody.fileKey.chunkOf) {
+                validateObject(requestBody.fileKey.chunkOf, '/ChunkOf');
+                validateObject(requestBody.fileKey.chunkOf.fileKey, '/FileKey');
+                const fileInfo2 = await getLocalFileInfo({fileKey: requestBody.fileKey.chunkOf.fileKey});
+                if (!fileInfo2) {
+                    reportError('Unable to find file.');
+                    return;
+                }
+                const requestBody2 = {
+                    ...requestBody,
+                    fileKey: requestBody.fileKey.chunkOf.fileKey,
+                    startByte: requestBody.startByte + requestBody.fileKey.chunkOf.startByte,
+                    endByte: requestBody.endByte + requestBody.fileKey.chunkOf.startByte
+                }
+
+                return await this._handleDownloadFileRequest({
+                    channelName,
+                    fromNodeId,
+                    requestBody: requestBody2,
+                    sendResponse,
+                    reportError,
+                    reportFinished,
+                    onCanceled,
+                    onResponseReceived
+                });
+            }
+            else {
+                reportError('Unable to find file.');
+                return;
+            }
+        }
+
         const startByte = requestBody.startByte;
         const endByte = requestBody.endByte;
         if ((startByte === undefined) || (endByte === undefined) || (typeof(startByte) !== 'number') || (typeof(endByte) !== 'number')) {
@@ -882,94 +1034,62 @@ class Node {
             reportError(`Too many bytes in single download request: ${numBytes} > ${MAX_BYTES_PER_DOWNLOAD_REQUEST}`);
             return;
         }
-        if (fileInfo) {
-            const fileSystemPath = fileInfo['path'];
+        const fileSystemPath = fileInfo['path'];
 
-            let numResponsesReceived = 0;
-            let numResponsesSent = 0;
-            let canceled = false;
-            onResponseReceived((responseIndex) => {
-                numResponsesReceived ++;
-            });
-            onCanceled(() => {
-                canceled = true;
-            });
+        let numResponsesReceived = 0;
+        let numResponsesSent = 0;
+        let canceled = false;
+        onResponseReceived((responseIndex) => {
+            numResponsesReceived ++;
+        });
+        onCanceled(() => {
+            canceled = true;
+        });
 
-            const AA = 35;
-            const BB = 5000;
+        const AA = 35;
+        const BB = 5000;
 
-            const asyncOpen = util.promisify(fs.open);
-            const asyncRead = util.promisify(fs.read);
+        const asyncOpen = util.promisify(fs.open);
+        const asyncRead = util.promisify(fs.read);
 
-            const file = await asyncOpen(fileSystemPath);
-            const messageChunkSize = 15000;
-            let i = requestBody.startByte;
-            const buffer = Buffer.alloc(messageChunkSize);
-            while ( i < requestBody.endByte) {
-                if (canceled) {
-                    reportError('Download canceled by requester.');
-                    return;
-                }
-                if (numResponsesSent - numResponsesReceived > AA) {
-                    let timer0 = new Date();
-                    await sleepMsec(1);
-                    while ((numResponsesSent - numResponsesReceived > AA) && (!canceled)) {
-                        const elapsed0 = (new Date()) - timer0;
-                        if (elapsed0 > BB) {
-                            reportError('Timeout while waiting for confirmation of receipt of messages.')
-                            return;
-                        }
-                        await sleepMsec(20);
+        const file = await asyncOpen(fileSystemPath);
+        const messageChunkSize = 15000;
+        let i = requestBody.startByte;
+        const buffer = Buffer.alloc(messageChunkSize);
+        while ( i < requestBody.endByte) {
+            if (canceled) {
+                reportError('Download canceled by requester.');
+                return;
+            }
+            if (numResponsesSent - numResponsesReceived > AA) {
+                let timer0 = new Date();
+                await sleepMsec(1);
+                while ((numResponsesSent - numResponsesReceived > AA) && (!canceled)) {
+                    const elapsed0 = (new Date()) - timer0;
+                    if (elapsed0 > BB) {
+                        reportError('Timeout while waiting for confirmation of receipt of messages.')
+                        return;
                     }
+                    await sleepMsec(20);
                 }
-                const i1 = i;
-                const i2 = Math.min(i1 + messageChunkSize, requestBody.endByte);
-                const x = await asyncRead(file, buffer, 0, i2 - i1, i1);
-                if (x.bytesRead !== i2 - i1) {
-                    throw Error('Problem reading file. Unexpected number of bytes read.');
-                }
-                sendResponse({
-                    data_b64: buffer.slice(0, i2 - i1).toString('base64')
-                });
-                numResponsesSent ++;
-
-                i = i2;
             }
-            while ((numResponsesSent - numResponsesReceived > 0) && (!canceled)) {
-                await sleepMsec(20);
+            const i1 = i;
+            const i2 = Math.min(i1 + messageChunkSize, requestBody.endByte);
+            const x = await asyncRead(file, buffer, 0, i2 - i1, i1);
+            if (x.bytesRead !== i2 - i1) {
+                throw Error('Problem reading file. Unexpected number of bytes read.');
             }
-            reportFinished();
+            sendResponse({
+                data_b64: buffer.slice(0, i2 - i1).toString('base64')
+            });
+            numResponsesSent ++;
 
-            // const readStream = fs.createReadStream(fileSystemPath, {start: requestBody.startByte, end: requestBody.endByte - 1 /* notice the -1 here */});
-
-            // function splitIntoChunks(data, chunkSize) {
-            //     const ret = [];
-            //     let i = 0;
-            //     while (i < data.length) {
-            //         ret.push(
-            //             data.slice(i, Math.min(i + chunkSize, data.length))
-            //         );
-            //         i += chunkSize;
-            //     }
-            //     return ret;
-            // }
-
-            // readStream.on('data', data => {
-            //     const messageChunkSize = 30000; // need to worry about the max size of udp messages
-            //     let dataChunks = splitIntoChunks(data, messageChunkSize);
-            //     dataChunks.forEach(dataChunk => {
-            //         sendResponse({
-            //             data_b64: dataChunk.toString('base64')
-            //         });
-            //     });
-            // });
-            // readStream.on('end', () => {
-            //     reportFinished();
-            // });
+            i = i2;
         }
-        else {
-            reportError('Unable to find file.');
+        while ((numResponsesSent - numResponsesReceived > 0) && (!canceled)) {
+            await sleepMsec(20);
         }
+        reportFinished();
     }
     async _handleGetLiveFeedSignedMessages({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
         validateChannelName(channelName);
@@ -1283,15 +1403,27 @@ class Node {
         if ((fileKey.sha1) || (fileKey.transformedSha1)) {
             const fileInfo = await getLocalFileInfo({ fileKey });
             if (fileInfo) {
-                if ('path' in fileInfo)
-                    delete fileInfo['path'];
                 const message2 = {
                     type: 'providing',
                     channelName,
                     fileKey,
-                    fileInfo
+                    fileSize: fileInfo.size
                 };
                 this.sendMessageToNode({ channelName, toNodeId: fromNodeId, message: message2 });
+            }
+            else if (fileKey.chunkOf) {
+                validateObject(fileKey.chunkOf, '/ChunkOf');
+                validateObject(fileKey.chunkOf.fileKey, '/FileKey');
+                const fileInfo2 = await getLocalFileInfo({fileKey: fileKey.chunkOf.fileKey});
+                if (fileInfo2) {
+                    const message2 = {
+                        type: 'providing',
+                        channelName,
+                        fileKey,
+                        fileSize: fileKey.chunkOf.endByte - fileKey.chunkOf.startByte
+                    };
+                    this.sendMessageToNode({ channelName, toNodeId: fromNodeId, message: message2 });
+                }
             }
         }
         else if ((fileKey.feedId) || (fileKey.transformedFeedId)) {
@@ -1324,17 +1456,14 @@ class Node {
         validateNodeId(fromNodeId);
         validateObject(message, '/ProvidingMessage');
         const fileKey = message.fileKey;
-        const fileInfo = message.fileInfo || null;
+        const fileSize = message.fileSize || null;
         const channelName = message.channelName;
 
         validateObject(fileKey, '/FileKey');
-        if (fileInfo) {
-            validateObject(fileInfo, '/FileInfo');
-        }
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
 
         this._onProvidingCallbacks.forEach(cb => {
-            cb({ channelName, nodeId: fromNodeId, fileKey, fileInfo });
+            cb({ channelName, nodeId: fromNodeId, fileKey, fileSize });
         });
     }
     async _handleAnnouncingMessage({ fromNodeId, message }) {
@@ -1610,6 +1739,39 @@ const fileKeysMatch = (k1, k2) => {
 function cloneObject(obj) {
     if (!obj) return obj;
     return JSON.parse(JSON.stringify(obj));
+}
+
+const _transformFileKey = ({fileKey, nodeId}) => {
+    validateObject(fileKey, '/FileKey');
+    let transformedFileKey;
+    if (fileKey.sha1) {
+        transformedFileKey = {
+            sha1Head: fileKey.sha1.slice(0, 10),
+            transformNodeId: nodeId,
+            transformedSha1: sha1sum(nodeId + fileKey.sha1)
+        };
+        if (fileKey.chunkOf) {
+            validateObject(fileKey.chunkOf, '/ChunkOf');
+            validateObject(fileKey.chunkOf.fileKey, '/FileKey');
+            transformedFileKey.chunkOf = {
+                ...fileKey.chunkOf,
+                fileKey: _transformFileKey({fileKey: fileKey.chunkOf.fileKey, nodeId})
+            }
+        }
+    }
+    else if (fileKey.feedId) {
+        transformedFileKey = {
+            type: fileKey.type,
+            feedIdHead: fileKey.feedId.slice(0, 10),
+            transformNodeId: nodeId,
+            transformedFeedId: sha1sum(nodeId + fileKey.feedId)
+        };
+    }
+    else {
+        transformedFileKey = fileKey;
+    }
+    validateObject(transformedFileKey, '/FileKey');
+    return transformedFileKey;
 }
 
 export default Node;

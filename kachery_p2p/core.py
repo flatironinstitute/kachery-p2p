@@ -1,4 +1,4 @@
-from typing import Tuple, Union, List
+from typing import Tuple, Union, List, Dict
 from types import SimpleNamespace
 import numpy as np
 import subprocess
@@ -48,11 +48,7 @@ def find_file(uri):
     url = f'http://localhost:{port}/findFile'
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     assert algorithm == 'sha1'
-    file_key = dict(
-        sha1=hash0
-    )
-    if 'manifest' in query:
-        file_key['manifestSha1'] = query['manifest']
+    file_key = _create_file_key(sha1=hash0, query=query)
     return _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
 
 def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str, dict]:
@@ -91,23 +87,27 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
     url = f'http://localhost:{port}/loadFile' # todo: finish
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     assert algorithm == 'sha1'
-    file_key = dict(
-        sha1=hash0
-    )
-    if 'manifest' in query:
-        file_key['manifestSha1'] = query['manifest']
+    file_key = _create_file_key(sha1=hash0, query=query)
     sock = _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
     for r in sock:
-        print(r)
-        if 'success' in r:
-            if r['success']:
-                # wow
-                return ka.load_file(uri=uri, dest=dest)
+        type0 = r.get('type')
+        if type0 == 'finished':
+            return ka.load_file(uri, dest=dest)
+        elif type0 == 'progress':
+            bytes_loaded = r['bytesLoaded']
+            bytes_total = r['bytesTotal']
+            node_id = r['nodeId']
+            pct = (bytes_loaded / bytes_total) * 100
+            if node_id:
+                nodestr = f' from {node_id[:6]}'
             else:
-                raise Exception(f'Error loading file: {r["error"]}')
+                nodestr = ''
+            print(f'Loaded {bytes_loaded} of {bytes_total}{nodestr} bytes ({pct:.1f} %)')
+        elif type0 == 'error':
+            raise Exception(f'Error loading file: {r["error"]}')
         else:
-            print(r)
-    raise Exception('Unable to download file. Response closed before finished.')
+            raise Exception(f'Unexpected message from daemon: {r}')
+    raise Exception('Unable to download file. Connection to daemon closed before finished.')
 
 def load_file_old(uri: str, dest: Union[str, None]=None, p2p: bool=True):
     if uri.startswith('sha1dir://'):
@@ -125,11 +125,7 @@ def load_file_old(uri: str, dest: Union[str, None]=None, p2p: bool=True):
     url = f'http://localhost:{port}/loadFile' # todo: finish
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     assert algorithm == 'sha1'
-    file_key = dict(
-        sha1=hash0
-    )
-    if 'manifest' in query:
-        file_key['manifestSha1'] = query['manifest']
+    file_key = _create_file_key(sha1=hash0, query=query)
     # sock = _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
     # for r in sock:
     #     if r['type'] == 'progress':
@@ -146,57 +142,47 @@ def load_file_old(uri: str, dest: Union[str, None]=None, p2p: bool=True):
 
     for r in find_file(uri):
         timer = time.time()
-        a = _load_file_helper(uri=uri, node_id=r['nodeId'], channel=r['channel'], file_key=r['fileKey'], file_info=r['fileInfo'], dest=dest)
+        a = _load_file_helper(uri=uri, node_id=r['nodeId'], channel=r['channel'], file_key=r['fileKey'], file_size=r['fileSize'], dest=dest)
         if a is not None:
             elapsed = time.time() - timer
-            size = r["fileInfo"]["size"]
+            size = r["fileSize"]
             rate = size / elapsed / (1024 * 1024)
             print(f'Downloaded {size} bytes in {elapsed} sec ({rate} MB/sec)')
             return a
     return None
 
-def load_bytes(uri: str, start: Union[int, None]=None, end: Union[int, None]=None, write_to_stdout=False, p2p: bool=True) -> Union[bytes, None]:
-    if uri.startswith('sha1dir://'):
-        uri0 = _resolve_file_uri_from_dir_uri(uri, p2p=p2p)
-        if uri0 is None:
-            return None
-        uri = uri0
-    local_path = ka.load_file(uri)
-    if local_path is not None:
-        return ka.load_bytes(path=local_path, start=start, end=end, write_to_stdout=write_to_stdout)
+def load_bytes(uri: str, start: int, end: int, write_to_stdout=False, p2p: bool=True) -> Union[bytes, None]:
+    ret = ka.load_bytes(uri, start=start, end=end, write_to_stdout=write_to_stdout)
+    if ret is not None:
+        return ret
     if not p2p:
+        return    
+    protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
+    if query.get('manifest'):
+        manifest = load_object(f'sha1://{query["manifest"][0]}')
+        if manifest is None:
+            print('Unable to load manifest')
+            return None
+        assert manifest['sha1'] == hash0, 'Manifest sha1 does not match expected.'
+        data_chunks = []
+        for ch in manifest['chunks']:
+            if start < ch['end'] and end > ch['start']:
+                a = load_bytes(
+                    uri=f'sha1://{ch["sha1"]}?chunkOf={hash0}~{ch["start"]}~{ch["end"]}',
+                    start=max(0, start - ch['start']),
+                    end=min(ch['end']-ch['start'], end-ch['start']
+                ))
+                if a is None:
+                    print('Unable to load bytes from chunk')
+                    return None
+                data_chunks.append(a)
+        return b''.join(data_chunks)
+    
+    path = load_file(uri=uri)
+    if path is None:
+        print('Unable to load file.')
         return None
-    for r in find_file(uri):
-        timer = time.time()
-        a = _load_bytes_helper(
-            channel=r['channel'],
-            node_id=r['nodeId'],
-            file_key=r['fileKey'],
-            file_info=r['fileInfo'],
-            start=start,
-            end=end
-        )
-        if a is not None:
-            if write_to_stdout:
-                sys.stdout.buffer.write(a)
-                return None
-            else:
-                return a
-
-def _load_bytes_helper(channel, node_id, file_key, file_info, start, end):
-    port = _api_port()
-    url = f'http://localhost:{port}/downloadFileBytes'
-    return _http_post_download_file_data(
-        url,
-        dict(
-            channel=channel,
-            nodeId=node_id,
-            fileKey=file_key,
-            startByte=start,
-            endByte=end
-        ),
-        content_size=end - start
-    )
+    return ka.load_bytes(uri, start=start, end=end, write_to_stdout=write_to_stdout)
 
 def read_dir(uri: str, p2p: bool=True):
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
@@ -284,7 +270,7 @@ def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verb
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.4.10'
+                npm_package = 'kachery-p2p-daemon@0.4.11'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''
@@ -409,7 +395,7 @@ def _resolve_file_uri_from_dir_uri(dir_uri, p2p: bool=True):
     return None
     
 
-def _load_file_helper(uri, channel, node_id, file_key, file_info, dest):
+def _load_file_helper(uri, channel, node_id, file_key, file_size, dest):
     port = _api_port()
     url = f'http://localhost:{port}/downloadFile'
     with TemporaryDirectory() as tmpdir:
@@ -420,9 +406,9 @@ def _load_file_helper(uri, channel, node_id, file_key, file_info, dest):
                 channel=channel,
                 nodeId=node_id,
                 fileKey=file_key,
-                fileSize=file_info['size']
+                fileSize=file_size
             ),
-            total_size=file_info['size'],
+            total_size=file_size,
             dest_path=fname
         )
         with ka.config(use_hard_links=True):
@@ -553,3 +539,21 @@ def _http_post_json_receive_json_socket(url: str, data: dict, verbose: Optional[
                 else:
                     buf.append(c[0])
     return custom_iterator()
+
+def _create_file_key(*, sha1, query):
+    file_key: Dict[Union[str, dict]] = dict(
+        sha1=sha1
+    )
+    if 'manifest' in query:
+        file_key['manifestSha1'] = query['manifest'][0]
+    if 'chunkOf' in query:
+        v = query['chunkOf'][0].split('~')
+        assert len(v) ==3, 'Unexpected chunkOf in URI query.'
+        file_key['chunkOf'] = {
+            'fileKey': {
+                'sha1': v[0]
+            },
+            'startByte': int(v[1]),
+            'endByte': int(v[2])
+        }
+    return file_key

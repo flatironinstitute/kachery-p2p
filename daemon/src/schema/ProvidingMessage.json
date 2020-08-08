@@ -5,7 +5,7 @@
         "type": {"const": "providing"},
         "channelName": {"$ref": "/ChannelName"},
         "fileKey": {"$ref": "/FileKey"},
-        "fileInfo": {"$ref": "/FileInfo"},
+        "fileSize": {"type": "integer"},
         "_id": {"$ref": "/MessageId"}
     },
     "required": ["type", "channelName", "fileKey"],

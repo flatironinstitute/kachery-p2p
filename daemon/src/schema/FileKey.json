@@ -5,7 +5,8 @@
             "type": "object",
             "properties": {
                 "sha1": {"$ref": "/Sha1Hash"},
-                "manifestSha1": {"$ref": "/Sha1Hash"}
+                "manifestSha1": {"$ref": "/Sha1Hash"},
+                "chunkOf": {"$ref": "/ChunkOf"}
             },
             "required": ["sha1"],
             "additionalProperties": false
@@ -16,7 +17,8 @@
                 "transformedSha1": {"$ref": "/Sha1Hash"},
                 "transformNodeId": {"$ref": "/NodeId"},
                 "sha1Head": {"$ref": "/Sha1Head"},
-                "manifestSha1": {"$ref": "/Sha1Hash"}
+                "manifestSha1": {"$ref": "/Sha1Hash"},
+                "chunkOf": {"$ref": "/ChunkOf"}
             },
             "required": ["transformedSha1", "transformNodeId", "sha1Head"],
             "additionalProperties": false

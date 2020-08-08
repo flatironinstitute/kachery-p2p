@@ -1,8 +1,9 @@
 import { exec } from 'child_process'
-import fs from 'fs';
+import fs, { writeSync } from 'fs';
 import { sha1sum } from './common/crypto_util.js';
 import { assert } from 'console';
 import { randomAlphaString } from './common/util.js';
+import crypto from 'crypto';
 
 const _getTemporaryDirectory = () => {
     const ret = process.env['KACHERY_STORAGE_DIR'] + '/tmp';
@@ -16,16 +17,55 @@ export const createTemporaryFilePath = ({prefix}) => {
     return `${dirpath}/${prefix}-${randomAlphaString(10)}`;
 }
 
+export const concatenateFilesIntoTemporaryFile = async (paths) => {
+    return new Promise((resolve, reject) => {
+        const tmpPath = createTemporaryFilePath({prefix: 'kachery-p2p-concat-'});
+        const writeStream = fs.createWriteStream(tmpPath);
+        const sha = crypto.createHash('sha1');
+        let done = false;
+        let ii = 0;
+        const _handleNextFile = () => {
+            if (done) return;
+            if (ii >= paths.length) {
+                writeStream.end(() => {
+                    if (done) return;
+                    done = true;
+                    const sha1 = sha.digest('hex');
+                    resolve({sha1, path: tmpPath});
+                });
+                return;
+            }
+            const readStream = fs.createReadStream(paths[ii]);
+            readStream.on('error', (err) => {
+                if (done) return;
+                done = true;
+                reject(err);
+            });
+            readStream.on('data', data => {
+                if (done) return;
+                sha.update(data);
+                writeStream.write(data);
+            });
+            readStream.on('end', () => {
+                ii ++;
+                _handleNextFile();
+            });
+        }
+        _handleNextFile();
+    });
+}
+
 export const moveFileIntoKacheryStorage = ({path, sha1}) => {
     const s = sha1;
     const destParentPath = `${kacheryStorageDir()}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`;
     const destPath = `${destParentPath}/${s}`;
     if (fs.existsSync(destPath)) {
         fs.unlinkSync(path);
-        return;
+        return destPath;
     }
-    fs.mkdirSync(destPath, {recursive: true});
+    fs.mkdirSync(destParentPath, {recursive: true});
     fs.renameSync(path, destPath);
+    return destPath;
 }
 
 export const kacheryStorageDir = () => {

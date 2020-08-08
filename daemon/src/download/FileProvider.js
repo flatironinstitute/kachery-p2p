@@ -1,18 +1,19 @@
 import fs from 'fs';
+import assert from 'assert';
 import { validateObject } from '../schema/index.js';
+import crypto from 'crypto';
 
 class FileProvider {
     constructor({node, findFileResult}) {
         assert(node, 'Missing node in constructor of FileProvider');
         validateObject(findFileResult, '/FindFileOrLiveFeedResult');
-        validateObject(findFileResult.fileInfo, '/FileInfo');
 
         this._node = node;
         this._findFileResult = findFileResult;
-        this._fileInfo = findFileResult.fileInfo;
+        this._fileSize = findFileResult.fileSize;
     }
     fileSize() {
-        return this._fileInfo.size;
+        return this._fileSize;
     }
     nodeId() {
         return this._findFileResult.nodeId;
@@ -26,18 +27,10 @@ class FileProvider {
         const onProgressCallbacks = [];
 
         let complete = false;
-        let appendToFile = null;
-        if (appendToFile) {
-            appendToFile = fs.openSync(appendToFilePath, 'a+');
+        let appendToFileWriteStream = null;
+        if (appendToFilePath) {
+            appendToFileWriteStream = fs.createWriteStream(appendToFilePath, {flags: 'a+'});
         }
-
-        const {stream, cancel} = this._node.downloadFile({
-            channelName: this._findFileResult.channel,
-            nodeId: this._findFileResult.nodeId,
-            fileKey: this._findFileResult.fileKey,
-            startByte,
-            endByte
-        });
 
         const numBytesExpected = endByte - startByte;
 
@@ -45,11 +38,23 @@ class FileProvider {
         var sha1sum = crypto.createHash('sha1')
         let numBytesLoaded = 0;
 
+        const {stream, cancel: cancelDownload} = this._node.downloadFile({
+            channelName: this._findFileResult.channel,
+            nodeId: this._findFileResult.nodeId,
+            fileKey: this._findFileResult.fileKey,
+            startByte,
+            endByte
+        });
+        assert(stream, 'stream is undefined in loadData');
+        assert(typeof(cancelDownload) === 'function', 'cancelDownload is not a function in loadData');
+
         const _finalize = () => {
-            if (appendToFile) {
-                fs.closeSync(appendToFile);
-            }
             complete = true;
+            cancelDownload();
+        }
+        
+        if (appendToFilePath) {
+            stream.pipe(appendToFileWriteStream);
         }
 
         stream.on('error', (err) => {
@@ -57,30 +62,45 @@ class FileProvider {
             _finalize();
             onErrorCallbacks.forEach(cb => cb(err));
         })
-        stream.on('close', () => {
+        stream.on('end', () => {
             if (complete) return;
-            _finalize();
             if (numBytesLoaded !== numBytesExpected) {
-                const err = new Error('Stream closed before downloaded expected number of bytes.');
+                const err = new Error('Stream ended before downloaded expected number of bytes.');
                 onErrorCallbacks.forEach(cb => cb(err));
                 return;
             }
-            let data = null;
             if (!appendToFilePath) {
-                data = Buffer.concat(chunks);
+                _finalize();
+                const data = Buffer.concat(chunks);
+                assert(data.length === numBytesExpected, 'Unexpected. Concatenated chunks do not have expected length.');
+                const sha1 = sha1sum.digest('hex');
+                onFinishedCallbacks.forEach(cb => cb({data, sha1}));
             }
-            assert(data.length === numBytesExpected, 'Unexpected. Concatenated chunks do not have expected length.');
-            const sha1 = sha1sum.digest('hex');
-            onFinishedCallbacks.forEach(cb => cb({data, sha1}));
         });
+        if (appendToFilePath) {
+            appendToFileWriteStream.on('finish', () => {
+                if (complete) return;
+                _finalize();
+                const sha1 = sha1sum.digest('hex');
+                onFinishedCallbacks.forEach(cb => cb({data: null, sha1}));
+            });
+        }
+        let progressTimer = new Date();
         stream.on('data', data => {
             if (complete) return;
             numBytesLoaded += data.length;
             sha1sum.update(data);
-            if (appendToFilePath) {
-                fs.write(appendToFile, data);
+            const progressElapsed = (new Date()) - progressTimer;
+            if (progressElapsed >= 1000) {
+                const prog = {
+                    bytesLoaded: numBytesLoaded,
+                    bytesTotal: numBytesExpected,
+                    nodeId: this.nodeId()
+                };
+                onProgressCallbacks.forEach(cb => cb(prog));
+                progressTimer = new Date();
             }
-            else {
+            if (!appendToFilePath) {
                 chunks.push(data);
             }
         });
@@ -88,7 +108,6 @@ class FileProvider {
         const _handleCancel = () => {
             if (complete) return;
             _finalize();
-            stream.close();
         }
 
         return {

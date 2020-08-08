@@ -1,6 +1,6 @@
 import fs from 'fs';
 import assert from 'assert';
-import { sleepMsec } from "../common/util.js";
+import { sleepMsec, sha1MatchesFileKey } from "../common/util.js";
 import { validateObject, validateSha1Hash } from "../schema/index.js";
 import { sha1sum } from "../common/crypto_util.js";
 import { createTemporaryFilePath, moveFileIntoKacheryStorage } from "../kachery.js";
@@ -51,14 +51,15 @@ class FileLoader {
                 console.warn(`We have inconsistent file sizes reported from peers: ${provider.nodeId().slice(0, 6)} ${pPrev.provider.nodeId().slice(0, 6)}`);
             }
         }
-        this._fileProvidersPlus.push({
+        const pp = {
             info: {
                 fileSize: provider.fileSize()
             },
             provider
-        });
+        };
+        this._fileProvidersPlus.push(pp);
         
-        this._onNewProviderCallbacks.forEach(cb => cb(provider));
+        this._onNewProviderCallbacks.forEach(cb => cb(pp));
     }
     reportFinishedFindingProviders() {
         this._finishedFindingProvidersReported = true;
@@ -96,7 +97,7 @@ class FileLoader {
             onProgress((progress) => {
                 p.info.testProgress= progress;
             });
-            p.info.testCancel = cancel;
+            p.info.testCancel = () => cancel();
         }
 
         const _startFullDownload = (p) => {
@@ -118,9 +119,10 @@ class FileLoader {
                 p.info.fullFinished = true;
             });
             onProgress((progress) => {
-                p.info.fullProgress(progress);
+                p.info.fullProgress = progress;
+                this._onProgressCallbacks.forEach(cb => cb(progress));
             });
-            p.info.fullCancel = cancel;
+            p.info.fullCancel = () => cancel();
         }
         
         this._onNewProvider(p => {
@@ -128,15 +130,15 @@ class FileLoader {
             _startTestDownload(p);
         });
 
-        const pIndex = 0;
-        const timer = 0;
+        let pIndex = 0;
+        let timer = 0;
         while (true) {
             if (complete) return;
             if (this._halt) {
                 complete = true;
                 for (let p0 of this._fileProvidersPlus) {
                     if (p0.info.testCancel) p0.info.testCancel();
-                    if (p0.info.fullCancel) pp.info.fullCancel();
+                    if (p0.info.fullCancel) p0.info.fullCancel();
                     if (p0.info.temporaryFilePath) {
                         if (fs.existsSync(p0.info.temporaryFilePath)) {
                             fs.unlinkSync(p0.info.temporaryFilePath);
@@ -154,16 +156,24 @@ class FileLoader {
                 }
                 else if (pp.info.fullFinished) {
                     complete = true;
-                    try {
-                        moveFileIntoKacheryStorage({path: pp.info.temporaryFilePath, sha1: pp.info.fullSha1});
-                    }
-                    catch(err) {
-                        console.warn(`Unexpected. Unable to move file into kachery storage: ${err.message}`);
-                        const err2 = new Error(`Unexpected. Unable to move file into kachery storage: ${err.message}`);
+                    const stat0 = fs.statSync(pp.info.temporaryFilePath);
+                    if (stat0.size !== this._numBytes) {
+                        const err2 = new Error(`Unexpected. Size of downloaded file is ${stat0.size}. Expected ${this._numBytes}.`);
+                        console.warn(err2.message);
                         this._onErrorCallbacks.forEach(cb => cb(err2));
                         return;
                     }
-                    this._onFinishedCallbacks.forEach(cb => cb({sha1: pp.info.fullSha1, }));
+                    let path = null;
+                    try {
+                        path = moveFileIntoKacheryStorage({path: pp.info.temporaryFilePath, sha1: pp.info.fullSha1});
+                    }
+                    catch(err) {
+                        const err2 = new Error(`Unexpected. Unable to move file into kachery storage: ${err.message}`);
+                        console.warn(err2.message);                        
+                        this._onErrorCallbacks.forEach(cb => cb(err2));
+                        return;
+                    }
+                    this._onFinishedCallbacks.forEach(cb => cb({sha1: pp.info.fullSha1, path }));
                 }
                 else if (pp.info.fullError) {
                     if (fs.existsSync(pp.info.temporaryFilePath)) {
@@ -202,23 +212,6 @@ class FileLoader {
             await sleepMsec(10);
         }
     }
-}
-
-const sha1MatchesFileKey = ({sha1, fileKey}) => {
-    validateSha1Hash(sha1);
-    validateObject(fileKey, '/FileKey');
-
-    if (fileKey.sha1) {
-        return fileKey.sha1 === sha1;
-    }
-    else if (fileKey.transformedSha1) {
-        if (sha1.startsWith(fileKey.sha1Head)) {
-            if (sha1sum(fileKey.transformNodeId + sha1) === fileKey.transformedSha1) {
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 export default FileLoader;

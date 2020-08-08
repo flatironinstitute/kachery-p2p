@@ -104,8 +104,8 @@ class Daemon {
     loadFile = ({fileKey}) => (this._loadFile({fileKey}));
 
     // returns {stream, cancel}
-    downloadFile = async ({channelName, nodeId, fileKey, fileSize, opts}) => (await this._downloadFile({channelName, nodeId, fileKey, fileSize, opts}));
-    downloadFileBytes = async ({channelName, nodeId, fileKey, startByte, endByte, opts}) => (await this._downloadFileBytes({channelName, nodeId, fileKey, startByte, endByte, opts}));
+    downloadFile = ({channelName, nodeId, fileKey, fileSize, opts}) => (this._downloadFile({channelName, nodeId, fileKey, fileSize, opts}));
+    downloadFileBytes = ({channelName, nodeId, fileKey, startByte, endByte, opts}) => (this._downloadFileBytes({channelName, nodeId, fileKey, startByte, endByte, opts}));
     // Find a live feed
     // returns an object with:
     //   {onFound, onFinished, cancel}
@@ -142,17 +142,17 @@ class Daemon {
     }
 
     // returns {stream, cancel}
-    _downloadFile = async ({channelName, nodeId, fileKey, fileSize}) => {
+    _downloadFile = ({channelName, nodeId, fileKey, fileSize}) => {
         validateChannelName(channelName);
         validateNodeId(nodeId);
         validateObject(fileKey, '/FileKey');
         // assert(typeof(fileSize) === 'number');
 
         log().info(`downloadFile`, {channelName, nodeId, fileKey, fileSize});
-        return await this._node.downloadFile({channelName, nodeId, fileKey, startByte: 0, endByte: fileSize});
+        return this._node.downloadFile({channelName, nodeId, fileKey, startByte: 0, endByte: fileSize});
     }
     // returns {stream, cancel}
-    _downloadFileBytes = async ({channelName, nodeId, fileKey, startByte, endByte}) => {
+    _downloadFileBytes = ({channelName, nodeId, fileKey, startByte, endByte}) => {
         validateChannelName(channelName);
         validateNodeId(nodeId);
         validateObject(fileKey, '/FileKey');
@@ -160,7 +160,7 @@ class Daemon {
         // assert(typeof(endByte) === 'number');
 
         log().info(`downloadFileBytes`, {channelName, nodeId, fileKey, startByte, endByte});
-        return await this._node.downloadFile({channelName, nodeId, fileKey, startByte, endByte});
+        return this._node.downloadFile({channelName, nodeId, fileKey, startByte, endByte});
     }
     _getLiveFeedSignedMessages = async ({channelName, nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
         validateChannelName(channelName);
