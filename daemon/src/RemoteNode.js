@@ -507,8 +507,12 @@ class RemoteNode {
 
     async _start() {
         this._startCheckingExpired();
-        this._startTryingOutgoingConnection({type: 'websocket'});
-        this._startTryingOutgoingConnection({type: 'udp'});
+        if (!process.env.KACHERY_P2P_DISABLE_OUTGOING_WEBSOCKET_CONNECTIONS) {
+            this._startTryingOutgoingConnection({type: 'websocket'});
+        }
+        if (!process.env.KACHERY_P2P_DISABLE_OUTGOING_UDP_CONNECTIONS) {
+            this._startTryingOutgoingConnection({type: 'udp'});
+        }
         this._startAnnouncingSelf();
         this._startResendingUnconfirmedMessages();
     }

@@ -15,14 +15,19 @@ class TemporaryDirectory():
         else:
             storage_dir = None
         if storage_dir is not None:
+            assert os.path.exists(storage_dir), f'Unexpected problem. Storage directory does not exist: {storage_dir}'
             dirpath = os.path.join(storage_dir, 'tmp')
             if not os.path.exists(dirpath):
-                try:
-                    os.mkdir(dirpath)
-                except:
-                    # maybe somebody else created this directory
-                    if not os.path.exists:
-                        raise Exception(f'Unexpected problem creating temporary directory: {dirpath}')
+                for _ in range(1, 3):
+                    try:
+                        os.mkdir(dirpath)
+                        break
+                    except:
+                        # maybe somebody else created this directory
+                        if os.path.exists(dirpath):
+                            break
+                        else:
+                            raise Exception(f'Unexpected problem creating temporary directory: {dirpath}')
         else:
             dirpath = None
         self._path = str(tempfile.mkdtemp(prefix=self._prefix, dir=dirpath))

@@ -13,6 +13,7 @@ from urllib.parse import parse_qs
 import kachery as ka
 from ._temporarydirectory import TemporaryDirectory
 from ._shellscript import ShellScript
+from .exceptions import LoadFileError
 
 def _api_port():
     return os.getenv('KACHERY_P2P_API_PORT', 20431)
@@ -102,9 +103,9 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
                 nodestr = f' from {node_id[:6]}'
             else:
                 nodestr = ''
-            print(f'Loaded {bytes_loaded} of {bytes_total}{nodestr} bytes ({pct:.1f} %)')
+            print(f'Loaded {bytes_loaded} of {bytes_total} bytes{nodestr} ({pct:.1f} %)')
         elif type0 == 'error':
-            raise Exception(f'Error loading file: {r["error"]}')
+            raise LoadFileError(f'Error loading file: {r["error"]}')
         else:
             raise Exception(f'Unexpected message from daemon: {r}')
     raise Exception('Unable to download file. Connection to daemon closed before finished.')
@@ -270,7 +271,7 @@ def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verb
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.4.12'
+                npm_package = 'kachery-p2p-daemon@0.4.13'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''

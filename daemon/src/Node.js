@@ -489,8 +489,8 @@ class Node {
         let bytesLoaded = 0;
         let progressTimer = new Date();
 
-        try {
-            (async () => {
+        (async () => {
+            try {
                 const manifestFileKey = {sha1: fileKey.manifestSha1};
                 const manifestPath = await this._loadFileAsync({fileKey: manifestFileKey});
                 const manifest = await readJsonFile(manifestPath);
@@ -498,6 +498,7 @@ class Node {
                     throw new Error(`Manifest sha1 does not match file key: ${manifest.sha1}`);
                 }
                 const chunkPaths = [];
+                let lastProg = {};
                 for (let ichunk = 0; ichunk < manifest.chunks.length; ichunk++) {
                     if (done) return;
                     const chunk = manifest.chunks[ichunk];
@@ -514,9 +515,11 @@ class Node {
                         }
                     };
                     const _handleChunkProgress = ((prog) => {
+                        lastProg = prog;
                         const pr0 = {
                             bytesLoaded: bytesLoaded + prog.bytesLoaded,
-                            bytesTotal: manifest.size
+                            bytesTotal: manifest.size,
+                            nodeId: prog.nodeId
                         }
                         onProgressCallbacks.forEach(cb => cb(pr0));
                         progressTimer = new Date();
@@ -525,7 +528,8 @@ class Node {
                     bytesLoaded += chunk.end - chunk.start;
                     const pr = {
                         bytesLoaded,
-                        bytesTotal: manifest.size
+                        bytesTotal: manifest.size,
+                        nodeId: lastProg.nodeId || ''
                     }
                     const progressElapsed = (new Date()) - progressTimer;
                     if (progressElapsed >= 1000) {
@@ -542,11 +546,11 @@ class Node {
                 }
                 moveFileIntoKacheryStorage({path: concatPath, sha1: manifest.sha1});
                 _reportFinished({path: concatPath});
-            })();
-        }
-        catch(err) {
-            _reportError(err);
-        }
+            }
+            catch(err) {
+                _reportError(err);
+            }
+        })();
 
         return {
             onProgress: cb => onProgressCallbacks.push(cb),

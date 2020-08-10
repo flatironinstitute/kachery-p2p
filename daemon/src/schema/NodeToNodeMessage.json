@@ -15,6 +15,7 @@
         {"$ref": "/FindChannelPeersMessage"},
         {"$ref": "/FindChannelPeersResponseMessage"},
         {"$ref": "/InitialMessage"},
+        {"$ref": "/MessageToNodeMessage"},
         {"$ref": "/ProvidingMessage"},
         {"$ref": "/RequestToNodeMessage"},
         {"$ref": "/RequestToNodeErrorMessage"},

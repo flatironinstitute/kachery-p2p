@@ -192,6 +192,7 @@ class FileLoader {
                         complete = true;
                         const err = new Error('File not found.');
                         this._onErrorCallbacks.forEach(cb => cb(err));
+                        return;
                     }
                     else {
                         const elapsed = (new Date()) - timer;

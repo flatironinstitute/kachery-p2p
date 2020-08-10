@@ -19,7 +19,8 @@
             "required": ["channelName", "fromNodeId", "toNodeId", "route", "message", "timestamp"],
             "additionalProperties": false
         },
-        "signature": {"$ref": "/Signature"}
+        "signature": {"$ref": "/Signature"},
+        "_id": {"$ref": "/MessageId"}
     },
     "required": ["type", "body", "signature"],
     "additionalProperties": false
