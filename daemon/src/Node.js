@@ -497,13 +497,10 @@ class Node {
                 if (!sha1MatchesFileKey({sha1: manifest.sha1, fileKey})) {
                     throw new Error(`Manifest sha1 does not match file key: ${manifest.sha1}`);
                 }
-                const chunkPaths = [];
-                let lastProg = {};
+
+                const manifestChunkLoaderManager = new ManifestChunkLoaderManager({numSimultaneous: 1});
                 for (let ichunk = 0; ichunk < manifest.chunks.length; ichunk++) {
-                    if (done) return;
                     const chunk = manifest.chunks[ichunk];
-                    console.info(`Loading chunk ${ichunk + 1} of ${manifest.chunks.length} (${chunk.end - chunk.start} bytes)`);
-                    // todo: report progress here
                     const chunkFileKey = {
                         sha1: chunk.sha1,
                         chunkOf: {
@@ -514,38 +511,25 @@ class Node {
                             endByte: chunk.end
                         }
                     };
-                    const _handleChunkProgress = ((prog) => {
-                        lastProg = prog;
-                        const pr0 = {
-                            bytesLoaded: bytesLoaded + prog.bytesLoaded,
-                            bytesTotal: manifest.size,
-                            nodeId: prog.nodeId
-                        }
-                        onProgressCallbacks.forEach(cb => cb(pr0));
-                        progressTimer = new Date();
-                    });
-                    const chunkPath = await this._loadFileAsync({fileKey: chunkFileKey, onProgress: _handleChunkProgress});
-                    bytesLoaded += chunk.end - chunk.start;
-                    const pr = {
-                        bytesLoaded,
-                        bytesTotal: manifest.size,
-                        nodeId: lastProg.nodeId || ''
-                    }
-                    const progressElapsed = (new Date()) - progressTimer;
-                    if (progressElapsed >= 1000) {
-                        onProgressCallbacks.forEach(cb => cb(pr));
-                        progressTimer = new Date();
-                    }
-                    chunkPaths.push(chunkPath);                    
+                    manifestChunkLoaderManager.addChunk({index: ichunk, chunkFileKey});
                 }
-                console.info(`Concatenating ${manifest.chunks.length} chunks.`);
-                const {sha1, path: concatPath} = await concatenateFilesIntoTemporaryFile(chunkPaths);
-                if (sha1 !== manifest.sha1) {
-                    fs.unlinkSync(concatPath);
-                    throw Error('Unexpected SHA-1 of concatenated file.');
-                }
-                moveFileIntoKacheryStorage({path: concatPath, sha1: manifest.sha1});
-                _reportFinished({path: concatPath});
+                manifestChunkLoaderManager.onProgress(prog => {
+                    onProgressCallbacks.forEach(cb => cb(pr0));
+                });
+                manifestChunkLoaderManager.onError(err => {
+                    _reportError(err);
+                });
+                manifestChunkLoaderManager.onFinished(({chunkPaths}) => {
+                    console.info(`Concatenating ${manifest.chunks.length} chunks.`);
+                    const {sha1, path: concatPath} = await concatenateFilesIntoTemporaryFile(chunkPaths);
+                    if (sha1 !== manifest.sha1) {
+                        fs.unlinkSync(concatPath);
+                        throw Error('Unexpected SHA-1 of concatenated file.');
+                    }
+                    moveFileIntoKacheryStorage({path: concatPath, sha1: manifest.sha1});
+                    _reportFinished({path: concatPath});
+                });
+                manifestChunkLoaderManager.start();
             }
             catch(err) {
                 _reportError(err);
