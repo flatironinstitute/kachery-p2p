@@ -77,11 +77,11 @@ The shape of this array should be `(500, 500, 2)`.
 
 Verify that if you run this script again, the file does not need to be re-downloaded.
 
-Now we'll go for something larger (200 MB):
+Now we'll go for something larger (600 MB):
 
 ```python
 import kachery_p2p as kp
-a = kp.load_npy('sha1://35fb45d5703ab320e3a0caadad5a2d7f06f3b71b/file_200MB.npy')
+a = kp.load_npy('sha1://a3f6ff6f17056fe6955b3f0b9674220a0a3982c7/file.npy?manifest=a79769fc3ed451d3ef45a48d8d1b5c03da0d5309')
 print(a.shape)
 ```
 

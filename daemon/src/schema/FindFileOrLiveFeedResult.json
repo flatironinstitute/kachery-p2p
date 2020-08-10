@@ -5,7 +5,10 @@
         "channel": {"$ref": "/ChannelName"},
         "nodeId": {"$ref": "/NodeId"},
         "fileKey": {"$ref": "/FileKey"},
-        "fileSize": {"type": "integer"}
+        "fileSize": {"oneOf": [
+            {"type": "null"},
+            {"type": "integer"}
+        ]}
     },
     "required": ["channel", "nodeId", "fileKey"],
     "additionalProperties": false
