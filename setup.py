@@ -43,7 +43,7 @@ setuptools.setup(
     ],
     install_requires=[
         "click",
-        "kachery>=0.6.5"
+        "kachery>=0.6.6"
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
