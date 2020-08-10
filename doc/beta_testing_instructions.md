@@ -81,11 +81,16 @@ Now we'll go for something larger (600 MB):
 
 ```python
 import kachery_p2p as kp
+
+# Note: if you interrupt this download (via ctrl+c),
+# then when you restart, it should pick up roughly
+# where you left off
 a = kp.load_npy('sha1://a3f6ff6f17056fe6955b3f0b9674220a0a3982c7/file.npy?manifest=a79769fc3ed451d3ef45a48d8d1b5c03da0d5309')
+
 print(a.shape)
 ```
 
-This should take around 1-2 minutes (depending on the speed of your internet connection). The shape of the downloaded array should be `(500, 500, 100)`. While you wait, you could move on to the next tests in a new terminal.
+This should take around 1-2 minutes (depending on the speed of your internet connection). The shape of the downloaded array should be `(500, 500, 300)`. While you wait, you could move on to the next tests in a new terminal. Or you could test the auto-resume capability (see the note above).
 
 ## Sharing files
 
