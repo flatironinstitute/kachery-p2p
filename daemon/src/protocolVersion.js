@@ -1,4 +1,4 @@
-const PROTOCOL_VERSION = 'kachery-p2p-0.4.16';
+const PROTOCOL_VERSION = 'kachery-p2p-0.4.17';
 
 export const protocolVersion = () => {
     return PROTOCOL_VERSION;
