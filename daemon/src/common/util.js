@@ -71,6 +71,8 @@ const sortKeysInObject = (x) => {
 
 const convertBinaryToBufferInObject = (x) => {
     if (x instanceof bson.Binary) {
+        // This might be the troublesome line.
+        // We should check to see if the underlying type is bytearray before returning the internal buffer.
         return x.buffer;
     }
     else if (x instanceof Object) {
