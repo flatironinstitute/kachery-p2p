@@ -1057,10 +1057,18 @@ class Node {
         const asyncRead = util.promisify(fs.read);
 
         const file = await asyncOpen(fileSystemPath);
-        const messageChunkSize = 15000;
+
+        // this process is way more efficient if this is large
+        // but udp messages may have a problem
+        const messageChunkSize = 300000;
+
         let i = requestBody.startByte;
         const buffer = Buffer.alloc(messageChunkSize);
+        const timer0 = new Date();
+        const tot = [0, 0, 0];
+        let ttt;
         while ( i < requestBody.endByte) {
+            ttt = new Date();
             if (canceled) {
                 reportError('Download canceled by requester.');
                 return;
@@ -1074,18 +1082,24 @@ class Node {
                         reportError('Timeout while waiting for confirmation of receipt of messages.')
                         return;
                     }
-                    await sleepMsec(20);
+                    await sleepMsec(1);
                 }
             }
             const i1 = i;
             const i2 = Math.min(i1 + messageChunkSize, requestBody.endByte);
+            tot[0] += (new Date()) - ttt;
+            ttt = new Date();
             const x = await asyncRead(file, buffer, 0, i2 - i1, i1);
             if (x.bytesRead !== i2 - i1) {
                 throw Error('Problem reading file. Unexpected number of bytes read.');
             }
+
+            tot[1] += (new Date()) - ttt;
+            ttt = new Date();
             sendResponse({
                 data_b64: buffer.slice(0, i2 - i1).toString('base64')
             });
+            tot[2] += (new Date()) - ttt;
             numResponsesSent ++;
 
             i = i2;
@@ -1093,6 +1107,7 @@ class Node {
         while ((numResponsesSent - numResponsesReceived > 0) && (!canceled)) {
             await sleepMsec(20);
         }
+        const elapsed = (new Date()) - timer0;
         reportFinished();
     }
     async _handleGetLiveFeedSignedMessages({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {

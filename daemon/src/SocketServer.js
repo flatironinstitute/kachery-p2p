@@ -1,4 +1,3 @@
-import assert from 'assert';
 import WebSocket from 'ws';
 import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from './common/crypto_util.js'
 import { protocolVersion } from './protocolVersion.js';

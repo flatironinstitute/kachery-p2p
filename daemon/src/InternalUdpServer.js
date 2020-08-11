@@ -50,7 +50,8 @@ class InternalUdpServer {
     }
     _createOutgoingUdpConnection({address, port}) {
         const connectionId = randomAlphaString(10);
-        const C = new UdpConnection({udpServer: this, connectionId, remoteAddress: address, remotePort: port});
+        const innerC = new InnerUdpConnection({udpServer: this, connectionId, remoteAddress: address, remotePort: port});
+        const C = new UdpConnection(innerC);
         C.on('close', () => {
             if (connectionId in this._pendingOutgoingConnections) {
                 delete this._pendingOutgoingConnections[connectionId];
@@ -73,12 +74,13 @@ class InternalUdpServer {
                 console.warn(`openConnection: connection with id already exists: ${message.connectionId}`);
                 return;
             }
-            const C = new UdpConnection({
+            const innerC = new InnerUdpConnection({
                 udpServer: this,
                 connectionId: message.connectionId,
                 remoteAddress: remote.address,
                 remotePort: remote.port
             });
+            const C = new UdpConnection(innerC);
             C.on('close', () => {
                 if (this._incomingConnections[message.connectionId]) {
                     delete this._incomingConnections[message.connectionId];
@@ -130,6 +132,102 @@ class InternalUdpServer {
 }
 
 class UdpConnection {
+    constructor(innerUdpConnection) {
+        this._innerUdpConnection = innerUdpConnection;
+        this._innerUdpConnection.on('message', messageText => this._handleMessage(messageText))
+        this._onMessageCallbacks = [];
+        this._pendingIncomingMessages = {};
+    }
+    send(messageText) {
+        const messageTextParts = this._splitIntoParts(messageText);
+        const id = randomAlphaString(10);
+        for (let i=0; i<messageTextParts.length; i++) {
+            const part = messageTextParts[i];
+            let header = id + ':' + i + ':' + messageTextParts.length + ':';
+            while (header.length < 64)
+                header += ' ';
+            this._innerUdpConnection.send(header + part);
+        }
+    }
+    on(name, cb) {
+        if (name === 'open') {
+            this._innerUdpConnection.on('open', cb);
+        }
+        else if (name === 'close') {
+            this._innerUdpConnection.on('close', cb);
+        }
+        else if (name === 'error') {
+            this._innerUdpConnection.on('error', cb);
+        }
+        else if (name === 'message') {
+            this._onMessageCallbacks.push(cb);
+        }
+    }
+    close() {
+        this._innerUdpConnection.close();
+    }
+    remoteAddress() {
+        return this._innerUdpConnection.remoteAddress();
+    }
+    remotePort() {
+        return this._innerUdpConnection.remotePort();
+    }
+    _setOpen() {
+        this._innerUdpConnection._setOpen();
+    }
+    _handleMessage(messageText) {
+        const header = messageText.slice(0, 64);
+        const txt = messageText.slice(64);
+        let vals = header.split(':');
+        if (vals.length !== 4) return;
+        const id = vals[0];
+        if (id.length !== 10) return;
+        let i, tot;
+        try {
+            i = int(vals[1]);
+            tot = int(vals[2]);
+        }
+        catch(err) {
+            return;
+        }
+        if (i < 0) return;
+        if (i >= tot) return;
+        if (id in this._pendingIncomingMessages) {
+            if (this._pendingIncomingMessages[id].tot !== tot) return;
+            if (this._pendingIncomingMessages[id][i]) return;
+        }
+        else {
+            this._pendingIncomingMessages[id] = {tot: tot, numReceived: 0};
+        }
+        this._pendingIncomingMessages[id][i] = txt;
+        this._pendingIncomingMessages[id].numReceived ++;
+        if (this._pendingIncomingMessages[id].numReceived === tot) {
+            const a = [];
+            for (let i=0; i<tot; i++) {
+                a.push(this._pendingIncomingMessages[id][i]);
+            }
+            const reconstructedText = ''.join(a);
+            this._onMessageCallbacks.forEach(cb => cb(reconstructedText));
+            delete this._pendingIncomingMessages[id];
+        }
+    }
+    _handleIncomingMessage(message) {
+        this._innerUdpConnection._handleIncomingMessage(message);
+    }
+    _splitIntoParts(messageText) {
+        const maxSize = 10000;
+        const ret = [];
+        let i = 0;
+        while (i < messageText.length) {
+            const i2 = Math.min(i + maxSize, messageText.length);
+            ret.push(messageText.slice(i, i2));
+            i = i2;
+        }
+        return ret;
+    }
+}
+
+class InnerUdpConnection {
     constructor({udpServer, connectionId, remoteAddress, remotePort}) {
         this._udpServer = udpServer;
         this._connectionId = connectionId;
@@ -235,6 +333,7 @@ class UdpConnection {
                 if (x.numTries() >= 6) {
                     // console.warn(`Udp message failed after ${x.numTries()} tries. Closing connection.`);
                     this.close();
+                    return; // added on 8/10/20
                 }
                 x.incrementNumTries();
                 this._priorityQueuedMessages.enqueue(x);
