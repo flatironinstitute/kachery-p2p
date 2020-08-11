@@ -550,12 +550,15 @@ class UdpCongestionManager {
     }
 
     estimateDelayForNextMessage(numBytes) {
-        const maxNumUnconfirmedBytes = this._maxNumBytesPerSecond / 1000 * this._estimatedRoundtripLatencyMsec;
+        let maxNumBytesPerSecond = this._maxNumBytesPerSecond;
+        // for debugging
+        maxNumBytesPerSecond = 500000;
+        const maxNumUnconfirmedBytes = maxNumBytesPerSecond / 1000 * this._estimatedRoundtripLatencyMsec;
         const numOutstandingBytes = this._currentTrialData.numSentBytes - this._currentTrialData.numConfirmedBytes;
         if (!numOutstandingBytes) return 0;
         if (numOutstandingBytes + numBytes <= maxNumUnconfirmedBytes) return 0;
         const diffBytes = numOutstandingBytes + numBytes - maxNumUnconfirmedBytes;
-        const delayMsec = diffBytes / (this._maxNumBytesPerSecond / 1000);
+        const delayMsec = diffBytes / (maxNumBytesPerSecond / 1000);
         return delayMsec;
     }
 
@@ -591,10 +594,6 @@ class UdpCongestionManager {
             if (d.peakNumUnconfirmedBytes > 0.8 * a) {
                 // okay, let's increase the rate
                 this._maxNumBytesPerSecond *= 1.2;
-                // for debugging
-                if (this._maxNumBytesPerSecond > 1000000) {
-                    this._maxNumBytesPerSecond = 1000000;
-                }
             }
         }
         else if (d.numLostMessages === 1) {
