@@ -702,7 +702,7 @@ class Node {
                 _currentReq = req;
                 req.onResponse(responseBody => {
                     if (finished) return;
-                    if (!responseBody.data) {
+                    if (!responseBody.data_b64) {
                         finished = true;
                         reject('Error downloading file. No data in response');
                         return;
