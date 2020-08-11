@@ -16,6 +16,17 @@ export const getSignature = (obj, keyPair) => {
     }
 }
 
+export const getSignatureJson = (obj, keyPair) => {
+    try {
+        return crypto.sign(null, Buffer.from(JSONStringifyDeterministic(obj)), keyPair.privateKey).toString('hex');
+    }
+    catch(err) {
+        console.warn(err);
+        console.warn('Exception when creating signature.');
+        return null;
+    }
+}
+
 export const verifySignatureJson = (obj, signature, publicKey, opts) => {
     opts = opts || {};
     if (opts.checkTimestamp) {

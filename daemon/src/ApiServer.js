@@ -156,6 +156,7 @@ export default class ApiServer {
                 await this._feedApiAppendMessages(req, res)
             }
             catch(err) {
+                console.warn(err);
                 log().warning('Error in appendMessages', {error: err.message});
                 res.status(500).send('Error appending messages.');
             }
