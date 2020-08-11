@@ -708,8 +708,8 @@ class Node {
                         return;
                     }
                     try {
-                        //const buf = Buffer.from(responseBody.data_b64, 'base64');
-                        const buf = responseBody.data;
+                        const buf = Buffer.from(responseBody.data_b64, 'base64');
+                        // const buf = responseBody.data;
                         sha1_sum.update(buf);
                         // todo: implement this properly so we don't overflow the stream
                         bytesDownloadedThisChunk += buf.length;
@@ -1097,12 +1097,12 @@ class Node {
 
             tot[1] += (new Date()) - ttt;
             ttt = new Date();
-            // sendResponse({
-            //     data_b64: buffer.slice(0, i2 - i1).toString('base64')
-            // });
             sendResponse({
-                data: buffer.slice(0, i2 - i1)
+                data_b64: buffer.slice(0, i2 - i1).toString('base64')
             });
+            // sendResponse({
+            //     data: buffer.slice(0, i2 - i1)
+            // });
             tot[2] += (new Date()) - ttt;
             numResponsesSent ++;
 
