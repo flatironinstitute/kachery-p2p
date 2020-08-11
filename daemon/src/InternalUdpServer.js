@@ -589,8 +589,12 @@ class UdpCongestionManager {
             // didn't lose any messages... let's see if we were limited
             const a = this._maxNumBytesPerSecond / 1000 * this._estimatedRoundtripLatencyMsec;
             if (d.peakNumUnconfirmedBytes > 0.8 * a) {
-                // okay, let's increae the rate
+                // okay, let's increase the rate
                 this._maxNumBytesPerSecond *= 1.2;
+                // for debugging
+                if (this._maxNumBytesPerSecond > 1000000) {
+                    this._maxNumBytesPerSecond = 1000000;
+                }
             }
         }
         else if (d.numLostMessages === 1) {

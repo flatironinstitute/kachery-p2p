@@ -490,7 +490,7 @@ class RemoteNode {
                 const x = this._unconfirmedOutgoingMessages[id];
                 const elapsed = (new Date()) - x.timestamp;
                 if (elapsed > 5000) {
-                    if (x.numTries >=4 ) {
+                    if (x.numTries >= 4 ) {
                         console.warn(`Did not get confirmation for message after ${x.numTries} tries. Disconnecting peer.`);
                         this.disconnect();
                         return;
