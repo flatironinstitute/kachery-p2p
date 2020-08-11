@@ -217,7 +217,8 @@ class IncomingConnection {
             body,
             signature: getSignature(body, this._keyPair)
         };
-        this._webSocket.send(kacheryP2PSerialize(message));
+        const messageSerialized = kacheryP2PSerialize(message);
+        this._webSocket.send(messageSerialized);
     }
     disconnect() {
         this._webSocket.close();
@@ -399,7 +400,8 @@ class OutgoingConnection {
             if (!verifySignature(message.body, message.signature, hexToPublicKey(this._nodeId))) {
                 throw Error('Unexpected problem verifying outgoing signature');
             }
-            this._ws.send(kacheryP2PSerialize(message));
+            const messageSerialized = kacheryP2PSerialize(message);
+            this._ws.send(messageSerialized);
         }
         else {
             this._queuedMessages.push(msg);

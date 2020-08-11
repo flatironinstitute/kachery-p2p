@@ -33,7 +33,8 @@ const step1 = async () => {
 
     const sendMessage = async (client, msg) => {
         return new Promise((resolve, reject) => {
-            client.send(kacheryP2PSerialize(msg));
+            const msgSerialized = kacheryP2PSerialize(msg);
+            client.send(msgSerialized);
             resolve();
         })
     }
@@ -68,7 +69,8 @@ const main = async () => {
             const reply = {
                 confirmMessageId: message.messageId
             };
-            ws.send(kacheryP2PSerialize(reply));
+            const replySerialized = kacheryP2PSerialize(reply);
+            ws.send(replySerialized);
         })
     });
 }

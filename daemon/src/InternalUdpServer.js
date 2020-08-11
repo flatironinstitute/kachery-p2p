@@ -29,8 +29,8 @@ class InternalUdpServer {
                 message = kacheryP2PDeserialize(messageBuffer);
             }
             catch(err) {
-                console.warn(err);
-                console.warn('Unable to parse udp message', {remote});
+                // console.warn(err);
+                // console.warn('Unable to parse udp message', {remote});
                 return;
             }
 
@@ -210,8 +210,8 @@ class UdpConnection {
             for (let i=0; i<tot; i++) {
                 a.push(this._pendingIncomingMessages[id][i]);
             }
-            const reconstructedText = a.join('');
-            this._onMessageCallbacks.forEach(cb => cb(reconstructedText));
+            const reconstructedBuffer = Buffer.concat(a);
+            this._onMessageCallbacks.forEach(cb => cb(reconstructedBuffer));
             delete this._pendingIncomingMessages[id];
         }
     }
@@ -400,6 +400,10 @@ class InnerUdpConnection {
             }
             this._handledIncomingUdpMessageIds[udpMessageId] = {timestamp: new Date()};
 
+            if ((!message.messageBuffer) || (!(message.messageBuffer instanceof Buffer))) {
+                this.close();
+                return;
+            }
             const isKeepAlive = (Buffer.compare(Buffer.from('udpKeepAlive'), message.messageBuffer) === 0);
             if (!isKeepAlive) {
                 this._onMessageCallbacks.forEach(cb => cb(message.messageBuffer));
@@ -458,7 +462,7 @@ class InnerUdpConnection {
             const elapsed1 = (new Date()) - this._lastOutgoingMessageTimestamp;
             if (elapsed1 > 5000) {
                 if (this._open) {
-                    this.send('udpKeepAlive');
+                    this.send(Buffer.from('udpKeepAlive'));
                 }
             }
             const elapsed2 = (new Date()) - this._lastIncomingMessageTimestamp;
@@ -614,7 +618,14 @@ class UdpCongestionManager {
 
 function _udpSocketSend(socket, message, port, address) {
     validateObject(message, '/UdpMessage');
-    const messageBuffer = kacheryP2PSerialize(message);
+    let messageBuffer;
+    try {
+        messageBuffer = kacheryP2PSerialize(message);
+    }
+    catch(err) {
+        console.warn('Unable to serialize outgoing udp message.')
+        return;
+    }
     socket.send(messageBuffer, port, address, (err, numBytesSent) => {
         if (err) {
             console.warn('Failed to send udp message to remote', {address, port, error: err.message});
