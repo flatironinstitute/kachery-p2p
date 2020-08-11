@@ -1,8 +1,8 @@
-import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from './common/crypto_util.js'
 import dgram from 'dgram';
-import { randomAlphaString, sleepMsec } from './common/util.js';
-import { timeStamp, assert } from 'console';
+import { randomAlphaString, sleepMsec, kacheryP2PDeserialize, kacheryP2PSerialize } from './common/util.js';
+import { assert } from 'console';
 import { validateObject } from './schema/index.js';
+import { JSONStringifyDeterministic } from './common/crypto_util.js';
 
 class InternalUdpServer {
     constructor(port) {
@@ -22,13 +22,14 @@ class InternalUdpServer {
             // console.info('Udp socket', socket.address());
         });
         this._socket = socket;
-        this._socket.on('message', (messageTxt, remote) => {
+        this._socket.on('message', (messageBuffer, remote) => {
             // parse the json message
             let message;
             try {
-                message = JSON.parse(messageTxt);
+                message = kacheryP2PDeserialize(messageBuffer);
             }
-            catch {
+            catch(err) {
+                console.warn(err);
                 console.warn('Unable to parse udp message', {remote});
                 return;
             }
@@ -104,7 +105,7 @@ class InternalUdpServer {
                 const ipe = message.initiatorPublicEndpoint;
                 // make sure it really is a public endpoint
                 if ((ipe) && (ipe.address) && (!ipe.address.startsWith('127.0.0')) && (!ipe.address.startsWith('0.')) && (C.remoteAddress() !== 'localhost')) {
-                    if ((!this._publicEndpoint) || (JSONStringifyDeterministic(this._publicEndpoint) !== message.initiatorPublicEndpoint)) {
+                    if ((!this._publicEndpoint) || (JSONStringifyDeterministic(this._publicEndpoint) !== JSONStringifyDeterministic(message.initiatorPublicEndpoint))) {
                         this._publicEndpoint = message.initiatorPublicEndpoint;
                         this._publicEndpointChangedCallbacks.forEach(cb => cb());
                     }
@@ -134,19 +135,20 @@ class InternalUdpServer {
 class UdpConnection {
     constructor(innerUdpConnection) {
         this._innerUdpConnection = innerUdpConnection;
-        this._innerUdpConnection.on('message', messageText => this._handleMessage(messageText))
+        this._innerUdpConnection.on('message', messageBuffer => this._handleMessage(messageBuffer))
         this._onMessageCallbacks = [];
         this._pendingIncomingMessages = {};
     }
-    send(messageText) {
-        const messageTextParts = this._splitIntoParts(messageText);
+    send(messageBuffer) {
+        const messageBufferParts = this._splitIntoParts(messageBuffer);
         const id = randomAlphaString(10);
-        for (let i=0; i<messageTextParts.length; i++) {
-            const part = messageTextParts[i];
-            let header = id + ':' + i + ':' + messageTextParts.length + ':';
-            while (header.length < 64)
-                header += ' ';
-            this._innerUdpConnection.send(header + part);
+        for (let i=0; i<messageBufferParts.length; i++) {
+            const part = messageBufferParts[i];
+            let headerText = id + ':' + i + ':' + messageBufferParts.length + ':';
+            while (headerText.length < 64)
+                headerText += ' ';
+            const headerBuf = Buffer.from(headerText);
+            this._innerUdpConnection.send(Buffer.concat([headerBuf, part]));
         }
     }
     on(name, cb) {
@@ -175,9 +177,9 @@ class UdpConnection {
     _setOpen() {
         this._innerUdpConnection._setOpen();
     }
-    _handleMessage(messageText) {
-        const header = messageText.slice(0, 64);
-        const txt = messageText.slice(64);
+    _handleMessage(messageBuffer) {
+        const header = messageBuffer.slice(0, 64).toString('utf-8');
+        const buf = messageBuffer.slice(64);
         let vals = header.split(':');
         if (vals.length !== 4) return;
         const id = vals[0];
@@ -201,7 +203,7 @@ class UdpConnection {
         else {
             this._pendingIncomingMessages[id] = {tot: tot, numReceived: 0};
         }
-        this._pendingIncomingMessages[id][i] = txt;
+        this._pendingIncomingMessages[id][i] = buf;
         this._pendingIncomingMessages[id].numReceived ++;
         if (this._pendingIncomingMessages[id].numReceived === tot) {
             const a = [];
@@ -216,13 +218,13 @@ class UdpConnection {
     _handleIncomingMessage(message) {
         this._innerUdpConnection._handleIncomingMessage(message);
     }
-    _splitIntoParts(messageText) {
+    _splitIntoParts(messageBuffer) {
         const maxSize = 10000;
         const ret = [];
         let i = 0;
-        while (i < messageText.length) {
-            const i2 = Math.min(i + maxSize, messageText.length);
-            ret.push(messageText.slice(i, i2));
+        while (i < messageBuffer.length) {
+            const i2 = Math.min(i + maxSize, messageBuffer.length);
+            ret.push(messageBuffer.slice(i, i2));
             i = i2;
         }
         return ret;
@@ -274,10 +276,10 @@ class InnerUdpConnection {
             this._onMessageCallbacks.push(cb);
         }
     }
-    send(messageText) { // note: this message is text
+    send(messageBuffer) { // note: this message is a buffer
         if (this._closed) return;
 
-        const x = new Message(messageText);
+        const x = new Message(messageBuffer);
         this._queuedMessages.enqueue(x);
         this._handleQueuedMessages();
     }
@@ -322,7 +324,7 @@ class InnerUdpConnection {
             message: {
                 type: 'message',
                 udpMessageId: x.udpMessageId(),
-                messageText: x.messageText()
+                messageBuffer: x.messageBuffer()
             }
         };
         _udpSocketSend(this._udpServer._socket, message, this._remotePort, this._remoteAddress);
@@ -398,8 +400,9 @@ class InnerUdpConnection {
             }
             this._handledIncomingUdpMessageIds[udpMessageId] = {timestamp: new Date()};
 
-            if (message.messageText !== 'udpKeepAlive') {
-                this._onMessageCallbacks.forEach(cb => cb(message.messageText));
+            const isKeepAlive = (Buffer.compare(Buffer.from('udpKeepAlive'), message.messageBuffer) === 0);
+            if (!isKeepAlive) {
+                this._onMessageCallbacks.forEach(cb => cb(message.messageBuffer));
             }
         }
         else {
@@ -473,17 +476,17 @@ class InnerUdpConnection {
 }
 
 class Message {
-    constructor(messageText) {
-        this._messageText = messageText;
+    constructor(messageBuffer) {
+        this._messageBuffer = messageBuffer;
         this._numTries = 1;
         this._udpMessageId = randomAlphaString(10);
         this._sentTimestamp = null;
     }
-    messageText() {
-        return this._messageText;
+    messageBuffer() {
+        return this._messageBuffer;
     }
     numBytes() {
-        return this._messageText.length;
+        return this._messageBuffer.length;
     }
     numTries() {
         return this._numTries;
@@ -611,13 +614,13 @@ class UdpCongestionManager {
 
 function _udpSocketSend(socket, message, port, address) {
     validateObject(message, '/UdpMessage');
-    const messageText = JSONStringifyDeterministic(message);
-    socket.send(messageText, port, address, (err, numBytesSent) => {
+    const messageBuffer = kacheryP2PSerialize(message);
+    socket.send(messageBuffer, port, address, (err, numBytesSent) => {
         if (err) {
             console.warn('Failed to send udp message to remote', {address, port, error: err.message});
             return;
         }
-        if (numBytesSent !== messageText.length) {
+        if (numBytesSent !== messageBuffer.length) {
             console.warn('Problem sending udp message to remote: numBytesSent does not equal expected');
             return;
         }

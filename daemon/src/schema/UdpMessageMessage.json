@@ -8,9 +8,9 @@
             "properties": {
                 "type": {"const": "message"},
                 "udpMessageId": {"$ref": "/MessageId"},
-                "messageText": {"type": "string"}
+                "messageBuffer": {}
             },
-            "required": ["type", "udpMessageId", "messageText"],
+            "required": ["type", "udpMessageId", "messageBuffer"],
             "additionalProperties": false
         }
     },

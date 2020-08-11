@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { kacheryP2PSerialize } from './util.js';
 
 const ed25519PubKeyPrefix = "302a300506032b6570032100";
 const ed25519PrivateKeyPrefix = "302e020100300506032b657004220420";
@@ -6,7 +7,7 @@ const ed25519PrivateKeyPrefix = "302e020100300506032b657004220420";
 // safe
 export const getSignature = (obj, keyPair) => {
     try {
-        return crypto.sign(null, Buffer.from(JSONStringifyDeterministic(obj), 'utf-8'), keyPair.privateKey).toString('hex');
+        return crypto.sign(null, kacheryP2PSerialize(obj), keyPair.privateKey).toString('hex');
     }
     catch(err) {
         console.warn(err);
@@ -29,7 +30,7 @@ export const verifySignature = (obj, signature, publicKey, opts) => {
         }
     }
     try {
-        return crypto.verify(null, Buffer.from(JSONStringifyDeterministic(obj), 'utf-8'), publicKey, Buffer.from(signature, 'hex'));
+        return crypto.verify(null, kacheryP2PSerialize(obj), publicKey, Buffer.from(signature, 'hex'));
     }
     catch(err) {
         console.warn(err);

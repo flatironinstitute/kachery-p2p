@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import WebSocket from 'ws';
-import { randomAlphaString, sleepMsec } from '../common/util.js';
+import { randomAlphaString, sleepMsec, kacheryP2PDeserialize, kacheryP2PSerialize } from '../common/util.js';
 
 const PORT = 34901;
 const NUM_MESSAGES = 10000;
@@ -20,7 +20,7 @@ const step1 = async () => {
 
     const wsClient = new WebSocket(`ws://localhost:${PORT}`);
     wsClient.on('message', msg => {
-        const message = JSON.parse(msg);
+        const message = kacheryP2PDeserialize(msg);
         if (message.confirmMessageId in pendingMessageIds) {
             delete pendingMessageIds[message.confirmMessageId];
             numConfirmed ++;
@@ -33,7 +33,7 @@ const step1 = async () => {
 
     const sendMessage = async (client, msg) => {
         return new Promise((resolve, reject) => {
-            client.send(JSON.stringify(msg));
+            client.send(kacheryP2PSerialize(msg));
             resolve();
         })
     }
@@ -64,11 +64,11 @@ const main = async () => {
     });
     websocketServer.on('connection', ws => {
         ws.on('message', msg => {
-            const message = JSON.parse(msg);
+            const message = kacheryP2PDeserialize(msg);
             const reply = {
                 confirmMessageId: message.messageId
             };
-            ws.send(JSON.stringify(reply));
+            ws.send(kacheryP2PSerialize(reply));
         })
     });
 }

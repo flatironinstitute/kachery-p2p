@@ -1,9 +1,10 @@
 import WebSocket from 'ws';
-import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from './common/crypto_util.js'
+import { verifySignature, hexToPublicKey, getSignature } from './common/crypto_util.js'
 import { protocolVersion } from './protocolVersion.js';
 import InternalUdpServer from './InternalUdpServer.js';
 import ip from 'ip';
 import { validateObject, validateNodeToNodeMessage, validateNodeId } from './schema/index.js';
+import { kacheryP2PSerialize, kacheryP2PDeserialize } from './common/util.js';
 
 // todo: monitor and clean up closed connections throughout file
 
@@ -122,10 +123,10 @@ class IncomingConnection {
             // question: do we need to do something here? will 'close' be called also?
         });
 
-        this._webSocket.on('message', (messageText) => {
+        this._webSocket.on('message', (messageBuffer) => {
             let messageParsed;
             try {
-                messageParsed = JSON.parse(messageText);
+                messageParsed = kacheryP2PDeserialize(messageBuffer);
             }
             catch(err) {
                 this._webSocket.close();
@@ -216,7 +217,7 @@ class IncomingConnection {
             body,
             signature: getSignature(body, this._keyPair)
         };
-        this._webSocket.send(JSONStringifyDeterministic(message));
+        this._webSocket.send(kacheryP2PSerialize(message));
     }
     disconnect() {
         this._webSocket.close();
@@ -280,10 +281,10 @@ class OutgoingConnection {
             // question: do we need to do something here? will 'close' be called also?
         });
 
-        this._ws.on('message', messageText => {
+        this._ws.on('message', messageBuffer => {
             let messageParsed;
             try {
-                messageParsed = JSON.parse(messageText);
+                messageParsed = kacheryP2PDeserialize(messageBuffer);
             }
             catch(err) {
                 this._webSocket.close();
@@ -398,7 +399,7 @@ class OutgoingConnection {
             if (!verifySignature(message.body, message.signature, hexToPublicKey(this._nodeId))) {
                 throw Error('Unexpected problem verifying outgoing signature');
             }
-            this._ws.send(JSONStringifyDeterministic(message));
+            this._ws.send(kacheryP2PSerialize(message));
         }
         else {
             this._queuedMessages.push(msg);

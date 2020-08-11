@@ -1,6 +1,5 @@
 import fs from 'fs'
 import { sleepMsec } from './common/util.js'
-import { JSONStringifyDeterministic } from './common/crypto_util.js';
 import Node from './Node.js';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util.js';
 import FeedManager from './FeedManager.js';
@@ -219,7 +218,7 @@ const readJsonFile = async (path) => {
 }
 
 const writeJsonFile = async (path, obj) => {
-    await fs.promises.writeFile(path, JSONStringifyDeterministic(obj, null, 4));
+    await fs.promises.writeFile(path, JSON.stringify(obj, null, 4));
 }
 
 const _loadKeypair = (configDir) => {

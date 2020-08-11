@@ -1,4 +1,5 @@
 import fs from 'fs';
+import bson from 'bson';
 
 export const randomString = (num_chars) => {
     var text = "";
@@ -37,5 +38,57 @@ export const readJsonFile = async (path) => {
     const txt = await fs.promises.readFile(path, 'utf-8');
     return JSON.parse(txt);
 }
+
+export const kacheryP2PSerialize = (x) => {
+    return bson.serialize(sortKeysInObject(x));
+}
+
+export const kacheryP2PDeserialize = (x) => {
+    return convertBinaryToBufferInObject(bson.deserialize(x));
+}
+
+const sortKeysInObject = (x) => {
+    if (x instanceof Buffer) {
+        return x;
+    }
+    else if (x instanceof Object) {
+        if (Array.isArray(x)) {
+            return x.map(a => (sortKeysInObject(a)));
+        }
+        else {
+            const keys = Object.keys(x).sort();
+            let ret = {};
+            for (let k of keys) {
+                ret[k] = sortKeysInObject(x[k]);
+            }
+            return ret;
+        }
+    }
+    else {
+        return x;
+    }
+}
+
+const convertBinaryToBufferInObject = (x) => {
+    if (x instanceof bson.Binary) {
+        return x.buffer;
+    }
+    else if (x instanceof Object) {
+        if (Array.isArray(x)) {
+            return x.map(a => (convertBinaryToBufferInObject(a)));
+        }
+        else {
+            const ret = {};
+            for (let k in x) {
+                ret[k] = convertBinaryToBufferInObject(x[k]);
+            }
+            return ret;
+        }
+    }
+    else {
+        return x;
+    }
+}
+
 
 export const sleepMsec = m => new Promise(r => setTimeout(r, m));

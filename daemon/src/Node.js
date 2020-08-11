@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { getSignature, verifySignature, hexToPublicKey, sha1sum, JSONStringifyDeterministic } from './common/crypto_util.js';
+import { getSignature, verifySignature, hexToPublicKey, sha1sum } from './common/crypto_util.js';
 import { sleepMsec, randomAlphaString, sha1MatchesFileKey, readJsonFile } from './common/util.js';
 import { getLocalFileInfo, moveFileIntoKacheryStorage, concatenateFilesIntoTemporaryFile } from './kachery.js';
 import SmartyNode from './SmartyNode.js';
@@ -702,13 +702,14 @@ class Node {
                 _currentReq = req;
                 req.onResponse(responseBody => {
                     if (finished) return;
-                    if (!responseBody.data_b64) {
+                    if (!responseBody.data) {
                         finished = true;
-                        reject('Error downloading file. No data_b64 in response');
+                        reject('Error downloading file. No data in response');
                         return;
                     }
                     try {
-                        const buf = Buffer.from(responseBody.data_b64, 'base64');
+                        //const buf = Buffer.from(responseBody.data_b64, 'base64');
+                        const buf = responseBody.data;
                         sha1_sum.update(buf);
                         // todo: implement this properly so we don't overflow the stream
                         bytesDownloadedThisChunk += buf.length;
@@ -1096,8 +1097,11 @@ class Node {
 
             tot[1] += (new Date()) - ttt;
             ttt = new Date();
+            // sendResponse({
+            //     data_b64: buffer.slice(0, i2 - i1).toString('base64')
+            // });
             sendResponse({
-                data_b64: buffer.slice(0, i2 - i1).toString('base64')
+                data: buffer.slice(0, i2 - i1)
             });
             tot[2] += (new Date()) - ttt;
             numResponsesSent ++;
@@ -1667,7 +1671,7 @@ class Node {
                 body,
                 signature: getSignature(body, this._keyPair)
             };
-            const mjson = JSONStringifyDeterministic(m);
+            const mjson = JSON.stringify(m);
             multicastSocket.send(
                 mjson,
                 0,

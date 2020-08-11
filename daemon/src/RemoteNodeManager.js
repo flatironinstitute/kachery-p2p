@@ -1,7 +1,7 @@
 import assert from 'assert';
 import RemoteNode from './RemoteNode.js';
-import { JSONStringifyDeterministic, sha1sum } from './common/crypto_util.js';
-import { randomAlphaString, sleepMsec } from './common/util.js';
+import { JSONStringifyDeterministic } from './common/crypto_util.js';
+import { sleepMsec } from './common/util.js';
 import { validateChannelName, validateNodeToNodeMessage, validateNodeId, validateObject, validateNodeData, validatePort, validateSha1Hash } from './schema/index.js';
 
 class RemoteNodeManager {
