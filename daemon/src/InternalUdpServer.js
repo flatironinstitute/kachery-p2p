@@ -1,7 +1,7 @@
 import { JSONStringifyDeterministic, verifySignature, hexToPublicKey, getSignature } from './common/crypto_util.js'
 import dgram from 'dgram';
 import { randomAlphaString, sleepMsec } from './common/util.js';
-import { timeStamp } from 'console';
+import { timeStamp, assert } from 'console';
 import { validateObject } from './schema/index.js';
 
 class InternalUdpServer {
@@ -184,8 +184,10 @@ class UdpConnection {
         if (id.length !== 10) return;
         let i, tot;
         try {
-            i = int(vals[1]);
-            tot = int(vals[2]);
+            i = parseInt(vals[1]);
+            tot = parseInt(vals[2]);
+            assert(i !== NaN);
+            assert(tot !== NaN);
         }
         catch(err) {
             return;
@@ -206,7 +208,7 @@ class UdpConnection {
             for (let i=0; i<tot; i++) {
                 a.push(this._pendingIncomingMessages[id][i]);
             }
-            const reconstructedText = ''.join(a);
+            const reconstructedText = a.join('');
             this._onMessageCallbacks.forEach(cb => cb(reconstructedText));
             delete this._pendingIncomingMessages[id];
         }
