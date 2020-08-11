@@ -16,6 +16,29 @@ export const getSignature = (obj, keyPair) => {
     }
 }
 
+export const verifySignatureJson = (obj, signature, publicKey, opts) => {
+    opts = opts || {};
+    if (opts.checkTimestamp) {
+        if (!obj.timestamp) {
+            return false;
+        }
+        const elapsed = (new Date()) - obj.timestamp;
+        // needs to be less than 30 minutes old
+        const numMinutes = 30;
+        if (elapsed > numMinutes * 60 * 1000) {
+            return false;
+        }
+    }
+    try {
+        return crypto.verify(null, Buffer.from(JSONStringifyDeterministic(obj)), publicKey, Buffer.from(signature, 'hex'));
+    }
+    catch(err) {
+        console.warn(err);
+        console.warn('Exception when verifying signature.');
+        return false;
+    }
+}
+
 export const verifySignature = (obj, signature, publicKey, opts) => {
     opts = opts || {};
     if (opts.checkTimestamp) {

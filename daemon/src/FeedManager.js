@@ -2,7 +2,7 @@ import os from 'os';
 import fs from 'fs';
 import { sleepMsec } from './common/util.js';
 import { kacheryStorageDir } from './kachery.js';
-import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSignature, hexToPublicKey, hexToPrivateKey, sha1sum, JSONStringifyDeterministic } from './common/crypto_util.js'
+import { createKeyPair, publicKeyToHex, privateKeyToHex, verifySignature, getSignature, hexToPublicKey, hexToPrivateKey, sha1sum, JSONStringifyDeterministic, verifySignatureJson } from './common/crypto_util.js'
 import { log } from './common/log.js';
 import { assert } from 'console';
 import { validateObject, validateSha1Hash, validateNodeId } from './schema/index.js';
@@ -549,7 +549,7 @@ class Subfeed {
             let previousSignature = null;
             let previousMessageNumber = -1;
             for (let msg of messages) {
-                if (!verifySignature(msg.body, msg.signature, this._publicKey)) {
+                if (!verifySignatureJson(msg.body, msg.signature, this._publicKey)) {
                     throw Error(`Unable to verify signature of message in feed: ${this._feedDir} ${msg.signature}`)
                 }
                 if (previousSignature !== (msg.body.previousSignature || null)) {
@@ -720,7 +720,7 @@ class Subfeed {
         for (let signedMessage of signedMessages) {
             const body = signedMessage.body;
             const signature = signedMessage.signature;
-            if (!verifySignature(body, signature, this._publicKey)) {
+            if (!verifySignatureJson(body, signature, this._publicKey)) {
                 throw Error(`Error verifying signature when appending signed message for: ${this._feedId} ${this._subfeedName} ${signature}`);
             }
             if ((body.previousSignature || null) !== (previousSignature || null)) {
