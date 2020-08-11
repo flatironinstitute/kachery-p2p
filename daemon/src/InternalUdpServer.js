@@ -552,7 +552,7 @@ class UdpCongestionManager {
     estimateDelayForNextMessage(numBytes) {
         let maxNumBytesPerSecond = this._maxNumBytesPerSecond;
         // for debugging
-        maxNumBytesPerSecond = 500000;
+        // maxNumBytesPerSecond = 500000;
         const maxNumUnconfirmedBytes = maxNumBytesPerSecond / 1000 * this._estimatedRoundtripLatencyMsec;
         const numOutstandingBytes = this._currentTrialData.numSentBytes - this._currentTrialData.numConfirmedBytes;
         if (!numOutstandingBytes) return 0;
