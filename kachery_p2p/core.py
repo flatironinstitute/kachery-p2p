@@ -91,7 +91,10 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
     file_key = _create_file_key(sha1=hash0, query=query)
     sock = _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
     for r in sock:
-        type0 = r.get('type')
+        try:
+            type0 = r.get('type')
+        except:
+            raise Exception(f'Unexpected response from daemon: {r}')
         if type0 == 'finished':
             return ka.load_file(uri, dest=dest)
         elif type0 == 'progress':
@@ -271,7 +274,7 @@ def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verb
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.4.18'
+                npm_package = 'kachery-p2p-daemon@0.4.19'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''

@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { getSignature, verifySignature, hexToPublicKey, sha1sum } from './common/crypto_util.js';
+import { getSignature, verifySignature, hexToPublicKey, sha1sum, JSONStringifyDeterministic } from './common/crypto_util.js';
 import { sleepMsec, randomAlphaString, sha1MatchesFileKey, readJsonFile } from './common/util.js';
 import { getLocalFileInfo, moveFileIntoKacheryStorage, concatenateFilesIntoTemporaryFile } from './kachery.js';
 import SmartyNode from './SmartyNode.js';
@@ -60,6 +60,8 @@ class Node {
         this._remoteNodeManager.setLocalNodeInfo(this._nodeInfo);
 
         this._activeIncomingRequests = {}; // by request id
+
+        this._inProgressLoadFiles = {}; // by fileKeyCode
 
         this._smartyNode = new SmartyNode(this);
 
@@ -576,6 +578,21 @@ class Node {
     }
     loadFile({fileKey}) {
         validateObject(fileKey, '/FileKey');
+        const fileKeyCode = sha1sum(JSONStringifyDeterministic(fileKey));
+        if (fileKeyCode in this._inProgressLoadFiles) {
+            const x = this._inProgressLoadFiles[fileKeyCode];
+            x._internalData.numAttachedCallers++;
+            return {
+                onProgress: cb => x.onProgress(cb),
+                onFinished: cb => x.onFinished(cb),
+                onError: cb => x.onError(cb),
+                cancel: () => x.cancel()
+            };
+        }
+
+        let _internalData = {
+            numAttachedCallers: 1
+        };
 
         const onFinishedCallbacks = [];
         const onErrorCallbacks = [];
@@ -583,28 +600,51 @@ class Node {
         let finder = null;
         let fileLoader = null;
         let _handleCancel = () => { // this is replace below in the case of manifest chunks
-            if (finder) finder.cancel();
-            if (fileLoader) fileLoader.cancel();
+            _internalData.numAttachedCallers--;
+            if (_internalData.numAttachedCallers <= 0) {
+                if (finder) finder.cancel();
+                if (fileLoader) fileLoader.cancel();
+                if (fileKeyCode in this._inProgressLoadFiles) {
+                    delete this._inProgressLoadFiles[fileKeyCode];
+                }
+            }
         }
+
+        const _handleFinished = (path) => {
+            if (fileKeyCode in this._inProgressLoadFiles) {
+                delete this._inProgressLoadFiles[fileKeyCode];
+            }
+            onFinishedCallbacks.forEach(cb => cb({path}));
+        }
+        const _handleError = (err) => {
+            if (fileKeyCode in this._inProgressLoadFiles) {
+                delete this._inProgressLoadFiles[fileKeyCode];
+            }
+            onErrorCallbacks.forEach(cb => cb(err));
+        }
+        const _handleProgress = (prog) => {
+            onProgressCallbacks.forEach(cb => cb(prog));
+        }
+        
 
         (async () => {
             const fileInfo = await getLocalFileInfo({fileKey});
             if (fileInfo) {
-                onFinishedCallbacks.forEach(cb => cb({path: fileInfo.path}));
+                _handleFinished(fileInfo.path);
                 return;
             }
             if (fileKey.manifestSha1) {
                 const x = this._loadFileWithManifest({fileKey});
-                x.onFinished(({path}) => onFinishedCallbacks.forEach(cb => cb({path})));
-                x.onError(err => onErrorCallbacks.forEach(cb => cb(err)));
-                x.onProgress(prog => onProgressCallbacks.forEach(cb => cb(prog)));
+                x.onFinished(({path}) => _handleFinished(path));
+                x.onError(err => _handleError(err));
+                x.onProgress(prog => _handleProgress(prog));
                 _handleCancel = () => x.cancel();
                 return;
             }
 
             fileLoader = new FileLoader({fileKey});
             fileLoader.onProgress(prog => {
-                onProgressCallbacks.forEach(cb => cb(prog))
+                _handleProgress(prog);
             });
 
             assert((fileKey.sha1) || (fileKey.transformedSha1), 'Incorrect type of fileKey.');
@@ -620,21 +660,25 @@ class Node {
 
             fileLoader.onFinished(({path}) => {
                 finder.cancel();
-                onFinishedCallbacks.forEach(cb => cb({path}));
+                _handleFinished(path);
             });
             fileLoader.onError((err) => {
                 finder.cancel();
 
-                onErrorCallbacks.forEach(cb => cb(err));
+                _handleError(err);
             });
         })();
 
-        return {
+        const ret = {
             onProgress: cb => onProgressCallbacks.push(cb),
             onFinished: cb => onFinishedCallbacks.push(cb),
             onError: cb => onErrorCallbacks.push(cb),
-            cancel: () => _handleCancel()
-        }
+            cancel: () => _handleCancel(),
+            _internalData
+        };
+        this._inProgressLoadFiles[fileKeyCode] = ret;
+
+        return ret;
     }
     downloadFile({channelName, nodeId, fileKey, startByte, endByte}) {
         validateChannelName(channelName);

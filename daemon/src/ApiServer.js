@@ -347,7 +347,7 @@ export default class ApiServer {
             });
         });
         req.on('close', () => {
-            // if the request socket is closed, we cancel the find request
+            // if the request socket is closed, we cancel the load request
             isDone = true;
             x.cancel();
         });
