@@ -4,6 +4,10 @@ import { assert } from 'console';
 import { validateObject } from './schema/index.js';
 import { JSONStringifyDeterministic } from './common/crypto_util.js';
 
+const MAX_UDP_PACKET_SIZE = 10000;
+const TARGET_PCT_LOST_BYTES = 2;
+
+
 class InternalUdpServer {
     constructor(port) {
         this._onConnectionCallbacks = [];
@@ -219,11 +223,11 @@ class UdpConnection {
         this._innerUdpConnection._handleIncomingMessage(message);
     }
     _splitIntoParts(messageBuffer) {
-        const maxSize = 10000;
+        const maxPacketSize = MAX_UDP_PACKET_SIZE;
         const ret = [];
         let i = 0;
         while (i < messageBuffer.length) {
-            const i2 = Math.min(i + maxSize, messageBuffer.length);
+            const i2 = Math.min(i + maxPacketSize, messageBuffer.length);
             ret.push(messageBuffer.slice(i, i2));
             i = i2;
         }
@@ -292,14 +296,14 @@ class InnerUdpConnection {
             let numBytesNextMessage, delayMsec;
             if (!this._priorityQueuedMessages.isEmpty()) {
                 numBytesNextMessage = this._priorityQueuedMessages[0].numBytes();
-                delayMsec = this._congestionManager.estimateDelayForNextMessage(numBytesNextMessage);
+                delayMsec = this._congestionManager.estimateDelayMsecForNextMessage(numBytesNextMessage);
                 if (!delayMsec) {
                     this._sendQueuedMessage(this._priorityQueuedMessages.dequeue());
                 }
             }
             else if (!this._queuedMessages.isEmpty()) {
                 numBytesNextMessage = this._queuedMessages[0].numBytes();
-                delayMsec = this._congestionManager.estimateDelayForNextMessage(numBytesNextMessage);
+                delayMsec = this._congestionManager.estimateDelayMsecForNextMessage(numBytesNextMessage);
                 if (!delayMsec) {
                     this._sendQueuedMessage(this._queuedMessages.dequeue());
                 }
@@ -342,7 +346,7 @@ class InnerUdpConnection {
                 x.incrementNumTries();
                 this._priorityQueuedMessages.enqueue(x);
                 delete this._unconfirmedMessages[x.udpMessageId()];
-                this._congestionManager.reportMessageLost({udpMessageId: x.udpMessageId()});
+                this._congestionManager.reportMessageLost({udpMessageId: x.udpMessageId(), numBytes: x.numBytes()});
             }
         }, this._congestionManager.estimatedRoundtripLatencyMsec() * 4);
     }
@@ -416,7 +420,7 @@ class InnerUdpConnection {
     _handleConfirmUdpMessage(udpMessageId) {
         if (udpMessageId in this._unconfirmedMessages) {
             const m = this._unconfirmedMessages[udpMessageId];
-            this._congestionManager.reportConfirmedMessage({numBytes: m.numBytes(), roundtripLatencyMsec: (new Date()) - m.sentTimestamp(), udpMessageId: m.udpMessageId()});
+            this._congestionManager.reportMessageConfirmed({numBytes: m.numBytes(), roundtripLatencyMsec: (new Date()) - m.sentTimestamp(), udpMessageId: m.udpMessageId()});
             delete this._unconfirmedMessages[udpMessageId];
             this._numUnconfirmedMessages --;
             if (this._thresh === 0) {
@@ -511,37 +515,56 @@ class Message {
 
 class UdpCongestionManager {
     constructor() {
-        this._numUnconfirmedMessages = 0;
-        this._numUnconfirmedBytes = 0;
-        this._halt = false;
+        this._numUnconfirmedMessages = 0; // current number of unconfirmed messages
+        this._numUnconfirmedBytes = 0; // current number of unconfirmed bytes
 
-        this._maxNumBytesPerSecond = 1000000;
-        this._estimatedRoundtripLatencyMsec = 500;
+        this._halt = false; // whether the manager has been halted
 
-        this._trialDurationMsec = 5000;
+        this._maxNumBytesPerSecondToSend = 3 * 1000 * 1000; // current number of bytes per second allowed to send
+        this._estimatedRoundtripLatencyMsec = 200; // current estimated roundtrip latency
+
+        this._trialDurationMsec = 5000; // duration of a single trial
+
+        // current trial data, see below
         this._currentTrialData = null;
         this._resetTrialData();
+        
+        // start this manager
         this._start();
     }
 
     reportMessageSent({numBytes, udpMessageId}) {
-        this._currentTrialData.sentMessageIds[udpMessageId] = true;
-        this._currentTrialData.numSentMessages ++;
-        this._currentTrialData.numSentBytes += numBytes;
+        // message has been sent
+        this._currentTrialData.sentMessageIds[udpMessageId] = true; // remember the message id
+        this._currentTrialData.numSentMessages ++; // increment number of sent messages
+        this._currentTrialData.numSentBytes += numBytes; // increment num sent bytes
+        
+        // update the peak num. unconfirmed bytes (this will help us know whether this trial was testing the limits)
         if (this._currentTrialData.numSentBytes - this._currentTrialData.numConfirmedBytes > this._currentTrialData.peakNumUnconfirmedBytes) {
             this._currentTrialData.peakNumUnconfirmedBytes = this._currentTrialData.numSentBytes - this._currentTrialData.numConfirmedBytes;
         }
     }
 
-    reportMessageLost({udpMessageId}) {
+    reportMessageLost({numBytes, udpMessageId}) {
+        // message has been lost
+        // check if it is one of our trial messages
         if (!(udpMessageId in this._currentTrialData.sentMessageIds)) return;
+
+        // increment number of lost messages and num lost bytes
         this._currentTrialData.numLostMessages ++;
+        this._currentTrialData.numLostBytes += numBytes;
     }
 
-    reportConfirmedMessage({numBytes, roundtripLatencyMsec, udpMessageId}) {
+    reportMessageConfirmed({numBytes, roundtripLatencyMsec, udpMessageId}) {
+        // message has been confirmed
+        // check if it is one of our trial messages
         if (!(udpMessageId in this._currentTrialData.sentMessageIds)) return;
+
+        // increment number of confirmed messages and bytes
         this._currentTrialData.numConfirmedMessages ++;
         this._currentTrialData.numConfirmedBytes += numBytes;
+
+        // push to our list of roundtrip latencies
         this._currentTrialData.roundtripLatenciesMsec.push(roundtripLatencyMsec);
     }
 
@@ -549,16 +572,32 @@ class UdpCongestionManager {
         return this._estimatedRoundtripLatencyMsec;
     }
 
-    estimateDelayForNextMessage(numBytes) {
-        let maxNumBytesPerSecond = this._maxNumBytesPerSecond;
+    estimateDelayMsecForNextMessage(numBytes) {
+        // let's estimate how long to delay before sending the next message
+
+        let maxNumBytesPerSecondToSend = this._maxNumBytesPerSecondToSend;
+        
         // for debugging
-        // maxNumBytesPerSecond = 500000;
-        const maxNumUnconfirmedBytes = maxNumBytesPerSecond / 1000 * this._estimatedRoundtripLatencyMsec;
-        const numOutstandingBytes = this._currentTrialData.numSentBytes - this._currentTrialData.numConfirmedBytes;
+        // maxNumBytesPerSecondToSend = 2 *1000 * 1000;
+
+        // determine how many unconfirmed bytes we are allowed to have at any given moment
+        const maxNumUnconfirmedBytesAllowed = maxNumBytesPerSecondToSend / 1000 * this._estimatedRoundtripLatencyMsec;
+
+        // determine current number of outstanding (unconfirmed bytes)
+        const numOutstandingBytes = this._currentTrialData.numSentBytes - this._currentTrialData.numConfirmedBytes - this._currentTrialData.numLostBytes;
+
+        // If we have no outstanding bytes, return 0 delay
         if (!numOutstandingBytes) return 0;
-        if (numOutstandingBytes + numBytes <= maxNumUnconfirmedBytes) return 0;
-        const diffBytes = numOutstandingBytes + numBytes - maxNumUnconfirmedBytes;
-        const delayMsec = diffBytes / (maxNumBytesPerSecond / 1000);
+
+        // If we are within allowed range, return 0 delay
+        if (numOutstandingBytes + numBytes <= maxNumUnconfirmedBytesAllowed) return 0;
+
+        // How many extra outstanding (unconfirmed) bytes do we have?
+        const diffBytes = numOutstandingBytes + numBytes - maxNumUnconfirmedBytesAllowed;
+
+        // Estimate how much do we need to delay in order to catch up
+        // num.bytes / (num.bytes / num.sec) * 1000 convert to msec
+        const delayMsec = (diffBytes / maxNumBytesPerSecondToSend) * 1000;
         return delayMsec;
     }
 
@@ -568,43 +607,94 @@ class UdpCongestionManager {
 
     _resetTrialData() {
         this._currentTrialData = {
-            sentMessageIds: {},
-            numSentMessages: 0,
-            numConfirmedMessages: 0,
-            numLostMessages: 0,
-            numSentBytes: 0,
-            numConfirmedBytes: 0,
-            roundtripLatenciesMsec: [],
-            peakNumUnconfirmedBytes: 0
+            timestampStart: new Date(), // timestamp for start of trial period
+            sentMessageIds: {}, // ids of all sent messages during trial
+            numSentMessages: 0, // num. sent messages during trial
+            numConfirmedMessages: 0, // num. confirmed messages during trial
+            numLostMessages: 0, // num. presumed lost messages during trial
+            numSentBytes: 0, // num. bytes sent during trial
+            numConfirmedBytes: 0, // num. bytes confirmed during trial
+            numLostBytes: 0, // num. bytes lost during try
+            roundtripLatenciesMsec: [], // roundtrip latencies for all messages during trial
+            peakNumUnconfirmedBytes: 0 // peak number of outstanding (unconfirmed bytes)
         }
     }
     _adjustCongestionParameters() {
-        const d = this._currentTrialData;
-        const debugUdp = false;
-        let doPrint = ((debugUdp) && (d.numSentMessages > 10));
-        if (this._currentTrialData.roundtripLatenciesMsec.length >= 3) {
-            this._estimatedRoundtripLatencyMsec = (median(this._currentTrialData.roundtripLatenciesMsec) + this._estimatedRoundtripLatencyMsec) / 2;
-            if (doPrint) console.info(`Estimated round-trip latency: ${this._estimatedRoundtripLatencyMsec}`)
-            if (this._estimatedRoundtripLatencyMsec < 100) this._estimatedRoundtripLatencyMsec = 100;
-            if (this._estimatedRoundtripLatencyMsec > 1000) this._estimatedRoundtripLatencyMsec = 1000;
+        // get the current trial data
+        const {
+            timestampStart,
+            sentMessageIds,
+            numSentMessages,
+            numConfirmedMessages,
+            numLostMessages,
+            numSentBytes,
+            numConfirmedBytes,
+            numLostBytes,
+            roundtripLatenciesMsec,
+            peakNumUnconfirmedBytes
+        } = this._currentTrialData;
+
+        if (!numSentBytes) {
+            // wwe didn't send any bytes. do nothing
+            return;
         }
-        if (d.numLostMessages === 0) {
-            // didn't lose any messages... let's see if we were limited
-            const a = this._maxNumBytesPerSecond / 1000 * this._estimatedRoundtripLatencyMsec;
-            if (d.peakNumUnconfirmedBytes > 0.8 * a) {
+
+        // whether to print debug info
+        const debugUdp = false;
+        // const debugUdp = true;
+        let doPrint = ((debugUdp) && (numSentBytes > 500 * 1000));
+        const elapsedTrialSec = ((new Date()) - timestampStart) / 1000;
+        if (doPrint) {
+            console.info('[-------------------------------------------------------------------------]');
+            console.info(`Sent/conf/lost/%lost: ${numSentMessages}/${numConfirmedMessages}/${numLostMessages}/${((numLostMessages/numSentMessages)*100).toFixed(1)}% [${((numLostBytes/numSentBytes) * 100).toFixed(1)}% lost bytes]`);
+            console.info(`Allowed/actual rate (MiB/s): ${(this._maxNumBytesPerSecondToSend / 1000000).toFixed(2)}/${(numConfirmedBytes / elapsedTrialSec / 1000000).toFixed(2)}`);
+            console.info(`Est. rt latency: ${this._estimatedRoundtripLatencyMsec}`);
+            console.info('[-------------------------------------------------------------------------]');
+        }
+
+        // The target of % bytes we want to lose
+        const targetPctLostBytes = TARGET_PCT_LOST_BYTES;
+
+        // Percentage of lost bytes
+        const pctLostBytes = numLostBytes / numSentBytes * 100;
+        if (pctLostBytes < targetPctLostBytes) {
+            // didn't lose enough bytes... let's see if we were actually limited
+            // calculate the expected peak number of outstanding bytes if we were at full load
+            const a = this._maxNumBytesPerSecondToSend / 1000 * this._estimatedRoundtripLatencyMsec;
+            if (peakNumUnconfirmedBytes > 0.6 * a) {
+                // it looks like we were indeed limited
                 // okay, let's increase the rate
-                this._maxNumBytesPerSecond *= 1.2;
+                this._maxNumBytesPerSecondToSend *= 1.2;
             }
         }
-        else if (d.numLostMessages === 1) {
-            // lost a message. decrease the rate
-            this._maxNumBytesPerSecond /= 1.1;
+        else {
+            // We lost too many bytes, so let's decrease the rate
+            // todo: should we check whether the loss was likely due to rate?
+            this._maxNumBytesPerSecondToSend /= 1.2;
         }
-        else if (d.numLostMessages >= 2) {
-            // lost multiple messages, decrease the rate
-            this._maxNumBytesPerSecond /= 1.2;
+
+        if (pctLostBytes < 20) {
+            // don't let the rate get too low
+            const lowerBound = 1 * 1000 * 1000;
+            if (this._maxNumBytesPerSecondToSend < lowerBound) {
+                this._maxNumBytesPerSecondToSend = lowerBound;
+            }
         }
-        if (doPrint) console.info(`${d.numSentMessages} sent, ${d.numConfirmedMessages} confirmed, ${d.numLostMessages} lost, rate: ${this._maxNumBytesPerSecond / 1000000}, estLat: ${this._estimatedRoundtripLatencyMsec}`);
+
+        // re-estimate round-trip latency
+        if (roundtripLatenciesMsec.length >= 5) {
+            // we have enough data to estimate latency
+
+            // adjust the rount trip latency by taking a weighted average of existing estimate with new estimate (median)
+            const alpha = 0.3; // how much to weight the new estimate
+            this._estimatedRoundtripLatencyMsec = median(this._currentTrialData.roundtripLatenciesMsec) * alpha + this._estimatedRoundtripLatencyMsec * (1 - alpha);
+
+            // constrain the estimate
+            const minEstLatency = 20;
+            const maxEstLatency = 1000;
+            if (this._estimatedRoundtripLatencyMsec < minEstLatency) this._estimatedRoundtripLatencyMsec = minEstLatency;
+            if (this._estimatedRoundtripLatencyMsec > maxEstLatency) this._estimatedRoundtripLatencyMsec = maxEstLatency;
+        }
     }
     async _startTrials() {
         while (true) {

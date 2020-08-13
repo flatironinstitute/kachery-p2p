@@ -155,6 +155,8 @@ class RemoteNode {
         }
 
         let udpFirst = false;
+        // let udpFirst = true;
+        
         if (udpFirst) {
             if (this._outgoingUdpConnection) {
                 this._outgoingUdpConnection.sendMessage(message);
