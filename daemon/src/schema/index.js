@@ -1,9 +1,15 @@
-import validator from './validator.js';
+// import validator from './validator.js';
+import validatorNew from './validatorNew.js';
 
 export const validateObject = (obj, schemaId, opts) => {
     opts = opts || {};
     try {
-        validator.validate(obj, {'$ref': schemaId}, {throwError: true});
+        // validator.validate(obj, {'$ref': schemaId}, {throwError: true});
+        const isValid = validatorNew.validate(schemaId, obj);
+        if (!isValid) {
+            throw Error(validatorNew.errorsText());
+        }
+
     }
     catch(err) {
         if (opts.noThrow) {

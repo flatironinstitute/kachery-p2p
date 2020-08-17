@@ -237,7 +237,7 @@ class Node {
         assert(channelName in this._channels, 'Cannot make request to node. Node in channel.');
         validateNodeId(toNodeId);
         validateObject(requestBody, '/RequestBody');
-        assert(timeout && typeof(timeout) === 'number' && timeout > 0);
+        assert(timeout && (typeof(timeout) === 'number') && timeout > 0);
         requestId = requestId || randomAlphaString(10);
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
         // assert(typeof(direct) === 'boolean');

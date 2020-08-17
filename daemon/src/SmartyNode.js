@@ -170,6 +170,7 @@ class SmartyNode {
                     testData,
                     avoid: [...avoid, this._node.nodeId()]
                 },
+                timeout: 5000,
                 timestamp: 5000
             });
             req.onResponse(responseBody => {

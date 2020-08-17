@@ -15,6 +15,7 @@
   "author": "Jeremy Magland",
   "license": "Apache-2.0",
   "dependencies": {
+    "ajv": "^6.12.4",
     "axios": "^0.19.2",
     "bson": "^4.1.0",
     "express": "^4.17.1",
