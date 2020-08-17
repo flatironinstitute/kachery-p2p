@@ -240,7 +240,7 @@ def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verb
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.4.20'
+                npm_package = 'kachery-p2p-daemon@0.4.21'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''
