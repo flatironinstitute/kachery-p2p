@@ -96,6 +96,7 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
         except:
             raise Exception(f'Unexpected response from daemon: {r}')
         if type0 == 'finished':
+            print(f'Loaded file: {uri}')
             return ka.load_file(uri, dest=dest)
         elif type0 == 'progress':
             bytes_loaded = r['bytesLoaded']
@@ -106,7 +107,7 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
                 nodestr = f' from {node_id[:6]}'
             else:
                 nodestr = ''
-            print(f'Loaded {bytes_loaded} of {bytes_total} bytes{nodestr} ({pct:.1f} %)')
+            print(f'Loaded {bytes_loaded} of {bytes_total} bytes{nodestr} ({pct:.1f} %): {uri}')
         elif type0 == 'error':
             raise LoadFileError(f'Error loading file: {r["error"]}')
         else:
@@ -169,17 +170,22 @@ def load_bytes(uri: str, start: int, end: int, write_to_stdout=False, p2p: bool=
             return None
         assert manifest['sha1'] == hash0, 'Manifest sha1 does not match expected.'
         data_chunks = []
+        chunks_to_load = []
         for ch in manifest['chunks']:
             if start < ch['end'] and end > ch['start']:
-                a = load_bytes(
-                    uri=f'sha1://{ch["sha1"]}?chunkOf={hash0}~{ch["start"]}~{ch["end"]}',
-                    start=max(0, start - ch['start']),
-                    end=min(ch['end']-ch['start'], end-ch['start']
-                ))
-                if a is None:
-                    print('Unable to load bytes from chunk')
-                    return None
-                data_chunks.append(a)
+                chunks_to_load.append(ch)
+        for ii, ch in enumerate(chunks_to_load):
+            if len(chunks_to_load) > 1:
+                print(f'load_bytes: Loading chunk {ii + 1} of {len(chunks_to_load)}')
+            a = load_bytes(
+                uri=f'sha1://{ch["sha1"]}?chunkOf={hash0}~{ch["start"]}~{ch["end"]}',
+                start=max(0, start - ch['start']),
+                end=min(ch['end']-ch['start'], end-ch['start']
+            ))
+            if a is None:
+                print('Unable to load bytes from chunk')
+                return None
+            data_chunks.append(a)
         return b''.join(data_chunks)
     
     path = load_file(uri=uri)
@@ -240,7 +246,7 @@ def _probe_daemon():
         return None
     return x
 
-def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verbose: int=0, dverbose: int=0, host: str='', bootstrap: List[str]):
+def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verbose: int=0, dverbose: int=0, host: str='', bootstrap: List[str], node_arg: List[str]=[]):
     from kachery_p2p import __version__
 
     if _probe_daemon() is not None:
@@ -267,6 +273,8 @@ def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verb
         except:
             raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
         
+        for na in node_arg:
+            start_args.append(f'--node-arg={na}')
 
         while True:
             restarting = False
@@ -339,7 +347,7 @@ def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verb
 
         export KACHERY_P2P_API_PORT="{api_port}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-        exec node --experimental-modules {thisdir}/../daemon/src/cli.js start {' '.join(start_args)}
+        exec node {' '.join(node_arg)} --experimental-modules {thisdir}/../daemon/src/cli.js start {' '.join(start_args)}
         ''')
         ss.start()
         try:

@@ -261,7 +261,7 @@ class FeedManager {
                 finished = true;
                 // in case we have other messages coming in at the same time
                 // TODO: only do this if we have results that have not come in yet
-                await sleepMsec(30);
+                await sleepMsec(3000);
                 resolve(messages);
             }
 

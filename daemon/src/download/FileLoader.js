@@ -107,6 +107,7 @@ class FileLoader {
                 appendToFilePath: p.info.temporaryFilePath
             });
             onError((err) => {
+                console.warn(`Error in download: ${err.message}`);
                 p.info.fullError = err;
             });
             onFinished(({data: dataShouldByNull, sha1}) => {
@@ -176,6 +177,7 @@ class FileLoader {
                     this._onFinishedCallbacks.forEach(cb => cb({sha1: pp.info.fullSha1, path }));
                 }
                 else if (pp.info.fullError) {
+                    console.warn(`Error downloading file: ${pp.info.fullError}`);
                     if (fs.existsSync(pp.info.temporaryFilePath)) {
                         fs.unlinkSync(pp.info.temporaryFilePath);
                     }

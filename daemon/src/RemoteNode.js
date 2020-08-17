@@ -4,6 +4,43 @@ import { sha1sum } from "./common//crypto_util.js";
 import { timeStamp } from "console";
 import { validateObject, validateNodeToNodeMessage, validateNodeData, validatePort, validateNodeId } from "./schema/index.js";
 
+const globalStats = {
+    incomingMessageCounts: {},
+    outgoingMessageCounts: {}
+}
+
+const gsReportIncomingMessage = (message) => {
+    if (message._confirmId) {
+        gsReportIncomingMessage({type: '_confirm'});
+        return;
+    }
+    if (!(message.type in globalStats.incomingMessageCounts)) {
+        globalStats.incomingMessageCounts[message.type] = 0;
+    }
+    globalStats.incomingMessageCounts[message.type]++;
+    if (message.type === 'broadcast') {
+        gsReportIncomingMessage({
+            type: 'broadcast/' + message.body.message.type
+        });
+    }
+}
+
+const gsReportOutgoingMessage = (message) => {
+    if (message._confirmId) {
+        gsReportOutgoingMessage({type: '_confirm'});
+        return;
+    }
+    if (!(message.type in globalStats.outgoingMessageCounts)) {
+        globalStats.outgoingMessageCounts[message.type] = 0;
+    }
+    globalStats.outgoingMessageCounts[message.type]++;
+    if (message.type === 'broadcast') {
+        gsReportOutgoingMessage({
+            type: 'broadcast/' + message.body.message.type
+        });
+    }
+}
+
 class RemoteNode {
     constructor({ remoteNodeManager, remoteNodeId }) {
         validateNodeId(remoteNodeId);
@@ -140,7 +177,8 @@ class RemoteNode {
         if (!this._remoteNodeData) return null;
         return cloneObject(this._remoteNodeData.body.nodeInfo);
     }
-    sendMessage(message) {        
+    sendMessage(message) {     
+        gsReportOutgoingMessage(message);   
         validateNodeToNodeMessage(message);
 
         if (!message._confirmId) {
@@ -317,6 +355,7 @@ class RemoteNode {
         // todo: trigger events here?
     }
     _handleMessage(message) {
+        gsReportIncomingMessage(message);
         validateNodeToNodeMessage(message);
 
         if (message._confirmId) {

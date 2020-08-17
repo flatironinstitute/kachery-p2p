@@ -97,8 +97,9 @@ def log():
 @click.option('--method', default='npx', help='Method for starting daemon: npx (default), npx-latest, npm, npm-latest or dev')
 @click.option('--host', default='', help='IP for connecting to this daemon')
 @click.option('--port', default=0, help='Port to listen on (0 means do not listen)')
-def start_daemon(method, channel, verbose, dverbose, host, port, bootstrap):
-    kp.start_daemon(method=method, channels=channel, verbose=verbose, dverbose=dverbose, host=host, port=port, bootstrap=bootstrap)
+@click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
+def start_daemon(method, channel, verbose, dverbose, host, port, bootstrap, node_arg):
+    kp.start_daemon(method=method, channels=channel, verbose=verbose, dverbose=dverbose, host=host, port=port, bootstrap=bootstrap, node_arg=node_arg)
 
 @click.command(help="Stop the daemon.")
 def stop_daemon():

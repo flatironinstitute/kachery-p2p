@@ -196,7 +196,7 @@ class Daemon {
         while (true) {
             if (this._halted) return;
             // maintenance goes here
-            await sleepMsec(100);
+            await sleepMsec(10000);
         }
     }
     _readConfigFile = async () => {
