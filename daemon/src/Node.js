@@ -1112,58 +1112,62 @@ class Node {
         const asyncRead = util.promisify(fs.read);
 
         const file = await asyncOpen(fileSystemPath);
+        try {
+            // this process is way more efficient if this is large
+            // but udp messages may have a problem
+            const messageChunkSize = 300000;
 
-        // this process is way more efficient if this is large
-        // but udp messages may have a problem
-        const messageChunkSize = 300000;
-
-        let i = requestBody.startByte;
-        const buffer = Buffer.alloc(messageChunkSize);
-        const timer0 = new Date();
-        const tot = [0, 0, 0];
-        let ttt;
-        while ( i < requestBody.endByte) {
-            ttt = new Date();
-            if (canceled) {
-                reportError('Download canceled by requester.');
-                return;
-            }
-            if (numResponsesSent - numResponsesReceived > AA) {
-                let timer0 = new Date();
-                await sleepMsec(1);
-                while ((numResponsesSent - numResponsesReceived > AA) && (!canceled)) {
-                    const elapsed0 = (new Date()) - timer0;
-                    if (elapsed0 > BB) {
-                        reportError('Timeout while waiting for confirmation of receipt of messages.')
-                        return;
-                    }
-                    await sleepMsec(1);
+            let i = requestBody.startByte;
+            const buffer = Buffer.alloc(messageChunkSize);
+            const timer0 = new Date();
+            const tot = [0, 0, 0];
+            let ttt;
+            while ( i < requestBody.endByte) {
+                ttt = new Date();
+                if (canceled) {
+                    reportError('Download canceled by requester.');
+                    return;
                 }
-            }
-            const i1 = i;
-            const i2 = Math.min(i1 + messageChunkSize, requestBody.endByte);
-            tot[0] += (new Date()) - ttt;
-            ttt = new Date();
-            const x = await asyncRead(file, buffer, 0, i2 - i1, i1);
-            if (x.bytesRead !== i2 - i1) {
-                throw Error('Problem reading file. Unexpected number of bytes read.');
-            }
+                if (numResponsesSent - numResponsesReceived > AA) {
+                    let timer0 = new Date();
+                    await sleepMsec(1);
+                    while ((numResponsesSent - numResponsesReceived > AA) && (!canceled)) {
+                        const elapsed0 = (new Date()) - timer0;
+                        if (elapsed0 > BB) {
+                            reportError('Timeout while waiting for confirmation of receipt of messages.')
+                            return;
+                        }
+                        await sleepMsec(1);
+                    }
+                }
+                const i1 = i;
+                const i2 = Math.min(i1 + messageChunkSize, requestBody.endByte);
+                tot[0] += (new Date()) - ttt;
+                ttt = new Date();
+                const x = await asyncRead(file, buffer, 0, i2 - i1, i1);
+                if (x.bytesRead !== i2 - i1) {
+                    throw Error('Problem reading file. Unexpected number of bytes read.');
+                }
 
-            tot[1] += (new Date()) - ttt;
-            ttt = new Date();
-            sendResponse({
-                data_b64: buffer.slice(0, i2 - i1).toString('base64')
-            });
-            // sendResponse({
-            //     data: buffer.slice(0, i2 - i1)
-            // });
-            tot[2] += (new Date()) - ttt;
-            numResponsesSent ++;
+                tot[1] += (new Date()) - ttt;
+                ttt = new Date();
+                sendResponse({
+                    data_b64: buffer.slice(0, i2 - i1).toString('base64')
+                });
+                // sendResponse({
+                //     data: buffer.slice(0, i2 - i1)
+                // });
+                tot[2] += (new Date()) - ttt;
+                numResponsesSent ++;
 
-            i = i2;
+                i = i2;
+            }
+            while ((numResponsesSent - numResponsesReceived > 0) && (!canceled)) {
+                await sleepMsec(20);
+            }
         }
-        while ((numResponsesSent - numResponsesReceived > 0) && (!canceled)) {
-            await sleepMsec(20);
+        finally {
+            fs.closeSync(file);
         }
         const elapsed = (new Date()) - timer0;
         reportFinished();
