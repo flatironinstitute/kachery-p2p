@@ -1111,6 +1111,7 @@ class Node {
         const asyncOpen = util.promisify(fs.open);
         const asyncRead = util.promisify(fs.read);
 
+        const timer0 = new Date();
         const file = await asyncOpen(fileSystemPath);
         try {
             // this process is way more efficient if this is large
@@ -1119,7 +1120,6 @@ class Node {
 
             let i = requestBody.startByte;
             const buffer = Buffer.alloc(messageChunkSize);
-            const timer0 = new Date();
             const tot = [0, 0, 0];
             let ttt;
             while ( i < requestBody.endByte) {
