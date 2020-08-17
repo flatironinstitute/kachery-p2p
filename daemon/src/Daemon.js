@@ -102,9 +102,6 @@ class Daemon {
     //    {onError, onFinished, cancel}
     loadFile = ({fileKey}) => (this._loadFile({fileKey}));
 
-    // returns {stream, cancel}
-    downloadFile = ({channelName, nodeId, fileKey, fileSize, opts}) => (this._downloadFile({channelName, nodeId, fileKey, fileSize, opts}));
-    downloadFileBytes = ({channelName, nodeId, fileKey, startByte, endByte, opts}) => (this._downloadFileBytes({channelName, nodeId, fileKey, startByte, endByte, opts}));
     // Find a live feed
     // returns an object with:
     //   {onFound, onFinished, cancel}
@@ -138,28 +135,6 @@ class Daemon {
         validateObject(fileKey, '/FileKey');
 
         return this._node.loadFile({fileKey});
-    }
-
-    // returns {stream, cancel}
-    _downloadFile = ({channelName, nodeId, fileKey, fileSize}) => {
-        validateChannelName(channelName);
-        validateNodeId(nodeId);
-        validateObject(fileKey, '/FileKey');
-        // assert(typeof(fileSize) === 'number');
-
-        log().info(`downloadFile`, {channelName, nodeId, fileKey, fileSize});
-        return this._node.downloadFile({channelName, nodeId, fileKey, startByte: 0, endByte: fileSize});
-    }
-    // returns {stream, cancel}
-    _downloadFileBytes = ({channelName, nodeId, fileKey, startByte, endByte}) => {
-        validateChannelName(channelName);
-        validateNodeId(nodeId);
-        validateObject(fileKey, '/FileKey');
-        // assert(typeof(startByte) === 'number');
-        // assert(typeof(endByte) === 'number');
-
-        log().info(`downloadFileBytes`, {channelName, nodeId, fileKey, startByte, endByte});
-        return this._node.downloadFile({channelName, nodeId, fileKey, startByte, endByte});
     }
     _getLiveFeedSignedMessages = async ({channelName, nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
         validateChannelName(channelName);

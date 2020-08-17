@@ -18,7 +18,7 @@ class FileProvider {
     nodeId() {
         return this._findFileResult.nodeId;
     }
-    loadData({startByte, endByte, appendToFilePath=undefined}) {
+    loadData({startByte, endByte, appendToFilePath=undefined, timeout}) {
         assert(typeof(startByte) === 'number', 'startByte is not a number in loadData');
         assert(typeof(endByte) === 'number', 'endByte is not a number in loadData');
         
@@ -38,12 +38,13 @@ class FileProvider {
         var sha1sum = crypto.createHash('sha1')
         let numBytesLoaded = 0;
 
-        const {stream, cancel: cancelDownload} = this._node.downloadFile({
+        const {stream, cancel: cancelDownload} = this._node._downloadFile({
             channelName: this._findFileResult.channel,
             nodeId: this._findFileResult.nodeId,
             fileKey: this._findFileResult.fileKey,
             startByte,
-            endByte
+            endByte,
+            timeout
         });
         assert(stream, 'stream is undefined in loadData');
         assert(typeof(cancelDownload) === 'function', 'cancelDownload is not a function in loadData');

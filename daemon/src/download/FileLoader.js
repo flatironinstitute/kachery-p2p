@@ -78,7 +78,8 @@ class FileLoader {
             assert(this._testByteRange !== null, 'Unexpected: testByteRange is null.');
             const {onError, onFinished, onProgress, cancel} = p.provider.loadData({
                 startByte: this._testByteRange[0],
-                endByte: this._testByteRange[1]
+                endByte: this._testByteRange[1],
+                timeout: 5000
             });
             onError((err) => {
                 p.info.testError = err;
@@ -104,7 +105,8 @@ class FileLoader {
             const {onError, onFinished, onProgress, cancel} = p.provider.loadData({
                 startByte: 0,
                 endByte: this._numBytes,
-                appendToFilePath: p.info.temporaryFilePath
+                appendToFilePath: p.info.temporaryFilePath,
+                timeout: 10000
             });
             onError((err) => {
                 console.warn(`Error in download: ${err.message}`);
@@ -132,6 +134,7 @@ class FileLoader {
         });
 
         let pIndex = 0;
+        let passNumber = 1; // do two passes
         let timer = 0;
         while (true) {
             if (complete) return;
@@ -182,6 +185,12 @@ class FileLoader {
                         fs.unlinkSync(pp.info.temporaryFilePath);
                     }
                     pIndex ++;
+                    if (pIndex >= this._providersThatPassedTestLoad.lenth) {
+                        if (passNumber < 2) {
+                            passNumber ++;
+                            pIndex = 0;
+                        }
+                    }
                     if (pIndex < this._providersThatPassedTestLoad.length) {
                         // we'll give the next one a chance
                         timer = new Date();

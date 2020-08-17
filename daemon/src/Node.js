@@ -237,13 +237,10 @@ class Node {
         assert(channelName in this._channels, 'Cannot make request to node. Node in channel.');
         validateNodeId(toNodeId);
         validateObject(requestBody, '/RequestBody');
-        timeout = timeout || null;
+        assert(timeout && typeof(timeout) === 'number' && timeout > 0);
         requestId = requestId || randomAlphaString(10);
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
         // assert(typeof(direct) === 'boolean');
-        if (timeout !== null) {
-            // assert(typeof(timeout) === 'number');
-        }
         validateObject(requestId, '/MessageId');
 
         // Send a request to node
@@ -335,22 +332,20 @@ class Node {
             // we should get an error message coming back
             this.sendMessageToNode({ channelName, toNodeId, direct, route: null, message: cancelMessage });
         }
-        if (timeout) {
-            const checkTimeout = () => {
-                const elapsed = (new Date() - timestampLastResponse);
-                if (elapsed > timeout) {
-                    if (!isFinished) {
-                        handleError('Timeout while waiting for response.');
-                    }
-                }
-                else {
-                    setTimeout(() => {
-                        checkTimeout();
-                    }, timeout - elapsed + 10);
+        const checkTimeout = () => {
+            const elapsed = (new Date() - timestampLastResponse);
+            if (elapsed > timeout) {
+                if (!isFinished) {
+                    handleError('Timeout while waiting for response.');
                 }
             }
-            checkTimeout();
+            else {
+                setTimeout(() => {
+                    checkTimeout();
+                }, timeout - elapsed + 10);
+            }
         }
+        checkTimeout();
         return {
             requestId,
             onResponse: cb => onResponseCallbacks.push(cb),
@@ -538,7 +533,7 @@ class Node {
                         onProgressCallbacks.forEach(cb => cb(pr));
                         progressTimer = new Date();
                     }
-                    chunkPaths.push(chunkPath);                    
+                    chunkPaths.push(chunkPath);
                 }
                 console.info(`Concatenating ${manifest.chunks.length} chunks.`);
                 const {sha1, path: concatPath} = await concatenateFilesIntoTemporaryFile(chunkPaths);
@@ -680,7 +675,7 @@ class Node {
 
         return ret;
     }
-    downloadFile({channelName, nodeId, fileKey, startByte, endByte}) {
+    _downloadFile({channelName, nodeId, fileKey, startByte, endByte, timeout}) {
         validateChannelName(channelName);
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
         validateNodeId(nodeId);
@@ -742,7 +737,12 @@ class Node {
                 let finished = false;
                 let bytesDownloadedThisChunk = 0;
         
-                const req = this.makeRequestToNode({channelName, toNodeId: nodeId, requestBody, timeout: 10000});
+                const req = this.makeRequestToNode({
+                    channelName,
+                    toNodeId: nodeId,
+                    requestBody,
+                    timeout
+                });
                 _currentReq = req;
                 req.onResponse(responseBody => {
                     if (finished) return;
@@ -826,7 +826,12 @@ class Node {
             };
             let finished = false;
             const signedMessages = [];
-            const req = this.makeRequestToNode({channelName, toNodeId: nodeId, requestBody, timeout: waitMsec + 10000});
+            const req = this.makeRequestToNode({
+                channelName,
+                toNodeId: nodeId,
+                requestBody,
+                timeout: waitMsec + 10000
+            });
             req.onResponse(responseBody => {
                 if (finished) return;
                 for (let signedMessage of (responseBody.signedMessages || [])) {
@@ -863,7 +868,12 @@ class Node {
                 messages
             };
             let finished = false;
-            const req = this.makeRequestToNode({channelName, toNodeId: nodeId, requestBody, timeout: 10000});
+            const req = this.makeRequestToNode({
+                channelName,
+                toNodeId: nodeId,
+                requestBody,
+                timeout: 10000
+            });
             req.onResponse(responseBody => {
                 if (finished) return;
                 // not expecting a response

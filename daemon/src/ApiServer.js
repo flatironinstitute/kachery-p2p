@@ -97,28 +97,6 @@ export default class ApiServer {
                 res.status(500).send('Error loading file.');
             }
         });
-        // /downloadFile - download a previously-found file from a remote node
-        this._app.post('/downloadFile', async (req, res) => {
-            log().info('/downloadFile');
-            try {
-                await this._apiDownloadFile(req, res)
-            }
-            catch(err) {
-                console.warn(err.stack);
-                res.status(500).send('Error downloading file.');
-            }
-        });
-        // /downloadFile - download a chunk of a previously-found file from a remote node
-        this._app.post('/downloadFileBytes', async (req, res) => {
-            log().info('/downloadFileBytes');
-            try {
-                await this._apiDownloadFileBytes(req, res)
-            }
-            catch(err) {
-                console.warn(err.stack);
-                res.status(500).send('Error downloading file block.');
-            }
-        });
         // /feed/createFeed - create a new writeable feed on this node
         this._app.post('/feed/createFeed', async (req, res) => {
             log().info('/feed/createFeed');
@@ -351,40 +329,6 @@ export default class ApiServer {
             isDone = true;
             x.cancel();
         });
-    }
-    // /downloadFile - download a previously-found file from a remote node
-    async _apiDownloadFile(req, res) {
-        const reqData = req.body;
-        validateNodeId(reqData.nodeId);
-        validateObject(reqData.fileKey, '/FileKey');
-        assert(typeof(reqData.fileSize) === 'number', 'fileSize is not a number');
-        const {stream, cancel} = this._daemon.downloadFile({
-            channelName: reqData.channel,
-            nodeId: reqData.nodeId,
-            fileKey: reqData.fileKey,
-            fileSize: reqData.fileSize,
-            opts: reqData.opts || {}
-        });
-        // todo: cancel on connection closed
-        stream.pipe(res);
-    }
-    // /downloadFile - download a previously-found file from a remote node
-    async _apiDownloadFileBytes(req, res) {
-        const reqData = req.body;
-        validateNodeId(reqData.nodeId);
-        validateObject(reqData.fileKey, '/FileKey');
-        assert(typeof(reqData.startByte) === 'number', 'startByte is not a number');
-        assert(typeof(reqData.endByte) === 'number', 'endByte is not a number');
-        const {stream, cancel} = this._daemon.downloadFileBytes({
-            channelName: reqData.channel,
-            nodeId: reqData.nodeId,
-            fileKey: reqData.fileKey,
-            startByte: reqData.startByte,
-            endByte: reqData.endByte,
-            opts: reqData.opts || {}
-        });
-        // todo: cancel on connection closed
-        stream.pipe(res);
     }
     // /feed/createFeed - create a new writeable feed on this node
     async _feedApiCreateFeed(req, res) {
