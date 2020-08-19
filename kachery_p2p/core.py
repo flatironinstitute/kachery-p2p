@@ -72,7 +72,7 @@ def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str, dict]:
         raise Exception('Unexpected protocol: {}'.format(protocol))
     return protocol, algorithm, hash0, additional_path, query
 
-def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
+def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None):
     if uri.startswith('sha1dir://'):
         uri0 = _resolve_file_uri_from_dir_uri(uri)
         if uri0 is None:
@@ -89,7 +89,11 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     assert algorithm == 'sha1'
     file_key = _create_file_key(sha1=hash0, query=query)
-    sock = _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
+    sock = _http_post_json_receive_json_socket(url, dict(
+        fileKey=file_key,
+        fromNode=from_node,
+        fromChannel=from_channel
+    ))
     for r in sock:
         try:
             type0 = r.get('type')
@@ -114,7 +118,7 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True):
             raise Exception(f'Unexpected message from daemon: {r}')
     raise Exception('Unable to download file. Connection to daemon closed before finished.')
 
-def load_bytes(uri: str, start: int, end: int, write_to_stdout=False, p2p: bool=True) -> Union[bytes, None]:
+def load_bytes(uri: str, start: int, end: int, write_to_stdout=False, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[bytes, None]:
     ret = ka.load_bytes(uri, start=start, end=end, write_to_stdout=write_to_stdout)
     if ret is not None:
         return ret
@@ -146,7 +150,7 @@ def load_bytes(uri: str, start: int, end: int, write_to_stdout=False, p2p: bool=
             data_chunks.append(a)
         return b''.join(data_chunks)
     
-    path = load_file(uri=uri)
+    path = load_file(uri=uri, from_node=from_node, from_channel=from_channel)
     if path is None:
         print('Unable to load file.')
         return None
@@ -160,20 +164,20 @@ def read_dir(uri: str, p2p: bool=True):
         return None
     return ka.read_dir(uri)
         
-def load_object(uri: str, p2p: bool=True):
-    local_path = load_file(uri, p2p=p2p)
+def load_object(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None):
+    local_path = load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
     if local_path is None:
         return None
     return ka.load_object(uri)
 
-def load_text(uri: str, p2p: bool=True):
-    local_path = load_file(uri, p2p=p2p)
+def load_text(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None):
+    local_path = load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
     if local_path is None:
         return None
     return ka.load_text(uri)
 
-def load_npy(uri: str, p2p: bool=True):
-    local_path = load_file(uri, p2p=p2p)
+def load_npy(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None):
+    local_path = load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
     if local_path is None:
         return None
     return ka.load_npy(uri)
@@ -240,7 +244,7 @@ def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verb
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.4.21'
+                npm_package = 'kachery-p2p-daemon@0.4.22'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''
@@ -367,41 +371,41 @@ def _resolve_file_uri_from_dir_uri(dir_uri, p2p: bool=True):
 # def _get_kachery_uri_from_file_key(file_key):
 #     return f'sha1://{file_key["sha1"]}'
 
-def _http_post_download_file(url: str, data: dict, total_size: int, dest_path: str):
-    try:
-        import requests
-    except:
-        raise Exception('Error importing requests *')
+# def _http_post_download_file(url: str, data: dict, total_size: int, dest_path: str):
+#     try:
+#         import requests
+#     except:
+#         raise Exception('Error importing requests *')
 
-    with requests.post(url, json=data, stream=True) as r:
-        r.raise_for_status()
-        bytes_downloaded = 0
-        timer = time.time()
-        with open(dest_path, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192): 
-                bytes_downloaded = bytes_downloaded + len(chunk)
-                elapsed = time.time() - timer
-                if elapsed >=3:
-                    timer = time.time()
-                    print(f'Downloaded {bytes_downloaded} / {total_size} bytes')
-                f.write(chunk)
-            assert bytes_downloaded == total_size, f'Unexpected number of bytes downloaded. {bytes_downloaded} <> {total_size}'
-            print(f'Finished downloading {total_size} bytes')
+#     with requests.post(url, json=data, stream=True) as r:
+#         r.raise_for_status()
+#         bytes_downloaded = 0
+#         timer = time.time()
+#         with open(dest_path, 'wb') as f:
+#             for chunk in r.iter_content(chunk_size=8192): 
+#                 bytes_downloaded = bytes_downloaded + len(chunk)
+#                 elapsed = time.time() - timer
+#                 if elapsed >=3:
+#                     timer = time.time()
+#                     print(f'Downloaded {bytes_downloaded} / {total_size} bytes')
+#                 f.write(chunk)
+#             assert bytes_downloaded == total_size, f'Unexpected number of bytes downloaded. {bytes_downloaded} <> {total_size}'
+#             print(f'Finished downloading {total_size} bytes')
 
-def _http_post_download_file_data(url: str, data: dict, content_size: int):
-    try:
-        import requests
-    except:
-        raise Exception('Error importing requests *')
+# def _http_post_download_file_data(url: str, data: dict, content_size: int):
+#     try:
+#         import requests
+#     except:
+#         raise Exception('Error importing requests *')
 
-    chunks = []
-    with requests.post(url, json=data, stream=True) as r:
-        r.raise_for_status()
-        bytes_downloaded = 0
-        for chunk in r.iter_content(chunk_size=8192): 
-            bytes_downloaded = bytes_downloaded + len(chunk)
-            chunks.append(chunk)
-    return b''.join(chunks)
+#     chunks = []
+#     with requests.post(url, json=data, stream=True) as r:
+#         r.raise_for_status()
+#         bytes_downloaded = 0
+#         for chunk in r.iter_content(chunk_size=8192): 
+#             bytes_downloaded = bytes_downloaded + len(chunk)
+#             chunks.append(chunk)
+#     return b''.join(chunks)
 
 def _http_get_json(url: str, verbose: Optional[bool] = None) -> dict:
     timer = time.time()

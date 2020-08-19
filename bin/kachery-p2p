@@ -41,8 +41,10 @@ def find_file(uri):
 @click.command(help="Download a file.")
 @click.argument('uri')
 @click.option('--dest', default=None, help='Optional local path of destination file.')
-def load_file(uri, dest):
-    x = kp.load_file(uri, dest=dest)
+@click.option('--from-node', default=None, help='Optionally specify the ID of the node to download from')
+@click.option('--from-channel', default=None, help='Optionally specify the name of the channel to download from')
+def load_file(uri, dest, from_node, from_channel):
+    x = kp.load_file(uri, dest=dest, from_node=from_node, from_channel=from_channel)
     print(x)
 
 @click.command(help="Download a file and write the content to stdout.")

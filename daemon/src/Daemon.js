@@ -100,7 +100,7 @@ class Daemon {
     // Find a file from remote, and store in kachery storage
     // returns on object:
     //    {onError, onFinished, cancel}
-    loadFile = ({fileKey}) => (this._loadFile({fileKey}));
+    loadFile = ({fileKey, opts}) => (this._loadFile({fileKey, opts}));
 
     // Find a live feed
     // returns an object with:
@@ -131,10 +131,17 @@ class Daemon {
         return this._node._findFileOrLiveFeed({fileKey: {type: 'liveFeed', feedId}, timeoutMsec});
     }
 
-    _loadFile = ({fileKey}) => {
+    _loadFile = ({fileKey, opts}) => {
         validateObject(fileKey, '/FileKey');
+        assert(opts, 'No opts passed to daemon _loadFile');
+        if (opts.fromNode) {
+            validateNodeId(opts.fromNode);
+        }
+        if (opts.fromChannel) {
+            validateChannelName(opts.fromChannel);
+        }
 
-        return this._node.loadFile({fileKey});
+        return this._node.loadFile({fileKey, opts});
     }
     _getLiveFeedSignedMessages = async ({channelName, nodeId, feedId, subfeedName, position, waitMsec, opts}) => {
         validateChannelName(channelName);

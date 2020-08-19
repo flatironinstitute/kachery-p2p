@@ -51,7 +51,7 @@ class Node {
 
         this._bootstrapPeerManagers = [];
 
-        this._onProvidingCallbacks = [];
+        this._providingListeners = {};
         this._onRequestCallbacks = [];
 
         this._remoteNodeManager = new RemoteNodeManager(this);
@@ -104,10 +104,6 @@ class Node {
         this._bootstrapPeerManagers.push(
             new BootstrapPeerManager({remoteNodeManager: this._remoteNodeManager, websocketServer: this._websocketServer, address, port})
         );
-    }
-    onProviding(cb) {
-        assert(typeof(cb) === 'function', 'onProviding callback is not a function');
-        this._onProvidingCallbacks.push(cb);
     }
     broadcastMessage({ channelName, message }) {
         validateChannelName(channelName);
@@ -355,9 +351,15 @@ class Node {
             cancel: () => { _doCancel(); }
         }
     }
-    _findFileOrLiveFeed = ({fileKey, timeoutMsec}) => {
+    _findFileOrLiveFeed = ({fileKey, timeoutMsec, fromNode=null, fromChannel=null}) => {
         validateObject(fileKey, '/FileKey');
         // assert(typeof(timeoutMsec) === 'number');
+        if (fromNode) {
+            validateNodeId(fromNode);
+        }
+        if (fromChannel) {
+            validateChannelName(fromChannel);
+        }
 
         const findOutputs = [];
         const foundCallbacks = [];
@@ -383,15 +385,18 @@ class Node {
             log().info(`Finding file`, {fileKey});
 
         const channelNames = this.joinedChannelNames();
+        // todo: think about situation where the same node is on multiple channels
         channelNames.forEach(channelName => {
-            const x = this._findFileOrLiveFeedOnChannel({channelName, fileKey, timeoutMsec});
-            findOutputs.push(x);
-            x.onFound(result => {
-                if (isFinished) return;
-                validateObject(result, '/FindFileOrLiveFeedResult');
-                foundCallbacks.forEach(cb => cb(result));
-            });
-            x.onFinished(() => {x.finished=true; checkFinished();});
+            if ((!fromChannel) || (channelName === fromChannel)) {
+                const x = this._findFileOrLiveFeedOnChannel({channelName, fileKey, timeoutMsec, fromNode});
+                findOutputs.push(x);
+                x.onFound(result => {
+                    if (isFinished) return;
+                    validateObject(result, '/FindFileOrLiveFeedResult');
+                    foundCallbacks.forEach(cb => cb(result));
+                });
+                x.onFinished(() => {x.finished=true; checkFinished();});
+            }
         });
         const checkFinished = () => {
             if (isFinished) return;
@@ -404,7 +409,7 @@ class Node {
         checkFinished();
         return ret;
     }
-    _findFileOrLiveFeedOnChannel = ({channelName, fileKey, timeoutMsec}) => {
+    _findFileOrLiveFeedOnChannel = ({channelName, fileKey, timeoutMsec, fromNode=null}) => {
         if ((timeoutMsec === undefined) || (timeoutMsec === null)) {
             timeoutMsec = 4000;
         }
@@ -416,9 +421,30 @@ class Node {
         const onFoundCallbacks = [];
         const onFinishedCallbacks = [];
         let isFinished = false;
+        let transformedFileKey = _transformFileKey({fileKey, nodeId: this._nodeId});
+        const seekingMessage = {
+            type: 'seeking',
+            channelName,
+            fileKey: transformedFileKey
+        };
+        if (!fromNode) {
+            this.broadcastMessage({
+                channelName,
+                message: seekingMessage
+            });
+        }
+        else {
+            this.sendMessageToNode({
+                channelName,
+                toNodeId: fromNode,
+                message: seekingMessage
+            });
+        }
+        const providingListener = this._createProvidingListener({channelName, fileKey: transformedFileKey});
         const handleCancel = () => {
             if (isFinished) return;
             isFinished = true;
+            providingListener.cancel();
             onFinishedCallbacks.forEach(cb => cb());
         }
         const ret = {
@@ -426,16 +452,7 @@ class Node {
             onFinished: cb => {onFinishedCallbacks.push(cb)},
             cancel: handleCancel
         }
-        let transformedFileKey = _transformFileKey({fileKey, nodeId: this._nodeId});
-        this.broadcastMessage({
-            channelName,
-            message: {
-                type: 'seeking',
-                channelName,
-                fileKey: transformedFileKey
-            }
-        });
-        this.onProviding((x) => { // todo: fix this memory leak
+        providingListener.onProviding((x) => {
             if (isFinished) return;
             validateChannelName(x.channelName);
             validateNodeId(x.nodeId);
@@ -451,13 +468,16 @@ class Node {
                 validateObject(result, '/FindFileOrLiveFeedResult');
                 onFoundCallbacks.forEach(cb => {cb(result);});
             }
+            else {
+                console.warn('Unexpected: not a file match inside onProviding()');
+            }
         });
         setTimeout(() => {
             handleCancel();
         }, timeoutMsec);
         return ret;
     }
-    _loadFileWithManifest({fileKey}) {
+    _loadFileWithManifest({fileKey, opts}) {
         validateObject(fileKey, '/FileKey');
         validateSha1Hash(fileKey.manifestSha1);
 
@@ -489,7 +509,7 @@ class Node {
         (async () => {
             try {
                 const manifestFileKey = {sha1: fileKey.manifestSha1};
-                const manifestPath = await this._loadFileAsync({fileKey: manifestFileKey});
+                const manifestPath = await this._loadFileAsync({fileKey: manifestFileKey, opts});
                 const manifest = await readJsonFile(manifestPath);
                 if (!sha1MatchesFileKey({sha1: manifest.sha1, fileKey})) {
                     throw new Error(`Manifest sha1 does not match file key: ${manifest.sha1}`);
@@ -521,7 +541,7 @@ class Node {
                         onProgressCallbacks.forEach(cb => cb(pr0));
                         progressTimer = new Date();
                     });
-                    const chunkPath = await this._loadFileAsync({fileKey: chunkFileKey, onProgress: _handleChunkProgress});
+                    const chunkPath = await this._loadFileAsync({fileKey: chunkFileKey, onProgress: _handleChunkProgress, opts});
                     bytesLoaded += chunk.end - chunk.start;
                     const pr = {
                         bytesLoaded,
@@ -556,10 +576,11 @@ class Node {
             cancel: () => _handleCancel()
         }
     }
-    async _loadFileAsync({fileKey, onProgress=undefined}) {
+    async _loadFileAsync({fileKey, onProgress=undefined, opts}) {
         validateObject(fileKey, '/FileKey');
+        assert(opts, 'No opts passed to node _loadFileAsync');
         return new Promise((resolve, reject) => {
-            const x = this.loadFile({fileKey});
+            const x = this.loadFile({fileKey, opts});
             x.onFinished(({path}) => {
                 resolve(path);
             });
@@ -571,8 +592,15 @@ class Node {
             })
         });
     }
-    loadFile({fileKey}) {
+    loadFile({fileKey, opts}) {
+        assert(opts, 'No opts passed to node loadFile');
         validateObject(fileKey, '/FileKey');
+        if (opts.fromNode) {
+            validateNodeId(opts.fromNode);
+        }
+        if (opts.fromChannel) {
+            validateChannelName(opts.fromChannel);
+        }
         const fileKeyCode = sha1sum(JSONStringifyDeterministic(fileKey));
         if (fileKeyCode in this._inProgressLoadFiles) {
             const x = this._inProgressLoadFiles[fileKeyCode];
@@ -621,7 +649,6 @@ class Node {
             onProgressCallbacks.forEach(cb => cb(prog));
         }
         
-
         (async () => {
             const fileInfo = await getLocalFileInfo({fileKey});
             if (fileInfo) {
@@ -629,7 +656,7 @@ class Node {
                 return;
             }
             if (fileKey.manifestSha1) {
-                const x = this._loadFileWithManifest({fileKey});
+                const x = this._loadFileWithManifest({fileKey, opts});
                 x.onFinished(({path}) => _handleFinished(path));
                 x.onError(err => _handleError(err));
                 x.onProgress(prog => _handleProgress(prog));
@@ -643,7 +670,7 @@ class Node {
             });
 
             assert((fileKey.sha1) || (fileKey.transformedSha1), 'Incorrect type of fileKey.');
-            finder = this._findFileOrLiveFeed({fileKey});
+            finder = this._findFileOrLiveFeed({fileKey, fromNode: opts.fromNode || null, fromChannel: opts.fromChannel || null});
             finder.onFound(findFileResult => {
                 validateObject(findFileResult, '/FindFileOrLiveFeedResult');
                 const provider = new FileProvider({node: this, findFileResult});
@@ -1533,6 +1560,39 @@ class Node {
             }
         }
     }
+    _createProvidingListenerCode({channelName, fileKey}) {
+        return sha1sum(JSONStringifyDeterministic({
+            channelName,
+            fileKey
+        }));
+    }
+    _createProvidingListener({channelName, fileKey}) {
+        const code = this._createProvidingListenerCode({channelName, fileKey});
+        if (code in this._providingListeners) {
+            this._providingListeners[code]._numAttached ++;
+            return this._providingListeners[code];
+        }
+        const _onProvidingCallbacks = [];
+        const onProviding = (cb) => {
+            _onProvidingCallbacks.push(cb);
+        }
+        const cancel = () => {
+            if (code in this._providingListeners) {
+                this._providingListeners[code]._numAttached --;
+                if (this._providingListeners[code]._numAttached <= 0) {
+                    delete this._providingListeners[code];
+                }
+            }
+        }
+        const x = {
+            onProviding,
+            cancel,
+            _onProvidingCallbacks,
+            _numAttached: 1
+        };
+        this._providingListeners[code] = x;
+        return x;
+    }
     async _handleProvidingMessage({ fromNodeId, message }) {
         validateNodeId(fromNodeId);
         validateObject(message, '/ProvidingMessage');
@@ -1543,9 +1603,15 @@ class Node {
         validateObject(fileKey, '/FileKey');
         assert(channelName in this._channels, `Not in channel: ${channelName}`);
 
-        this._onProvidingCallbacks.forEach(cb => {
-            cb({ channelName, nodeId: fromNodeId, fileKey, fileSize });
+        const code =  this._createProvidingListenerCode({
+            channelName,
+            fileKey
         });
+        if (code in this._providingListeners) {
+            this._providingListeners[code]._onProvidingCallbacks.forEach(cb => {
+                cb({ channelName, nodeId: fromNodeId, fileKey, fileSize });
+            });
+        }
     }
     async _handleAnnouncingMessage({ fromNodeId, message }) {
         // one of two mechanisms to discover nodes and get updated info

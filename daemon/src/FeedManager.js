@@ -803,6 +803,11 @@ const _feedDirectory = (feedId) => {
 
 const _subfeedHash = (subfeedName) => {
     if (typeof(subfeedName) == 'string') {
+        if (subfeedName.startsWith('~')) {
+            assert(subfeedName.length === 41, `Invalid subfeed name: ${subfeedName}`);
+            validateSha1Hash(subfeedName.slice(1));
+            return subfeedName.slice(1);
+        }
         return sha1sum(subfeedName);
     }
     else {

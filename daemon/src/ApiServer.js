@@ -296,9 +296,18 @@ export default class ApiServer {
     async _apiLoadFile(req, res) {
         const reqData = req.body;
         validateObject(reqData.fileKey, '/FileKey');
+        const opts = {};
+        if (reqData.fromNode) {
+            validateNodeId(reqData.fromNode);
+            opts.fromNode = reqData.fromNode;
+        }
+        if (reqData.fromChannel) {
+            validateChannelName(reqData.fromChannel);
+            opts.fromChannel = reqData.fromChannel;
+        }
         const x = this._daemon.loadFile({
             fileKey: reqData.fileKey,
-            opts: reqData.opts || {}
+            opts
         });
         const jsonSocket = new JsonSocket(res);
         let isDone = false;
