@@ -129,7 +129,7 @@ export default class ApiServer {
         });
         // /feed/appendMessages - append messages to a local writeable subfeed
         this._app.post('/feed/appendMessages', async (req, res) => {
-            log().info('/feed/appendMessages');
+            log().info('/feed/appendMessages', req.body.messages.map(msg => (msg.type)));
             try {
                 await this._feedApiAppendMessages(req, res)
             }
