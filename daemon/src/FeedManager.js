@@ -1,6 +1,6 @@
 import os from 'os';
 import fs from 'fs';
-import { sleepMsec } from './common/util.js';
+import { sleepMsec, randomAlphaString } from './common/util.js';
 import { kacheryStorageDir } from './kachery.js';
 import { createKeyPair, publicKeyToHex, privateKeyToHex, getSignatureJson, hexToPublicKey, hexToPrivateKey, sha1sum, JSONStringifyDeterministic, verifySignatureJson } from './common/crypto_util.js'
 import { log } from './common/log.js';
@@ -256,12 +256,14 @@ class FeedManager {
 
             const messages = {};
 
+            let numMessages = 0;
             const doFinish = async () => {
                 if (finished) return;
+                if (numMessages > 0) {
+                    // maybe we have other messages coming in at exactly the same time. Wait a bit for those
+                    await sleepMsec(30);
+                }
                 finished = true;
-                // in case we have other messages coming in at the same time
-                // TODO: only do this if we have results that have not come in yet
-                await sleepMsec(3000);
                 resolve(messages);
             }
 
@@ -272,6 +274,7 @@ class FeedManager {
                     const messages0 = await subfeed.getSignedMessages({position: w.position, maxNumMessages, waitMsec});
                     if (messages0.length > 0) {
                         messages[watchName] = messages0.map(m => m.body.message);
+                        numMessages += messages0.length;
                         if (!finished) doFinish();
                     }
                 })();
@@ -525,6 +528,7 @@ class Subfeed {
         this._initializing = false;
         this._onInitializedCallbacks = [];
         this._onInitializeErrorCallbacks = [];
+        this._newMessageListeners = {};
     }
     async initialize(privateKey) {
         this._privateKey = privateKey;
@@ -657,19 +661,40 @@ class Subfeed {
             else if ((waitMsec) && (waitMsec > 0)) {
                 // If this is a writeable subfeed, and we have been instructed to wait, then let's just wait for a bit and maybe some new messages will arrive.
 
-                const timer = new Date();
-                while (true) {
-                    // todo: use callback strategy instead (call directly from appendSignedMessages)
-                    await sleepMsec(100);
-                    if (position < this._signedMessages.length) {
-                        // We have new messages! Call getSignedMessages again to retrieve them.
-                        return this.getSignedMessages({position, maxNumMessages});
+                await new Promise((resolve) => {
+                    let resolved = false;
+                    const listenerId = randomAlphaString(10);
+                    this._newMessageListeners[listenerId] = () => {
+                        onNewMessages: () => {
+                            if (resolved) return;
+                            resolved = true;
+                            delete this._newMessageListeners[listenerId];
+                            // We have new messages! Call getSignedMessages again to retrieve them.
+                            signedMessages = this.getSignedMessages({position, maxNumMessages});
+                            resolve();    
+                        }
                     }
-                    const elapsed = (new Date()) - timer;
-                    if (elapsed > waitMsec) {
-                        break;
-                    }
-                }
+                    setTimeout(() => {
+                        if (resolved) return;
+                        resolved = true;
+                        delete this._newMessageListeners[listenerId];
+                        resolve();
+                    }, waitMsec);
+                });
+                
+                // const timer = new Date();
+                // while (true) {
+                //     // todo: use callback strategy instead (call directly from appendSignedMessages)
+                //     await sleepMsec(100);
+                //     if (position < this._signedMessages.length) {
+                //         // We have new messages! Call getSignedMessages again to retrieve them.
+                //         return this.getSignedMessages({position, maxNumMessages});
+                //     }
+                //     const elapsed = (new Date()) - timer;
+                //     if (elapsed > waitMsec) {
+                //         break;
+                //     }
+                // }
             }
         }
         // Finally, return the signed messages that have been accumulated above.
@@ -735,6 +760,10 @@ class Subfeed {
             textLinesToAppend.push(JSONStringifyDeterministic(signedMessage));
         }
         fs.appendFileSync(this._subfeedMessagesPath, textLinesToAppend.join('\n') + '\n', {encoding: 'utf8'});
+
+        for (let id in this._newMessageListeners) {
+            this._newMessageListeners[id]();
+        }
     }
     async getAccessRules() {
         return this._accessRules;
