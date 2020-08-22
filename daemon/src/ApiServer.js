@@ -221,7 +221,7 @@ export default class ApiServer {
         });
         // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
         this._app.post('/feed/watchForNewMessages', async (req, res) => {
-            log().info('/feed/watchForNewMessages');
+            log().info('/feed/watchForNewMessages', req.body.subfeedWatches);
             try {
                 await this._feedApiWatchForNewMessages(req, res)
             }

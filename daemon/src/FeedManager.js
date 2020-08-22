@@ -618,7 +618,7 @@ class Subfeed {
     }
     async getSignedMessages({position, maxNumMessages, waitMsec=null}) {
         // Get some signed messages starting at position
-        const signedMessages = [];
+        let signedMessages = [];
         if (position < this._signedMessages.length) {
             // If we have some messages loaded into memory, let's return those!
             for (let i = position; i < this._signedMessages.length; i++) {
@@ -665,14 +665,12 @@ class Subfeed {
                     let resolved = false;
                     const listenerId = randomAlphaString(10);
                     this._newMessageListeners[listenerId] = () => {
-                        onNewMessages: () => {
-                            if (resolved) return;
-                            resolved = true;
-                            delete this._newMessageListeners[listenerId];
-                            // We have new messages! Call getSignedMessages again to retrieve them.
-                            signedMessages = this.getSignedMessages({position, maxNumMessages});
-                            resolve();    
-                        }
+                        if (resolved) return;
+                        resolved = true;
+                        delete this._newMessageListeners[listenerId];
+                        // We have new messages! Call getSignedMessages again to retrieve them.
+                        signedMessages = this.getSignedMessages({position, maxNumMessages});
+                        resolve();    
                     }
                     setTimeout(() => {
                         if (resolved) return;

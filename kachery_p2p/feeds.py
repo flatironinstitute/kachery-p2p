@@ -44,6 +44,8 @@ class Feed:
         self._is_writeable = x['info']['isWriteable']
     def is_writeable(self):
         return self._is_writeable
+    def get_feed_id(self):
+        return self._feed_id
     def get_uri(self):
         return self._feed_uri
     def is_snapshot(self):
@@ -155,7 +157,7 @@ class Subfeed:
                 waitMsec=wait_msec
             ))
             if not x['success']:
-                return None
+                raise Exception(f'Error getting next messages: {x.get("error")}')
             messages = []
             if signed:
                 for msg in x['signedMessages']:

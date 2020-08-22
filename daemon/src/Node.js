@@ -107,7 +107,10 @@ class Node {
     }
     broadcastMessage({ channelName, message }) {
         validateChannelName(channelName);
-        assert(channelName in this._channels, 'Cannot broadcast message. Not in channel.');
+        if (!(channelName in this._channels)) {
+            // console.warn('Cannot broadcast message. Not in channel.');
+            return;
+        }
         validateNodeToNodeMessage(message);
 
         const broadcastMessageId = randomAlphaString(10);
@@ -156,7 +159,10 @@ class Node {
     }
     async sendMessageToNode({ channelName, toNodeId, direct=false, route, message }) {
         validateChannelName(channelName);
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        if (!(channelName in this._channels)) {
+            // console.warn(`Not in channel: ${channelName}`);
+            return;
+        }
         validateNodeId(toNodeId);
         // assert(typeof(direct) === 'boolean')
         if (route) {
@@ -235,7 +241,7 @@ class Node {
         validateObject(requestBody, '/RequestBody');
         assert(timeout && (typeof(timeout) === 'number') && timeout > 0);
         requestId = requestId || randomAlphaString(10);
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        assert(channelName in this._channels, `Cannot make request to node. Not in channel: ${channelName}`);
         // assert(typeof(direct) === 'boolean');
         validateObject(requestId, '/MessageId');
 
@@ -414,7 +420,7 @@ class Node {
             timeoutMsec = 4000;
         }
         validateChannelName(channelName);
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        assert(channelName in this._channels, `findFileOrLiveFeedOnChannel: Not in channel: ${channelName}`);
         validateObject(fileKey, '/FileKey');
         assert(typeof(timeoutMsec) === 'number', 'timeoutMsec is not a number');
 
@@ -457,7 +463,10 @@ class Node {
             validateChannelName(x.channelName);
             validateNodeId(x.nodeId);
             validateObject(x.fileKey, '/FileKey');
-            assert(x.channelName in this._channels, `Not in channel: ${x.channelName}`);
+            if (!(channelName in this._channels)) {
+                // console.warn(`Not in channel: ${channelName}`);
+                return;
+            }
             if ((x.channelName === channelName) && (fileKeysMatch(x.fileKey, transformedFileKey))) {
                 const result = {
                     channel: x.channelName,
@@ -704,7 +713,7 @@ class Node {
     }
     _downloadFile({channelName, nodeId, fileKey, startByte, endByte, timeout}) {
         validateChannelName(channelName);
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        assert(channelName in this._channels, `downloadFile: Not in channel: ${channelName}`);
         validateNodeId(nodeId);
         validateObject(fileKey, '/FileKey');
         // assert(typeof(startByte) === 'number');
@@ -836,7 +845,7 @@ class Node {
     }
     async getLiveFeedSignedMessages({channelName, nodeId, feedId, subfeedName, position, waitMsec}) {
         validateChannelName(channelName);
-        assert(channelName in this._channels, 'Cannot getLiveFeedSignedMessages. Not in channel.');
+        assert(channelName in this._channels, 'getLiveFeedSignedMessages: Not in channel.');
         validateNodeId(nodeId);
         validateObject(feedId, '/FeedId');
         validateObject(subfeedName, '/SubfeedName');
@@ -921,7 +930,10 @@ class Node {
 
     _handleRequestFromNode({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
         validateChannelName(channelName);
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        if (!(channelName in this._channels)) {
+            // console.warn('handleRequestFromNode: not in channel');
+            return;
+        }
         validateNodeId(fromNodeId);
         validateObject(requestBody, '/RequestBody');
         assert(typeof(sendResponse) === 'function', 'sendResponse is not a function.');
@@ -1061,7 +1073,10 @@ class Node {
 
     async _handleDownloadFileRequest({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
         validateChannelName(channelName);
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        if (!(channelName in this._channels)) {
+            // console.warn('handleDownloadFileRequest: not in channel');
+            return;
+        }
         validateNodeId(fromNodeId);
         validateObject(requestBody, '/DownloadFileRequest');
         assert(typeof(sendResponse) === 'function', 'sendResponse is not a function.');
@@ -1201,7 +1216,10 @@ class Node {
     }
     async _handleGetLiveFeedSignedMessages({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
         validateChannelName(channelName);
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        if (!(channelName in this._channels)) {
+            // console.warn('handleGetLiveFeedSignedMessages: not in channel');
+            return;
+        }
         validateNodeId(fromNodeId);
         validateObject(requestBody, '/GetLiveFeedSignedMessagesRequest');
         assert(typeof(sendResponse) === 'function', 'sendResponse is not a function.');
@@ -1232,7 +1250,10 @@ class Node {
     }
     async _handleSubmitMessagesToLiveFeed({channelName, fromNodeId, requestBody, sendResponse, reportError, reportFinished, onCanceled, onResponseReceived}) {
         validateChannelName(channelName);
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        if (!(channelName in this._channels)) {
+            // console.warn('handleSubmitMessagesToLiveFeed: not in channel');
+            return;
+        }
         validateNodeId(fromNodeId);
         assert(typeof(sendResponse) === 'function', 'sendResponse is not a function');
         assert(typeof(reportError) === 'function', 'reportError is not a function');
@@ -1356,7 +1377,7 @@ class Node {
         const channelName = body.channelName;
         if (!(channelName in this._channels)) {
             // if we aren't in the channel, then we aren't going to broadcast the message
-            console.warn(`Not broadcasting message. Not in channel: ${channelName}`);
+            // console.warn(`Not broadcasting message. Not in channel: ${channelName}`);
             return;
         }
 
@@ -1455,7 +1476,10 @@ class Node {
 
         validateObject(requestId, '/MessageId');
         validateObject(requestBody, '/RequestBody');
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        if (!(channelName in this._channels)) {
+            // console.warn('handleRequestToNode: not in channel');
+            return;
+        }
 
         let numResponses = 0;
         this.sendMessageToNode({ channelName, toNodeId: fromNodeId, message: { type: 'requestToNodeReceived', requestId } });
@@ -1503,7 +1527,10 @@ class Node {
         const fileKey = message.fileKey;
         const channelName = message.channelName;
         validateObject(fileKey, '/FileKey');
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
+        if (!(channelName in this._channels)) {
+            // console.warn('handleSeekingMessage: not in channel');
+            return;
+        }
         if (fileKey.transformedSha1) {
             // this is important
             assert(fileKey.transformNodeId === fromNodeId, 'transformNodeId is not fromNodeId');
@@ -1600,8 +1627,12 @@ class Node {
         const fileSize = message.fileSize || null;
         const channelName = message.channelName;
 
+        if (!(channelName in this._channels)) {
+            // console.warn('handleProvidingMessage: not in channel');
+            return;
+        }
+
         validateObject(fileKey, '/FileKey');
-        assert(channelName in this._channels, `Not in channel: ${channelName}`);
 
         const code =  this._createProvidingListenerCode({
             channelName,
