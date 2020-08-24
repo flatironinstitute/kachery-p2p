@@ -417,7 +417,7 @@ class Node {
     }
     _findFileOrLiveFeedOnChannel = ({channelName, fileKey, timeoutMsec, fromNode=null}) => {
         if ((timeoutMsec === undefined) || (timeoutMsec === null)) {
-            timeoutMsec = 4000;
+            timeoutMsec = 10000;
         }
         validateChannelName(channelName);
         assert(channelName in this._channels, `findFileOrLiveFeedOnChannel: Not in channel: ${channelName}`);

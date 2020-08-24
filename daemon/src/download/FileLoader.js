@@ -207,7 +207,7 @@ class FileLoader {
                     }
                     else {
                         const elapsed = (new Date()) - timer;
-                        if (elapsed > 4000)  {
+                        if (elapsed > 15000)  {
                             complete = true;
                             let err;
                             if (this._providersThatPassedTestLoad.length === 0) {
