@@ -139,7 +139,7 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: 
             path = None
         if path:
             return path
-    raise Exception('Unable to download file.')
+    raise Exception(f'Unable to download file: {uri}')
 
 def _load_file_from_file_server(*, uri, dest, file_server_url):
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
