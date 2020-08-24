@@ -142,7 +142,7 @@ const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, fi
   apiServer.listen(apiPort);
 
   if (fileServerPort) {
-    const fileServer = new FileServer({verbose});
+    const fileServer = new FileServer({daemon, verbose});
     fileServer.listen(fileServerPort);
   }
 
