@@ -12,7 +12,7 @@ import BootstrapPeerManager from './BootstrapPeerManager.js';
 import RemoteNodeManager from './RemoteNodeManager.js';
 import util from 'util';
 import dgram from 'dgram';
-import { protocolVersion } from './protocolVersion.js';
+import { protocolVersion, daemonVersion } from './protocolVersion.js';
 import { validateObject, validateChannelName, validateNodeId, validateNodeToNodeMessage, validateNodeData, validateSha1Hash, validatePort } from './schema/index.js';
 import FileProvider from './download/FileProvider.js';
 import FileLoader from './download/FileLoader.js';
@@ -1032,6 +1032,7 @@ class Node {
         }
 
         const lines = [];
+        lines.push(`DAEMON VERSION: ${daemonVersion()}`)
         lines.push(`PROTOCOL VERSION: ${protocolVersion()}`)
         lines.push('');
         const nodesIncluded = {};

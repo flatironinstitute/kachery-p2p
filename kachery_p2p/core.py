@@ -1,6 +1,7 @@
 from typing import Tuple, Union, List, Dict
 from types import SimpleNamespace
 import numpy as np
+import hashlib
 import subprocess
 import time
 import os
@@ -15,6 +16,19 @@ from ._temporarydirectory import TemporaryDirectory
 from ._shellscript import ShellScript
 from .exceptions import LoadFileError
 
+_global_config = {
+    'nop2p': False,
+    'file_server_urls': []
+}
+
+def _experimental_config(*, nop2p: Union[None, bool]=None, file_server_urls: Union[None, List[str]]=None):
+    if nop2p is not None:
+        assert isinstance(nop2p, bool)
+        _global_config['nop2p'] = nop2p
+    if file_server_urls is not None:
+        assert isinstance(file_server_urls, list)
+        _global_config['file_server_urls'] = file_server_urls
+
 def _api_port():
     return os.getenv('KACHERY_P2P_API_PORT', 20431)
 
@@ -26,25 +40,22 @@ def get_channels():
         raise Exception(resp['error'])
     return resp['state']['channels']
 
-def join_channel(channel_name):
-    port = _api_port()
-    url = f'http://localhost:{port}/joinChannel'
-    resp = _http_post_json(url, dict(channelName=channel_name))
-    if not resp['success']:
-        raise Exception(resp['error'])
-
-def leave_channel(channel_name):
-    port = _api_port()
-    url = f'http://localhost:{port}/leaveChannel'
-    resp = _http_post_json(url, dict(channelName=channel_name))
-    if not resp['success']:
-        raise Exception(resp['error'])
-
 def find_file(uri):
     if uri.startswith('sha1dir://'):
         uri = _resolve_file_uri_from_dir_uri(uri)
         if uri is None:
             raise Exception('Unable to find file.')
+    if _global_config['nop2p']:
+        class empty_iterator:
+            def __init__(self):
+                pass
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                raise StopIteration
+        return empty_iterator()
     port = _api_port()
     url = f'http://localhost:{port}/findFile'
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
@@ -81,42 +92,145 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: 
     local_path = ka.load_file(uri, dest=dest)
     if local_path is not None:
         return local_path
-    if not p2p:
-        return None
-
-    port = _api_port()
-    url = f'http://localhost:{port}/loadFile' # todo: finish
-    protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
-    assert algorithm == 'sha1'
-    file_key = _create_file_key(sha1=hash0, query=query)
-    sock = _http_post_json_receive_json_socket(url, dict(
-        fileKey=file_key,
-        fromNode=from_node,
-        fromChannel=from_channel
-    ))
-    for r in sock:
+    try_p2p = p2p and (not _global_config['nop2p'])
+    if try_p2p:
         try:
-            type0 = r.get('type')
+            port = _api_port()
+            url = f'http://localhost:{port}/loadFile' # todo: finish
+            protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
+            assert algorithm == 'sha1'
+            file_key = _create_file_key(sha1=hash0, query=query)
+            sock = _http_post_json_receive_json_socket(url, dict(
+                fileKey=file_key,
+                fromNode=from_node,
+                fromChannel=from_channel
+            ))
+            for r in sock:
+                try:
+                    type0 = r.get('type')
+                except:
+                    raise Exception(f'Unexpected response from daemon: {r}')
+                if type0 == 'finished':
+                    print(f'Loaded file: {uri}')
+                    return ka.load_file(f'sha1://{hash0}', dest=dest)
+                elif type0 == 'progress':
+                    bytes_loaded = r['bytesLoaded']
+                    bytes_total = r['bytesTotal']
+                    node_id = r['nodeId']
+                    pct = (bytes_loaded / bytes_total) * 100
+                    if node_id:
+                        nodestr = f' from {node_id[:6]}'
+                    else:
+                        nodestr = ''
+                    print(f'Loaded {bytes_loaded} of {bytes_total} bytes{nodestr} ({pct:.1f} %): {uri}')
+                elif type0 == 'error':
+                    raise LoadFileError(f'Error loading file: {r["error"]}')
+                else:
+                    raise Exception(f'Unexpected message from daemon: {r}')
+            raise Exception('Unable to download file. Connection to daemon closed before finished.')
         except:
-            raise Exception(f'Unexpected response from daemon: {r}')
-        if type0 == 'finished':
-            print(f'Loaded file: {uri}')
-            return ka.load_file(uri, dest=dest)
-        elif type0 == 'progress':
-            bytes_loaded = r['bytesLoaded']
-            bytes_total = r['bytesTotal']
-            node_id = r['nodeId']
-            pct = (bytes_loaded / bytes_total) * 100
-            if node_id:
-                nodestr = f' from {node_id[:6]}'
-            else:
-                nodestr = ''
-            print(f'Loaded {bytes_loaded} of {bytes_total} bytes{nodestr} ({pct:.1f} %): {uri}')
-        elif type0 == 'error':
-            raise LoadFileError(f'Error loading file: {r["error"]}')
-        else:
-            raise Exception(f'Unexpected message from daemon: {r}')
-    raise Exception('Unable to download file. Connection to daemon closed before finished.')
+            if len(_global_config['file_server_urls']) == 0:
+                raise
+    for url in _global_config['file_server_urls']:
+        try:
+            path = _load_file_from_file_server(uri=uri, dest=dest, file_server_url=url)
+        except Exception as e:
+            print(str(e))
+            path = None
+        if path:
+            return path
+    raise Exception('Unable to download file.')
+
+def _load_file_from_file_server(*, uri, dest, file_server_url):
+    protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
+    if query.get('manifest'):
+        manifest = load_object(f'sha1://{query["manifest"][0]}')
+        if manifest is None:
+            print('Unable to load manifest')
+            return None
+        assert manifest['sha1'] == hash0, 'Manifest sha1 does not match expected.'
+        chunk_local_paths = []
+        for ii, ch in enumerate(manifest['chunks']):
+            if len(manifest['chunks']) > 1:
+                print(f'load_bytes: Loading chunk {ii + 1} of {len(manifest["chunks"])}')
+            a = load_file(
+                uri=f'sha1://{ch["sha1"]}?chunkOf={hash0}~{ch["start"]}~{ch["end"]}'
+            )
+            if a is None:
+                print('Unable to load data from chunk')
+                return None
+            chunk_local_paths.append(a)
+        with TemporaryDirectory() as tmpdir:
+            concat_fname = f'{tmpdir}/concat_{hash0}'
+            print('Concatenating chunks...')
+            sha1_concat = _concatenate_files_and_compute_sha1(paths=chunk_local_paths, dest=concat_fname)
+            assert sha1_concat == hash0, f'Unexpected sha1 of concatenated file: {sha1_concat} <> {hash0}'
+            ka.core._store_local_file_in_cache(path=concat_fname, hash=sha1_concat, algorithm='sha1', config=ka.core._load_config())
+            return ka.load_file('sha1://' + hash0)
+    
+    with TemporaryDirectory() as tmpdir:
+        tmp_fname = tmpdir + f'/download_{hash0}'
+        url = f'{file_server_url}/sha1/{hash0[0]}{hash0[1]}/{hash0[2]}{hash0[3]}/{hash0[4]}{hash0[5]}/{hash0}'
+        try:
+            sha1 = _download_file_and_compute_sha1(url=url, fname=tmp_fname)
+            assert hash0 == sha1, f'Unexpected sha1 of downloaded file: {sha1} <> {hash0}'
+            # todo: think about how to do this without calling internal (private) function
+            ka.core._store_local_file_in_cache(path=tmp_fname, hash=sha1, algorithm='sha1', config=ka.core._load_config())
+            return ka.load_file('sha1://' + sha1)
+        except:
+            if query.get('chunkOf'):
+                a = query.get('chunkOf')[0]
+                list0 = a.split('~')
+                assert len(list0) == 3
+                start0 = int(list0[1])
+                end0 = int(list0[2])
+                chunk_of_sha1 = list0[0]
+                assert len(chunk_of_sha1) == 40
+                s = chunk_of_sha1
+                url_chunkof = f'{file_server_url}/sha1/{s[0]}{s[1]}/{s[2]}{s[3]}/{s[4]}{s[5]}/{s}'
+                sha1 = _download_file_and_compute_sha1(url=url_chunkof, fname=tmp_fname, start=start0, end=end0)
+                assert hash0 == sha1, f'Unexpected sha1 of downloaded file: {sha1} <> {hash0}'
+                # todo: think about how to do this without calling internal (private) function
+                ka.core._store_local_file_in_cache(path=tmp_fname, hash=sha1, algorithm='sha1', config=ka.core._load_config())
+                return ka.load_file('sha1://' + sha1)
+
+
+def _concatenate_files_and_compute_sha1(*, paths: List[str], dest: str):
+    with open(dest, 'wb') as f_concat:
+        sha1sum = hashlib.sha1()
+        chunksize = 8192
+        for path in paths:
+            with open(path, "rb") as f:
+                while True:
+                    data = f.read(chunksize)
+                    if data:
+                        sha1sum.update(data)
+                        f_concat.write(data)
+                    else:
+                        break
+    return sha1sum.hexdigest()
+
+def _download_file_and_compute_sha1(*, url, fname, start=None, end=None):
+    try:
+        import requests
+    except:
+        raise Exception('Error importing requests (in _download_file_and_compute_sha1)')
+    if start is not None:
+        assert end is not None
+        headers = {"Range": f"bytes={start}-{end - 1}"}
+    else:
+        headers = {}
+    with requests.get(url, headers=headers, stream=True) as r:
+        r.raise_for_status()
+        with open(fname, 'wb') as f:
+            sha1sum = hashlib.sha1()
+            for chunk in r.iter_content(chunk_size=8192): 
+                # If you have chunk encoded response uncomment if
+                # and set chunk_size parameter to None.
+                #if chunk:
+                sha1sum.update(chunk)
+                f.write(chunk)
+    return sha1sum.hexdigest()
 
 def load_bytes(uri: str, start: int, end: int, write_to_stdout=False, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[bytes, None]:
     ret = ka.load_bytes(uri, start=start, end=end, write_to_stdout=write_to_stdout)
@@ -208,7 +322,7 @@ def _probe_daemon():
         return None
     return x
 
-def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verbose: int=0, dverbose: int=0, host: str='', bootstrap: List[str], node_arg: List[str]=[]):
+def start_daemon(*, port: int=0, file_server_port: int=0, method: str='npx', channels: List[str]=[], verbose: int=0, dverbose: int=0, host: str='', bootstrap: List[str], node_arg: List[str]=[]):
     from kachery_p2p import __version__
 
     if _probe_daemon() is not None:
@@ -227,6 +341,7 @@ def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verb
     if host:
         start_args.append(f'--host {host}')
     start_args.append(f'--port {port}')
+    start_args.append(f'--file-server-port {file_server_port}')
 
     # Note that npx-latest/npm-latest uses the latest version of the daemon on npm, which may be desireable for some bootstrap nodes, but not adviseable if you want to be sure that kachery-p2p is constistent with the node daemon
     if (method == 'npx') or (method == 'npx-latest') or (method == 'npm') or (method == 'npm-latest'):
@@ -244,7 +359,7 @@ def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verb
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.4.25'
+                npm_package = 'kachery-p2p-daemon@0.4.26'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''

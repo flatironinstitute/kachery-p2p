@@ -21,16 +21,6 @@ def get_channels():
             num_peers_str = f'{num_peers} peers'
         print(f'{channel["name"]}: {num_peers_str}')
 
-@click.command(help="Join a channel.")
-@click.argument('channel_name')
-def join_channel(channel_name):
-    kp.join_channel(channel_name)
-
-@click.command(help="Leave a channel.")
-@click.argument('channel_name')
-def leave_channel(channel_name):
-    kp.leave_channel(channel_name)
-
 @click.command(help="Find a file.")
 @click.argument('uri')
 def find_file(uri):
@@ -43,7 +33,10 @@ def find_file(uri):
 @click.option('--dest', default=None, help='Optional local path of destination file.')
 @click.option('--from-node', default=None, help='Optionally specify the ID of the node to download from')
 @click.option('--from-channel', default=None, help='Optionally specify the name of the channel to download from')
-def load_file(uri, dest, from_node, from_channel):
+@click.option('--exp-nop2p', is_flag=True, help='Disable p2p')
+@click.option('--exp-file-server-url', multiple=True, help='Optional URLs of static file servers')
+def load_file(uri, dest, from_node, from_channel, exp_nop2p, exp_file_server_url):
+    kp._experimental_config(nop2p=exp_nop2p, file_server_urls=list(exp_file_server_url))
     x = kp.load_file(uri, dest=dest, from_node=from_node, from_channel=from_channel)
     print(x)
 
@@ -51,14 +44,18 @@ def load_file(uri, dest, from_node, from_channel):
 @click.argument('uri')
 @click.option('--start', help='The start byte (optional)', default=None)
 @click.option('--end', help='The end byte non-inclusive (optional)', default=None)
-def cat_file(uri, start, end):
+@click.option('--exp-nop2p', is_flag=True, help='Disable p2p')
+@click.option('--exp-file-server-url', multiple=True, help='Optional URLs of static file servers')
+def cat_file(uri, start, end, exp_nop2p, exp_file_server_url):
     old_stdout = sys.stdout
     sys.stdout = sys.stderr
+
+    kp._experimental_config(nop2p=exp_nop2p, file_server_urls=list(exp_file_server_url))
 
     if start is None and end is None:
         path1 = kp.load_file(uri)
         if not path1:
-            raise Exception('Error loading file.')
+            raise Exception('Error loading file for cat.')
         sys.stdout = old_stdout
         with open(path1, 'rb') as f:
             while True:
@@ -98,10 +95,11 @@ def log():
 @click.option('--dverbose', default=0, help='Discovery verbosity level')
 @click.option('--method', default='npx', help='Method for starting daemon: npx (default), npx-latest, npm, npm-latest or dev')
 @click.option('--host', default='', help='IP for connecting to this daemon')
-@click.option('--port', default=0, help='Port to listen on (0 means do not listen)')
+@click.option('--port', default=0, help='Optional port to listen on (0 means do not listen)')
+@click.option('--file-server-port', default=0, help='Optional port for serving static files')
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
-def start_daemon(method, channel, verbose, dverbose, host, port, bootstrap, node_arg):
-    kp.start_daemon(method=method, channels=channel, verbose=verbose, dverbose=dverbose, host=host, port=port, bootstrap=bootstrap, node_arg=node_arg)
+def start_daemon(method, channel, verbose, dverbose, host, port, file_server_port, bootstrap, node_arg):
+    kp.start_daemon(method=method, channels=channel, verbose=verbose, dverbose=dverbose, host=host, port=port, file_server_port=file_server_port, bootstrap=bootstrap, node_arg=node_arg)
 
 @click.command(help="Stop the daemon.")
 def stop_daemon():
@@ -120,8 +118,6 @@ def version():
 cli.add_command(cat_file)
 cli.add_command(find_file)
 cli.add_command(get_channels)
-cli.add_command(join_channel)
-cli.add_command(leave_channel)
 cli.add_command(load_file)
 cli.add_command(log)
 cli.add_command(node_info)

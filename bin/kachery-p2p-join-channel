@@ -1,3 +1,0 @@
-#!/bin/bash
-
-exec kachery-p2p join-channel "$@"

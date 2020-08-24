@@ -5,6 +5,7 @@ import fs from 'fs';
 import yargs from 'yargs';
 import Daemon from './Daemon.js';
 import ApiServer from './ApiServer.js';
+import FileServer from './FileServer.js';
 import assert from 'assert';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
@@ -72,6 +73,10 @@ function main() {
           describe: 'Port to listen on.',
           type: 'string'
         })
+        yargs.option('file-server-port', {
+          describe: 'Optional port for serving static files over http.',
+          type: 'string'
+        })
         yargs.option('bootstrap', {
           describe: 'Override the default bootstrap node. Use --bootstrap ip:port',
           type: 'array',
@@ -89,6 +94,7 @@ function main() {
         }
         const listenHost = argv.host;
         const listenPort = argv.port ? Number(argv.port) : null;
+        const fileServerPort = argv['file-server-port'] ? Number(argv['file-server-port']) : null;
         const label = argv.label;
         startDaemon({
           configDir,
@@ -96,6 +102,7 @@ function main() {
           bootstrapInfos,
           listenHost,
           listenPort,
+          fileServerPort,
           verbose: argv.verbose,
           discoveryVerbose: argv.dverbose,
           label,
@@ -128,11 +135,16 @@ class Log {
   }
 }
 
-const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, verbose, discoveryVerbose, label, bootstrapInfos, opts }) => {
+const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, fileServerPort, verbose, discoveryVerbose, label, bootstrapInfos, opts }) => {
   const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, udpListenPort: listenPort, label, bootstrapInfos, opts});
 
   const apiServer = new ApiServer(daemon, {verbose});
   apiServer.listen(apiPort);
+
+  if (fileServerPort) {
+    const fileServer = new FileServer({verbose});
+    fileServer.listen(fileServerPort);
+  }
 
   for (let channelName of channelNames) {
     daemon.joinChannel(channelName);
