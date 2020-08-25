@@ -304,13 +304,16 @@ def store_text(text: str, basename: Union[str, None]=None):
 def store_npy(array: np.ndarray, basename: Union[str, None]=None):
     return ka.store_npy(array, basename=basename)
 
-def get_node_id():
-    x = _probe_daemon()
+def get_node_id(api_port=None):
+    x = _probe_daemon(api_port=api_port)
     assert x is not None, 'Unable to connect to daemon.'
     return x['nodeId']
 
-def _probe_daemon():
-    port = _api_port()
+def _probe_daemon(api_port=None):
+    if api_port is not None:
+        port = api_port
+    else:
+        port = _api_port()
     url = f'http://localhost:{port}/probe'
     try:
         x = _http_get_json(url)
@@ -438,8 +441,11 @@ def _check_latest_npm_package_version(package_name):
     latest_version = versions[-1]
     return latest_version
 
-def stop_daemon():
-    port = _api_port()
+def stop_daemon(api_port=None):
+    if api_port is not None:
+        port = api_port
+    else:
+        port = _api_port()
     url = f'http://localhost:{port}/halt'
     try:
         x = _http_get_json(url)
