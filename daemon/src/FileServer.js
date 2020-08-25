@@ -16,7 +16,7 @@ class FileServer {
         this._app.use('/sha1', (req, res, next) => {
             (async () => {
                 const query = req.query;
-                const relpath = req.url;
+                const relpath = req.url.split('?')[0];
                 const list = relpath.split('/');
                 const expectedLengths = [0, 2, 2, 2, 40];
                 if (list.length !== expectedLengths.length) {

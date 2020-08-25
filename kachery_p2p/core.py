@@ -167,7 +167,10 @@ def _load_file_from_file_server(*, uri, dest, file_server_url):
             assert sha1_concat == hash0, f'Unexpected sha1 of concatenated file: {sha1_concat} <> {hash0}'
             ka.core._store_local_file_in_cache(path=concat_fname, hash=sha1_concat, algorithm='sha1', config=ka.core._load_config())
             return ka.load_file('sha1://' + hash0)
-    chunkOf_str = query.get('chunkOf', None)
+    if query.get('chunkOf'):
+        chunkOf_str = query.get('chunkOf')[0]
+    else:
+        chunkOf_str = None
     
     with TemporaryDirectory() as tmpdir:
         tmp_fname = tmpdir + f'/download_{hash0}'
