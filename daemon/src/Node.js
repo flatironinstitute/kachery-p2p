@@ -381,7 +381,7 @@ class Node {
         }
         const ret = {
             onFound: cb => {foundCallbacks.push(cb)},
-            onFinished: cb => {finishedCallbacks.push(cb)},
+            onFinished: cb => {finishedCallbacks.push(cb); if (isFinished) cb();},
             cancel: handleCancel
         };
 
@@ -679,7 +679,7 @@ class Node {
             });
 
             assert((fileKey.sha1) || (fileKey.transformedSha1), 'Incorrect type of fileKey.');
-            finder = this._findFileOrLiveFeed({fileKey, fromNode: opts.fromNode || null, fromChannel: opts.fromChannel || null});
+            finder = this._findFileOrLiveFeed({fileKey, timeoutMsec: 6000, fromNode: opts.fromNode || null, fromChannel: opts.fromChannel || null});
             finder.onFound(findFileResult => {
                 validateObject(findFileResult, '/FindFileOrLiveFeedResult');
                 const provider = new FileProvider({node: this, findFileResult});

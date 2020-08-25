@@ -174,7 +174,7 @@ def _load_file_from_file_server(*, uri, dest, file_server_url):
     
     with TemporaryDirectory() as tmpdir:
         tmp_fname = tmpdir + f'/download_{hash0}'
-        url = f'{file_server_url}/sha1/{hash0[0]}{hash0[1]}/{hash0[2]}{hash0[3]}/{hash0[4]}{hash0[5]}/{hash0}'
+        url = f'{file_server_url}/sha1/{hash0}'
         if chunkOf_str is not None:
             url = url + f'?chunkOf={chunkOf_str}'
         sha1 = _download_file_and_compute_sha1(url=url, fname=tmp_fname)
