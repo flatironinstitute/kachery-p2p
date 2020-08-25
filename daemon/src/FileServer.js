@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'fs';
+import { validateObject } from './schema/index.js';
 
 class FileServer {
     constructor({daemon, verbose}) {
@@ -14,6 +15,7 @@ class FileServer {
         const sha1Dir = `${process.env.KACHERY_STORAGE_DIR}/sha1`;
         this._app.use('/sha1', (req, res, next) => {
             (async () => {
+                const query = req.query;
                 const relpath = req.url;
                 const list = relpath.split('/');
                 const expectedLengths = [0, 2, 2, 2, 40];
@@ -33,6 +35,31 @@ class FileServer {
                     const fileKey = {
                         sha1: list[4]
                     };
+                    if (query.chunkOf) {
+                        const list = query.chunkOf.split('~');
+                        if (list.length === 3) {
+                            const chunkOfSha1 = list[0];
+                            const startByte = Number(list[1]);
+                            const endByte = Number(list[2]);
+                            fileKey.chunkOf = {
+                                fileKey: {
+                                    sha1: chunkOfSha1,
+                                    startByte,
+                                    endByte
+                                }
+                            }
+                            const cs = chunkOfSha1;
+                            const chunkOfRelPath = `/${cs[0]}${cs[1]}/${cs[2]}${cs[3]}/${cs[4]}${cs[5]}/${cs}`;
+                            const chunkOfPath = `${process.env.KACHERY_STORAGE_DIR}/sha1${chunkOfRelPath}`;
+                            if (fs.existsSync(chunkOfPath)) {
+                                req.url = chunkOfRelPath;
+                                req.headers['Range'] = `bytes=${startByte}-${endByte - 1}`;
+                                next();
+                                return;
+                            }
+                        }
+                    }
+                    validateObject(fileKey, '/FileKey');
                     const opts = {}
                     const x = this._daemon.loadFile({fileKey, opts});
                     await new Promise((resolve, reject) => {

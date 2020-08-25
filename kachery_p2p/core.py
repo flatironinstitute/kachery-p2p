@@ -109,7 +109,7 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: 
                 try:
                     type0 = r.get('type')
                 except:
-                    raise Exception(f'Unexpected response from daemon: {r}')
+                    raise Exception(f'Unexpected response from daemon: {r}: {uri}')
                 if type0 == 'finished':
                     print(f'Loaded file: {uri}')
                     return ka.load_file(f'sha1://{hash0}', dest=dest)
@@ -124,10 +124,10 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: 
                         nodestr = ''
                     print(f'Loaded {bytes_loaded} of {bytes_total} bytes{nodestr} ({pct:.1f} %): {uri}')
                 elif type0 == 'error':
-                    raise LoadFileError(f'Error loading file: {r["error"]}')
+                    raise LoadFileError(f'Error loading file: {r["error"]}: {uri}')
                 else:
                     raise Exception(f'Unexpected message from daemon: {r}')
-            raise Exception('Unable to download file. Connection to daemon closed before finished.')
+            raise Exception(f'Unable to download file. Connection to daemon closed before finished: {uri}')
         except:
             if len(_global_config['file_server_urls']) == 0:
                 raise
@@ -167,32 +167,19 @@ def _load_file_from_file_server(*, uri, dest, file_server_url):
             assert sha1_concat == hash0, f'Unexpected sha1 of concatenated file: {sha1_concat} <> {hash0}'
             ka.core._store_local_file_in_cache(path=concat_fname, hash=sha1_concat, algorithm='sha1', config=ka.core._load_config())
             return ka.load_file('sha1://' + hash0)
+    chunkOf_str = query.get('chunkOf', None)
     
     with TemporaryDirectory() as tmpdir:
         tmp_fname = tmpdir + f'/download_{hash0}'
         url = f'{file_server_url}/sha1/{hash0[0]}{hash0[1]}/{hash0[2]}{hash0[3]}/{hash0[4]}{hash0[5]}/{hash0}'
-        try:
-            sha1 = _download_file_and_compute_sha1(url=url, fname=tmp_fname)
-            assert hash0 == sha1, f'Unexpected sha1 of downloaded file: {sha1} <> {hash0}'
-            # todo: think about how to do this without calling internal (private) function
-            ka.core._store_local_file_in_cache(path=tmp_fname, hash=sha1, algorithm='sha1', config=ka.core._load_config())
-            return ka.load_file('sha1://' + sha1)
-        except:
-            if query.get('chunkOf'):
-                a = query.get('chunkOf')[0]
-                list0 = a.split('~')
-                assert len(list0) == 3
-                start0 = int(list0[1])
-                end0 = int(list0[2])
-                chunk_of_sha1 = list0[0]
-                assert len(chunk_of_sha1) == 40
-                s = chunk_of_sha1
-                url_chunkof = f'{file_server_url}/sha1/{s[0]}{s[1]}/{s[2]}{s[3]}/{s[4]}{s[5]}/{s}'
-                sha1 = _download_file_and_compute_sha1(url=url_chunkof, fname=tmp_fname, start=start0, end=end0)
-                assert hash0 == sha1, f'Unexpected sha1 of downloaded file: {sha1} <> {hash0}'
-                # todo: think about how to do this without calling internal (private) function
-                ka.core._store_local_file_in_cache(path=tmp_fname, hash=sha1, algorithm='sha1', config=ka.core._load_config())
-                return ka.load_file('sha1://' + sha1)
+        if chunkOf_str is not None:
+            url = url + f'?chunkOf={chunkOf_str}'
+        sha1 = _download_file_and_compute_sha1(url=url, fname=tmp_fname)
+        assert hash0 == sha1, f'Unexpected sha1 of downloaded file: {sha1} <> {hash0}'
+        # todo: think about how to do this without calling internal (private) function
+        ka.core._store_local_file_in_cache(path=tmp_fname, hash=sha1, algorithm='sha1', config=ka.core._load_config())
+        return ka.load_file('sha1://' + sha1)
+    
 
 
 def _concatenate_files_and_compute_sha1(*, paths: List[str], dest: str):
