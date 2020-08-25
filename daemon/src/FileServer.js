@@ -43,11 +43,12 @@ class FileServer {
                             const endByte = Number(list[2]);
                             fileKey.chunkOf = {
                                 fileKey: {
-                                    sha1: chunkOfSha1,
-                                    startByte,
-                                    endByte
-                                }
+                                    sha1: chunkOfSha1
+                                },
+                                startByte,
+                                endByte
                             }
+                            console.log('---------------', fileKey, list, query.chunkOf);
                             const cs = chunkOfSha1;
                             const chunkOfRelPath = `/${cs[0]}${cs[1]}/${cs[2]}${cs[3]}/${cs[4]}${cs[5]}/${cs}`;
                             const chunkOfPath = `${process.env.KACHERY_STORAGE_DIR}/sha1${chunkOfRelPath}`;
