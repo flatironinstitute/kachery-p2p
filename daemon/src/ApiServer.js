@@ -23,6 +23,15 @@ export default class ApiServer {
         // this._app.use(cors()); // in the future, if we want to do this
         this._app.use(express.json());
 
+        this._app.all('/*', (req, res, next) => {
+            if (!isLocalRequest(req)) {
+                console.warn(`Rejecting access to remote request from ${req.connection.remoteAddress}`);
+                res.send("API only accessable from the local device").status(403).end();
+                return;
+            }
+            next();
+        });
+
         // /probe - check whether the daemon is up and running and return info such as the node ID
         this._app.get('/probe', async (req, res) => {
             log().info('/probe');
@@ -51,26 +60,6 @@ export default class ApiServer {
             log().info('/getState');
             try {
                 await this._apiGetState(req, res)
-            }
-            catch(err) {
-                await this._errorResponse(req, res, 500, err.message);
-            }
-        });
-        // /joinChannel - join a channel for lookups
-        this._app.post('/joinChannel', async (req, res) => {
-            log().info('/joinChannel');
-            try {
-                await this._apiJoinChannel(req, res)
-            }
-            catch(err) {
-                await this._errorResponse(req, res, 500, err.message);
-            }
-        });
-        // /leaveChannel - leave a previously-joined channel
-        this._app.post('/leaveChannel', async (req, res) => {
-            log().info('/leaveChannel');
-            try {
-                await this._apiLeaveChannel(req, res)
             }
             catch(err) {
                 await this._errorResponse(req, res, 500, err.message);
@@ -245,22 +234,6 @@ export default class ApiServer {
     async _apiGetState(req, res) {
         const state = this._daemon.getState();
         res.json({ success: true, state });
-    }
-    // /joinChannel - join a channel for lookups
-    async _apiJoinChannel(req, res) {
-        const reqData = req.body;
-        const channelName = reqData.channelName;
-        validateChannelName(channelName);
-        await this._daemon.joinChannel(channelName);
-        res.json({ success: true });
-    }
-    // /leaveChannel - leave a previously-joined channel
-    async _apiLeaveChannel(req, res) {
-        const reqData = req.body;
-        const channelName = reqData.channelName;
-        validateChannelName(channelName);
-        await this._daemon.leaveChannel(channelName);
-        res.json({ success: true });
     }
     // /findFile - find a file (or feed) in the remote nodes. May return more than one.
     async _apiFindFile(req, res) {
@@ -547,4 +520,8 @@ async function start_http_server(app, listen_port, stopper) {
     });
     await app.server.listen(listen_port);
     log().info('API server is running', {protocol: app.protocol, port: app.port}, {print: true});
+}
+
+const isLocalRequest = (req) => {
+    return (req.connection.localAddress === req.connection.remoteAddress);
 }

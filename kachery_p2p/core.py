@@ -112,7 +112,9 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: 
                     raise Exception(f'Unexpected response from daemon: {r}: {uri}')
                 if type0 == 'finished':
                     print(f'Loaded file: {uri}')
-                    return ka.load_file(f'sha1://{hash0}', dest=dest)
+                    ret = ka.load_file(f'sha1://{hash0}', dest=dest)
+                    assert ret is not None, 'Unexpected problem loading file. Please check that you are using the same KACHERY_STORAGE_DIR environment variable between the kachery-p2p daemon and this program.'
+                    return ret
                 elif type0 == 'progress':
                     bytes_loaded = r['bytesLoaded']
                     bytes_total = r['bytesTotal']
@@ -166,7 +168,9 @@ def _load_file_from_file_server(*, uri, dest, file_server_url):
             sha1_concat = _concatenate_files_and_compute_sha1(paths=chunk_local_paths, dest=concat_fname)
             assert sha1_concat == hash0, f'Unexpected sha1 of concatenated file: {sha1_concat} <> {hash0}'
             ka.core._store_local_file_in_cache(path=concat_fname, hash=sha1_concat, algorithm='sha1', config=ka.core._load_config())
-            return ka.load_file('sha1://' + hash0)
+            ff = ka.load_file('sha1://' + hash0)
+            assert ff is not None, f'Unexpected problem. Unable to load file after storing in local cache: sha1://{hash0}'
+            return ff
     if query.get('chunkOf'):
         chunkOf_str = query.get('chunkOf')[0]
     else:
@@ -181,7 +185,9 @@ def _load_file_from_file_server(*, uri, dest, file_server_url):
         assert hash0 == sha1, f'Unexpected sha1 of downloaded file: {sha1} <> {hash0}'
         # todo: think about how to do this without calling internal (private) function
         ka.core._store_local_file_in_cache(path=tmp_fname, hash=sha1, algorithm='sha1', config=ka.core._load_config())
-        return ka.load_file('sha1://' + sha1)
+        ff = ka.load_file('sha1://' + sha1)
+        assert ff is not None, f'Unexpected problem. Unable to load file after storing in local cache: sha1://{hash0}'
+        return ff
     
 
 
