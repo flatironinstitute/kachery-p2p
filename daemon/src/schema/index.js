@@ -15,8 +15,8 @@ export const validateObject = (obj, schemaId, opts) => {
         if (opts.noThrow) {
             return false;
         }
-        console.warn(`Validation error: ${err.message}`);
         console.warn(JSON.stringify(obj, null, 4));
+        console.warn(`Validation error for ${schemaId}: ${err.message}`);
         throw Error(`Validation error for ${schemaId}: ${err.message}`)
     }
     return true;

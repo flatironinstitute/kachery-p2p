@@ -81,6 +81,10 @@ function main() {
           describe: 'Override the default bootstrap node. Use --bootstrap ip:port',
           type: 'array',
         })
+        yargs.option('nobootstrap', {
+          describe: 'Do not use bootstrap nodes',
+          type: 'boolean'
+        })
       },
       handler: (argv) => {
         let channelNames = argv.channel || [];
@@ -96,6 +100,7 @@ function main() {
         const listenPort = argv.port ? Number(argv.port) : null;
         const fileServerPort = argv['file-server-port'] ? Number(argv['file-server-port']) : null;
         const label = argv.label;
+        const noBootstrap = argv['nobootstrap'] ? true : false;
         startDaemon({
           configDir,
           channelNames,
@@ -107,6 +112,7 @@ function main() {
           discoveryVerbose: argv.dverbose,
           label,
           opts: {
+            noBootstrap
           }
         });
       }

@@ -64,8 +64,10 @@ class Daemon {
                 });
         }
 
-        for (let bpi of bootstrapInfos) {
-            this._node.addBootstrapPeer({address: bpi.address, port: bpi.port});
+        if (!opts.noBootstrap) {
+            for (let bpi of bootstrapInfos) {
+                this._node.addBootstrapPeer({address: bpi.address, port: bpi.port});
+            }
         }
 
         this._start();
@@ -105,7 +107,7 @@ class Daemon {
     // Find a live feed
     // returns an object with:
     //   {onFound, onFinished, cancel}
-    findLiveFeed = ({feedId}) => (this._findLiveFeed({feedId}));
+    findLiveFeed = ({feedId, timeoutMsec}) => (this._findLiveFeed({feedId, timeoutMsec}));
 
     /*****************************************************************************
     IMPLEMENTATION

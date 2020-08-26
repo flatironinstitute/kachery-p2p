@@ -357,9 +357,11 @@ class Node {
             cancel: () => { _doCancel(); }
         }
     }
-    _findFileOrLiveFeed = ({fileKey, timeoutMsec, fromNode=null, fromChannel=null}) => {
+    _findFileOrLiveFeed = ({fileKey, timeoutMsec=null, fromNode=null, fromChannel=null}) => {
         validateObject(fileKey, '/FileKey');
-        // assert(typeof(timeoutMsec) === 'number');
+        if (timeoutMsec) {
+            assert(typeof(timeoutMsec) === 'number');
+        }
         if (fromNode) {
             validateNodeId(fromNode);
         }

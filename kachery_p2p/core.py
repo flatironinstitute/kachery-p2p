@@ -321,7 +321,7 @@ def _probe_daemon(api_port=None):
         return None
     return x
 
-def start_daemon(*, port: int=0, file_server_port: int=0, method: str='npx', channels: List[str]=[], verbose: int=0, dverbose: int=0, host: str='', bootstrap: List[str], node_arg: List[str]=[]):
+def start_daemon(*, port: int=0, file_server_port: int=0, method: str='npx', channels: List[str]=[], verbose: int=0, dverbose: int=0, host: str='', bootstrap: List[str], nobootstrap: bool=False, node_arg: List[str]=[]):
     from kachery_p2p import __version__
 
     if _probe_daemon() is not None:
@@ -335,6 +335,8 @@ def start_daemon(*, port: int=0, file_server_port: int=0, method: str='npx', cha
         start_args.append(f'--channel {ch}')
     for b in bootstrap:
         start_args.append(f'--bootstrap {b}')
+    if nobootstrap:
+        start_args.append(f'--nobootstrap')
     start_args.append(f'--verbose {verbose}')
     start_args.append(f'--dverbose {dverbose}')
     if host:
@@ -358,7 +360,7 @@ def start_daemon(*, port: int=0, file_server_port: int=0, method: str='npx', cha
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.4.27'
+                npm_package = 'kachery-p2p-daemon@0.4.28'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''

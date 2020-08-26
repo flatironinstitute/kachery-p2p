@@ -1,4 +1,4 @@
-__version__ = "0.4.27"
+__version__ = "0.4.28"
 
 from .core import get_node_id
 from .core import get_channels

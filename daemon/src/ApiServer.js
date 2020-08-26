@@ -419,10 +419,11 @@ export default class ApiServer {
     async _feedApiGetFeedInfo(req, res) {
         const reqData = req.body;
         const {
-            feedId
+            feedId,
+            timeoutMsec
         } = reqData;
         validateObject(feedId, '/FeedId');
-        const info = await this._daemon.feedManager().getFeedInfo({feedId});
+        const info = await this._daemon.feedManager().getFeedInfo({feedId, timeoutMsec});
         res.json({ success: true, info });
     }
     // /feed/getAccessRules - get access rules for a local writeable subfeed

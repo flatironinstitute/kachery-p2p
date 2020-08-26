@@ -196,7 +196,7 @@ class FeedManager {
         }
         return subfeed.getNumMessages();
     }
-    async getFeedInfo({ feedId }) {
+    async getFeedInfo({ feedId, timeoutMsec }) {
         validateObject(feedId, '/FeedId');
         
         // Get the p2p information about the feed
@@ -211,7 +211,7 @@ class FeedManager {
         }
         else {
             // Get the liveFeedInfo. If not found, this will throw an error.
-            const liveFeedInfo = await this._remoteFeedManager.findLiveFeedInfo({feedId});
+            const liveFeedInfo = await this._remoteFeedManager.findLiveFeedInfo({feedId, timeoutMsec});
             return {
                 isWriteable: false,
                 liveFeedInfo
@@ -468,7 +468,7 @@ class RemoteFeedManager {
             messages
         });
     }
-    async findLiveFeedInfo({feedId}) {
+    async findLiveFeedInfo({feedId, timeoutMsec}) {
         // Find the channel and nodeId for a feed that is owned by a remote node on the p2p network
         // If not found, throws an error.
 
@@ -479,7 +479,7 @@ class RemoteFeedManager {
         const asyncHelper = async () => {
             return new Promise((resolve, reject) => {
                 // Find the live feed (this could in theory return multiple results, but ideally it should only return one)
-                const x = this._daemon.findLiveFeed({feedId});
+                const x = this._daemon.findLiveFeed({feedId, timeoutMsec});
                 let resolved = false;
                 x.onFound(result => {
                     if (resolved) return;

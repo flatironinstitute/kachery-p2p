@@ -4,15 +4,17 @@ import time
 import hashlib
 import kachery as ka
 import json
+from typing import Union
 from .core import _api_port, load_object
 from .core import _http_post_json
 from urllib.parse import quote, unquote
 
 class Feed:
-    def __init__(self, uri):
+    def __init__(self, uri, *, timeout_sec: Union[None, float]=None):
         if '://' not in uri:
             uri = f'feed://{uri}'
         self._feed_uri = uri
+        self._timeout_sec = timeout_sec
         if uri.startswith('feed://'):
             feed_id, subfeed_name, position = _parse_feed_uri(uri)
             if subfeed_name is not None:
@@ -36,7 +38,8 @@ class Feed:
         port = _api_port()
         url = f'http://localhost:{port}/feed/getFeedInfo'
         x = _http_post_json(url, dict(
-            feedId=self._feed_id
+            feedId=self._feed_id,
+            timeoutMsec=self._timeout_sec * 1000 if self._timeout_sec is not None else None
         ))
 
         assert x['success'], f'Unable to initialize feed: {self._feed_id}. {x["error"]}'
@@ -367,14 +370,14 @@ def load_subfeed(subfeed_uri):
     assert subfeed_name is not None, 'No subfeed name found'
     return Feed('feed://' + feed_id).get_subfeed(subfeed_name=subfeed_name, position=position)
         
-def load_feed(feed_name_or_uri, *, create=False):
+def load_feed(feed_name_or_uri, *, timeout_sec: Union[None, float]=None, create=False):
     if feed_name_or_uri.startswith('feed://'):
         if create is True:
             raise Exception('Cannot use create=True when feed ID is specified.')
         feed_uri = feed_name_or_uri
         feed_id, subfeed_name, position = _parse_feed_uri(feed_uri)
         assert subfeed_name is None, 'Not a feed uri'
-        return Feed('feed://' + feed_id)
+        return Feed('feed://' + feed_id, timeout_sec=timeout_sec)
     elif feed_name_or_uri.startswith('sha1://'):
         if create is True:
             raise Exception('Cannot use create=True when feed is a snapshot.')
