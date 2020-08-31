@@ -1,19 +1,18 @@
-class Chunk {
-    constructor(chunkId, info) {
-        this._chunkId = chunkId;
-        this._info = info;
-        this._currentChunkDownloadJob = null;
+class DownloadOptimizerFile {
+    constructor(fileKey) {
+        this._fileKey = fileKey;
+        this._currentFileDownloadJob = null;
         this._callbacks = {
             progress,
             error,
             finished
         }
     }
-    numBytes() {
-        return self._info.numBytes;
+    fileKey() {
+        return this._fileKey;
     }
     isDownloading() {
-        return this._currentChunkDownloadJob ? true : false;
+        return this._currentFileDownloadJob ? true : false;
     }
     onProgress(cb) {
         this._callbacks.progress.push(cb);
@@ -24,14 +23,14 @@ class Chunk {
     onFinished(cb) {
         this._callbacks.finished.push(cb);
     }
-    setChunkDownloadJob(j) {
-        assert(this._currentChunkDownloadJob === null, 'Unexpected: provider already has a chunk download job')
-        this._currentChunkDownloadJob = j;
+    setFileDownloadJob(j) {
+        assert(this._currentFileDownloadJob === null, 'Unexpected: provider already has a file download job')
+        this._currentFileDownloadJob = j;
         j.onProgress(({numBytes, totalBytes}) => {
             this._callbacks.progress.forEach(cb => cb({numBytes, totalBytes}));
         });
         const _handleComplete = () => {
-            this._currentChunkDownloadJob = null;
+            this._currentFileDownloadJob = null;
         }
         j.onError((err) => {
             _handleComplete();
@@ -43,3 +42,5 @@ class Chunk {
         });
     }
 }
+
+export default DownloadOptimizerFile;

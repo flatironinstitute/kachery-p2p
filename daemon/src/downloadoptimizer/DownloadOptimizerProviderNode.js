@@ -1,18 +1,22 @@
-class Provider {
-    constructor() {
-        this._currentChunkDownloadJob = null;
+class DownloadOptimizerProviderNode {
+    constructor({nodeId}) {
+        this._nodeId = nodeId;
+        this._currentFileDownloadJob = null;
         this._numBytesDownloadedInCurrentJob = 0;
         this._rateEstimator = new RateEstimator(); // todo
+    }
+    nodeId() {
+        return this._nodeId;
     }
     estimatedRateBps() {
         return this._rateEstimator.estimatedRateBps();
     }
-    hasChunkDownloadJob() {
-        return this._currentChunkDownloadJob ? true : false;
+    hasFileDownloadJob() {
+        return this._currentFileDownloadJob ? true : false;
     }
-    setChunkDownloadJob(j) {
-        assert(this._currentChunkDownloadJob === null, 'Unexpected: provider already has a chunk download job')
-        this._currentChunkDownloadJob = j;
+    setFileDownloadJob(j) {
+        assert(this._currentFileDownloadJob === null, 'Unexpected: provider node already has a file download job')
+        this._currentFileDownloadJob = j;
         this._numBytesDownloadedInCurrentJob = 0;
         this._rateEstimator.reportStart();
         j.onProgress(({numBytes, totalBytes}) => {
@@ -22,7 +26,7 @@ class Provider {
         });
         const _handleComplete = () => {
             this._rateEstimator.reportStop();
-            this._currentChunkDownloadJob = null;
+            this._currentFileDownloadJob = null;
         }
         j.onError((err) => {
             _handleComplete();
@@ -33,3 +37,5 @@ class Provider {
     }
 
 }
+
+export default DownloadOptimizerProviderNode;
