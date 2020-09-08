@@ -359,7 +359,7 @@ def get_feed_id(feed_name, *, create=False):
     ))
     if not x['success']:
         if create:
-            return create_feed(feed_name)
+            return create_feed(feed_name)._feed_id
         else:
             raise Exception('Unable to load feed.')
     feed_id = x['feedId']

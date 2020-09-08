@@ -296,7 +296,7 @@ def store_file(path: str, basename: Union[str, None]=None):
     return ka.store_file(path, basename=basename)
 
 def store_object(object: dict, basename: Union[str, None]=None):
-    return ka.store_object(object)
+    return ka.store_object(object, basename=basename)
 
 def store_text(text: str, basename: Union[str, None]=None):
     return ka.store_text(text, basename=basename)
