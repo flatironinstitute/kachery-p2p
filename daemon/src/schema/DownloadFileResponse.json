@@ -1,9 +1,0 @@
-{
-    "$id": "/DownloadFileResponse",
-    "type": "object",
-    "properties": {
-        "data_b64": {"type": "string"}
-    },
-    "required": ["data_b64"],
-    "additionalProperties": false
-}

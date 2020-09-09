@@ -1,15 +1,16 @@
 {
-    "$id": "/RawSocketMessage",
+    "$id": "/DirectMessage",
     "type": "object",
     "properties": {
         "body": {
             "type": "object",
             "properties": {
+                "directMessageId": {"$ref": "/MessageId"},
                 "fromNodeId": {"$ref": "/NodeId"},
-                "message": {"$ref": "/SocketMessage"},
+                "messageContent": {"$ref": "/DirectMessageContent"},
                 "timestamp": {"$ref": "/Timestamp"}
             },
-            "required": ["fromNodeId", "message", "timestamp"],
+            "required": ["directMessageId", "fromNodeId", "messageContent", "timestamp"],
             "additionalProperties": false
         },
         "signature": {"$ref": "/Signature"}

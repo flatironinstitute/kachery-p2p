@@ -1,0 +1,23 @@
+{
+    "$id": "/BroadcastMessageContent",
+    "type": "object",
+    "properties": {
+        "messageType": {"const": "broadcast"},
+        "sourceBody": {
+            "type": "object",
+            "properties": {
+                "channelName": {"$ref": "/ChannelName"},
+                "broadcastMessageId": {"$ref": "/MessageId"},
+                "sourceNodeId": {"$ref": "/NodeId"},
+                "message": {"$ref": "/BroadcastMessageContent"},
+                "timestamp": {"$ref": "/Timestamp"}
+            },
+            "required": ["channelName", "broadcastMessageId", "sourceNodeId", "message", "timestamp"],
+            "additionalProperties": false
+        },
+        "sourceSignature": {"$ref": "/Signature"},
+        "nodesVisited": {"type": "array", "items": {"$ref": "/NodeId"}}
+    },
+    "required": ["messageType", "sourceBody", "sourceSignature", "nodesVisited"],
+    "additionalProperties": false
+}

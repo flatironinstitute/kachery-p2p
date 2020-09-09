@@ -1,0 +1,9 @@
+{
+    "$id": "/DirectMessageContent",
+    "oneOf": [
+        {"$ref": "/BroadcastMessageContent"},
+        {"$ref": "/ConfirmDirectMessageContent"},
+        {"$ref": "/ConfirmIndirectMessageContent"},
+        {"$ref": "/IndirectMessageContent"}
+    ]
+}

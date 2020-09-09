@@ -1,0 +1,10 @@
+{
+    "$id": "/ConfirmDirectMessageContent",
+    "type": "object",
+    "properties": {
+        "messageType": {"const": "confirmDirectMessage"},
+        "directMessageId": {"$ref": "/MessageId"}
+    },
+    "required": ["messageType", "indirectMessageId"],
+    "additionalProperties": false
+}

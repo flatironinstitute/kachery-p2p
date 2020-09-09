@@ -1,6 +1,0 @@
-{
-    "$id": "/Sha1Head",
-    "type": "string",
-    "minLength": 10,
-    "maxLength": 10
-}
