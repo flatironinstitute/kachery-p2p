@@ -1,0 +1,10 @@
+{
+    "$id": "/GetChannelInfoRequest",
+    "type": "object",
+    "properties": {
+        "requestType": {"const": "getChannelInfo"},
+        "channelName": {"$ref": "/ChannelName"}
+    },
+    "required": ["requestType", "channelName"],
+    "additionalProperties": false
+}

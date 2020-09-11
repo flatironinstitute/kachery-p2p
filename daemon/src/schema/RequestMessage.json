@@ -1,0 +1,18 @@
+{
+    "$id": "/RequestMessage",
+    "type": "object",
+    "properties": {
+        "requestId": {"$ref": "/MessageId"},
+        "requestMessageContent": {
+            "oneOf": [
+                {"$ref": "/GetChannelInfoRequest"},
+                {"$ref": "/SeekingFileRequest"},
+                {"$ref": "/DownloadFileRequest"},
+                {"$ref": "/SeekingFeedRequest"},
+                {"$ref": "/GetSignedMessagesRequest"}
+            ]
+        }
+    },
+    "required": ["requestId", "requestMessageContent"],
+    "additionalProperties": false
+}

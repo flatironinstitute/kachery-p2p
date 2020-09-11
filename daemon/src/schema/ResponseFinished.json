@@ -1,0 +1,9 @@
+{
+    "$id": "/ResponseFinished",
+    "type": "object",
+    "properties": {
+        "requestId": {"$ref": "/MessageId"}
+    },
+    "required": ["requestId"],
+    "additionalProperties": false
+}

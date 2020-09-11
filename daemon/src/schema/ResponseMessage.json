@@ -1,0 +1,19 @@
+{
+    "$id": "/ResponseMessage",
+    "type": "object",
+    "properties": {
+        "requestId": {"$ref": "/MessageId"},
+        "responseIndex": {"type": "integer"},
+        "responseMessageContent": {
+            "oneOf": [
+                {"$ref": "/GetChannelInfoResponse"},
+                {"$ref": "/SeekingFileResponse"},
+                {"$ref": "/DownloadFileResponse"},
+                {"$ref": "/SeekingFeedResponse"},
+                {"$ref": "/GetSignedMessagesResponse"}
+            ]
+        }
+    },
+    "required": ["requestId", "responseIndex", "requestMessageContent"],
+    "additionalProperties": false
+}

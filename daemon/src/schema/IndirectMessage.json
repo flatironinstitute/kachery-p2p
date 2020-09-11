@@ -1,23 +1,27 @@
 {
-    "$id": "/DirectMessage",
+    "$id": "/IndirectMessage",
     "type": "object",
     "properties": {
         "body": {
             "type": "object",
             "properties": {
-                "directMessageId": {"$ref": "/MessageId"},
+                "indirectMessageId": {"$ref": "/MessageId"},
                 "fromNodeId": {"$ref": "/NodeId"},
                 "toNodeId": {"$ref": "/NodeId"},
+                "channelName": {"$ref": "/ChannelName"},
+                "route": {
+                    "type": "array",
+                    "items": {"$ref": "/NodeId"}
+                },
                 "messageContent": {
                     "oneOf": [
                         {"$ref": "/NodeToNodeMessage"},
-                        {"$ref": "/IndirectMessage"},
-                        {"$ref": "/DirectMessageConfirmation"}
+                        {"$ref": "/IndirectMessageConfirmation"}
                     ]
                 },
                 "timestamp": {"$ref": "/Timestamp"}
             },
-            "required": ["directMessageId", "fromNodeId", "toNodeId", "messageContent", "timestamp"],
+            "required": ["indirectMessageId", "fromNodeId", "toNodeId", "channelName", "route", "messageContent", "timestamp"],
             "additionalProperties": false
         },
         "signature": {"$ref": "/Signature"}

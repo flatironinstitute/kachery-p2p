@@ -1,0 +1,9 @@
+{
+    "$id": "/RequestCancel",
+    "type": "object",
+    "properties": {
+        "requestId": {"$ref": "/MessageId"}
+    },
+    "required": ["requestId"],
+    "additionalProperties": false
+}

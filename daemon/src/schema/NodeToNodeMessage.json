@@ -1,0 +1,10 @@
+{
+    "$id": "/NodeToNodeMessage",
+    "oneOf": [
+        {"$ref": "/RequestMessage"},
+        {"$ref": "/RequestCancel"},
+        {"$ref": "/ResponseMessage"},
+        {"$ref": "/ResponseError"},
+        {"$ref": "/ResponseFinished"}
+    ]
+}

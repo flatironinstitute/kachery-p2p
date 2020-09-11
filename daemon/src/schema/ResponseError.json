@@ -1,0 +1,10 @@
+{
+    "$id": "/ResponseError",
+    "type": "object",
+    "properties": {
+        "requestId": {"$ref": "/MessageId"},
+        "errorMessage": {"type": "string"}
+    },
+    "required": ["requestId", "errorMessage"],
+    "additionalProperties": false
+}
