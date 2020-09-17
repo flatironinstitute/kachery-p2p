@@ -1,0 +1,23 @@
+{
+    "$id": "/WatchForLiveFeedMessagesResponseData",
+    "type": "object",
+    "properties": {
+        "type": {"const": "watchForLiveFeedMessagesResponse"},
+        "feedKey": {"$ref": "/FeedKey"},
+        "subfeedsWithNewMessages": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "subfeedName": {"$ref": "/SubfeedName"},
+                    "messageIndex": {"type": "integer"},
+                    "newMessageIndex": {"type": "integer"}
+                },
+                "required": ["subfeedName", "messageIndex", "newMessageIndex"],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": ["type", "feedKey", "subfeedsWithNewMessages"],
+    "additionalProperties": false
+}

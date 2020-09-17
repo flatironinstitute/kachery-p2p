@@ -1,0 +1,13 @@
+{
+    "$id": "/GetChannelInfoResponseData",
+    "type": "object",
+    "properties": {
+        "type": {"const": "getChannelInfoResponse"},
+        "nodes": {
+            "type": "array",
+            "items": {"$ref": "/ChannelNodeInfo"}
+        }
+    },
+    "required": ["type", "nodes"],
+    "additionalProperties": false
+}

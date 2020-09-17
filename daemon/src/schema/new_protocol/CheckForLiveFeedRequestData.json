@@ -1,0 +1,10 @@
+{
+    "$id": "/CheckForLiveFeedRequestData",
+    "type": "object",
+    "properties": {
+        "type": {"const": "checkForLiveFeedRequest"},
+        "feedKey": {"$ref": "/FeedKey"}
+    },
+    "required": ["type", "feedKey"],
+    "additionalProperties": false
+}

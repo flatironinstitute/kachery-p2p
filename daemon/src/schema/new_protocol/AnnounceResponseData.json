@@ -1,0 +1,9 @@
+{
+    "$id": "/AnnounceResponseData",
+    "type": "object",
+    "properties": {
+        "type": {"const": "announceResponse"}
+    },
+    "required": ["type"],
+    "additionalProperties": false
+}

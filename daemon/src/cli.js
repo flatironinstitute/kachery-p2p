@@ -4,8 +4,9 @@ import os from 'os';
 import fs from 'fs';
 import yargs from 'yargs';
 import Daemon from './Daemon.js';
-import ApiServer from './ApiServer.js';
-import FileServer from './FileServer.js';
+import DaemonApiServer from './DaemonApiServer.js';
+import PublicApiServer from './PublicApiServer.js';
+// import FileServer from './FileServer.js';
 import assert from 'assert';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
@@ -133,24 +134,22 @@ function parseBootstrapInfo(x) {
   };
 }
 
-const apiPort = process.env.KACHERY_P2P_API_PORT || 20431;
-
-class Log {
-  constructor() {
-
-  }
-}
+const daemonApiPort = process.env.KACHERY_P2P_DAEMON_API_PORT || process.env.KACHERY_P2P_API_PORT || 20431;
+const publicApiPort = process.env.KACHERY_P2P_PUBLIC_API_PORT || 20432;
 
 const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, fileServerPort, verbose, discoveryVerbose, label, bootstrapInfos, opts }) => {
   const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, udpListenPort: listenPort, label, bootstrapInfos, opts});
 
-  const apiServer = new ApiServer(daemon, {verbose});
-  apiServer.listen(apiPort);
+  const daemonApiServer = new DaemonApiServer(daemon, {verbose});
+  daemonApiServer.listen(daemonApiPort);
 
-  if (fileServerPort) {
-    const fileServer = new FileServer({daemon, verbose});
-    fileServer.listen(fileServerPort);
-  }
+  const publicApiServer = new publicApiServer(daemon, {verbose});
+  publicApiServer.listen(publicApiPort);
+
+  // if (fileServerPort) {
+  //   const fileServer = new FileServer({daemon, verbose});
+  //   fileServer.listen(fileServerPort);
+  // }
 
   for (let channelName of channelNames) {
     daemon.joinChannel(channelName);

@@ -1,0 +1,30 @@
+{
+    "$id": "/NodeToNodeRequest",
+    "type": "object",
+    "properties": {
+        "body": {
+            "type": "object",
+            "properties": {
+                "requestId": {"$ref": "/RequestId"},
+                "fromNodeId": {"$ref": "/NodeId"},
+                "toNodeId": {"$ref": "/NodeId"},
+                "channelName": {"$ref": "/ChannelName"},
+                "timestamp": {"$ref": "/Timestamp"},
+                "requestData": {
+                    "oneOf": [
+                        {"$ref": "/GetChannelInfoRequestData"},
+                        {"$ref": "/AnnounceRequestData"},
+                        {"$ref": "/CheckForFileRequestData"},
+                        {"$ref": "/CheckForLiveFeedRequestData"},
+                        {"$ref": "/WatchForLiveFeedMessagesRequestData"}
+                    ]
+                }
+            },
+            "required": ["requestId", "fromNodeId", "toNodeId", "channelName", "timestamp", "requestData"],
+            "additionalProperties": false
+        },
+        "signature": {"$ref": "/Signature"}
+    },
+    "required": ["body", "signature"],
+    "additionalProperties": false
+}

@@ -1,0 +1,11 @@
+{
+    "$id": "/CheckForFileResponseData",
+    "type": "object",
+    "properties": {
+        "type": {"const": "checkForFileResponse"},
+        "fileKey": {"$ref": "/FileKey"},
+        "found": {"type": "boolean"}
+    },
+    "required": ["type", "fileKey", "found"],
+    "additionalProperties": false
+}

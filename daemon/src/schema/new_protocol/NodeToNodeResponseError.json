@@ -1,0 +1,14 @@
+{
+    "$id": "/GetChannelInfoResponseData",
+    "type": "object",
+    "properties": {
+        "type": {"const": "responseError"},
+        "error": {
+            "oneOf": [
+                {"const": "routingError"}
+            ]
+        }
+    },
+    "required": ["type", "error"],
+    "additionalProperties": false
+}
