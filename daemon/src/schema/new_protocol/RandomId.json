@@ -1,0 +1,5 @@
+{
+    "$id": "/RandomId",
+    "type": "string",
+    "pattern": "^[a-zA-Z]{10}?$"
+}

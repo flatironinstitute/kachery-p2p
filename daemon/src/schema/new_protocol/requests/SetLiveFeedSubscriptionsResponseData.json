@@ -1,0 +1,9 @@
+{
+    "$id": "/SetLiveFeedSubscriptionsResponseData",
+    "type": "object",
+    "properties": {
+        "type": {"const": "setLiveFeedSubscriptionsResponse"}
+    },
+    "required": ["type"],
+    "additionalProperties": false
+}

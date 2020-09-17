@@ -4,8 +4,9 @@
     "properties": {
         "type": {"const": "checkForFileResponse"},
         "fileKey": {"$ref": "/FileKey"},
-        "found": {"type": "boolean"}
+        "found": {"type": "boolean"},
+        "size": {"oneOf": [{"type": "null"}, {"type": "integer"}]}
     },
-    "required": ["type", "fileKey", "found"],
+    "required": ["type", "fileKey", "found", "size"],
     "additionalProperties": false
 }

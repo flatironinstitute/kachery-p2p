@@ -1,0 +1,11 @@
+{
+    "$id": "/ChunkOf",
+    "type": "object",
+    "properties": {
+        "fileKey": {"$ref": "/FileKey"},
+        "startByte": {"type": "integer"},
+        "endByte": {"type": "integer"}
+    },
+    "required": ["fileKey", "startByte", "endByte"],
+    "additionalProperties": false
+}

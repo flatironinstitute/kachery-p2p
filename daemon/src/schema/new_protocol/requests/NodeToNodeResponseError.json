@@ -1,5 +1,5 @@
 {
-    "$id": "/GetChannelInfoResponseData",
+    "$id": "/NodeToNodeResponseError",
     "type": "object",
     "properties": {
         "type": {"const": "responseError"},

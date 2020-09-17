@@ -7,9 +7,10 @@
             "properties": {
                 "channelName": {"$ref": "/ChannelName"},
                 "nodeId": {"$ref": "/NodeId"},
-                "httpAddress": {"$ref": "/AddressOrNull"},
-                "webSocketAddress": {"$ref": "/AddressOrNull"},
-                "udpAddress": {"$ref": "/AddressOrNull"},
+                "httpAddress": {"oneOf": [{"type": "null"}, {"$ref": "/Address"}]},
+                "webSocketAddress": {"oneOf": [{"type": "null"}, {"$ref": "/Address"}]},
+                "udpAddress": {"oneOf": [{"type": "null"}, {"$ref": "/Address"}]},
+                "proxyNodeId": {"oneOf": [{"type": "null"}, {"$ref": "/NodeId"}]},
                 "timestamp": {"$ref": "/Timestamp"}
             },
             "required": ["channelName", "nodeId", "httpAddress", "webSocketAddress", "udpAddress", "timestamp"],

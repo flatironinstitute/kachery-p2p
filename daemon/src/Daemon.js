@@ -6,6 +6,7 @@ import FeedManager from './FeedManager.js';
 import { log, initializeLog } from './common/log.js';
 import { assert } from 'console';
 import { validateObject, validatePort, validateChannelName, validateNodeId } from './schema/index.js';
+import { request } from 'express';
 
 class Daemon {
     constructor({ configDir, listenHost, listenPort, udpListenPort, verbose, discoveryVerbose, label, bootstrapInfos, opts }) {
@@ -108,6 +109,48 @@ class Daemon {
     // returns an object with:
     //   {onFound, onFinished, cancel}
     findLiveFeed = ({feedId, timeoutMsec}) => (this._findLiveFeed({feedId, timeoutMsec}));
+
+    handleNodeToNodeRequest = async (request) => {
+        const { requestId, fromNodeId, toNodeId, channelName, requestData } = request;
+        validateNodeId(fromNodeId);
+        validateNodeId(toNodeId);
+        validateChannelName(channelName);
+
+        if (toNodeId !== this._nodeId) {
+            throw Error('Proxy not yet implemented');
+        }
+
+        let responseData;
+        if (request.type === 'announce') {
+            responseData = await this._handleAnnounceRequest(request); // todo
+        }
+        else if (request.type === 'checkForFile') {
+            responseData = await this._handleCheckForFileRequest(request); // todo
+        }
+        else if (request.type === 'checkForLiveFeed') {
+            responseData = await this._handleCheckForFileRequest(request); // todo
+        }
+        else if (request.type === 'getChannelInfo') {
+            responseData = await this._handleGetChannelInfoRequest(request); // todo
+        }
+        else if (request.type === 'setLiveFeedSubscriptions') {
+            responseData = await this._handleSetLiveFeedSubscriptionsRequest(request); // todo
+        }
+        else {
+            throw Error(`Unexpected request type: ${request.type}`)
+        }
+
+        const response = {
+            requestId,
+            fromNodeId: this._nodeId,
+            toNodeId: fromNodeId,
+            channelName,
+            timestamp: (new Date()) - 0,
+            responseData
+        }
+        validateObject(response, '/NodeToNodeResponse');
+        return response;
+    }
 
     /*****************************************************************************
     IMPLEMENTATION

@@ -14,8 +14,6 @@ export default class PublicApiServer {
     constructor(daemon) {
         this._daemon = daemon; // The kachery-p2p daemon
 
-        this._stopper_callbacks = [];
-
         this._app = express(); // the express app
 
         this._app.set('json spaces', 4); // when we respond with json, this is how it will be formatted
@@ -36,11 +34,11 @@ export default class PublicApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
-        // /getState - return the state of the daemon, with information about the channels and peers
-        this._app.post('/getChannelInfo', async (req, res) => {
-            log().info('/getChannelInfo');
+        // /nodeToNodeRequest
+        this._app.post('/nodeToNodeRequest', async (req, res) => {
+            log().info('/nodeToNodeRequest');
             try {
-                await this._apiGetChannelInfo(req, res)
+                await this._apiNodeToNodeRequest(req, res)
             }
             catch(err) {
                 await this._errorResponse(req, res, 500, err.message);
@@ -51,11 +49,13 @@ export default class PublicApiServer {
     async _apiProbe(req, res) {
         res.json({ success: true, nodeId: this._daemon.nodeId() });
     }
-    // /getState - return the state of the daemon, with information about the channels and peers
-    async _apiGetChannelInfo(req, res) {
+    // /nodeToNodeRequest
+    async _apiNodeToNodeRequest(req, res) {
         const reqBody = req.body;
-        validateObject(reqBody, '/PublicRequestGetChannelInfo');
-        res.json({ success: false, error: 'Not yet implemented' });
+        validateObject(reqBody, '/NodeToNodeRequest');
+        const response = await this._daemon.handleNodeToNodeRequest(reqBody);
+        validateObject(response, 'NodeToNodeResponse');
+        res.json(response);
     }
     // Start listening via http/https
     async listen(port) {

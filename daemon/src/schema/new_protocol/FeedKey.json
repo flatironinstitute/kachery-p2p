@@ -1,0 +1,13 @@
+{
+    "$id": "/FeedKey",
+    "oneOf": [
+        {
+            "type": "object",
+            "properties": {
+                "feedId": {"$ref": "/FeedId"}
+            },
+            "required": ["feedId"],
+            "additionalProperties": false
+        }
+    ]
+}

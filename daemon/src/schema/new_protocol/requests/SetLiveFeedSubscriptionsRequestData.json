@@ -1,0 +1,23 @@
+{
+    "$id": "/SetLiveFeedSubscriptionsRequestData",
+    "type": "object",
+    "properties": {
+        "type": {"const": "setLiveFeedSubscriptionsResponse"},
+        "subscriptions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "subscriptionId": {"$ref": "/RandomId"},
+                    "feedKey": {"$ref": "/FeedKey"},
+                    "subfeedHash": {"$ref": "/Sha1Hash"},
+                    "messageIndex": {"type": "integer"}
+                },
+                "required": ["subscriptionId", "feedKey", "subfeedHash", "messageIndex"],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": ["type", "subscriptions"],
+    "additionalProperties": false
+}
