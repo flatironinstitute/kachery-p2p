@@ -1,23 +1,23 @@
-import express from 'express';
-import https from 'https';
-import http from 'http';
-import fs from 'fs';
+import express, { Express } from 'express';
 import JsonSocket from 'json-socket';
-import { sleepMsec } from './common/util.js';
-import { log } from './common/log.js';
+import { sleepMsec } from './common/util';
 import { validateChannelName, validateObject, validateNodeId } from './schema/index.js';
 import { assert } from 'console';
 import start_http_server from './common/start_http_server.js';
+import KacheryP2PNode from './KacheryP2PNode';
+import { ChannelName, FileKey, NodeId } from './interfaces';
 
 export default class DaemonApiServer {
+    _node: KacheryP2PNode
+    _stopper_callbacks: (() => void)[]
+    _app: Express
+
     // This is the API server for the local daemon
     // The local Python code communicates with the daemon
     // via this API
-    constructor(daemon) {
-        this._daemon = daemon; // The kachery-p2p daemon
-
+    constructor(node: KacheryP2PNode, {verbose}) {
+        this._node = node; // The kachery-p2p daemon
         this._stopper_callbacks = [];
-
         this._app = express(); // the express app
 
         this._app.set('json spaces', 4); // when we respond with json, this is how it will be formatted
@@ -27,7 +27,7 @@ export default class DaemonApiServer {
         this._app.all('/*', (req, res, next) => {
             if (!isLocalRequest(req)) {
                 console.warn(`Rejecting access to remote request from ${req.connection.remoteAddress}`);
-                res.send("API only accessable from the local device").status(403).end();
+                res.send("API only accessible from the local device").status(403).end();
                 return;
             }
             next();
@@ -35,7 +35,7 @@ export default class DaemonApiServer {
 
         // /probe - check whether the daemon is up and running and return info such as the node ID
         this._app.get('/probe', async (req, res) => {
-            log().info('/probe');
+            console.info('/probe');
             try {
                 await this._apiProbe(req, res) 
             }
@@ -45,8 +45,8 @@ export default class DaemonApiServer {
         });
         // /halt - halt the kachery-p2p daemon (stops the server process)
         this._app.get('/halt', async (req, res) => {
-            log().info('/halt');
-            await waitMsec(100);
+            console.info('/halt');
+            await sleepMsec(100);
             try {
                 await this._apiHalt(req, res)
                 await sleepMsec(1000);
@@ -56,19 +56,9 @@ export default class DaemonApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
-        // /getState - return the state of the daemon, with information about the channels and peers
-        this._app.post('/getState', async (req, res) => {
-            log().info('/getState');
-            try {
-                await this._apiGetState(req, res)
-            }
-            catch(err) {
-                await this._errorResponse(req, res, 500, err.message);
-            }
-        });
         // /findFile - find a file (or feed) in the remote nodes. May return more than one.
         this._app.post('/findFile', async (req, res) => {
-            log().info('/findFile');
+            console.info('/findFile');
             try {
                 await this._apiFindFile(req, res)
             }
@@ -78,7 +68,7 @@ export default class DaemonApiServer {
         });
         // /loadFile - download file from remote node(s) and store in kachery storage
         this._app.post('/loadFile', async (req, res) => {
-            log().info('/loadFile');
+            console.info('/loadFile');
             try {
                 await this._apiLoadFile(req, res)
             }
@@ -89,7 +79,7 @@ export default class DaemonApiServer {
         });
         // /feed/createFeed - create a new writeable feed on this node
         this._app.post('/feed/createFeed', async (req, res) => {
-            log().info('/feed/createFeed');
+            console.info('/feed/createFeed');
             try {
                 await this._feedApiCreateFeed(req, res)
             }
@@ -99,7 +89,7 @@ export default class DaemonApiServer {
         });
         // /feed/deleteFeed - delete feed on this node
         this._app.post('/feed/deleteFeed', async (req, res) => {
-            log().info('/feed/deleteFeed');
+            console.info('/feed/deleteFeed');
             try {
                 await this._feedApiDeleteFeed(req, res)
             }
@@ -109,7 +99,7 @@ export default class DaemonApiServer {
         });
         // /feed/getFeedId - lookup the ID of a local feed based on its name
         this._app.post('/feed/getFeedId', async (req, res) => {
-            log().info('/feed/getFeedId');
+            console.info('/feed/getFeedId');
             try {
                 await this._feedApiGetFeedId(req, res)
             }
@@ -119,132 +109,127 @@ export default class DaemonApiServer {
         });
         // /feed/appendMessages - append messages to a local writeable subfeed
         this._app.post('/feed/appendMessages', async (req, res) => {
-            log().info('/feed/appendMessages', req.body.messages.map(msg => (msg.type)));
+            console.info('/feed/appendMessages', req.body.messages.map(msg => (msg.type)));
             try {
                 await this._feedApiAppendMessages(req, res)
             }
             catch(err) {
-                console.warn(err);
-                log().warning('Error in appendMessages', {error: err.message});
+                console.warn('Error in appendMessages', {error: err.message});
                 res.status(500).send('Error appending messages.');
             }
         });
         // /feed/submitMessages - submit messages to a remote live subfeed (must have permission)
         this._app.post('/feed/submitMessages', async (req, res) => {
-            log().info('/feed/submitMessages');
+            console.info('/feed/submitMessages');
             try {
                 await this._feedApiSubmitMessages(req, res)
             }
             catch(err) {
-                log().warning('Error in submitMessages', {error: err.message});
+                console.warn('Error in submitMessages', {error: err.message});
                 res.status(500).send(`Error appending messages: ${err.message}`);
             }
         });
         // /feed/getMessages - get messages from a local or remote subfeed
         this._app.post('/feed/getMessages', async (req, res) => {
             // important not to log this because then we'll have a feedback loop if we are listening to the log by getting the messages!
-            // log().info('/feed/getMessages');
+            // console.info('/feed/getMessages');
             try {
                 await this._feedApiGetMessages(req, res)
             }
             catch(err) {
-                console.warn(`Error in getMessages: ${err.message}`);
-                log().warning('Error in getMessages', {error: err.message});
+                console.warn('Error in getMessages', {error: err.message});
                 res.status(500).send('Error getting messages.');
             }
         });
         // /feed/getSignedMessages - get signed messages from a local or remote subfeed
         this._app.post('/feed/getSignedMessages', async (req, res) => {
-            log().info('/feed/getSignedMessages');
+            console.info('/feed/getSignedMessages');
             try {
                 await this._feedApiGetSignedMessages(req, res)
             }
             catch(err) {
-                log().warning('Error in getSignedMessages', {error: err.message});
+                console.warn('Error in getSignedMessages', {error: err.message});
                 res.status(500).send('Error getting signed messages.');
             }
         });
         // /feed/getNumMessages - get number of messages in a subfeed
         this._app.post('/feed/getNumMessages', async (req, res) => {
-            log().info('/feed/getNumMessages');
+            console.info('/feed/getNumMessages');
             try {
                 await this._feedApiGetNumMessages(req, res)
             }
             catch(err) {
-                log().warning('Error in getNumMessages', {error: err.message});
+                console.warn('Error in getNumMessages', {error: err.message});
                 res.status(500).send('Error getting num. messages.');
             }
         });
         // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
         this._app.post('/feed/getFeedInfo', async (req, res) => {
-            log().info('/feed/getFeedInfo');
+            console.info('/feed/getFeedInfo');
             try {
                 await this._feedApiGetFeedInfo(req, res)
             }
             catch(err) {
                 console.warn(err.stack);
-                log().warning('Error in getFeedInfo', {error: err.message});
+                console.warn('Error in getFeedInfo', {error: err.message});
                 res.status(500).send('Error getting feed info.');
             }
         });
         // /feed/getAccessRules - get access rules for a local writeable subfeed
         this._app.post('/feed/getAccessRules', async (req, res) => {
-            log().info('/feed/getAccessRules');
+            console.info('/feed/getAccessRules');
             try {
                 await this._feedApiGetAccessRules(req, res)
             }
             catch(err) {
-                log().warning('Error in getAccessRules', {error: err.message});
+                console.warn('Error in getAccessRules', {error: err.message});
                 res.status(500).send('Error getting access rules.');
             }
         });
         // /feed/setAccessRules - set access rules for a local writeable subfeed
         this._app.post('/feed/setAccessRules', async (req, res) => {
-            log().info('/feed/setAccessRules');
+            console.info('/feed/setAccessRules');
             try {
                 await this._feedApiSetAccessRules(req, res)
             }
             catch(err) {
-                log().warning('Error in setAccessRules', {error: err.message});
+                console.warn('Error in setAccessRules', {error: err.message});
                 res.status(500).send('Error setting access rules.');
             }
         });
         // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
         this._app.post('/feed/watchForNewMessages', async (req, res) => {
-            log().info('/feed/watchForNewMessages', req.body.subfeedWatches);
+            console.info('/feed/watchForNewMessages', req.body.subfeedWatches);
             try {
                 await this._feedApiWatchForNewMessages(req, res)
             }
             catch(err) {
-                log().warning('Error in watchForNewMessages', {error: err.message});
+                console.warn('Error in watchForNewMessages', {error: err.message});
                 res.status(500).send('Error watching for new messages.');
             }
         });
     }
     // /probe - check whether the daemon is up and running and return info such as the node ID
     async _apiProbe(req, res) {
-        res.json({ success: true, nodeId: this._daemon.nodeId() });
+        res.json({ success: true, nodeId: this._node.nodeId() });
     }
     // /halt - halt the kachery-p2p daemon (stops the server process)
     async _apiHalt(req, res) {
-        await this._daemon.halt();
+        await this._node.halt();
         this._stopper_callbacks.forEach(cb => {cb();});
         res.json({ success: true });
-    }
-    // /getState - return the state of the daemon, with information about the channels and peers
-    async _apiGetState(req, res) {
-        const state = this._daemon.getState();
-        res.json({ success: true, state });
     }
     // /findFile - find a file (or feed) in the remote nodes. May return more than one.
     async _apiFindFile(req, res) {
         const reqData = req.body;
         // Returns the find request
         validateObject(reqData.fileKey, '/FileKey');
-        if (reqData.timeoutMsec) {
+        if (reqData.timeoutMsec !== undefined) {
             assert(typeof(reqData.timeoutMsec) === 'number', 'apiFindFile: timeoutMsec is not a number');
         }
-        const x = this._daemon.findFile({fileKey: reqData.fileKey, timeoutMsec: reqData.timeoutMsec});
+        const fileKey: FileKey = reqData.fileKey as FileKey
+        const timeoutMsec: number | undefined = reqData.timeoutMsec;
+        const x = this._node.findFile({fileKey, timeoutMsec});
         const jsonSocket = new JsonSocket(res);
         let isDone = false;
         x.onFound(result => {
@@ -270,7 +255,7 @@ export default class DaemonApiServer {
     async _apiLoadFile(req, res) {
         const reqData = req.body;
         validateObject(reqData.fileKey, '/FileKey');
-        const opts = {};
+        const opts: {fromNode: NodeId | undefined, fromChannel: ChannelName | undefined} = {fromNode: undefined, fromChannel: undefined};
         if (reqData.fromNode) {
             validateNodeId(reqData.fromNode);
             opts.fromNode = reqData.fromNode;
@@ -279,7 +264,7 @@ export default class DaemonApiServer {
             validateChannelName(reqData.fromChannel);
             opts.fromChannel = reqData.fromChannel;
         }
-        const x = this._daemon.loadFile({
+        const x = this._node.loadFile({
             fileKey: reqData.fileKey,
             opts
         });
@@ -320,7 +305,7 @@ export default class DaemonApiServer {
         if (feedName) {
             assert(typeof(feedName) === 'string', 'feedName is not a string');
         }
-        const feedId = await this._daemon.feedManager().createFeed({feedName});
+        const feedId = await this._node.feedManager().createFeed({feedName});
         res.json({ success: true, feedId });
     }
     // /feed/deleteFeed - delete feed on this node
@@ -330,7 +315,7 @@ export default class DaemonApiServer {
         if (feedId) {
             validateObject(feedId, '/FeedId');
         }
-        await this._daemon.feedManager().deleteFeed({feedId});
+        await this._node.feedManager().deleteFeed({feedId});
         res.json({ success: true });
     }
     // /feed/getFeedId - lookup the ID of a local feed based on its name
@@ -338,7 +323,7 @@ export default class DaemonApiServer {
         const reqData = req.body;
         const feedName = reqData.feedName;
         assert(typeof(feedName) === 'string', 'feedName is not a string');
-        const feedId = await this._daemon.feedManager().getFeedId({feedName});
+        const feedId = await this._node.feedManager().getFeedId({feedName});
         if (!feedId) {
             res.json({ success: false });
             return;
@@ -349,13 +334,13 @@ export default class DaemonApiServer {
     async _feedApiAppendMessages(req, res) {
         const reqData = req.body;
         const {
-            feedId, subfeedName, messages
+            feedId, subfeedHash, messages
         } = reqData;
         validateObject(feedId, '/FeedId');
-        validateObject(subfeedName, '/SubfeedName');
+        validateObject(subfeedHash, '/SubfeedHash');
         assert(Array.isArray(messages), 'messages is not an array');
-        await this._daemon.feedManager().appendMessages({
-            feedId, subfeedName, messages
+        await this._node.feedManager().appendMessages({
+            feedId, subfeedHash, messages
         });
         res.json({ success: true })
     }
@@ -363,27 +348,27 @@ export default class DaemonApiServer {
     async _feedApiSubmitMessages(req, res) {
         const reqData = req.body;
         const {
-            feedId, subfeedName, messages
+            feedId, subfeedHash, messages, timeoutMsec
         } = reqData;
         validateObject(feedId, '/FeedId');
-        validateObject(subfeedName, '/SubfeedName');
+        validateObject(subfeedHash, '/SubfeedHash');
         assert(Array.isArray(messages), 'messages is not an array');
-        await this._daemon.feedManager().submitMessages({feedId, subfeedName, messages});
+        await this._node.feedManager().submitMessages({feedId, subfeedHash, messages, timeoutMsec});
         res.json({ success: true })
     }
     // /feed/getMessages - get messages from a local or remote subfeed
     async _feedApiGetMessages(req, res) {
         const reqData = req.body;
         const {
-            feedId, subfeedName, position, maxNumMessages, waitMsec
+            feedId, subfeedHash, position, maxNumMessages, waitMsec
         } = reqData;
         validateObject(feedId, '/FeedId');
-        validateObject(subfeedName, '/SubfeedName');
+        validateObject(subfeedHash, '/SubfeedHash');
         // assert(typeof(position) === 'number');
         // assert(typeof(maxNumMessages) === 'number');
         // assert(typeof(waitMsec) === 'number');
-        const messages = await this._daemon.feedManager().getMessages({
-            feedId, subfeedName, position, maxNumMessages, waitMsec
+        const messages = await this._node.feedManager().getMessages({
+            feedId, subfeedHash, position, maxNumMessages, waitMsec
         });
         res.json({ success: true, messages });
     }
@@ -391,15 +376,15 @@ export default class DaemonApiServer {
     async _feedApiGetSignedMessages(req, res) {
         const reqData = req.body;
         const {
-            feedId, subfeedName, position, maxNumMessages, waitMsec
+            feedId, subfeedHash, position, maxNumMessages, waitMsec
         } = reqData;
         validateObject(feedId, '/FeedId');
-        validateObject(subfeedName, '/SubfeedName');
+        validateObject(subfeedHash, '/SubfeedHash');
         // assert(typeof(position) === 'number');
         // assert(typeof(maxNumMessages) === 'number');
         // assert(typeof(waitMsec) === 'number');
-        const signedMessages = await this._daemon.feedManager().getSignedMessages({
-            feedId, subfeedName, position, maxNumMessages, waitMsec
+        const signedMessages = await this._node.feedManager().getSignedMessages({
+            feedId, subfeedHash, position, maxNumMessages, waitMsec
         });
         res.json({ success: true, signedMessages });
     }
@@ -407,12 +392,12 @@ export default class DaemonApiServer {
     async _feedApiGetNumMessages(req, res) {
         const reqData = req.body;
         const {
-            feedId, subfeedName
+            feedId, subfeedHash
         } = reqData;
         validateObject(feedId, '/FeedId');
-        validateObject(subfeedName, '/SubfeedName');
-        const numMessages = await this._daemon.feedManager().getNumMessages({
-            feedId, subfeedName
+        validateObject(subfeedHash, '/SubfeedHash');
+        const numMessages = await this._node.feedManager().getNumMessages({
+            feedId, subfeedHash
         });
         res.json({ success: true, numMessages });
     }
@@ -424,18 +409,18 @@ export default class DaemonApiServer {
             timeoutMsec
         } = reqData;
         validateObject(feedId, '/FeedId');
-        const info = await this._daemon.feedManager().getFeedInfo({feedId, timeoutMsec});
+        const info = await this._node.feedManager().getFeedInfo({feedId, timeoutMsec});
         res.json({ success: true, info });
     }
     // /feed/getAccessRules - get access rules for a local writeable subfeed
     async _feedApiGetAccessRules(req, res) {
         const reqData = req.body;
         const {
-            feedId, subfeedName
+            feedId, subfeedHash
         } = reqData;
         validateObject(feedId, '/FeedId');
-        validateObject(subfeedName, '/SubfeedName');
-        const accessRules = await this._daemon.feedManager().getAccessRules({feedId, subfeedName});
+        validateObject(subfeedHash, '/SubfeedHash');
+        const accessRules = await this._node.feedManager().getAccessRules({feedId, subfeedHash});
         validateObject(accessRules, '/AccessRules');
         res.json({ success: true, accessRules });
     }
@@ -443,29 +428,29 @@ export default class DaemonApiServer {
     async _feedApiSetAccessRules(req, res) {
         const reqData = req.body;
         const {
-            feedId, subfeedName, accessRules
+            feedId, subfeedHash, accessRules
         } = reqData;
         validateObject(feedId, '/FeedId');
-        validateObject(subfeedName, '/SubfeedName');
+        validateObject(subfeedHash, '/SubfeedHash');
         validateObject(accessRules, '/AccessRules');
-        await this._daemon.feedManager().setAccessRules({feedId, subfeedName, accessRules});
+        await this._node.feedManager().setAccessRules({feedId, subfeedHash, accessRules});
         res.json({ success: true });
     }
     // Helper function for returning http request with an error response
-    async _errorResponse(req, res, code, errstr) {
-        log().info(`Responding with error: ${code} ${errstr}`);
+    async _errorResponse(req, res, code, errorString) {
+        console.info(`Responding with error: ${code} ${errorString}`);
         try {
-            res.status(code).send(errstr);
+            res.status(code).send(errorString);
         }
         catch(err) {
-            log().warning(`Problem sending error`, {error: err.message});
+            console.warn(`Problem sending error`, {error: err.message});
         }
-        await waitMsec(100);
+        await sleepMsec(100);
         try {
             req.connection.destroy();
         }
         catch(err) {
-            log().warning('Problem destroying connection', {error: err.message});
+            console.warn('Problem destroying connection', {error: err.message});
         }
     }
     // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
@@ -475,7 +460,7 @@ export default class DaemonApiServer {
             subfeedWatches, waitMsec
         } = reqData;
         // assert(typeof(waitMsec) === 'number');
-        const messages = await this._daemon.feedManager().watchForNewMessages({
+        const messages = await this._node.feedManager().watchForNewMessages({
             subfeedWatches, waitMsec
         });
         res.json({ success: true, messages });
@@ -489,10 +474,6 @@ export default class DaemonApiServer {
         }
         await start_http_server(this._app, port, stopper);
     }
-}
-
-function waitMsec(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 const isLocalRequest = (req) => {

@@ -1,8 +1,8 @@
 import { exec } from 'child_process'
 import fs, { writeSync } from 'fs';
-import { sha1sum } from './common/crypto_util.js';
+import { sha1sum } from './common/crypto_util';
 import { assert } from 'console';
-import { randomAlphaString } from './common/util.js';
+import { randomAlphaString } from './common/util';
 import crypto from 'crypto';
 
 const _getTemporaryDirectory = () => {
@@ -188,7 +188,8 @@ export const getLocalFileInfo = async ({fileKey}) => {
         return null;
     }
     else {
-        throw Error('Problem with fileKey', fileKey);
+        console.warn(fileKey);
+        throw Error('Problem with fileKey');
     }
 }
 

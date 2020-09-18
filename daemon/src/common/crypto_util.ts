@@ -1,13 +1,14 @@
 import crypto from 'crypto';
-import { kacheryP2PSerialize } from './util.js';
+import { PublicKey, PrivateKey, PublicKeyHex, PrivateKeyHex, KeyPair, Signature, Sha1Hash, toStr } from '../interfaces';
+import { kacheryP2PSerialize } from './util';
 
 const ed25519PubKeyPrefix = "302a300506032b6570032100";
 const ed25519PrivateKeyPrefix = "302e020100300506032b657004220420";
 
 // safe
-export const getSignature = (obj, keyPair) => {
+export const getSignature = (obj: Object, keyPair: KeyPair): Signature => {
     try {
-        return crypto.sign(null, kacheryP2PSerialize(obj), keyPair.privateKey).toString('hex');
+        return crypto.sign(null, kacheryP2PSerialize(obj), toStr(keyPair.privateKey)).toString('hex') as any as Signature;
     }
     catch(err) {
         console.warn(err);
@@ -16,9 +17,9 @@ export const getSignature = (obj, keyPair) => {
     }
 }
 
-export const getSignatureJson = (obj, keyPair) => {
+export const getSignatureJson = (obj: Object, keyPair: KeyPair): Signature => {
     try {
-        return crypto.sign(null, Buffer.from(JSONStringifyDeterministic(obj)), keyPair.privateKey).toString('hex');
+        return crypto.sign(null, Buffer.from(JSONStringifyDeterministic(obj)), toStr(keyPair.privateKey)).toString('hex') as any as Signature;
     }
     catch(err) {
         console.warn(err);
@@ -27,13 +28,12 @@ export const getSignatureJson = (obj, keyPair) => {
     }
 }
 
-export const verifySignatureJson = (obj, signature, publicKey, opts) => {
-    opts = opts || {};
+export const verifySignatureJson = (obj: Object, signature: Signature, publicKey: PublicKey, opts: {checkTimestamp: boolean}={checkTimestamp: false}) => {
     if (opts.checkTimestamp) {
-        if (!obj.timestamp) {
+        if (!obj['timestamp']) {
             return false;
         }
-        const elapsed = (new Date()) - obj.timestamp;
+        const elapsed = Number(new Date()) - obj['timestamp'];
         // needs to be less than 30 minutes old
         const numMinutes = 30;
         if (elapsed > numMinutes * 60 * 1000) {
@@ -41,7 +41,7 @@ export const verifySignatureJson = (obj, signature, publicKey, opts) => {
         }
     }
     try {
-        return crypto.verify(null, Buffer.from(JSONStringifyDeterministic(obj)), publicKey, Buffer.from(signature, 'hex'));
+        return crypto.verify(null, Buffer.from(JSONStringifyDeterministic(obj)), toStr(publicKey), Buffer.from(toStr(signature), 'hex'));
     }
     catch(err) {
         console.warn(err);
@@ -50,13 +50,12 @@ export const verifySignatureJson = (obj, signature, publicKey, opts) => {
     }
 }
 
-export const verifySignature = (obj, signature, publicKey, opts) => {
-    opts = opts || {};
+export const verifySignature = (obj: Object, signature: Signature, publicKey: PublicKey, opts={checkTimestamp: false}): boolean => {
     if (opts.checkTimestamp) {
-        if (!obj.timestamp) {
+        if (!obj['timestamp']) {
             return false;
         }
-        const elapsed = (new Date()) - obj.timestamp;
+        const elapsed = Number(new Date()) - obj['timestamp'];
         // needs to be less than 30 minutes old
         const numMinutes = 30;
         if (elapsed > numMinutes * 60 * 1000) {
@@ -64,7 +63,7 @@ export const verifySignature = (obj, signature, publicKey, opts) => {
         }
     }
     try {
-        return crypto.verify(null, kacheryP2PSerialize(obj), publicKey, Buffer.from(signature, 'hex'));
+        return crypto.verify(null, kacheryP2PSerialize(obj), toStr(publicKey), Buffer.from(toStr(signature), 'hex'));
     }
     catch(err) {
         console.warn(err);
@@ -73,13 +72,13 @@ export const verifySignature = (obj, signature, publicKey, opts) => {
     }
 }
 
-export const sha1sum = (txt) => {
+export const sha1sum = (txt: string): Sha1Hash => {
     var shasum = crypto.createHash('sha1')
     shasum.update(txt)
-    return shasum.digest('hex')
+    return shasum.digest('hex') as any as Sha1Hash;
 }
 
-export const publicKeyToHex = (publicKey) => {
+export const publicKeyToHex = (publicKey: PublicKey): PublicKeyHex => {
     const x = publicKey.split('\n');
     if (x[0] !== '-----BEGIN PUBLIC KEY-----') {
         throw Error('Problem in public key format.');
@@ -91,10 +90,10 @@ export const publicKeyToHex = (publicKey) => {
     if (!ret.startsWith(ed25519PubKeyPrefix)) {
         throw Error('Problem in public key format.');
     }
-    return ret.slice(ed25519PubKeyPrefix.length);
+    return ret.slice(ed25519PubKeyPrefix.length) as any as PublicKeyHex;
 }
 
-export const privateKeyToHex = (privateKey) => {
+export const privateKeyToHex = (privateKey: PrivateKey): PrivateKeyHex => {
     const x = privateKey.split('\n');
     if (x[0] !== '-----BEGIN PRIVATE KEY-----') {
         throw Error('Problem in private key format.');
@@ -106,25 +105,25 @@ export const privateKeyToHex = (privateKey) => {
     if (!ret.startsWith(ed25519PrivateKeyPrefix)) {
         throw Error('Problem in private key format.');
     }
-    return ret.slice(ed25519PrivateKeyPrefix.length);
+    return ret.slice(ed25519PrivateKeyPrefix.length) as any as PrivateKeyHex;
 }
 
-export const hexToPublicKey = (x) => {
+export const hexToPublicKey = (x: PublicKeyHex): PublicKey => {
     if (!x) {
         throw Error('Error in hexToPublicKey. Input is empty.');
     }
-    return `-----BEGIN PUBLIC KEY-----\n${Buffer.from(ed25519PubKeyPrefix + x, 'hex').toString('base64')}\n-----END PUBLIC KEY-----\n`;
+    return `-----BEGIN PUBLIC KEY-----\n${Buffer.from(ed25519PubKeyPrefix + x, 'hex').toString('base64')}\n-----END PUBLIC KEY-----\n` as any as PublicKey;
 }
 
-export const hexToPrivateKey = (x) => {
+export const hexToPrivateKey = (x: PrivateKeyHex): PrivateKey => {
     if (!x) {
         throw Error('Error in hexToPrivateKey. Input is empty.');
     }
-    return `-----BEGIN PRIVATE KEY-----\n${Buffer.from(ed25519PrivateKeyPrefix + x, 'hex').toString('base64')}\n-----END PRIVATE KEY-----\n`;
+    return `-----BEGIN PRIVATE KEY-----\n${Buffer.from(ed25519PrivateKeyPrefix + x, 'hex').toString('base64')}\n-----END PRIVATE KEY-----\n` as any as PrivateKey;
 }
 
 export const createKeyPair = () => {
-    return crypto.generateKeyPairSync('ed25519', {
+    const {publicKey, privateKey} = crypto.generateKeyPairSync('ed25519', {
         // modulusLength: 1024,
         publicKeyEncoding: {
             type: 'spki',
@@ -137,10 +136,14 @@ export const createKeyPair = () => {
             // passphrase: 'top secret'
         }
     });
+    return {
+        publicKey: publicKey as any as PublicKey,
+        privateKey: privateKey as any as PrivateKey
+    }
 }
 
 // Thanks: https://stackoverflow.com/questions/16167581/sort-object-properties-and-json-stringify
-export const JSONStringifyDeterministic = ( obj, space ) => {
+export const JSONStringifyDeterministic = ( obj, space=undefined ) => {
     var allKeys = [];
     JSON.stringify( obj, function( key, value ){ allKeys.push( key ); return value; } )
     allKeys.sort();

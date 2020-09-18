@@ -1,3 +1,7 @@
+import fs from 'fs';
+import https from 'https';
+import http from 'http';
+
 const start_http_server = async (app, listen_port, stopper) => {
     // convenient for starting either as http or https depending on the port
     app.port = listen_port;
@@ -24,7 +28,7 @@ const start_http_server = async (app, listen_port, stopper) => {
         app.server.close();
     });
     await app.server.listen(listen_port);
-    log().info('API server is running', {protocol: app.protocol, port: app.port}, {print: true});
+    console.info('API server is running', {protocol: app.protocol, port: app.port}, {print: true});
 }
 
 export default start_http_server;

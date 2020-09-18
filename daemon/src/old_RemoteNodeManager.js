@@ -1,35 +1,35 @@
 import assert from 'assert';
 import RemoteNode from './RemoteNode.js';
-import { JSONStringifyDeterministic } from './common/crypto_util.js';
-import { sleepMsec } from './common/util.js';
+import { JSONStringifyDeterministic } from './common/crypto_util';
+import { sleepMsec } from './common/util';
 import { validateChannelName, validateNodeToNodeMessage, validateNodeId, validateObject, validateNodeData, validatePort, validateSha1Hash } from './schema/index.js';
+import KacheryP2PNode from './KacheryP2PNode.js';
+import { ChannelName, NodeId } from './interfaces.js';
+
+function str(x: any) {
+    return x as string
+}
 
 class RemoteNodeManager {
-    constructor(node) {
+    _node: KacheryP2PNode
+    _remoteNodes: { [key: string]: RemoteNode; } = {} // by node Id
+    _halt: boolean = false
+    _localNodeInfo: Object | null = null // todo: type this
+    _nodeIdsByChannelName: { [key: string]: {[key: string]: {timestamp: Date}}; } = {}
+    _onMessageCallbacks: Function[]
+    constructor(node: KacheryP2PNode) {
         this._node = node;
-        this._remoteNodes = {}; // by id
-        this._halt = false;
-        this._localNodeInfo = null;
-
-        this._nodeIdsByTransformedChannelName = {};
-
-        this._onMessageCallbacks = [];
         this._start();
     }
-    associateNodeWithTransformedChannelName({nodeId, transformedChannelName}) {
-        validateNodeId(nodeId);
-        validateSha1Hash(transformedChannelName);
-
-        if (!(transformedChannelName in this._nodeIdsByTransformedChannelName)) {
-            this._nodeIdsByTransformedChannelName[transformedChannelName] = {};
+    associateNodeWithChannelName(nodeId: NodeId, channelName: ChannelName) {
+        if (!((str(channelName)) in this._nodeIdsByChannelName)) {
+            this._nodeIdsByChannelName[str(channelName)] = {};
         }
-        this._nodeIdsByTransformedChannelName[transformedChannelName][nodeId] = {timestamp: new Date()};
+        this._nodeIdsByChannelName[str(channelName)][str(nodeId)] = {timestamp: new Date()};
     }
-    getNodeIdsForTransformedChannelName(transformedChannelName) {
-        validateSha1Hash(transformedChannelName);
-
+    getNodeIdsForChannelName(channelName: ChannelName) {
         const ret = [];
-        const x = this._nodeIdsByTransformedChannelName[transformedChannelName];
+        const x = this._nodeIdsByChannelName[str(channelName)];
         if (x) {
             for (let nodeId in x) {
                 ret.push(nodeId);

@@ -1,12 +1,12 @@
-#!/usr/bin/env node
+#!/usr/bin/env ts-node
 
 import os from 'os';
 import fs from 'fs';
 import yargs from 'yargs';
-import Daemon from './Daemon.js';
-import DaemonApiServer from './DaemonApiServer.js';
-import PublicApiServer from './PublicApiServer.js';
-// import FileServer from './FileServer.js';
+import KacheryP2PNode from './KacheryP2PNode';
+import DaemonApiServer from './DaemonApiServer';
+import PublicApiServer from './PublicApiServer';
+import PublicWebSocketServer from './PublicWebSocketServer'; // todo
 import assert from 'assert';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
@@ -31,16 +31,7 @@ process.on('uncaughtException', function (err) {
 });
 
 function main() {
-  // for (let i=0; i<10; i++) {
-  //   const keyPair = createKeyPair();
-  //   console.info(publicKeyToHex(keyPair.publicKey));
-  // }
-  // for (let i=0; i<10; i++) {
-  //   const keyPair = createKeyPair();
-  //   console.info(privateKeyToHex(keyPair.privateKey));
-  // }
-  // return;
-  const argv = yargs
+  const argv = yargs()
     .scriptName('kachery-p2p-daemon')
     .command({
       command: 'start',
@@ -55,13 +46,8 @@ function main() {
           type: 'number',
           default: 0
         })
-        yargs.option('dverbose', {
-          describe: 'Verbosity level for discovery.',
-          type: 'number',
-          default: 0
-        })
         yargs.option('host', {
-          describe: 'IP of this daemon.',
+          describe: 'host name or IP address of this daemon.',
           type: 'string',
           default: ''
         })
@@ -71,25 +57,29 @@ function main() {
           default: os.hostname()
         })
         yargs.option('port', {
-          describe: 'Port to listen on.',
+          describe: 'Override the default http port to listen on.',
           type: 'string'
         })
-        yargs.option('file-server-port', {
-          describe: 'Optional port for serving static files over http.',
+        yargs.option('udp-port', {
+          describe: 'Override the default UDP port (by default it will equal the http port).',
+          type: 'string'
+        })
+        yargs.option('websocket-port', {
+          describe: 'Override the default websocket port to listen on.',
           type: 'string'
         })
         yargs.option('bootstrap', {
-          describe: 'Override the default bootstrap node. Use --bootstrap ip:port',
+          describe: 'Override the default bootstrap nodes. Use --bootstrap <host-or-ip>:<port>',
           type: 'array',
         })
-        yargs.option('nobootstrap', {
+        yargs.option('no-bootstrap', {
           describe: 'Do not use bootstrap nodes',
           type: 'boolean'
         })
       },
       handler: (argv) => {
-        let channelNames = argv.channel || [];
-        let bootstrapStrings = argv.bootstrap || null;
+        const channelNames = argv.channel || [];
+        const bootstrapStrings = argv.bootstrap || null;
         const bootstrapInfos = bootstrapStrings ? (
           bootstrapStrings.map(x => parseBootstrapInfo(x))
         ): null;
@@ -97,21 +87,25 @@ function main() {
         if (!fs.existsSync(configDir)) {
           fs.mkdirSync(configDir);
         }
-        const listenHost = argv.host;
-        const listenPort = argv.port ? Number(argv.port) : null;
-        const fileServerPort = argv['file-server-port'] ? Number(argv['file-server-port']) : null;
+        const hostName = argv.host || null;
+        const httpListenPort = argv.port ? Number(argv.port) : 14507;
+        const udpListenPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort;
+        const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : 14508;
+        const daemonApiPort = process.env.KACHERY_P2P_DAEMON_API_PORT || process.env.KACHERY_P2P_API_PORT || 20431;
         const label = argv.label;
-        const noBootstrap = argv['nobootstrap'] ? true : false;
+        const noBootstrap = argv['no-bootstrap'] ? true : false;
+        const verbose = argv.verbose || 0;
         startDaemon({
-          configDir,
           channelNames,
-          bootstrapInfos,
-          listenHost,
-          listenPort,
-          fileServerPort,
-          verbose: argv.verbose,
-          discoveryVerbose: argv.dverbose,
+          configDir,
+          verbose,
+          hostName,
+          daemonApiPort,
+          httpListenPort,
+          webSocketListenPort,
+          udpListenPort,
           label,
+          bootstrapInfos,
           opts: {
             noBootstrap
           }
@@ -129,30 +123,58 @@ function parseBootstrapInfo(x) {
   const a = x.split(':');
   assert(a.length === 2, 'Improper bootstrap string')
   return {
-    address: a[0],
+    hostName: a[0],
     port: Number(a[1])
   };
 }
 
-const daemonApiPort = process.env.KACHERY_P2P_DAEMON_API_PORT || process.env.KACHERY_P2P_API_PORT || 20431;
-const publicApiPort = process.env.KACHERY_P2P_PUBLIC_API_PORT || 20432;
+const startDaemon = async ({
+  channelNames,
+  configDir,
+  verbose,
+  hostName,
+  daemonApiPort,
+  httpListenPort,
+  webSocketListenPort,
+  udpListenPort,
+  label,
+  bootstrapInfos,
+  opts
+}) => {
+  // const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, udpListenPort: listenPort, label, bootstrapInfos, opts});
+  const kNode = new KacheryP2PNode({
+    configDir,
+    verbose,
+    httpAddress: {
+      hostName,
+      port: httpListenPort
+    },
+    webSocketAddress: {
+      hostName,
+      port: webSocketListenPort
+    },
+    label,
+    bootstrapInfos,
+    channelNames,
+    opts
+  })
 
-const startDaemon = async ({ channelNames, configDir, listenHost, listenPort, fileServerPort, verbose, discoveryVerbose, label, bootstrapInfos, opts }) => {
-  const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, udpListenPort: listenPort, label, bootstrapInfos, opts});
-
-  const daemonApiServer = new DaemonApiServer(daemon, {verbose});
+  const daemonApiServer = new DaemonApiServer(kNode, {verbose});
   daemonApiServer.listen(daemonApiPort);
 
-  const publicApiServer = new publicApiServer(daemon, {verbose});
-  publicApiServer.listen(publicApiPort);
+  if (httpListenPort) {
+    const publicApiServer = new PublicApiServer(kNode, {verbose});
+    publicApiServer.listen(httpListenPort);
+  }
 
-  // if (fileServerPort) {
-  //   const fileServer = new FileServer({daemon, verbose});
-  //   fileServer.listen(fileServerPort);
-  // }
+  if (webSocketListenPort) {
+    const publicWebSocketServer = new PublicWebSocketServer(kNode, {verbose});
+    publicWebSocketServer.listen(webSocketListenPort); // todo
+  }
 
-  for (let channelName of channelNames) {
-    daemon.joinChannel(channelName);
+  if (udpListenPort) {
+    const publicUdpSocketServer = new PublicWebSocketServer(kNode, {verbose});
+    publicUdpSocketServer.listen(udpListenPort);
   }
 }
 

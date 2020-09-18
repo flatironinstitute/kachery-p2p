@@ -1,8 +1,8 @@
 import fs from 'fs'
-import { sleepMsec } from './common/util.js'
+import { sleepMsec } from './common/util'
 import Node from './Node.js';
-import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util.js';
-import FeedManager from './FeedManager.js';
+import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util';
+import FeedManager from './FeedManager';
 import { log, initializeLog } from './common/log.js';
 import { assert } from 'console';
 import { validateObject, validatePort, validateChannelName, validateNodeId } from './schema/index.js';

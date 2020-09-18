@@ -1,8 +1,8 @@
 import dgram from 'dgram';
-import { randomAlphaString, sleepMsec, kacheryP2PDeserialize, kacheryP2PSerialize } from './common/util.js';
+import { randomAlphaString, sleepMsec, kacheryP2PDeserialize, kacheryP2PSerialize } from './common/util';
 import { assert } from 'console';
 import { validateObject } from './schema/index.js';
-import { JSONStringifyDeterministic } from './common/crypto_util.js';
+import { JSONStringifyDeterministic } from './common/crypto_util';
 
 const MAX_UDP_PACKET_SIZE = 10000;
 const TARGET_PCT_LOST_BYTES = 2;

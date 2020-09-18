@@ -1,10 +1,10 @@
 import WebSocket from 'ws';
-import { verifySignature, hexToPublicKey, getSignature } from './common/crypto_util.js'
+import { verifySignature, hexToPublicKey, getSignature } from './common/crypto_util'
 import { protocolVersion } from './protocolVersion.js';
 import InternalUdpServer from './InternalUdpServer.js';
 import ip from 'ip';
 import { validateObject, validateNodeToNodeMessage, validateNodeId } from './schema/index.js';
-import { kacheryP2PSerialize, kacheryP2PDeserialize } from './common/util.js';
+import { kacheryP2PSerialize, kacheryP2PDeserialize } from './common/util';
 
 // todo: monitor and clean up closed connections throughout file
 

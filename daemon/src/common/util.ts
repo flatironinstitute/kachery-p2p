@@ -1,5 +1,6 @@
 import fs from 'fs';
 import bson from 'bson';
+import { sha1sum } from './crypto_util';
 
 export const randomString = (num_chars) => {
     var text = "";
@@ -72,7 +73,7 @@ const sortKeysInObject = (x) => {
 const convertBinaryToBufferInObject = (x) => {
     if (x instanceof bson.Binary) {
         // This might be the troublesome line.
-        // We should check to see if the underlying type is bytearray before returning the internal buffer.
+        // We should check to see if the underlying type is byte array before returning the internal buffer.
         return x.buffer;
     }
     else if (x instanceof Object) {

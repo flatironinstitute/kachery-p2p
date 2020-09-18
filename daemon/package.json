@@ -5,8 +5,11 @@
     "node": ">=12.0.0"
   },
   "description": "Peer-to-peer content-addressable file sharing",
-  "bin": "./src/cli.js",
+  "bin": "./src/cli.ts",
   "scripts": {
+    "start": "tsc && node dist/cli.js",
+    "dev": "ts-node ./src/cli.ts",
+    "build": "tsc",
     "test": "echo \"No tests\" && exit 0",
     "publish-dry": "npm publish --dry-run",
     "publish-go": "npm publish"
@@ -15,6 +18,9 @@
   "author": "Jeremy Magland",
   "license": "Apache-2.0",
   "dependencies": {
+    "@types/bson": "^4.0.2",
+    "@types/express": "^4.17.8",
+    "@types/node": "^14.11.1",
     "ajv": "^6.12.4",
     "axios": "^0.19.2",
     "bson": "^4.1.0",
@@ -24,5 +30,9 @@
     "jsonschema": "^1.2.6",
     "ws": "^7.3.1",
     "yargs": "^15.3.1"
+  },
+  "devDependencies": {
+    "ts-node": "^9.0.0",
+    "typescript": "^4.0.2"
   }
 }

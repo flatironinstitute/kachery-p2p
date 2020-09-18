@@ -1,6 +1,7 @@
-import { sleepMsec } from './common/util.js'
+import { sleepMsec } from './common/util'
 import { OutgoingConnectionError } from './SocketServer.js';
 import { validateObject, validateSha1Hash, validateNodeData, validateNodeId, validatePort } from './schema/index.js';
+import RemoteNodeManager from './RemoteNodeManager';
 
 class BootstrapPeerManager {
     constructor({remoteNodeManager, websocketServer, address, port}) {
