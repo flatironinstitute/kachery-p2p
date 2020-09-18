@@ -6,7 +6,7 @@ import { createKeyPair, publicKeyToHex, privateKeyToHex, getSignatureJson, hexTo
 import { assert } from 'console';
 import { validateObject, validateSha1Hash, validateNodeId } from './schema/index.js';
 import KacheryP2PNode from './KacheryP2PNode';
-import { FeedId, feedIdToPublicKeyHex, NodeId, PrivateKey, PrivateKeyHex, PublicKey, PublicKeyHex, SubfeedHash, toStr, SignedMessage } from './interfaces';
+import { FeedId, feedIdToPublicKeyHex, NodeId, PrivateKey, PrivateKeyHex, PublicKey, PublicKeyHex, SubfeedHash, toStr, SignedMessage, FindLiveFeedResult } from './interfaces';
 
 // todo fix feeds config on disk (too many in one .json file)
 
@@ -329,19 +329,23 @@ class FeedManager {
         // If so, append the messages. We also provide the sending node ID in the meta data for the messages
         subfeed.appendMessages(messages, {metaData: {submittedByNodeId: fromNodeId}});
     }
-    async _loadFeedsConfig() {
+    async _loadFeedsConfig(): Promise<FeedsConfig> {
         // Load the configuration for all feeds, if not already loaded
         // This contains all the private keys for the feeds as well as the local name/ID associations for feed
 
         // Only load if not already in memory
-        if (!this._feedsConfig) {
+        if (this._feedsConfig) {
+            return this._feedsConfig;
+        }
+        else {
             const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
+            // todo: validate feedsConfig here
             const x = await readJsonFile(configDir + '/feeds.json', {});
             x.feeds = x.feeds || {};
             x.feedIdsByName = x.feedIdsByName || {};
             this._feedsConfig = x;
+            return x;
         }
-        return this._feedsConfig;
     }
     async _saveFeedsConfig(config) {
         // Store the configuration for all feeds
@@ -418,7 +422,7 @@ class RemoteFeedManager {
 
         // Search and find the info for the feed (channel and node id)
         // If not found, return null
-        let liveFeedInfo = null;
+        let liveFeedInfo;
         while (true) {
             try {
                 liveFeedInfo = await this.findLiveFeedInfo({feedId, timeoutMsec: 0});
@@ -460,7 +464,7 @@ class RemoteFeedManager {
 
         // Search and find the info for the feed (channel and nodeId)
         let waitMsec = 2000;
-        let liveFeedInfo = null;
+        let liveFeedInfo;
         while (true) {
             try {
                 liveFeedInfo = await this.findLiveFeedInfo({feedId, timeoutMsec});
@@ -500,7 +504,7 @@ class RemoteFeedManager {
         if (feedId in this._liveFeedInfos) {
             return this._liveFeedInfos[feedId];
         }
-        const asyncHelper = async () => {
+        const asyncHelper = async (): Promise<FindLiveFeedResult> => {
             return new Promise((resolve, reject) => {
                 // Find the live feed (this could in theory return multiple results, but ideally it should only return one)
                 const x = this._node.findLiveFeed({feedId, timeoutMsec});
@@ -816,7 +820,8 @@ class Subfeed {
     }
 }
 
-const readMessagesFile = async (path) => {
+// todo: type messages
+const readMessagesFile = async (path): Promise<Object[]> => {
     let txt;
     try {
         txt = await fs.promises.readFile(path, {encoding: 'utf8'});
@@ -827,7 +832,7 @@ const readMessagesFile = async (path) => {
     if (typeof(txt) !== 'string') {
         throw Error('Unexpected: txt is not a string.');
     }
-    let messages = [];
+    let messages: Object[] = [];
     const lines = txt.split('\n');
     for (let line of lines) {
         if (line) {

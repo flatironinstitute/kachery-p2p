@@ -144,6 +144,9 @@ class KacheryP2PNode {
             cancel: () => {}
         }
     }
+    async handleNodeToNodeRequest(requestBody) {
+        // todo
+    }
     async _start() {
         while (true) {
             if (this.#halted) return;
