@@ -4,7 +4,7 @@ import BootstrapPeerInterface from './BootstrapPeerInterface';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util';
 import { sleepMsec } from './common/util';
 import FeedManager from './FeedManager';
-import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage } from './interfaces';
+import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage, FindFileResult } from './interfaces';
 import RemoteNodeManager from './RemoteNodeManager';
 import { isAddress } from './interfaces';
 
@@ -17,6 +17,13 @@ interface Params {
     bootstrapInfos: Address[] | null,
     channelNames: ChannelName[],
     opts: {noBootstrap: boolean}
+}
+
+// todo
+interface LoadFileProgress {
+    bytesLoaded: bigint,
+    bytesTotal: bigint,
+    nodeId: NodeId | null
 }
 
 class KacheryP2PNode {
@@ -89,9 +96,9 @@ class KacheryP2PNode {
         // todo: figure out what else we need to halt
     }
     findFile(args: {fileKey: FileKey, timeoutMsec: number | undefined}): {
-        onFound: Function,
-        onFinished: Function,
-        cancel: Function
+        onFound: (callback: (result: FindFileResult) => void) => void,
+        onFinished: (callback: () => void) => void,
+        cancel: () => void
     } {
         // todo
         return {
@@ -101,10 +108,10 @@ class KacheryP2PNode {
         }
     }
     loadFile(args: {fileKey: FileKey, opts: {fromNode: NodeId | undefined, fromChannel: ChannelName | undefined}}): {
-        onFinished: Function,
-        onProgress: Function,
-        onError: Function,
-        cancel: Function
+        onFinished: (callback: () => void) => void,
+        onProgress: (callback: (progress: LoadFileProgress) => void) => void,
+        onError: (callback: (Error) => void) => void,
+        cancel: () => void
     } {
         // todo
         return {

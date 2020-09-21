@@ -1,12 +1,14 @@
-const isObject = (x: any) => {
+import { assert } from "console";
+
+const isObject = (x: any): x is Object => {
     return ((x !== null) && (typeof x === 'object'));
 }
 
-const isString = (x: any) => {
+export const isString = (x: any): x is string => {
     return ((x !== null) && (typeof x === 'string'));
 }
 
-const isFunction = (x: any) => {
+const isFunction = (x: any): x is Function => {
     return ((x !== null) && (typeof x === 'function'));
 }
 
@@ -14,11 +16,11 @@ export const isNumber = (x: any): x is number => {
     return ((x !== null) && (typeof x === 'number'));
 }
 
-const isNull = (x: any) => {
+export const isNull = (x: any): x is null => {
     return x === null;
 }
 
-const isBoolean = (x: any) => {
+const isBoolean = (x: any): x is boolean => {
     return ((x !== null) && (typeof x === 'boolean'));
 }
 
@@ -37,7 +39,7 @@ const equalTo = (value: any): ((x: any) => boolean) => {
     }
 }
 
-const isArray2 = (testFunction: Function): ((x: any) => boolean) => {
+export const isArrayOf = (testFunction: (x: any) => boolean): ((x: any) => boolean) => {
     return (x) => {
         if ((x !== null) && (Array.isArray(x))) {
             for (let a of x) {
@@ -49,11 +51,12 @@ const isArray2 = (testFunction: Function): ((x: any) => boolean) => {
     }
 }
 
-const isObject2 = (testFunction: Function): ((x: any) => boolean) => {
+const isObjectOf = (keyTestFunction: (x: any) => boolean, valueTestFunction: (x: any) => boolean): ((x: any) => boolean) => {
     return (x) => {
         if (isObject(x)) {
             for (let k in x) {
-                if (!testFunction(x[k])) return false;
+                if (!keyTestFunction(k)) return false;
+                if (!valueTestFunction(x[k])) return false;
             }
             return true;
         }
@@ -130,14 +133,14 @@ const isSignature = (x: any): x is Signature => {
 export interface NodeId extends String {
     __nodeId__: never // phantom type
 }
-const isNodeId = (x: any): x is NodeId => {
+export const isNodeId = (x: any): x is NodeId => {
     if (!isString(x)) return false;
     return (/^[0-9a-f]{64}?$/.test(x));
 }
 export interface ChannelName extends String {
     __channelName__: never // phantom type
 }
-const isChannelName = (x: any): x is ChannelName => {
+export const isChannelName = (x: any): x is ChannelName => {
     if (!isString(x)) return false;
     return (/^[0-9a-zA-Z_\-\.]{4,160}?$/.test(x));
 }
@@ -145,7 +148,7 @@ const isChannelName = (x: any): x is ChannelName => {
 export interface FeedId extends String {
     __feedId__: never // phantom type
 }
-const isFeedId = (x: any): x is FeedId => {
+export const isFeedId = (x: any): x is FeedId => {
     if (!isString(x)) return false;
     return (/^[0-9a-f]{64}?$/.test(x));
 }
@@ -153,13 +156,19 @@ const isFeedId = (x: any): x is FeedId => {
 export interface SubfeedHash extends String {
     __subfeedHash__: never
 }
-const isSubfeedHash = (x: any): x is SubfeedHash => {
+export const isSubfeedHash = (x: any): x is SubfeedHash => {
     if (!isString(x)) return false;
     return (/^[0-9a-f]{40}?$/.test(x));
 }
 
-export interface FileKey extends Object {
-    __fileKey__: never
+// todo: expand filekey type
+export interface FileKey {
+    sha1: Sha1Hash
+}
+export const isFileKey = (x: any): x is FileKey => {
+    return validateObject(x, {
+        sha1: (a: any) => (isString(a) && /^[0-9a-f]{40}?$/.test(a))
+    });
 }
 
 export const feedIdToPublicKeyHex = (feedId: FeedId): PublicKeyHex => {
@@ -218,9 +227,9 @@ export interface SignedSubfeedMessage {
     body: {
         previousSignature: Signature,
         messageNumber: number,
-        message: Object,
+        message: SubfeedMessage,
         timestamp: Timestamp,
-        metaData?: Object
+        metaData?: SubfeedMessageMetaData
     },
     signature: Signature
 }
@@ -233,6 +242,18 @@ export const isSignedSubfeedMessage = (x: any): x is SignedSubfeedMessage => {
         },
         signature: isSignature
     });
+}
+
+export interface SubfeedMessage extends Object {
+    __subfeedMessage__: never;
+};
+export const isSubfeedMessage = (x: any): x is SubfeedMessage => {
+    return isObject(x);
+}
+
+export type SubfeedMessageMetaData = Object;
+export const isSubfeedMessageMetaData = (x: any): x is SubfeedMessageMetaData => {
+    return isObject(x);
 }
 
 const validateObject = (x: any, spec: any): boolean => {
@@ -268,14 +289,51 @@ export const isFeedsConfigFeed = (x: any): x is FeedsConfigFeed => {
     });
 }
 
+export interface FeedName extends String {
+    __feedName__: never; // phantom
+}
+export const isFeedName = (x: any): x is FeedName => {
+    return isString(x);
+}
+
+export const objectToMap = <KeyType extends String, ValueType>(obj: Object) => {
+    return new Map<KeyType, ValueType>(Object.keys(obj).map(k => {
+        return [k as any as KeyType, obj[k] as any as ValueType];
+    }));
+}
+
+export const mapToObject = <KeyType extends String, ValueType>(m: Map<KeyType, ValueType>) => {
+    const ret = {};
+    m.forEach((v, k) => {
+        ret[k.toString()] = v;
+    });
+    return ret;
+}
+
 export interface FeedsConfig {
-    feeds: FeedsConfigFeed[],
+    feeds: {[key: string]: FeedsConfigFeed},
     feedIdsByName: {[key: string]: FeedId}
+}
+export interface FeedsConfigRAM {
+    feeds: Map<FeedId, FeedsConfigFeed>,
+    feedIdsByName: Map<FeedName, FeedId>
+}
+export const toFeedsConfigRAM = (x: FeedsConfig): FeedsConfigRAM => {
+    return {
+        feeds: objectToMap<FeedId, FeedsConfigFeed>(x.feeds),
+        feedIdsByName: objectToMap<FeedName, FeedId>(x.feedIdsByName)
+    }
+}
+export const toFeedsConfig = (x: FeedsConfigRAM): FeedsConfig => {
+    return {
+        feeds: mapToObject<FeedId, FeedsConfigFeed>(x.feeds),
+        feedIdsByName: mapToObject<FeedName, FeedId>(x.feedIdsByName)
+    }
 }
 export const isFeedsConfig = (x: any): x is FeedsConfig => {
     return validateObject(x, {
-        feeds: isArray2(isFeedsConfigFeed),
-        feedIdsByName: isObject2(isFeedId)
+        feeds: isObjectOf(isFeedId, isFeedsConfigFeed),
+        feedIdsByName: isObjectOf(isFeedName, isFeedId)
     })
 }
 
@@ -284,7 +342,7 @@ export interface SubfeedAccessRules {
 }
 export const isSubfeedAccessRules = (x: any): x is SubfeedAccessRules => {
     return validateObject(x, {
-        rules: isArray2(isSubfeedAccessRule)
+        rules: isArrayOf(isSubfeedAccessRule)
     })
 }
 
@@ -297,6 +355,14 @@ export const isSubfeedAccessRule = (x: any): x is SubfeedAccessRule => {
         nodeId: isNodeId,
         write: isBoolean
     })
+}
+
+
+export interface SubfeedWatchName extends String {
+    __subfeedWatchName__: never; // phantom
+}
+export const isSubfeedWatchName = (x: any) => {
+    return isString(x);
 }
 
 export interface SubfeedWatch {
@@ -312,7 +378,28 @@ const isSubfeedWatch = (x: any): x is SubfeedWatch => {
     });
 }
 
+export interface FeedSubfeedId extends String {
+    __feedSubfeedId__: never; // phantom
+}
+export const feedSubfeedId = (feedId: FeedId, subfeedHash: SubfeedHash): FeedSubfeedId => {
+    return (toStr(feedId) + ':' + toStr(subfeedHash)) as any as FeedSubfeedId; 
+}
+
 export type SubfeedWatches = {[key: string]: SubfeedWatch};
 export const isSubfeedWatches = (x: any): x is SubfeedWatches => {
-    return isObject2(isSubfeedWatch)(x);
+    return isObjectOf(isSubfeedWatchName, isSubfeedWatch)(x);
+}
+export type SubfeedWatchesRAM = Map<SubfeedWatchName, SubfeedWatch>;
+export const toSubfeedWatchesRAM = (x: SubfeedWatches) => {
+    return objectToMap<SubfeedWatchName, SubfeedWatch>(x);
+}
+export const toSubfeedWatches = (x: SubfeedWatchesRAM) => {
+    return mapToObject<SubfeedWatchName, SubfeedWatch>(x);
+}
+
+export interface FindFileResult {
+    channelName: ChannelName,
+    nodeId: NodeId,
+    fileKey: FileKey,
+    fileSize: bigint
 }

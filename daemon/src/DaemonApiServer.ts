@@ -1,12 +1,34 @@
 import express, { Express } from 'express';
 import JsonSocket from 'json-socket';
 import { sleepMsec } from './common/util';
-import { validateChannelName, validateObject, validateNodeId } from './schema/index.js';
+import { validateObject } from './schema/index.js';
 import { assert } from 'console';
 import start_http_server from './common/start_http_server.js';
 import KacheryP2PNode from './KacheryP2PNode';
-import { ChannelName, FileKey, isSubfeedWatches, NodeId, isNumber } from './interfaces';
-import { access } from 'fs';
+import { ChannelName, FileKey, isSubfeedWatches, NodeId, isNumber, isFeedsConfigFeed, isSubfeedAccessRules, isSubfeedHash, isFileKey, isNodeId, isChannelName, isFeedId, isString, isNull, isSignedSubfeedMessage, isSubfeedMessage, isArrayOf, toSubfeedWatchesRAM, FeedId, isFeedName, SubfeedMessage, SignedSubfeedMessage, FindLiveFeedResult, SubfeedAccessRules, SubfeedWatchName, mapToObject } from './interfaces';
+import { Socket } from 'net';
+
+interface Req {
+    body: any,
+    on: (eventName: string, callback: () => void) => void,
+    connection: Socket
+}
+
+interface Res {
+    json: (obj: {
+        success: boolean,
+        nodeId?: NodeId,
+        feedId?: FeedId,
+        messages?: SubfeedMessage[] | {[key: string]: SubfeedMessage[]},
+        signedMessages?: SignedSubfeedMessage[],
+        numMessages?: number,
+        info?: {isWriteable: boolean, liveFeedInfo: FindLiveFeedResult} | {isWriteable: boolean, liveFeedInfo: undefined},
+        accessRules?: SubfeedAccessRules | null
+    }) => void,
+    end: () => void,
+    status: (s: number) => Res,
+    send: (x: any) => Res
+}
 
 export default class DaemonApiServer {
     _node: KacheryP2PNode
@@ -211,31 +233,27 @@ export default class DaemonApiServer {
         });
     }
     // /probe - check whether the daemon is up and running and return info such as the node ID
-    async _apiProbe(req, res) {
+    async _apiProbe(req: Req, res: Res) {
         res.json({ success: true, nodeId: this._node.nodeId() });
     }
     // /halt - halt the kachery-p2p daemon (stops the server process)
-    async _apiHalt(req, res) {
-        await this._node.halt();
+    async _apiHalt(req: Req, res: Res) {
+        this._node.halt();
         this._stopper_callbacks.forEach(cb => {cb();});
         res.json({ success: true });
     }
     // /findFile - find a file (or feed) in the remote nodes. May return more than one.
-    async _apiFindFile(req, res) {
+    async _apiFindFile(req: Req, res: Res) {
         const reqData = req.body;
         // Returns the find request
-        validateObject(reqData.fileKey, '/FileKey');
-        if (reqData.timeoutMsec !== undefined) {
-            assert(typeof(reqData.timeoutMsec) === 'number', 'apiFindFile: timeoutMsec is not a number');
-        }
-        const fileKey: FileKey = reqData.fileKey as FileKey
-        const timeoutMsec: number | undefined = reqData.timeoutMsec;
+        const { fileKey, timeoutMsec } = reqData;
+        if (!isFileKey(fileKey)) throw Error(`Error in _apiFindFile: invalid fileKey`);
+        if (!isNumber(timeoutMsec)) throw Error(`Error in _apiFindFile: invalid timeoutMsec`);
         const x = this._node.findFile({fileKey, timeoutMsec});
         const jsonSocket = new JsonSocket(res);
         let isDone = false;
         x.onFound(result => {
             if (isDone) return;
-            validateObject(result, '/FindFileOrLiveFeedResult');
             // may return more than one result
             // we send them one-by-one
             jsonSocket.sendMessage(result);
@@ -253,20 +271,27 @@ export default class DaemonApiServer {
         });
     }
     // /loadFile - load a file from remote kachery node(s) and store in kachery storage
-    async _apiLoadFile(req, res) {
+    async _apiLoadFile(req: Req, res: Res) {
         const reqData = req.body;
-        validateObject(reqData.fileKey, '/FileKey');
-        const opts: {fromNode: NodeId | undefined, fromChannel: ChannelName | undefined} = {fromNode: undefined, fromChannel: undefined};
-        if (reqData.fromNode) {
-            validateNodeId(reqData.fromNode);
-            opts.fromNode = reqData.fromNode;
+        const { fileKey, fromNode, fromChannel } = reqData;
+        if (!isFileKey(fileKey)) throw Error(`Error in _apiLoadFile: invalid fileKey`);
+        const opts: {
+            fromNode: NodeId | undefined,
+            fromChannel: ChannelName | undefined
+        } = {
+            fromNode: undefined,
+            fromChannel: undefined
+        };
+        if (fromNode) {
+            if (!isNodeId(fromNode)) throw Error(`Error in _apiLoadFile: invalid fromNode`);
+            opts.fromNode = fromNode;
         }
-        if (reqData.fromChannel) {
-            validateChannelName(reqData.fromChannel);
-            opts.fromChannel = reqData.fromChannel;
+        if (fromChannel) {
+            if (!isChannelName(fromChannel)) throw Error(`Error in _apiLoadFile: invalid fromChannel`);
+            opts.fromChannel = fromChannel;
         }
         const x = this._node.loadFile({
-            fileKey: reqData.fileKey,
+            fileKey: fileKey,
             opts
         });
         const jsonSocket = new JsonSocket(res);
@@ -300,30 +325,30 @@ export default class DaemonApiServer {
         });
     }
     // /feed/createFeed - create a new writeable feed on this node
-    async _feedApiCreateFeed(req, res) {
+    async _feedApiCreateFeed(req: Req, res: Res) {
         const reqData = req.body;
         const feedName = reqData.feedName || null;
         if (feedName) {
-            assert(typeof(feedName) === 'string', 'feedName is not a string');
+            if (!isString(feedName)) throw Error(`Error in feedApiCreateFeed: invalid feedName`);
         }
-        const feedId = await this._node.feedManager().createFeed({feedName});
+        const feedId = await this._node.feedManager().createFeed({feedName: feedName ? feedName : null});
         res.json({ success: true, feedId });
     }
     // /feed/deleteFeed - delete feed on this node
-    async _feedApiDeleteFeed(req, res) {
+    async _feedApiDeleteFeed(req: Req, res: Res) {
         const reqData = req.body;
-        const feedId = reqData.feedId || null;
-        if (feedId) {
-            validateObject(feedId, '/FeedId');
+        const { feedId } = reqData;
+        if (!isFeedId(feedId)) {
+            throw Error(`Error in feedApiDeleteFeed. Invalid feedId.`);
         }
         await this._node.feedManager().deleteFeed({feedId});
         res.json({ success: true });
     }
     // /feed/getFeedId - lookup the ID of a local feed based on its name
-    async _feedApiGetFeedId(req, res) {
+    async _feedApiGetFeedId(req: Req, res: Res) {
         const reqData = req.body;
-        const feedName = reqData.feedName;
-        assert(typeof(feedName) === 'string', 'feedName is not a string');
+        const { feedName } = reqData;
+        if (!isFeedName(feedName)) throw Error(`Error in feedApiGetFeedId. Invalid feedName.`);
         const feedId = await this._node.feedManager().getFeedId({feedName});
         if (!feedId) {
             res.json({ success: false });
@@ -332,113 +357,114 @@ export default class DaemonApiServer {
         res.json({ success: true, feedId });
     }
     // /feed/appendMessages - append messages to a local writeable subfeed
-    async _feedApiAppendMessages(req, res) {
+    async _feedApiAppendMessages(req: Req, res: Res) {
         const reqData = req.body;
         const {
             feedId, subfeedHash, messages
         } = reqData;
-        validateObject(feedId, '/FeedId');
-        validateObject(subfeedHash, '/SubfeedHash');
-        assert(Array.isArray(messages), 'messages is not an array');
+        if (!isFeedId(feedId)) throw Error('Error in _feedApiAppendMessages: invalid feedId');
+        if (!isSubfeedHash(subfeedHash)) throw Error('Error in _feedApiAppendMessages: invalid subfeedHash');
+        if (!isArrayOf(isSubfeedMessage)(messages)) throw Error('Error in _feedApiAppendMessages: invalid messages');
         await this._node.feedManager().appendMessages({
             feedId, subfeedHash, messages
         });
         res.json({ success: true })
     }
     // /feed/submitMessages - submit messages to a remote live subfeed (must have permission)
-    async _feedApiSubmitMessages(req, res) {
+    async _feedApiSubmitMessages(req: Req, res: Res) {
         const reqData = req.body;
         const {
             feedId, subfeedHash, messages, timeoutMsec
         } = reqData;
-        validateObject(feedId, '/FeedId');
-        validateObject(subfeedHash, '/SubfeedHash');
-        assert(Array.isArray(messages), 'messages is not an array');
+        if (!isFeedId(feedId)) throw Error('Error in _feedApiSubmitMessages: invalid feedId');
+        if (!isSubfeedHash(subfeedHash)) throw Error('Error in _feedApiSubmitMessages: invalid subfeedHash');
+        if (!isArrayOf(isSubfeedMessage)(messages)) throw Error('Error in _feedApiSubmitMessages: invalid messages');
+        if (!isNumber(timeoutMsec)) throw Error(`Error in _feedApiSubmitMessages: invalid timeoutMsec`);
         await this._node.feedManager().submitMessages({feedId, subfeedHash, messages, timeoutMsec});
         res.json({ success: true })
     }
     // /feed/getMessages - get messages from a local or remote subfeed
-    async _feedApiGetMessages(req, res) {
+    async _feedApiGetMessages(req: Req, res: Res) {
         const reqData = req.body;
         const {
             feedId, subfeedHash, position, maxNumMessages, waitMsec
         } = reqData;
-        validateObject(feedId, '/FeedId');
-        validateObject(subfeedHash, '/SubfeedHash');
-        // assert(typeof(position) === 'number');
-        // assert(typeof(maxNumMessages) === 'number');
-        // assert(typeof(waitMsec) === 'number');
+        if (!isFeedId(feedId)) throw Error('Error in _feedApiGetMessages: invalid feedId');
+        if (!isSubfeedHash(subfeedHash)) throw Error('Error in _feedApiGetMessages: invalid subfeedHash');
+        if (!isNumber(position)) throw Error(`Error in _feedApiGetMessages: invalid position`);
+        if (!isNumber(maxNumMessages)) throw Error(`Error in _feedApiGetMessages: invalid maxNumMessages`);
+        if (!isNumber(waitMsec)) throw Error(`Error in _feedApiGetMessages: invalid waitMsec`);
         const messages = await this._node.feedManager().getMessages({
             feedId, subfeedHash, position, maxNumMessages, waitMsec
         });
         res.json({ success: true, messages });
     }
     // /feed/getSignedMessages - get signed messages from a local or remote subfeed
-    async _feedApiGetSignedMessages(req, res) {
+    async _feedApiGetSignedMessages(req: Req, res: Res) {
         const reqData = req.body;
         const {
             feedId, subfeedHash, position, maxNumMessages, waitMsec
         } = reqData;
-        validateObject(feedId, '/FeedId');
-        validateObject(subfeedHash, '/SubfeedHash');
-        // assert(typeof(position) === 'number');
-        // assert(typeof(maxNumMessages) === 'number');
-        // assert(typeof(waitMsec) === 'number');
+        if (!isFeedId(feedId)) throw Error('Error in _feedApiGetSignedMessages: invalid feedId');
+        if (!isSubfeedHash(subfeedHash)) throw Error('Error in _feedApiGetSignedMessages: invalid subfeedHash');
+        if (!isNumber(position)) throw Error(`Error in _feedApiGetSignedMessages: invalid position`);
+        if (!isNumber(maxNumMessages)) throw Error(`Error in _feedApiGetSignedMessages: invalid maxNumMessages`);
+        if (!isNumber(waitMsec)) throw Error(`Error in _feedApiGetSignedMessages: invalid waitMsec`);
         const signedMessages = await this._node.feedManager().getSignedMessages({
             feedId, subfeedHash, position, maxNumMessages, waitMsec
         });
         res.json({ success: true, signedMessages });
     }
     // /feed/getNumMessages - get number of messages in a subfeed
-    async _feedApiGetNumMessages(req, res) {
+    async _feedApiGetNumMessages(req: Req, res: Res) {
         const reqData = req.body;
         const {
             feedId, subfeedHash
         } = reqData;
-        validateObject(feedId, '/FeedId');
-        validateObject(subfeedHash, '/SubfeedHash');
+        if (!isFeedId(feedId)) throw Error('Error in _feedApiGetNumMessages: invalid feedId');
+        if (!isSubfeedHash(subfeedHash)) throw Error('Error in _feedApiGetNumMessages: invalid subfeedHash');
         const numMessages = await this._node.feedManager().getNumMessages({
             feedId, subfeedHash
         });
         res.json({ success: true, numMessages });
     }
     // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
-    async _feedApiGetFeedInfo(req, res) {
+    async _feedApiGetFeedInfo(req: Req, res: Res) {
         const reqData = req.body;
         const {
             feedId,
             timeoutMsec
         } = reqData;
-        validateObject(feedId, '/FeedId');
+        if (!isFeedId(feedId)) throw Error('Error in _feedApiGetFeedInfo: invalid feedId');
+        if (!isNumber(timeoutMsec)) throw Error(`Error in _feedApiGetFeedInfo: invalid timeoutMsec`);
         const info = await this._node.feedManager().getFeedInfo({feedId, timeoutMsec});
         res.json({ success: true, info });
     }
     // /feed/getAccessRules - get access rules for a local writeable subfeed
-    async _feedApiGetAccessRules(req, res) {
+    async _feedApiGetAccessRules(req: Req, res: Res) {
         const reqData = req.body;
         const {
             feedId, subfeedHash
         } = reqData;
-        validateObject(feedId, '/FeedId');
-        validateObject(subfeedHash, '/SubfeedHash');
+        if (!isFeedId(feedId)) throw Error('Error in _feedApiGetAccessRules: invalid feedId');
+        if (!isSubfeedHash(subfeedHash)) throw Error('Error in _feedApiGetAccessRules: invalid subfeedHash');
         const accessRules = await this._node.feedManager().getAccessRules({feedId, subfeedHash});
-        validateObject(accessRules, '/AccessRules');
         res.json({ success: true, accessRules });
     }
     // /feed/setAccessRules - set access rules for a local writeable subfeed
-    async _feedApiSetAccessRules(req, res) {
+    async _feedApiSetAccessRules(req: Req, res: Res) {
         const reqData = req.body;
         const {
             feedId, subfeedHash, accessRules
         } = reqData;
         if (!isFeedId(feedId)) throw Error('Error in _feedApiSetAccessRules: invalid feedId')
         if (!isSubfeedHash(subfeedHash)) throw Error('Error in _feedApiSetAccessRules: invalid subfeedHash')
-        if (!isAccessRules(accessRules)) throw Error('Error in _feedApiSetAccessRules: invalid accessRules')
+        if (!isSubfeedAccessRules(accessRules)) throw Error('Error in _feedApiSetAccessRules: invalid accessRules')
         await this._node.feedManager().setAccessRules({feedId, subfeedHash, accessRules});
         res.json({ success: true });
     }
     // Helper function for returning http request with an error response
-    async _errorResponse(req, res, code, errorString) {
+    async _errorResponse(req: Req, res: Res, code: number, errorString: string) {
         console.info(`Responding with error: ${code} ${errorString}`);
         try {
             res.status(code).send(errorString);
@@ -455,22 +481,22 @@ export default class DaemonApiServer {
         }
     }
     // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
-    async _feedApiWatchForNewMessages(req, res) {
+    async _feedApiWatchForNewMessages(req: Req, res: Res) {
         const reqData = req.body;
         const {
             subfeedWatches, waitMsec
         } = reqData;
         // assert(typeof(waitMsec) === 'number');
-        if (!isNumber(waitMsec)) {
-            throw Error('Invalid waitMsec in _feedApiWatchForNewMessages')
-        }
         if (!isSubfeedWatches(subfeedWatches)) {
             throw Error('Invalid subfeedWatches in _feedApiWatchForNewMessages')
         }
+        if (!isNumber(waitMsec)) {
+            throw Error('Invalid waitMsec in _feedApiWatchForNewMessages')
+        }
         const messages = await this._node.feedManager().watchForNewMessages({
-            subfeedWatches, waitMsec, maxNumMessages: 0
+            subfeedWatches: toSubfeedWatchesRAM(subfeedWatches), waitMsec, maxNumMessages: 0
         });
-        res.json({ success: true, messages });
+        res.json({ success: true, messages: mapToObject<SubfeedWatchName, SubfeedMessage[]>(messages) });
     }
     // Start listening via http/https
     async listen(port) {

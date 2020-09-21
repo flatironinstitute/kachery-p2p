@@ -12,10 +12,9 @@ function str(x: any) {
 
 class RemoteNodeManager {
     _node: KacheryP2PNode
-    _remoteNodes: { [key: string]: RemoteNode; } = {} // by node Id
+    _remoteNodes: Map<NodeId, RemoteNode> = new Map<NodeId, RemoteNode>()
     _halted: boolean = false
     _localNodeInfo: Object | null = null // todo: type this
-    _nodeIdsByChannelName: { [key: string]: {[key: string]: {timestamp: Date}}; } = {}
     _onMessageCallbacks: Function[]
     constructor(node: KacheryP2PNode) {
         this._node = node;
@@ -44,9 +43,9 @@ class RemoteNodeManager {
     //     return this._remoteNodes[peerId].bootstrapPeerInfo();
     // }
     halt() {
-        for (let nodeId in this._remoteNodes) {
-            this._remoteNodes[nodeId].halt();
-        }
+        this._remoteNodes.forEach((remoteNode) => {
+            remoteNode.halt();
+        })
         this._halted = true;
     }
     // isPeer(nodeId) {
