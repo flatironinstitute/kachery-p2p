@@ -10,7 +10,7 @@ const isFunction = (x: any) => {
     return ((x !== null) && (typeof x === 'function'));
 }
 
-const isNumber = (x: any) => {
+export const isNumber = (x: any): x is number => {
     return ((x !== null) && (typeof x === 'number'));
 }
 
@@ -18,18 +18,46 @@ const isNull = (x: any) => {
     return x === null;
 }
 
+const isBoolean = (x: any) => {
+    return ((x !== null) && (typeof x === 'boolean'));
+}
+
 const oneOf = (testFunctions: Function[]): ((x: any) => boolean) => {
     return (x) => {
         for (let tf of testFunctions) {
-            if (!tf(x)) return false;
+            if (tf(x)) return true;
         }
-        return true;
+        return false;
     }
 }
 
 const equalTo = (value: any): ((x: any) => boolean) => {
     return (x) => {
         return x === value;
+    }
+}
+
+const isArray2 = (testFunction: Function): ((x: any) => boolean) => {
+    return (x) => {
+        if ((x !== null) && (Array.isArray(x))) {
+            for (let a of x) {
+                if (!testFunction(a)) return false;
+            }
+            return true;
+        }
+        else return false;
+    }
+}
+
+const isObject2 = (testFunction: Function): ((x: any) => boolean) => {
+    return (x) => {
+        if (isObject(x)) {
+            for (let k in x) {
+                if (!testFunction(x[k])) return false;
+            }
+            return true;
+        }
+        else return false;
     }
 }
 
@@ -66,6 +94,10 @@ export interface Timestamp extends Number {
 const isTimestamp = (x: any) : x is Timestamp => {
     if (!isNumber(x)) return false;
     return true;
+}
+export const nowTimestamp = () => {
+    const ret = new Date()
+    return ret as any as Timestamp
 }
 
 export interface PublicKey extends String {
@@ -186,7 +218,9 @@ export interface SignedSubfeedMessage {
     body: {
         previousSignature: Signature,
         messageNumber: number,
-        message: Object
+        message: Object,
+        timestamp: Timestamp,
+        metaData?: Object
     },
     signature: Signature
 }
@@ -221,4 +255,64 @@ const validateObject = (x: any, spec: any): boolean => {
         }
     }
     return true;
+}
+
+export interface FeedsConfigFeed {
+    publicKey: PublicKeyHex,
+    privateKey: PrivateKeyHex | undefined
+}
+export const isFeedsConfigFeed = (x: any): x is FeedsConfigFeed => {
+    return validateObject(x, {
+        publicKey: isString,
+        privateKey: isString
+    });
+}
+
+export interface FeedsConfig {
+    feeds: FeedsConfigFeed[],
+    feedIdsByName: {[key: string]: FeedId}
+}
+export const isFeedsConfig = (x: any): x is FeedsConfig => {
+    return validateObject(x, {
+        feeds: isArray2(isFeedsConfigFeed),
+        feedIdsByName: isObject2(isFeedId)
+    })
+}
+
+export interface SubfeedAccessRules {
+    rules: SubfeedAccessRule[]
+}
+export const isSubfeedAccessRules = (x: any): x is SubfeedAccessRules => {
+    return validateObject(x, {
+        rules: isArray2(isSubfeedAccessRule)
+    })
+}
+
+export interface SubfeedAccessRule {
+    nodeId: NodeId,
+    write: boolean
+}
+export const isSubfeedAccessRule = (x: any): x is SubfeedAccessRule => {
+    return validateObject(x, {
+        nodeId: isNodeId,
+        write: isBoolean
+    })
+}
+
+export interface SubfeedWatch {
+    feedId: FeedId,
+    subfeedHash: SubfeedHash,
+    position: number
+}
+const isSubfeedWatch = (x: any): x is SubfeedWatch => {
+    return validateObject(x, {
+        feedId: isFeedId,
+        subfeedHash: isSubfeedHash,
+        position: isNumber
+    });
+}
+
+export type SubfeedWatches = {[key: string]: SubfeedWatch};
+export const isSubfeedWatches = (x: any): x is SubfeedWatches => {
+    return isObject2(isSubfeedWatch)(x);
 }

@@ -4,7 +4,7 @@ import BootstrapPeerInterface from './BootstrapPeerInterface';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util';
 import { sleepMsec } from './common/util';
 import FeedManager from './FeedManager';
-import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult } from './interfaces';
+import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage } from './interfaces';
 import RemoteNodeManager from './RemoteNodeManager';
 import { isAddress } from './interfaces';
 
@@ -122,9 +122,9 @@ class KacheryP2PNode {
         nodeId: NodeId,
         feedId: FeedId,
         subfeedHash: SubfeedHash,
-        position: bigint,
+        position: number,
         waitMsec: number
-    }): Promise<Object[]> {
+    }): Promise<SignedSubfeedMessage[]> {
         // todo
         return [];
     }

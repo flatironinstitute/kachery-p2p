@@ -5,7 +5,8 @@ import { validateChannelName, validateObject, validateNodeId } from './schema/in
 import { assert } from 'console';
 import start_http_server from './common/start_http_server.js';
 import KacheryP2PNode from './KacheryP2PNode';
-import { ChannelName, FileKey, NodeId } from './interfaces';
+import { ChannelName, FileKey, isSubfeedWatches, NodeId, isNumber } from './interfaces';
+import { access } from 'fs';
 
 export default class DaemonApiServer {
     _node: KacheryP2PNode
@@ -430,9 +431,9 @@ export default class DaemonApiServer {
         const {
             feedId, subfeedHash, accessRules
         } = reqData;
-        validateObject(feedId, '/FeedId');
-        validateObject(subfeedHash, '/SubfeedHash');
-        validateObject(accessRules, '/AccessRules');
+        if (!isFeedId(feedId)) throw Error('Error in _feedApiSetAccessRules: invalid feedId')
+        if (!isSubfeedHash(subfeedHash)) throw Error('Error in _feedApiSetAccessRules: invalid subfeedHash')
+        if (!isAccessRules(accessRules)) throw Error('Error in _feedApiSetAccessRules: invalid accessRules')
         await this._node.feedManager().setAccessRules({feedId, subfeedHash, accessRules});
         res.json({ success: true });
     }
@@ -460,8 +461,14 @@ export default class DaemonApiServer {
             subfeedWatches, waitMsec
         } = reqData;
         // assert(typeof(waitMsec) === 'number');
+        if (!isNumber(waitMsec)) {
+            throw Error('Invalid waitMsec in _feedApiWatchForNewMessages')
+        }
+        if (!isSubfeedWatches(subfeedWatches)) {
+            throw Error('Invalid subfeedWatches in _feedApiWatchForNewMessages')
+        }
         const messages = await this._node.feedManager().watchForNewMessages({
-            subfeedWatches, waitMsec
+            subfeedWatches, waitMsec, maxNumMessages: 0
         });
         res.json({ success: true, messages });
     }

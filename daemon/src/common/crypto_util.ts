@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { PublicKey, PrivateKey, PublicKeyHex, PrivateKeyHex, KeyPair, Signature, Sha1Hash, toStr } from '../interfaces';
+import { PublicKey, PrivateKey, PublicKeyHex, PrivateKeyHex, KeyPair, Signature, Sha1Hash, toStr, FeedId } from '../interfaces';
 import { kacheryP2PSerialize } from './util';
 
 const ed25519PubKeyPrefix = "302a300506032b6570032100";
@@ -90,6 +90,10 @@ export const publicKeyToHex = (publicKey: PublicKey): PublicKeyHex => {
         throw Error('Problem in public key format.');
     }
     return ret.slice(ed25519PubKeyPrefix.length) as any as PublicKeyHex;
+}
+
+export const publicKeyHexToFeedId = (publicKeyHex: PublicKeyHex): FeedId => {
+    return publicKeyToHex as any as FeedId;
 }
 
 export const privateKeyToHex = (privateKey: PrivateKey): PrivateKeyHex => {
