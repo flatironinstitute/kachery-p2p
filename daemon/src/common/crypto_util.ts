@@ -5,15 +5,14 @@ import { kacheryP2PSerialize } from './util';
 const ed25519PubKeyPrefix = "302a300506032b6570032100";
 const ed25519PrivateKeyPrefix = "302e020100300506032b657004220420";
 
-// safe
 export const getSignature = (obj: Object, keyPair: KeyPair): Signature => {
     try {
         return crypto.sign(null, kacheryP2PSerialize(obj), toStr(keyPair.privateKey)).toString('hex') as any as Signature;
     }
     catch(err) {
+        console.warn(obj);
         console.warn(err);
-        console.warn('Exception when creating signature.');
-        return null;
+        throw Error('Exception when creating signature.');
     }
 }
 
@@ -22,9 +21,9 @@ export const getSignatureJson = (obj: Object, keyPair: KeyPair): Signature => {
         return crypto.sign(null, Buffer.from(JSONStringifyDeterministic(obj)), toStr(keyPair.privateKey)).toString('hex') as any as Signature;
     }
     catch(err) {
+        console.warn(obj);
         console.warn(err);
-        console.warn('Exception when creating signature.');
-        return null;
+        throw Error('Exception when creating signature Json.');
     }
 }
 
@@ -143,8 +142,8 @@ export const createKeyPair = () => {
 }
 
 // Thanks: https://stackoverflow.com/questions/16167581/sort-object-properties-and-json-stringify
-export const JSONStringifyDeterministic = ( obj, space=undefined ) => {
-    var allKeys = [];
+export const JSONStringifyDeterministic = ( obj: Object, space: string | number | undefined =undefined ) => {
+    var allKeys: string[] = [];
     JSON.stringify( obj, function( key, value ){ allKeys.push( key ); return value; } )
     allKeys.sort();
     return JSON.stringify( obj, allKeys, space );

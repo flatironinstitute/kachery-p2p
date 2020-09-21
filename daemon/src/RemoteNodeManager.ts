@@ -159,7 +159,7 @@ class RemoteNodeManager {
     //     validateNodeId(nodeId);
     //     validateChannelName(channelName);
 
-    //     const transformedChannelName = this._node._gettransformedChannelNameForDiscovery({channelName, nodeId: this._node._nodeId});
+    //     const transformedChannelName = this._node._getTransformedChannelNameForDiscovery({channelName, nodeId: this._node._nodeId});
     //     if (transformedChannelName in this._nodeIdsByTransformedChannelName) {
     //         if (nodeId in this._nodeIdsByTransformedChannelName[transformedChannelName]) {
     //             return true;

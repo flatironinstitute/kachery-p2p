@@ -1,8 +1,9 @@
+import { HostName } from "./interfaces.js";
 import KacheryP2PNode from "./KacheryP2PNode.js";
 
 interface Params {
     node: KacheryP2PNode,
-    hostName: string,
+    hostName: HostName,
     port
 }
 

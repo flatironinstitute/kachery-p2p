@@ -1,3 +1,4 @@
+import { assert } from 'console';
 import fs from 'fs'
 import BootstrapPeerInterface from './BootstrapPeerInterface';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util';
@@ -5,6 +6,7 @@ import { sleepMsec } from './common/util';
 import FeedManager from './FeedManager';
 import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult } from './interfaces';
 import RemoteNodeManager from './RemoteNodeManager';
+import { isAddress } from './interfaces';
 
 interface Params {
     configDir: string,
@@ -47,14 +49,21 @@ class KacheryP2PNode {
                 bootstrapInfos = [
                         {hostName: '45.33.92.31', port: <Port><any>46002}, // kachery-p2p-spikeforest
                         {hostName: '45.33.92.33', port: <Port><any>46002} // kachery-p2p-flatiron1
-                    ].filter(bpi => {
-                        if ((bpi.hostName === 'localhost') || (bpi.hostName === this.#p.httpAddress.hostName)) {
-                            if (bpi.port === this.#p.httpAddress.port) {
-                                return false;
-                            }
+                ].map(bpi => {
+                    if (isAddress(bpi)) {
+                        return bpi;
+                    }
+                    else {
+                        throw Error(`Not an address: ${bpi}`);
+                    }
+                }).filter(bpi => {
+                    if ((bpi.hostName === 'localhost') || (bpi.hostName === this.#p.httpAddress.hostName)) {
+                        if (bpi.port === this.#p.httpAddress.port) {
+                            return false;
                         }
-                        return true;
-                    });
+                    }
+                    return true;
+                });
             }
 
             for (let bpi of bootstrapInfos) {

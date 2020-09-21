@@ -6,7 +6,7 @@ import { createKeyPair, publicKeyToHex, privateKeyToHex, getSignatureJson, hexTo
 import { assert } from 'console';
 import { validateObject, validateSha1Hash, validateNodeId } from './schema/index.js';
 import KacheryP2PNode from './KacheryP2PNode';
-import { FeedId, feedIdToPublicKeyHex, NodeId, PrivateKey, PrivateKeyHex, PublicKey, PublicKeyHex, SubfeedHash, toStr, SignedMessage, FindLiveFeedResult } from './interfaces';
+import { FeedId, feedIdToPublicKeyHex, NodeId, PrivateKey, PrivateKeyHex, PublicKey, PublicKeyHex, SubfeedHash, toStr, SignedSubfeedMessage, FindLiveFeedResult, isSignedSubfeedMessage } from './interfaces';
 
 // todo fix feeds config on disk (too many in one .json file)
 
@@ -26,13 +26,12 @@ class FeedManager {
     // todo: type
     _feedsConfig: FeedsConfig | null = null // The config will be loaded from disk as need. Contains all the private keys for the feeds and the local name/ID associations.
     // todo: type
-    _subfeeds: {} // The subfeed instances (Subfeed()) that have been loaded into memory
+    _subfeeds: {[key: string]: Subfeed} = {} // The subfeed instances (Subfeed()) that have been loaded into memory
     _remoteFeedManager: RemoteFeedManager // Manages the interaction with feeds on remote nodes
     constructor(node: KacheryP2PNode) {
         this._node = node;
         this._storageDir = kacheryStorageDir() + '/feeds';
         this._feedsConfig = null;
-        this._subfeeds = {};
         this._remoteFeedManager = new RemoteFeedManager(this._node);
     }
     async createFeed({ feedName }) {
@@ -140,7 +139,7 @@ class FeedManager {
         }
 
         // Append the messages
-        subfeed.appendMessages(args.messages);
+        subfeed.appendMessages(args.messages, {metaData: undefined});
     }
     async submitMessages(args: { feedId: FeedId, subfeedHash: SubfeedHash, messages: Object[], timeoutMsec: number}) {
         const { feedId, subfeedHash, messages, timeoutMsec } = args;
@@ -554,7 +553,7 @@ class Subfeed {
     _feedDir: string // The directory of the feed data
     _subfeedDir: string // The directory of the subfeed data
     _subfeedMessagesPath: string // The text file containing the actual messages (JSON strings on lines of text)
-    _signedMessages: SignedMessage[] | null = null // The signed messages loaded from the messages file (in-memory cache)
+    _signedMessages: SignedSubfeedMessage[] | null = null // The signed messages loaded from the messages file (in-memory cache)
     _remoteFeedManager: RemoteFeedManager // The remote feed manager, allowing us to retrieve data from remote nodes
     // todo: type for access rules
     _accessRules: {rules: {nodeId: NodeId, write: boolean}[]} | null = null // Access rules for this subfeed -- like which nodes on the p2p network have permission to submit messages
@@ -595,7 +594,7 @@ class Subfeed {
             // Verify the integrity of the messages
 
             // The first message has a previousSignature of null
-            let previousSignature = null;
+            let previousSignature;
             let previousMessageNumber = -1;
             for (let msg of messages) {
                 if (!verifySignatureJson(msg.body, msg.signature, this._publicKey)) {
@@ -605,7 +604,7 @@ class Subfeed {
                     throw Error(`Inconsistent previousSignature of message in feed when reading messages from file: ${this._feedDir} ${previousSignature} ${msg.body.previousSignature}`);
                 }
                 if (previousMessageNumber + 1 !== msg.body.messageNumber) {
-                    throw Error(`Incorrect message number for message in feed when reading messages from file: ${this._feedDir} ${previousMessageNumber + 1} ${msg.body.previousMessageNumber}`);
+                    throw Error(`Incorrect message number for message in feed when reading messages from file: ${this._feedDir} ${previousMessageNumber + 1} ${msg.body.messageNumber}`);
                 }
                 previousSignature = msg.signature;
                 previousMessageNumber = msg.body.messageNumber;
@@ -627,7 +626,7 @@ class Subfeed {
             this._accessRules = null;
 
             // Let's try to load messages from remote nodes on the p2p network
-            await this.getSignedMessages({position: 0, maxNumMessages: 10, waitMsec: 0});
+            await this.getSignedMessages({position: 0, maxNumMessages: 10, waitMsec: 1});
         }
         this._initializing = false;
         this._initialized = true;
@@ -649,6 +648,9 @@ class Subfeed {
     }
     getNumMessages() {
         // Return the number of messages that are currently loaded into memory
+        if (!this._signedMessages) {
+            throw Error('_signedMessages is null. Perhaps getNumMessages was called before subfeed was initialized.');
+        }
         return this._signedMessages.length;
     }
     isWriteable() {
@@ -662,9 +664,11 @@ class Subfeed {
         const a = this._accessRules.rules.filter(r => ((r.nodeId === remoteNodeId) && (r.write)));
         return (a.length > 0);
     }
-    async getSignedMessages({position, maxNumMessages, waitMsec=null}) {
-        // Get some signed messages starting at position
-        let signedMessages = [];
+    _getInMemorySignedMessages({position, maxNumMessages}: {position: number, maxNumMessages: number}) {
+        if (!this._signedMessages) {
+            throw Error('_signedMessages is null. Perhaps _getInMemorySignedMessages was called before subfeed was initialized.');
+        }
+        let signedMessages: SignedSubfeedMessage[] = [];
         if (position < this._signedMessages.length) {
             // If we have some messages loaded into memory, let's return those!
             for (let i = position; i < this._signedMessages.length; i++) {
@@ -676,8 +680,20 @@ class Subfeed {
                 }
             }
         }
+        return signedMessages;
+    }
+    async getSignedMessages({position, maxNumMessages, waitMsec}: {position: number, maxNumMessages: number, waitMsec: number}): Promise<SignedSubfeedMessage[]> {
+        // Get some signed messages starting at position
+        if (!this._signedMessages) {
+            throw Error('_signedMessages is null. Perhaps getSignedMessages was called before subfeed was initialized.');
+        }
+        if (position < this._signedMessages.length) {
+            // If we have some messages loaded into memory, let's return those!
+            return this._getInMemorySignedMessages({position, maxNumMessages});
+        }
         else if (position === this._signedMessages.length) {
             // We don't have any new messages in memory
+            let signedMessages: SignedSubfeedMessage[] = [];
             if (!this.isWriteable()) {
                 // If it's not locally writeable, then we should try to load messages from a remote node
                 const remoteSignedMessages = await this._remoteFeedManager.getSignedMessages({
@@ -691,12 +707,12 @@ class Subfeed {
                     if (position === this._signedMessages.length) {
                         // We found them! So we append them to local feed, and then call getSignedMessages() again. We should then return the appropriate number of signed messages.
                         this.appendSignedMessages(remoteSignedMessages);
-                        return this.getSignedMessages({position, maxNumMessages});
+                        return this._getInMemorySignedMessages({position, maxNumMessages});
                     }
                     else {
                         if (position < this._signedMessages.length) {
                             // we somehow got more signed messages. So let's go with those!
-                            return this.getSignedMessages({position, maxNumMessages});
+                            return this._getInMemorySignedMessages({position, maxNumMessages});
                         }
                         else {
                             throw Error('Unexpected problem. Position is now greater than signedMessages.length.')
@@ -704,7 +720,7 @@ class Subfeed {
                     }
                 }
             }
-            else if ((waitMsec) && (waitMsec > 0)) {
+            else if (waitMsec > 0) {
                 // If this is a writeable subfeed, and we have been instructed to wait, then let's just wait for a bit and maybe some new messages will arrive.
 
                 await new Promise((resolve) => {
@@ -715,7 +731,7 @@ class Subfeed {
                         resolved = true;
                         delete this._newMessageListeners[listenerId];
                         // We have new messages! Call getSignedMessages again to retrieve them.
-                        signedMessages = this.getSignedMessages({position, maxNumMessages});
+                        signedMessages = this._getInMemorySignedMessages({position, maxNumMessages});
                         resolve();    
                     }
                     setTimeout(() => {
@@ -732,7 +748,7 @@ class Subfeed {
                 //     await sleepMsec(100);
                 //     if (position < this._signedMessages.length) {
                 //         // We have new messages! Call getSignedMessages again to retrieve them.
-                //         return this.getSignedMessages({position, maxNumMessages});
+                //         return this._getInMemorySignedMessages({position, maxNumMessages});
                 //     }
                 //     const elapsed = (new Date()) - timer;
                 //     if (elapsed > waitMsec) {
@@ -740,22 +756,27 @@ class Subfeed {
                 //     }
                 // }
             }
+            // Finally, return the signed messages that have been accumulated above.
+            return signedMessages;
         }
-        // Finally, return the signed messages that have been accumulated above.
-        return signedMessages;
+        else {
+            return [];
+        }
     }
     // important that this is synchronous
-    appendMessages(messages, opts) {
-        opts = opts || {};
+    appendMessages(messages, opts: {metaData: Object | undefined}) {
+        if (!this._signedMessages) {
+            throw Error('_signedMessages is null. Perhaps appendMessages was called before subfeed was initialized.');
+        }
         if (!this._privateKey) {
             throw Error(`Cannot write to feed without private key: ${this._privateKey}`);
         }
-        let previousSignature = null;
+        let previousSignature;
         if (this._signedMessages.length > 0) {
             previousSignature = this._signedMessages[this._signedMessages.length - 1].signature;
         }
         let messageNumber = this._signedMessages.length;
-        const signedMessages = [];
+        const signedMessages: SignedSubfeedMessage[] = [];
         for (let msg of messages) {
             let body = {
                 message: msg,
@@ -776,14 +797,17 @@ class Subfeed {
     }
     // important that this is synchronous!
     appendSignedMessages(signedMessages) {
+        if (!this._signedMessages) {
+            throw Error('_signedMessages is null. Perhaps appendSignedMessages was called before subfeed was initialized.');
+        }
         if (signedMessages.length === 0)
             return;
-        let previousSignature = null;
+        let previousSignature;
         if (this._signedMessages.length > 0) {
             previousSignature = this._signedMessages[this._signedMessages.length - 1].signature;
         }
         let messageNumber = this._signedMessages.length;
-        const textLinesToAppend = [];
+        const textLinesToAppend: string[] = [];
         for (let signedMessage of signedMessages) {
             const body = signedMessage.body;
             const signature = signedMessage.signature;
@@ -821,7 +845,7 @@ class Subfeed {
 }
 
 // todo: type messages
-const readMessagesFile = async (path): Promise<Object[]> => {
+const readMessagesFile = async (path): Promise<SignedSubfeedMessage[]> => {
     let txt;
     try {
         txt = await fs.promises.readFile(path, {encoding: 'utf8'});
@@ -832,17 +856,26 @@ const readMessagesFile = async (path): Promise<Object[]> => {
     if (typeof(txt) !== 'string') {
         throw Error('Unexpected: txt is not a string.');
     }
-    let messages: Object[] = [];
+    let messages: SignedSubfeedMessage[] = [];
     const lines = txt.split('\n');
     for (let line of lines) {
         if (line) {
+            let signedMessage;
             try {
-                messages.push(JSON.parse(line));
+                signedMessage = JSON.parse(line);
             }
             catch(err) {
                 console.warn(`Problem parsing JSON from file.`, {path});
                 return [];
             }
+            if (isSignedSubfeedMessage(signedMessage)) {
+                messages.push(signedMessage);
+            }
+            else {
+                console.warn(`Problem with signed message from JSON file.`, {path});
+                return [];
+            }
+            
         }
     }
     return messages;

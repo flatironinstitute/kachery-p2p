@@ -13,8 +13,8 @@ const _getTemporaryDirectory = () => {
 
 export const createTemporaryFilePath = ({prefix}) => {
     assert(typeof(prefix) === 'string', 'prefix is not a string');
-    const dirpath = _getTemporaryDirectory();
-    return `${dirpath}/${prefix}-${randomAlphaString(10)}`;
+    const dirPath = _getTemporaryDirectory();
+    return `${dirPath}/${prefix}-${randomAlphaString(10)}`;
 }
 
 export const concatenateFilesIntoTemporaryFile = async (paths) => {
