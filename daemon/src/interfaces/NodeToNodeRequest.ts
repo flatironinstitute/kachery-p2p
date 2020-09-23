@@ -6,7 +6,7 @@ export interface NodeToNodeRequest {
         fromNodeId: NodeId,
         toNodeId: NodeId,
         timestamp: Timestamp,
-        requestData: NodeToNodeRequestData
+        requestData: NodeToNodeRequestData,
     },
     signature: Signature
 }

@@ -161,7 +161,7 @@ class KacheryP2PNode {
     loadFile(args: {fileKey: FileKey, opts: {fromNode: NodeId | undefined, fromChannel: ChannelName | undefined}}): {
         onFinished: (callback: () => void) => void,
         onProgress: (callback: (progress: LoadFileProgress) => void) => void,
-        onError: (callback: (Error) => void) => void,
+        onError: (callback: (err: Error) => void) => void,
         cancel: () => void
     } {
         // todo
