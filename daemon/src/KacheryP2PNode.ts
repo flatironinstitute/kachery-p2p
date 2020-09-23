@@ -114,7 +114,7 @@ class KacheryP2PNode {
         this.#halted = true;
         // todo: figure out what else we need to halt
     }
-    findFile(args: {fileKey: FileKey, timeoutMsec: number | undefined}): {
+    findFile(args: {fileKey: FileKey, timeoutMsec: number}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
         onFinished: (callback: () => void) => void,
         cancel: () => void
@@ -123,7 +123,7 @@ class KacheryP2PNode {
             requestType: 'checkForFile',
             fileKey: args.fileKey
         };
-        const {onResponse, onFinished, cancel} = this.#remoteNodeManager.sendRequestToAllNodesInChannels(requestData, {timeoutMsec: args.timeoutMsec});
+        const {onResponse, onFinished, cancel} = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, {timeoutMsec: args.timeoutMsec, channelNames: this.#channelNames});
         const onFoundCallbacks: ((result: FindFileResult) => void)[] = [];
         const onFinishedCallbacks: (() => void)[] = [];
         onResponse((nodeId: NodeId, responseData: NodeToNodeResponseData) => {

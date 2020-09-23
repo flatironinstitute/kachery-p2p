@@ -1,4 +1,4 @@
-import { HostName } from "./interfaces.js";
+import { HostName } from "./interfaces/core.js";
 import KacheryP2PNode from "./KacheryP2PNode.js";
 
 interface Params {

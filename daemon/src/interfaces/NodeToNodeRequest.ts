@@ -1,4 +1,4 @@
-import { ChannelName, isChannelName, isNodeId, isRequestId, NodeId, RequestId, Timestamp, _validateObject, isTimestamp, isOneOf, isEqualTo, ChannelNodeInfo, isChannelNodeInfo, FileKey, isFileKey, FeedId, isFeedId, LiveFeedSubscriptions, isLiveFeedSubscriptions, optional, isBoolean, isNumber, ChannelInfo, isChannelInfo, Signature, SubfeedHash, isSubfeedHash, isNull, SubmittedSubfeedMessage, isSubmittedSubfeedMessage, ErrorMessage, isErrorMessage } from "./core"
+import { ChannelName, isChannelName, isNodeId, isRequestId, NodeId, RequestId, Timestamp, _validateObject, isTimestamp, isOneOf, isEqualTo, ChannelNodeInfo, isChannelNodeInfo, FileKey, isFileKey, FeedId, isFeedId, LiveFeedSubscriptions, isLiveFeedSubscriptions, optional, isBoolean, isNumber, ChannelInfo, isChannelInfo, Signature, SubfeedHash, isSubfeedHash, isNull, SubmittedSubfeedMessage, isSubmittedSubfeedMessage, ErrorMessage, isErrorMessage, isBigInt } from "./core"
 
 export interface NodeToNodeRequest {
     body: {
@@ -45,7 +45,8 @@ export type NodeToNodeRequestData = (
     CheckForFileRequestData |
     CheckForLiveFeedRequestData |
     SetLiveFeedSubscriptionsRequestData |
-    SubmitMessageToLiveFeedRequestData
+    SubmitMessageToLiveFeedRequestData |
+    DownloadFileDataRequestData
 )
 export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
     return isOneOf([
@@ -72,6 +73,9 @@ export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData =>
         isCheckForLiveFeedResponseData,
         isSetLiveFeedSubscriptionsResponseData
     ]) ? true : false;
+}
+export const isDownloadRequest = (x: NodeToNodeRequestData) => {
+    return ['downloadFileData'].includes(x.requestType);
 }
 
 // getChannelInfo
@@ -210,5 +214,21 @@ export const isSubmitMessageToLiveFeedResponseData = (x: any): x is SubmitMessag
         requestType: isEqualTo('submitMessageToLiveFeed'),
         success: isBoolean,
         errorMessage: isOneOf([isNull, isErrorMessage])
+    })
+}
+
+// downloadFileData
+export interface DownloadFileDataRequestData {
+    requestType: 'downloadFileData',
+    fileKey,
+    startByte: bigint,
+    endByte: bigint
+}
+export const isDownloadFileDataRequestData = (x: any): x is DownloadFileDataRequestData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('downloadFileData'),
+        fileKey: isFileKey,
+        startByte: isBigInt,
+        endByte: isBigInt
     })
 }

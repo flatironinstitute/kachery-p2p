@@ -513,23 +513,22 @@ export const isChannelInfo = (x: any): x is ChannelInfo => {
     })
 }
 
-export const _validateObject = (x: any, spec: {[key: string]: any}): boolean => {
+type ValidateObjectSpec = {[key: string]: ValidateObjectSpec | (Function & ((a: any) => any))}
+
+export const _validateObject = (x: any, spec: ValidateObjectSpec): boolean => {
     if (!x) return false;
     if (!isObject(x)) return false;
     for (let k in x) {
         if (!(k in spec)) return false;
     }
     for (let k in spec) {
-        if (isObject(spec[k])) {
-            if (!(k in x)) return false;
-            if (!_validateObject(x[k], spec[k])) return false;
-        }
-        else if (isFunction(spec[k])) {
-            if (!spec[k](x[k])) return false;
+        const specK = spec[k];
+        if (isFunction(specK)) {
+            if (!specK(x[k])) return false;
         }
         else {
-            console.warn(spec);
-            throw Error('Invalid spec in _validateObject');
+            if (!(k in x)) return false;
+            if (!_validateObject(x[k], specK as ValidateObjectSpec)) return false;
         }
     }
     return true;

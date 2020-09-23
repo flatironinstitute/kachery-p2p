@@ -37,10 +37,34 @@ class RemoteNodeManager {
         }
     }
     async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData): Promise<NodeToNodeResponseData> {
+        if (isDownloadRequest(requestData)) {
+            throw Error('Unexpected, request is a download request.');
+        }
         // todo: implement
         return {dummy: true} as any as NodeToNodeResponseData;
     }
-    sendRequestToAllNodesInChannels(requestData: NodeToNodeRequestData, {timeoutMsec: number}) {
+    sendDownloadRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData) {
+        if (!isDownloadRequest(requestData)) {
+            throw Error('Unexpected, request is not a download request.');
+        }
+        // todo: implement
+        const _onDataCallbacks: ((data: Buffer) => void)[] = [];
+        const _onFinishedCallbacks: (() => void)[] = [];
+        const _onErrorCallbacks: ((err: Error) => void)[] = [];
+        const _cancel = () => {
+            // todo
+        }
+        return {
+            onData: (callback: (data: Buffer) => void) => {_onDataCallbacks.push(callback)},
+            onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
+            onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
+            cancel: _cancel
+        }
+    }
+    sendRequestToNodesInChannels(requestData: NodeToNodeRequestData, opts: {timeoutMsec: number, channelNames: ChannelName[]}) {
+        if (isDownloadRequest(requestData)) {
+            throw Error('Unexpected, request is a download request.');
+        }
         // todo: implement
         const _cancel = () => {
             // todo
