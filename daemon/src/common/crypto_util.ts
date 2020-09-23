@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { PublicKey, PrivateKey, PublicKeyHex, PrivateKeyHex, KeyPair, Signature, Sha1Hash, toStr, FeedId } from '../interfaces';
+import { PublicKey, PrivateKey, PublicKeyHex, PrivateKeyHex, KeyPair, Signature, Sha1Hash, FeedId } from '../interfaces/core'
 import { kacheryP2PSerialize } from './util';
 
 const ed25519PubKeyPrefix = "302a300506032b6570032100";
@@ -7,7 +7,7 @@ const ed25519PrivateKeyPrefix = "302e020100300506032b657004220420";
 
 export const getSignature = (obj: Object, keyPair: KeyPair): Signature => {
     try {
-        return crypto.sign(null, kacheryP2PSerialize(obj), toStr(keyPair.privateKey)).toString('hex') as any as Signature;
+        return crypto.sign(null, kacheryP2PSerialize(obj), keyPair.privateKey.toString()).toString('hex') as any as Signature;
     }
     catch(err) {
         console.warn(obj);
@@ -18,7 +18,7 @@ export const getSignature = (obj: Object, keyPair: KeyPair): Signature => {
 
 export const getSignatureJson = (obj: Object, keyPair: KeyPair): Signature => {
     try {
-        return crypto.sign(null, Buffer.from(JSONStringifyDeterministic(obj)), toStr(keyPair.privateKey)).toString('hex') as any as Signature;
+        return crypto.sign(null, Buffer.from(JSONStringifyDeterministic(obj)), keyPair.privateKey.toString()).toString('hex') as any as Signature;
     }
     catch(err) {
         console.warn(obj);
@@ -40,7 +40,7 @@ export const verifySignatureJson = (obj: Object, signature: Signature, publicKey
         }
     }
     try {
-        return crypto.verify(null, Buffer.from(JSONStringifyDeterministic(obj)), toStr(publicKey), Buffer.from(toStr(signature), 'hex'));
+        return crypto.verify(null, Buffer.from(JSONStringifyDeterministic(obj)), publicKey.toString(), Buffer.from(signature.toString(), 'hex'));
     }
     catch(err) {
         console.warn(err);
@@ -62,7 +62,7 @@ export const verifySignature = (obj: Object, signature: Signature, publicKey: Pu
         }
     }
     try {
-        return crypto.verify(null, kacheryP2PSerialize(obj), toStr(publicKey), Buffer.from(toStr(signature), 'hex'));
+        return crypto.verify(null, kacheryP2PSerialize(obj), publicKey.toString(), Buffer.from(signature.toString(), 'hex'));
     }
     catch(err) {
         console.warn(err);

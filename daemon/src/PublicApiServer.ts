@@ -3,6 +3,7 @@ import { validateObject } from './schema/index.js';
 import start_http_server from './common/start_http_server.js';
 import KacheryP2PNode from './KacheryP2PNode';
 import { sleepMsec } from './common/util.js';
+import { isNodeToNodeRequest, NodeToNodeResponse } from './interfaces/NodeToNodeRequest.js';
 
 export default class PublicApiServer {
     _node: KacheryP2PNode
@@ -51,9 +52,8 @@ export default class PublicApiServer {
     // /nodeToNodeRequest
     async _apiNodeToNodeRequest(req, res) {
         const reqBody = req.body;
-        validateObject(reqBody, '/NodeToNodeRequest');
-        const response = await this._node.handleNodeToNodeRequest(reqBody);
-        validateObject(response, 'NodeToNodeResponse');
+        if (!isNodeToNodeRequest(reqBody)) throw Error('Error in NodeToNode request');
+        const response: NodeToNodeResponse = await this._node.handleNodeToNodeRequest(reqBody);
         res.json(response);
     }
     // Helper function for returning http request with an error response

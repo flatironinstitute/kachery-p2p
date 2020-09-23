@@ -4,6 +4,7 @@ import { sha1sum } from './common/crypto_util';
 import { assert } from 'console';
 import { randomAlphaString } from './common/util';
 import crypto from 'crypto';
+import { FileKey, isFileKey, Sha1Hash } from './interfaces/core';
 
 const _getTemporaryDirectory = () => {
     const ret = process.env['KACHERY_STORAGE_DIR'] + '/tmp';
@@ -151,45 +152,19 @@ const mkdirIfNeeded = (path) => {
     }
 }
 
-export const getLocalFileInfo = async ({fileKey}) => {
-    if (fileKey.sha1) {
-        const s = fileKey.sha1;
-        const path = `${kacheryStorageDir()}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}/${s}`;
-        let stat0;
-        try {
-            stat0 = await fs.promises.stat(path);
-        }
-        catch(err) {
-            return null;
-        }
-        return {
-            path,
-            size: stat0.size,
-            sha1: s
-        }
+export const getLocalFileInfo = async (fileSha1: Sha1Hash): Promise<{path: string | null, size: bigint | null}> => {
+    const s = fileSha1;
+    const path = `${kacheryStorageDir()}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}/${s}`;
+    let stat0;
+    try {
+        stat0 = await fs.promises.stat(path);
     }
-    else if ((fileKey.transformedSha1) && (fileKey.transformNodeId) && (fileKey.sha1Head)) {
-        const s = fileKey.sha1Head;
-        const path = `${kacheryStorageDir()}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`;
-        let fileNames;
-        try {
-            fileNames = await fs.promises.readdir(path);
-        }
-        catch(err) {
-            fileNames = [];
-        }
-        for (let fileName of fileNames) {
-            if ((fileName.startsWith(fileKey.sha1Head)) && (fileName.length === 40)) {
-                if (sha1sum(fileKey.transformNodeId + fileName) === fileKey.transformedSha1) {
-                    return await getLocalFileInfo({fileKey: {sha1: fileName}});
-                }
-            }
-        }
-        return null;
+    catch(err) {
+        return {path: null, size: null};
     }
-    else {
-        console.warn(fileKey);
-        throw Error('Problem with fileKey');
+    return {
+        path,
+        size: stat0.size as bigint
     }
 }
 

@@ -8,9 +8,9 @@ interface Params {
 }
 
 class BootstrapPeerInterface {
-    _p: Params
-    constructor(params: Params) {
-        this._p = params;
+    #p: Params
+    constructor(p: Params) {
+        this.#p = p;
     }
 }
 
