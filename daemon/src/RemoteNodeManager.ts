@@ -1,7 +1,7 @@
 import RemoteNode from './RemoteNode.js';
 import { verifySignature } from './common/crypto_util';
 import KacheryP2PNode from './KacheryP2PNode.js';
-import { ChannelInfo, ChannelName, ChannelNodeInfo, NodeId, nodeIdToPublicKey } from './interfaces/core';
+import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey } from './interfaces/core';
 import { AnnounceRequestData, AnnounceResponseData, isDownloadRequest, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest.js';
 import { sleepMsec } from './common/util.js';
 
@@ -9,6 +9,7 @@ class RemoteNodeManager {
     #node: KacheryP2PNode
     #remoteNodes: Map<NodeId, RemoteNode> = new Map<NodeId, RemoteNode>()
     #halted: boolean = false
+    #onNodeChannelAddedCallbacks: ((remoteNodeId: NodeId, channelName: ChannelName) => void)[] = []
     constructor(node: KacheryP2PNode) {
         this.#node = node;
         this._start();
@@ -20,8 +21,25 @@ class RemoteNodeManager {
         this.#halted = true;
     }
     async handleAnnounceRequest({fromNodeId, requestData}: {fromNodeId: NodeId, requestData: AnnounceRequestData}): Promise<AnnounceResponseData> {
-        // todo: only handle this if we belong to this channel or we are a bootstrap node
+        // only handle this if we belong to this channel or we are a bootstrap node
+        if (!this.#node.isBootstrapNode()) {
+            if (!this.#node.channelNames().includes(requestData.channelNodeInfo.body.channelName)) {
+                return {
+                    requestType: 'announce',
+                    success: false,
+                    errorMessage: errorMessage('Not a bootstrap and not a member of this channel.')
+                };
+            }
+        }
         const { channelNodeInfo } = requestData;
+        this.setChannelNodeInfo(channelNodeInfo);
+        return {
+            requestType: 'announce',
+            success: true,
+            errorMessage: null
+        }
+    }
+    setChannelNodeInfo(channelNodeInfo: ChannelNodeInfo) {
         const { body, signature } = channelNodeInfo;
         if (!verifySignature(body, signature, nodeIdToPublicKey(channelNodeInfo.body.nodeId))) {
             throw Error('Invalid signature for channelNodeInfo.');
@@ -31,9 +49,23 @@ class RemoteNodeManager {
         }
         const n = this.#remoteNodes.get(body.nodeId);
         if (!n) throw Error('Unexpected');
+        const newChannel = (!n.getChannelNames().includes(channelNodeInfo.body.channelName));
         n.setChannelNodeInfoIfMoreRecent(channelNodeInfo.body.channelName, channelNodeInfo);
-        return {
-            requestType: 'announce'
+        if (newChannel) {
+            this.#onNodeChannelAddedCallbacks.forEach(cb => {
+                cb(n.remoteNodeId(), channelNodeInfo.body.channelName);
+            })
+        }
+    }
+    async setBootstrapNode(remoteNodeId: NodeId, address: Address) {
+        const n = this.#remoteNodes.get(remoteNodeId)
+        if (n) {
+            if ((!n.isBootstrap()) || (!jsonObjectsMatch(n.bootstrapAddress(), address))) {
+                this.#remoteNodes.delete(remoteNodeId);
+            }
+        }
+        if (!this.#remoteNodes.has(remoteNodeId)) {
+            this.#remoteNodes.set(remoteNodeId, new RemoteNode(this.#node, remoteNodeId, {isBootstrap: true, bootstrapAddress: address}))
         }
     }
     async getChannelInfo(channelName: ChannelName): Promise<ChannelInfo> {
@@ -48,7 +80,7 @@ class RemoteNodeManager {
             nodes
         }
     }
-    async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData): Promise<NodeToNodeResponseData> {
+    async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: number}): Promise<NodeToNodeResponseData> {
         if (isDownloadRequest(requestData)) {
             throw Error('Unexpected, request is a download request.');
         }
@@ -56,7 +88,28 @@ class RemoteNodeManager {
         if (!remoteNode) {
             throw Error(`Cannot send request to node: node with ID ${nodeId} not found.`)
         }
-        return await remoteNode.sendRequest(requestData);
+        return await remoteNode.sendRequest(requestData, {timeoutMsec: opts.timeoutMsec});
+    }
+    onNodeChannelAdded(callback: (remoteNodeId: NodeId, channelName: ChannelName) => void) {
+        this.#onNodeChannelAddedCallbacks.push(callback);
+    }
+    getRemoteNodesInChannel(channelName: ChannelName): RemoteNode[] {
+        const ret: RemoteNode[] = []
+        this.#remoteNodes.forEach((n, nodeId) => {
+            if (n.getChannelNames().includes(channelName)) {
+                ret.push(n)
+            }
+        });
+        return ret
+    }
+    getBootstrapRemoteNodes(): RemoteNode[] {
+        const ret: RemoteNode[] = []
+        this.#remoteNodes.forEach((n, nodeId) => {
+            if (n.isBootstrap() && (n.bootstrapAddress() !== null)) {
+                ret.push(n)
+            }
+        });
+        return ret
     }
     sendDownloadRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData) {
         if (!isDownloadRequest(requestData)) {
@@ -82,6 +135,7 @@ class RemoteNodeManager {
         }
         let finished = false;
         const _onResponseCallbacks: ((nodeId: NodeId, responseData: NodeToNodeResponseData) => void)[] = [];
+        const _onErrorResponseCallbacks: ((nodeId: NodeId, reason: any) => void)[] = [];
         const _onFinishedCallbacks: (() => void)[] = [];
         const promises: (Promise<NodeToNodeResponseData>)[] = [];
         this.#remoteNodes.forEach(n => {
@@ -93,11 +147,16 @@ class RemoteNodeManager {
                 }
             })
             if (okay) {
-                const promise = this.sendRequestToNode(n.remoteNodeId(), requestData);
+                const promise = this.sendRequestToNode(n.remoteNodeId(), requestData, {timeoutMsec: opts.timeoutMsec});
                 promise.then(responseData => {
                     if (finished) return;
                     _onResponseCallbacks.forEach(cb => {
                         cb(n.remoteNodeId(), responseData);
+                    });
+                })
+                promise.catch((reason) => {
+                    _onErrorResponseCallbacks.forEach(cb => {
+                        cb(n.remoteNodeId(), reason);
                     });
                 })
                 promises.push(promise);
@@ -116,6 +175,9 @@ class RemoteNodeManager {
         const onResponse = (callback: (nodeId: NodeId, responseData: NodeToNodeResponseData) => void) => {
             _onResponseCallbacks.push(callback);
         }
+        const onErrorResponse = (callback: (nodeId: NodeId, reason: any) => void) => {
+            _onErrorResponseCallbacks.push(callback);
+        }
         const onFinished = (callback: () => void) => {
             _onFinishedCallbacks.push(callback);
         }
@@ -128,6 +190,7 @@ class RemoteNodeManager {
         })
         return {
             onResponse,
+            onErrorResponse,
             onFinished,
             cancel: _cancel
         }

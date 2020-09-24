@@ -7,20 +7,26 @@ import KacheryP2PNode from "./KacheryP2PNode";
 
 class RemoteNode {
     #node: KacheryP2PNode
-    #bootstrapPeerInfo: Address | null = null
     #halted: boolean = false;
     #remoteNodeId: NodeId
     #channelNodeInfoByChannel: Map<ChannelName, ChannelNodeInfo> = new Map<ChannelName, ChannelNodeInfo>()
-    constructor(node: KacheryP2PNode, remoteNodeId: NodeId) {
+    #isBootstrap: boolean
+    #bootstrapAddress: Address | null
+    constructor(node: KacheryP2PNode, remoteNodeId: NodeId, opts: {isBootstrap: boolean, bootstrapAddress: Address | null} = {isBootstrap: false, bootstrapAddress: null}) {
         this.#node = node
         this.#remoteNodeId = remoteNodeId;
+        this.#isBootstrap = opts.isBootstrap
+        this.#bootstrapAddress = opts.bootstrapAddress
         this._start();
     }
     remoteNodeId() {
         return this.#remoteNodeId;
     }
-    bootstrapPeerInfo() {
-        return this.#bootstrapPeerInfo;
+    isBootstrap() {
+        return this.#isBootstrap
+    }
+    bootstrapAddress() {
+        return this.#bootstrapAddress
     }
     setChannelNodeInfoIfMoreRecent(channelName: ChannelName, channelNodeInfo: ChannelNodeInfo) {
         if (this.#channelNodeInfoByChannel.has(channelName)) {
@@ -43,10 +49,28 @@ class RemoteNode {
     getChannelNodeInfo(channelName: ChannelName): ChannelNodeInfo | null {
         return this.#channelNodeInfoByChannel.get(channelName) || null;
     }
-    async sendRequest(requestData: NodeToNodeRequestData): Promise<NodeToNodeResponseData> {
-        const channelNodeData = this._getMostRecentChannelNodeInfo();
-        if (channelNodeData === null) {
-            throw Error('Unable to send request to node: no channel node data found.');
+    async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: number}): Promise<NodeToNodeResponseData> {
+        let address: Address | null = null;
+        if (this.#isBootstrap && this.#bootstrapAddress) {
+            address = this.#bootstrapAddress
+        }
+        else {
+            const channelNodeData = this._getMostRecentChannelNodeInfo();
+            if (channelNodeData === null) {
+                throw Error('Unable to send request to non-bootstrap node: no channel node data found.');
+            }
+            const remoteInfo = channelNodeData.body;
+            if (remoteInfo.httpAddress) {
+                address = remoteInfo.httpAddress;
+            }
+            else {
+                if (remoteInfo.proxyHttpAddresses.length > 0) {
+                    address = remoteInfo.proxyHttpAddresses[0];
+                }
+            }
+            if (!address) {
+                throw Error('Unable to send request... no http address found.')
+            }
         }
         const requestId = createRequestId();
         const requestBody = {
@@ -60,23 +84,13 @@ class RemoteNode {
             body: requestBody,
             signature: getSignature(requestBody, this.#node.keyPair())
         }
-        const remoteInfo = channelNodeData.body;
-        let address: Address | null = null;
-        if (remoteInfo.httpAddress) {
-            address = remoteInfo.httpAddress;
-        }
-        else {
-            if (remoteInfo.proxyHttpAddresses.length > 0) {
-                address = remoteInfo.proxyHttpAddresses[0];
-            }
-        }
-        if (!address) {
-            throw Error('Unable to send request... no http address found.')
-        }
-        const response = await httpPostJson(address, request);
+        const response = await httpPostJson(address, '/NodeToNodeRequest', request, {timeoutMsec: opts.timeoutMsec});
         if (!isNodeToNodeResponse(response)) {
             // todo: in this situation, do we ban the node?
             throw Error('Invalid response from node.');
+        }
+        if (response.body.responseData.requestType !== request.body.requestData.requestType) {
+            throw Error('Unexpected requestType in response.')
         }
         if (response.body.fromNodeId !== this.#remoteNodeId) {
             throw Error('Unexpected fromNodeId in response.')

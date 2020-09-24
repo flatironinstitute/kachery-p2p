@@ -1,4 +1,4 @@
-import { hexToPublicKey } from "../common/crypto_util";
+import { hexToPublicKey, JSONStringifyDeterministic } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
 
 export type JSONPrimitive = string | number | boolean | null;
@@ -382,7 +382,7 @@ export const isErrorMessage = (x: any): x is ErrorMessage => {
 export const errorMessage = (x: string): ErrorMessage => {
     if (isErrorMessage(x)) return x;
     else {
-        throw Error('Invalid error messsage');
+        throw Error('Invalid error message');
     }
 }
 
@@ -577,4 +577,10 @@ export const _validateObject = (x: any, spec: ValidateObjectSpec): boolean => {
         }
     }
     return true;
+}
+
+export const jsonObjectsMatch = (x1: any, x2: any): boolean => {
+    if (!isJSONObject(x1)) throw Error('x1 is not a json object in jsonObjectsMatch');
+    if (!isJSONObject(x2)) throw Error('x2 is not a json object in jsonObjectsMatch');
+    return (JSONStringifyDeterministic(x1) === JSONStringifyDeterministic(x2));
 }

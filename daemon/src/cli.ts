@@ -78,6 +78,10 @@ function main() {
           describe: 'Do not use bootstrap nodes',
           type: 'boolean'
         })
+        yargs.option('is-bootstrap', {
+          describe: 'Mark this node as a bootstrap node',
+          type: 'boolean'
+        })
       },
       handler: (argv: JSONObject) => {
         const channelNames = ((argv.channel || []) as string[]).map(ch => {
@@ -86,7 +90,7 @@ function main() {
         });
         
         const bootstrapStrings = argv.bootstrap || null;
-        const bootstrapInfos = bootstrapStrings ? (
+        const bootstrapAddresses = bootstrapStrings ? (
           (bootstrapStrings as string[]).map(x => parseBootstrapInfo(x))
         ): null;
         const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
@@ -100,6 +104,7 @@ function main() {
         const daemonApiPort = process.env.KACHERY_P2P_DAEMON_API_PORT || process.env.KACHERY_P2P_API_PORT || 20431;
         const label = argv.label as string;
         const noBootstrap = argv['no-bootstrap'] ? true : false;
+        const isBootstrapNode = argv['is-bootstrap'] ? true : false;
         const verbose = Number(argv.verbose || 0);
 
         if (hostName !== null) {
@@ -136,9 +141,10 @@ function main() {
           webSocketListenPort,
           udpListenPort,
           label,
-          bootstrapInfos,
+          bootstrapAddresses,
           opts: {
-            noBootstrap
+            noBootstrap,
+            isBootstrapNode
           }
         });
       }
@@ -173,9 +179,10 @@ const startDaemon = async (args: {
   webSocketListenPort: Port | null,
   udpListenPort: Port | null,
   label: string,
-  bootstrapInfos: Address[] | null,
+  bootstrapAddresses: Address[] | null,
   opts: {
-    noBootstrap: boolean
+    noBootstrap: boolean,
+    isBootstrapNode: boolean
   }
 }) => {
   const {
@@ -188,7 +195,7 @@ const startDaemon = async (args: {
     webSocketListenPort,
     udpListenPort,
     label,
-    bootstrapInfos,
+    bootstrapAddresses,
     opts
   } = args;
   // const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, udpListenPort: listenPort, label, bootstrapInfos, opts});
@@ -199,7 +206,7 @@ const startDaemon = async (args: {
     httpListenPort,
     webSocketListenPort,
     label,
-    bootstrapInfos,
+    bootstrapAddresses,
     channelNames,
     opts
   })

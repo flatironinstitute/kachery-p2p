@@ -119,11 +119,15 @@ export const isAnnounceRequestData = (x: any): x is AnnounceRequestData => {
     })
 }
 export interface AnnounceResponseData {
-    requestType: 'announce'
+    requestType: 'announce',
+    success: boolean,
+    errorMessage: ErrorMessage | null
 }
 export const isAnnounceResponseData = (x: any): x is AnnounceResponseData => {
     return _validateObject(x, {
-        requestType: isEqualTo('announce')
+        requestType: isEqualTo('announce'),
+        success: isBoolean,
+        errorMessage: isErrorMessage
     })
 }
 
@@ -230,7 +234,8 @@ export interface GetLiveFeedSignedMessagesRequestData {
     feedId: FeedId,
     subfeedHash: SubfeedHash,
     position: number,
-    maxNumMessages: number
+    maxNumMessages: number,
+    waitMsec: number
 }
 export const isGetLiveFeedSignedMessagesRequestData = (x: any): x is GetLiveFeedSignedMessagesRequestData => {
     return _validateObject(x, {
@@ -238,7 +243,8 @@ export const isGetLiveFeedSignedMessagesRequestData = (x: any): x is GetLiveFeed
         feedId: isFeedId,
         subfeedHash: isSubfeedHash,
         position: isNumber,
-        maxNumMessages: isNumber
+        maxNumMessages: isNumber,
+        waitMsec: isNumber
     })
 }
 export interface GetLiveFeedSignedMessagesResponseData {

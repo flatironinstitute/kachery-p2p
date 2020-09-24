@@ -3,7 +3,7 @@ import start_http_server from './common/start_http_server.js';
 import KacheryP2PNode from './KacheryP2PNode';
 import { sleepMsec } from './common/util.js';
 import { isNodeToNodeRequest, NodeToNodeResponse } from './interfaces/NodeToNodeRequest.js';
-import { NodeId, Port, JSONObject, isJSONObject } from './interfaces/core.js';
+import { NodeId, Port, JSONObject, isJSONObject, _validateObject, isBoolean, isNodeId } from './interfaces/core.js';
 import { Socket } from 'net';
 
 interface Req {
@@ -17,6 +17,17 @@ interface Res {
     end: () => void,
     status: (s: number) => Res,
     send: (x: any) => Res
+}
+
+export interface ApiProbeResponse {
+    success: boolean,
+    nodeId: NodeId
+};
+export const isApiProbeResponse = (x: any): x is ApiProbeResponse => {
+    return _validateObject(x, {
+        success: isBoolean,
+        nodeId: isNodeId
+    });
 }
 
 export default class PublicApiServer {
@@ -48,6 +59,15 @@ export default class PublicApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             }
         });
+        this.#app.post('/probe', async (req, res) => {
+            console.info('/probe');
+            try {
+                await this._apiProbe(req, res) 
+            }
+            catch(err) {
+                await this._errorResponse(req, res, 500, err.message);
+            }
+        });
         // /nodeToNodeRequest
         this.#app.post('/nodeToNodeRequest', async (req, res) => {
             console.info('/nodeToNodeRequest');
@@ -61,10 +81,6 @@ export default class PublicApiServer {
     }
     // /probe - check whether the daemon is up and running and return info such as the node ID
     async _apiProbe(req: Req, res: Res) {
-        interface ApiProbeResponse {
-            success: boolean,
-            nodeId: NodeId
-        };
         const response: ApiProbeResponse = {success: true, nodeId: this.#node.nodeId()};
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);

@@ -3,7 +3,7 @@ import BootstrapPeerInterface from './BootstrapPeerInterface';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util';
 import { sleepMsec } from './common/util';
 import FeedManager from './FeedManager';
-import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage, FindFileResult, nowTimestamp, nodeIdToPublicKey, SubmittedSubfeedMessage, errorMessage, HostName } from './interfaces/core';
+import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage, FindFileResult, nowTimestamp, nodeIdToPublicKey, SubmittedSubfeedMessage, errorMessage, HostName, ChannelInfo, ChannelNodeInfoBody, ChannelNodeInfo } from './interfaces/core';
 import RemoteNodeManager from './RemoteNodeManager';
 import { isAddress } from './interfaces/core';
 
@@ -16,8 +16,8 @@ import { isSetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsRequestD
 import { isGetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData } from './interfaces/NodeToNodeRequest';
 import { LiveFeedSubscriptionManager } from './LiveFeedSubscriptionManager';
 import { KacheryStorageManager } from './KacheryStorageManager';
-import { response } from 'express';
 import { ProxyConnectionToClient } from './ProxyConnectionToClient';
+import RemoteNode from './RemoteNode';
 
 interface LoadFileProgress {
     bytesLoaded: bigint,
@@ -26,7 +26,6 @@ interface LoadFileProgress {
 }
 
 class KacheryP2PNode {
-    #bootstrapPeerInterfaces: BootstrapPeerInterface[] = []
     #keyPair: KeyPair
     #nodeId: NodeId
     #halted: boolean
@@ -36,6 +35,7 @@ class KacheryP2PNode {
     #kacheryStorageManager: KacheryStorageManager
     #liveFeedSubscriptionManager: LiveFeedSubscriptionManager
     #proxyConnectionsToClients = new Map<NodeId, ProxyConnectionToClient>()
+    #bootstrapAddresses: Address[] // not same as argument to constructor
     constructor(private p : {
         configDir: string,
         verbose: number,
@@ -43,9 +43,9 @@ class KacheryP2PNode {
         httpListenPort: Port | null,
         webSocketListenPort: Port | null,
         label: string,
-        bootstrapInfos: Address[] | null,
+        bootstrapAddresses: Address[] | null,
         channelNames: ChannelName[],
-        opts: {noBootstrap: boolean}
+        opts: {noBootstrap: boolean, isBootstrapNode: boolean}
     }) {
         const { publicKey, privateKey } = _loadKeypair(this.p.configDir); // The keypair for signing messages and the public key is used as the node id
         this.#keyPair = {publicKey, privateKey}; // the keypair
@@ -59,11 +59,10 @@ class KacheryP2PNode {
 
         this.#remoteNodeManager = new RemoteNodeManager(this);
 
-        let bootstrapInfos = this.p.bootstrapInfos;
-
+        let bootstrapAddresses = this.p.bootstrapAddresses;
         if (!this.p.opts.noBootstrap) {
-            if (bootstrapInfos === null) {
-                bootstrapInfos = [
+            if (bootstrapAddresses === null) {
+                bootstrapAddresses = [
                         {hostName: '45.33.92.31', port: <Port><any>46002}, // kachery-p2p-spikeforest
                         {hostName: '45.33.92.33', port: <Port><any>46002} // kachery-p2p-flatiron1
                 ].map(bpi => {
@@ -82,15 +81,8 @@ class KacheryP2PNode {
                     return true;
                 });
             }
-
-            for (let bpi of bootstrapInfos) {
-                this.#bootstrapPeerInterfaces.push(new BootstrapPeerInterface({
-                    node: this,
-                    hostName: bpi.hostName,
-                    port: bpi.port
-                }));
-            }
         }
+        this.#bootstrapAddresses = bootstrapAddresses || []
 
         this._start();
     }
@@ -107,6 +99,15 @@ class KacheryP2PNode {
         this.#remoteNodeManager.halt();
         this.#halted = true;
         // todo: figure out what else we need to halt
+    }
+    remoteNodeManager() {
+        return this.#remoteNodeManager
+    }
+    bootstrapAddresses() {
+        return [...this.#bootstrapAddresses]
+    }
+    isBootstrapNode() {
+        return this.p.opts.isBootstrapNode;
     }
     findFile(args: {fileKey: FileKey, timeoutMsec: number}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
@@ -177,6 +178,36 @@ class KacheryP2PNode {
             }
         })
     }
+    getChannelInfo(channelName: ChannelName): ChannelInfo {
+        const remoteNodesInChannel: RemoteNode[] = this.#remoteNodeManager.getRemoteNodesInChannel(channelName)
+        const x: ChannelInfo = {
+            nodes: remoteNodesInChannel.map(n => {
+                return n.getChannelNodeInfo(channelName)
+            }).filter(channelInfo => (channelInfo !== null))
+            .map(channelInfo => {
+                if (channelInfo === null) {
+                    throw Error('Unexpected channelInfo === null should have been filtered out')
+                }
+                return channelInfo;
+            })
+        }
+        return x;
+    }
+    getChannelNodeInfo(channelName: ChannelName): ChannelNodeInfo {
+        const body = {
+            channelName,
+            nodeId: this.#nodeId,
+            httpAddress: (this.p.hostName !== null) && (this.p.httpListenPort !== null) ? {hostName: this.p.hostName, port: this.p.httpListenPort} : null,
+            webSocketAddress: (this.p.hostName !== null) && (this.p.webSocketListenPort !== null) ? {hostName: this.p.hostName, port: this.p.webSocketListenPort} : null,
+            udpAddress: null, // todo
+            proxyHttpAddresses: [], // todo
+            timestamp: nowTimestamp()
+        }
+        return {
+            body,
+            signature: getSignature(body, this.#keyPair)
+        }
+    }
     async getRemoteLiveFeedSignedMessages(args: {
         nodeId: NodeId,
         feedId: FeedId,
@@ -191,9 +222,10 @@ class KacheryP2PNode {
             feedId,
             subfeedHash,
             position,
-            maxNumMessages
+            maxNumMessages,
+            waitMsec
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData);
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, {timeoutMsec: waitMsec + 1000});
         if (!isGetLiveFeedSignedMessagesResponseData(responseData)) {
             throw Error('Unexpected response type.');
         }
@@ -206,11 +238,12 @@ class KacheryP2PNode {
         }
         return signedMessages;
     }
-    async submitMessageToRemoteLiveFeed({nodeId, feedId, subfeedHash, message}: {
+    async submitMessageToRemoteLiveFeed({nodeId, feedId, subfeedHash, message, timeoutMsec}: {
         nodeId: NodeId,
         feedId: FeedId,
         subfeedHash: SubfeedHash,
-        message: SubmittedSubfeedMessage
+        message: SubmittedSubfeedMessage,
+        timeoutMsec: number
     }) {
         const requestData: SubmitMessageToLiveFeedRequestData = {
             requestType: 'submitMessageToLiveFeed',
@@ -218,7 +251,7 @@ class KacheryP2PNode {
             subfeedHash,
             message
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData);
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, {timeoutMsec: timeoutMsec});
         if (!isSubmitMessageToLiveFeedResponseData(responseData)) {
             throw Error(`Error submitting message to remote live feed: Unexpected response data.`);
         }
@@ -316,10 +349,7 @@ class KacheryP2PNode {
         }
     }
     async _handleAnnounceRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: AnnounceRequestData}): Promise<AnnounceResponseData> {
-        await this.#remoteNodeManager.handleAnnounceRequest({fromNodeId, requestData});
-        return {
-            requestType: 'announce'
-        }
+        return await this.#remoteNodeManager.handleAnnounceRequest({fromNodeId, requestData});
     }
     async _handleCheckForFileRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: CheckForFileRequestData}): Promise<CheckForFileResponseData> {
         const { fileKey } = requestData;
@@ -347,7 +377,7 @@ class KacheryP2PNode {
         }
     }
     async _handleGetLiveFeedSignedMessagesRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: GetLiveFeedSignedMessagesRequestData}): Promise<GetLiveFeedSignedMessagesResponseData> {
-        const { feedId, subfeedHash, position, maxNumMessages } = requestData;
+        const { feedId, subfeedHash, position, maxNumMessages, waitMsec } = requestData;
         const hasLiveFeed = await this.#feedManager.hasWriteableFeed({feedId});
         if (!hasLiveFeed) {
             return {
@@ -357,7 +387,7 @@ class KacheryP2PNode {
                 signedMessages: null
             }
         }
-        const signedMessages = await this.#feedManager.getSignedMessages({feedId, subfeedHash, position, maxNumMessages, waitMsec: 0});
+        const signedMessages = await this.#feedManager.getSignedMessages({feedId, subfeedHash, position, maxNumMessages, waitMsec});
         return {
             requestType: 'getLiveFeedSignedMessages',
             success: true,
