@@ -8,6 +8,8 @@ import DaemonApiServer from './DaemonApiServer';
 import PublicApiServer from './PublicApiServer';
 import PublicWebSocketServer from './PublicWebSocketServer'; // todo
 import assert from 'assert';
+import { NodeId } from './interfaces/core';
+import { ProxyConnectionToClient } from './ProxyConnectionToClient';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
 process.on('uncaughtException', function (err) {
@@ -169,7 +171,11 @@ const startDaemon = async ({
 
   if (webSocketListenPort) {
     const publicWebSocketServer = new PublicWebSocketServer(kNode, {verbose});
-    publicWebSocketServer.listen(webSocketListenPort); // todo
+    await publicWebSocketServer.startListening(webSocketListenPort);
+    console.info(`Websocket server listening on port ${webSocketListenPort}`)
+    publicWebSocketServer.onIncomingProxyConnection((nodeId: NodeId, c: ProxyConnectionToClient) => {
+      kNode.setProxyConnectionToClient(nodeId, c);
+    });
   }
 
   if (udpListenPort) {

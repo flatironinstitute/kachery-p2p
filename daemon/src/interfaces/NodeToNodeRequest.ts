@@ -1,4 +1,4 @@
-import { ChannelName, isChannelName, isNodeId, isRequestId, NodeId, RequestId, Timestamp, _validateObject, isTimestamp, isOneOf, isEqualTo, ChannelNodeInfo, isChannelNodeInfo, FileKey, isFileKey, FeedId, isFeedId, LiveFeedSubscriptions, isLiveFeedSubscriptions, optional, isBoolean, isNumber, ChannelInfo, isChannelInfo, Signature, SubfeedHash, isSubfeedHash, isNull, SubmittedSubfeedMessage, isSubmittedSubfeedMessage, ErrorMessage, isErrorMessage, isBigInt } from "./core"
+import { ChannelName, isChannelName, isNodeId, isRequestId, NodeId, RequestId, Timestamp, _validateObject, isTimestamp, isOneOf, isEqualTo, ChannelNodeInfo, isChannelNodeInfo, FileKey, isFileKey, FeedId, isFeedId, LiveFeedSubscriptions, isLiveFeedSubscriptions, optional, isBoolean, isNumber, ChannelInfo, isChannelInfo, Signature, SubfeedHash, isSubfeedHash, isNull, SubmittedSubfeedMessage, isSubmittedSubfeedMessage, ErrorMessage, isErrorMessage, isBigInt, SignedSubfeedMessage, isArrayOf, isSignedSubfeedMessage } from "./core"
 
 export interface NodeToNodeRequest {
     body: {
@@ -46,6 +46,7 @@ export type NodeToNodeRequestData = (
     CheckForLiveFeedRequestData |
     SetLiveFeedSubscriptionsRequestData |
     SubmitMessageToLiveFeedRequestData |
+    GetLiveFeedSignedMessagesRequestData |
     DownloadFileDataRequestData
 )
 export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
@@ -54,7 +55,10 @@ export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
         isAnnounceRequestData,
         isCheckForFileRequestData,
         isCheckForLiveFeedRequestData,
-        isSetLiveFeedSubscriptionsRequestData
+        isSetLiveFeedSubscriptionsRequestData,
+        isSubmitMessageToLiveFeedRequestData,
+        isGetLiveFeedSignedMessagesRequestData,
+        isDownloadFileDataRequestData
     ]) ? true : false;
 }
 export type NodeToNodeResponseData = (
@@ -63,7 +67,8 @@ export type NodeToNodeResponseData = (
     CheckForFileResponseData |
     CheckForLiveFeedResponseData |
     SetLiveFeedSubscriptionsResponseData |
-    SubmitMessageToLiveFeedResponseData
+    SubmitMessageToLiveFeedResponseData |
+    GetLiveFeedSignedMessagesResponseData
 )
 export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData => {
     return isOneOf([
@@ -71,7 +76,9 @@ export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData =>
         isAnnounceResponseData,
         isCheckForFileResponseData,
         isCheckForLiveFeedResponseData,
-        isSetLiveFeedSubscriptionsResponseData
+        isSetLiveFeedSubscriptionsResponseData,
+        isSubmitMessageToLiveFeedResponseData,
+        isGetLiveFeedSignedMessagesResponseData
     ]) ? true : false;
 }
 export const isDownloadRequest = (x: NodeToNodeRequestData) => {
@@ -213,6 +220,38 @@ export const isSubmitMessageToLiveFeedResponseData = (x: any): x is SubmitMessag
     return _validateObject(x, {
         requestType: isEqualTo('submitMessageToLiveFeed'),
         success: isBoolean,
+        errorMessage: isOneOf([isNull, isErrorMessage])
+    })
+}
+
+// getLiveFeedSignedMessages
+export interface GetLiveFeedSignedMessagesRequestData {
+    requestType: 'getLiveFeedSignedMessages',
+    feedId: FeedId,
+    subfeedHash: SubfeedHash,
+    position: number,
+    maxNumMessages: number
+}
+export const isGetLiveFeedSignedMessagesRequestData = (x: any): x is GetLiveFeedSignedMessagesRequestData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('getLiveFeedSignedMessages'),
+        feedId: isFeedId,
+        subfeedHash: isSubfeedHash,
+        position: isNumber,
+        maxNumMessages: isNumber
+    })
+}
+export interface GetLiveFeedSignedMessagesResponseData {
+    requestType: 'getLiveFeedSignedMessages',
+    success: boolean,
+    signedMessages: SignedSubfeedMessage[] | null,
+    errorMessage: ErrorMessage | null
+}
+export const isGetLiveFeedSignedMessagesResponseData = (x: any): x is GetLiveFeedSignedMessagesResponseData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('getLiveFeedSignedMessages'),
+        success: isBoolean,
+        signedMessages: isArrayOf(isSignedSubfeedMessage),
         errorMessage: isOneOf([isNull, isErrorMessage])
     })
 }

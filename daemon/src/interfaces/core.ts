@@ -1,8 +1,41 @@
 import { hexToPublicKey } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
 
+export type JSONPrimitive = string | number | boolean | null;
+export type JSONValue = JSONPrimitive | JSONObject | JSONArray;
+export type JSONObject = { [member: string]: JSONValue };
+export interface JSONArray extends Array<JSONValue> {}
+export const isJSONObject = (x: any): x is JSONObject => {
+    if (!isObject(x)) return false;
+    return isJSONSerializable(x);
+}
+const isJSONSerializable = (obj: Object): boolean => {
+    const isPlainObject = (a: Object) => {
+        return Object.prototype.toString.call(a) === '[object Object]';
+    };
+    const isPlain = (a: any) => {
+      return (a === null) || (typeof a === 'undefined' || typeof a === 'string' || typeof a === 'boolean' || typeof a === 'number' || Array.isArray(a) || isPlainObject(a));
+    }
+    if (!isPlain(obj)) {
+      return false;
+    }
+    for (let property in obj) {
+      if (obj.hasOwnProperty(property)) {
+        if (!isPlain(obj[property])) {
+          return false;
+        }
+        if (typeof obj[property] === "object") {
+          if (!isJSONSerializable(obj[property])) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+}
+
 // object
-const isObject = (x: any): x is Object => {
+export const isObject = (x: any): x is Object => {
     return ((x !== null) && (typeof x === 'object'));
 }
 
@@ -168,7 +201,7 @@ export interface KeyPair {
 export interface Signature extends String {
     __signature__: never
 }
-const isSignature = (x: any): x is Signature => {
+export const isSignature = (x: any): x is Signature => {
     if (!isString(x)) return false;
     return (/^[0-9a-f]{64}?$/.test(x));
 }
@@ -237,19 +270,22 @@ export const isFileKey = (x: any): x is FileKey => {
 // FindLiveFeedResult
 // todo
 export interface FindLiveFeedResult {
+    nodeId: NodeId
+}
 
+export interface ChannelNodeInfoBody {
+    channelName: ChannelName,
+    nodeId: NodeId,
+    httpAddress: Address | null,
+    webSocketAddress: Address | null,
+    udpAddress: Address | null,
+    proxyHttpAddresses: Address[],
+    timestamp: Timestamp
 }
 
 // ChannelNodeInfo
 export interface ChannelNodeInfo {
-    body: {
-        channelName: ChannelName,
-        nodeId: NodeId,
-        httpAddress: Address | null,
-        webSocketAddress: Address | null,
-        udpAddress: Address | null,
-        timestamp: Timestamp
-    },
+    body: ChannelNodeInfoBody,
     signature: Signature
 }
 export const isChannelNodeInfo = (x: any): x is ChannelNodeInfo => {
@@ -289,7 +325,7 @@ export const isSignedSubfeedMessage = (x: any): x is SignedSubfeedMessage => {
 }
 
 // SubfeedMessage
-export interface SubfeedMessage extends Object {
+export interface SubfeedMessage extends JSONObject {
     __subfeedMessage__: never;
 };
 export const isSubfeedMessage = (x: any): x is SubfeedMessage => {
@@ -297,7 +333,7 @@ export const isSubfeedMessage = (x: any): x is SubfeedMessage => {
 }
 
 // SubmittedSubfeedMessage
-export interface SubmittedSubfeedMessage extends Object {
+export interface SubmittedSubfeedMessage extends JSONObject {
     __submittedSubfeedMessage__: never;
 };
 export const isSubmittedSubfeedMessage = (x: any): x is SubmittedSubfeedMessage => {
@@ -339,6 +375,12 @@ export interface ErrorMessage extends String {
 }
 export const isErrorMessage = (x: any): x is ErrorMessage => {
     return (isString(x)) && (x.length < 1000) ;
+}
+export const errorMessage = (x: string): ErrorMessage => {
+    if (isErrorMessage(x)) return x;
+    else {
+        throw Error('Invalid error messsage');
+    }
 }
 
 // objectToMap and mapToObject

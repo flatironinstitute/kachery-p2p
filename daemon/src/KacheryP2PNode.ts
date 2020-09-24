@@ -1,22 +1,23 @@
-import { assert } from 'console';
 import fs from 'fs'
 import BootstrapPeerInterface from './BootstrapPeerInterface';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util';
 import { sleepMsec } from './common/util';
 import FeedManager from './FeedManager';
-import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage, FindFileResult, nowTimestamp, nodeIdToPublicKey, SubmittedSubfeedMessage } from './interfaces/core';
+import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage, FindFileResult, nowTimestamp, nodeIdToPublicKey, SubmittedSubfeedMessage, errorMessage } from './interfaces/core';
 import RemoteNodeManager from './RemoteNodeManager';
 import { isAddress } from './interfaces/core';
 
-import { isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest';
+import { isCheckForLiveFeedResponseData, isGetLiveFeedSignedMessagesResponseData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest';
 import { isAnnounceRequestData, AnnounceRequestData, AnnounceResponseData } from './interfaces/NodeToNodeRequest';
 import { isGetChannelInfoRequestData, GetChannelInfoRequestData, GetChannelInfoResponseData } from './interfaces/NodeToNodeRequest';
 import { isCheckForFileRequestData, CheckForFileRequestData, CheckForFileResponseData } from './interfaces/NodeToNodeRequest';
 import { isCheckForLiveFeedRequestData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData } from './interfaces/NodeToNodeRequest';
 import { isSetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData } from './interfaces/NodeToNodeRequest';
+import { isGetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData } from './interfaces/NodeToNodeRequest';
 import { LiveFeedSubscriptionManager } from './LiveFeedSubscriptionManager';
 import { KacheryStorageManager } from './KacheryStorageManager';
 import { response } from 'express';
+import { ProxyConnectionToClient } from './ProxyConnectionToClient';
 
 interface LoadFileProgress {
     bytesLoaded: bigint,
@@ -44,6 +45,7 @@ class KacheryP2PNode {
     #remoteNodeManager: RemoteNodeManager
     #kacheryStorageManager: KacheryStorageManager
     #liveFeedSubscriptionManager: LiveFeedSubscriptionManager
+    #proxyConnectionsToClients = new Map<NodeId, ProxyConnectionToClient>()
     constructor(params : {
         configDir: string,
         verbose: number,
@@ -108,6 +110,9 @@ class KacheryP2PNode {
     }
     channelNames() {
         return [...this.#channelNames];
+    }
+    keyPair() {
+        return this.#keyPair
     }
     halt() {
         this.#remoteNodeManager.halt();
@@ -175,16 +180,42 @@ class KacheryP2PNode {
     feedManager() {
         return this.#feedManager
     }
-    async getLiveFeedSignedMessages(args: {
-        channelName: ChannelName,
+    setProxyConnectionToClient(nodeId: NodeId, c: ProxyConnectionToClient) {
+        this.#proxyConnectionsToClients.set(nodeId, c);
+        c.onClosed(() => {
+            if (this.#proxyConnectionsToClients.get(nodeId) === c) {
+                this.#proxyConnectionsToClients.delete(nodeId);
+            }
+        })
+    }
+    async getRemoteLiveFeedSignedMessages(args: {
         nodeId: NodeId,
         feedId: FeedId,
         subfeedHash: SubfeedHash,
         position: number,
+        maxNumMessages: number,
         waitMsec: number
     }): Promise<SignedSubfeedMessage[]> {
-        // todo
-        return [];
+        const { nodeId, feedId, subfeedHash, position, maxNumMessages, waitMsec } = args;
+        const requestData: GetLiveFeedSignedMessagesRequestData = {
+            requestType: 'getLiveFeedSignedMessages',
+            feedId,
+            subfeedHash,
+            position,
+            maxNumMessages
+        }
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData);
+        if (!isGetLiveFeedSignedMessagesResponseData(responseData)) {
+            throw Error('Unexpected response type.');
+        }
+        if (!responseData.success) {
+            throw Error(`Error getting remote live feed signed messages: ${responseData.errorMessage}`);
+        }
+        const { signedMessages } = responseData;
+        if (signedMessages === null) {
+            throw Error('Unexpected: signedMessages is null.');
+        }
+        return signedMessages;
     }
     async submitMessageToRemoteLiveFeed({nodeId, feedId, subfeedHash, message}: {
         nodeId: NodeId,
@@ -206,26 +237,50 @@ class KacheryP2PNode {
             throw Error(`Error submitting message to remote live feed: ${responseData.errorMessage}`);
         }
     }
-    findLiveFeed(args: {
+    async findLiveFeed(args: {
         feedId: FeedId,
         timeoutMsec: number
-    }): {
-        onFound: (callback: ((result: FindLiveFeedResult) => void)) => void,
-        onFinished: (callback: (() => void)) => void,
-        cancel: () => void
-    } {
-        // todo
-        return {
-            onFound: () => {},
-            onFinished: () => {},
-            cancel: () => {}
-        }
+    }): Promise<FindLiveFeedResult | null> {
+        const {feedId, timeoutMsec} = args;
+        return new Promise<FindLiveFeedResult | null>((resolve, reject) => {
+            const requestData: CheckForLiveFeedRequestData = {
+                requestType: 'checkForLiveFeed',
+                feedId
+            }
+            const {onResponse, onFinished, cancel} = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, {timeoutMsec, channelNames: this.#channelNames});
+            let found = false;
+            onResponse((nodeId, responseData) => {
+                if (found) return;
+                if (!isCheckForLiveFeedResponseData(responseData)) {
+                    throw Error('Unexpected response type.');
+                }
+                if (responseData.found) {
+                    found = true;
+                    resolve({
+                        nodeId
+                    })
+                }
+            });
+            onFinished(() => {
+                if (!found) {
+                    resolve(null);
+                }
+            });
+        });
     }
     async handleNodeToNodeRequest(request: NodeToNodeRequest): Promise<NodeToNodeResponse> {
         const { requestId, fromNodeId, toNodeId, timestamp, requestData } = request.body;
         if (!verifySignature(request.body, request.signature, nodeIdToPublicKey(fromNodeId))) {
             // todo: is this the right way to handle this situation?
             throw Error('Invalid signature in node-to-node request');
+        }
+        if (toNodeId !== this.#nodeId) {
+            // going to a different node
+            const p = this.#proxyConnectionsToClients.get(toNodeId);
+            if (!p) {
+                throw Error('No proxy connection to node.');
+            }
+            return await p.sendRequest(request);
         }
         
         let responseData: NodeToNodeResponseData;
@@ -243,6 +298,9 @@ class KacheryP2PNode {
         }
         else if (isSetLiveFeedSubscriptionsRequestData(requestData)) {
             responseData = await this._handleSetLiveFeedSubscriptionsRequest({fromNodeId, requestData});
+        }
+        else if (isGetLiveFeedSignedMessagesRequestData(requestData)) {
+            responseData = await this._handleGetLiveFeedSignedMessagesRequest({fromNodeId, requestData});
         }
         else {
             console.warn(requestData);
@@ -297,6 +355,25 @@ class KacheryP2PNode {
         return {
             requestType: 'setLiveFeedSubscriptions',
             success: true
+        }
+    }
+    async _handleGetLiveFeedSignedMessagesRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: GetLiveFeedSignedMessagesRequestData}): Promise<GetLiveFeedSignedMessagesResponseData> {
+        const { feedId, subfeedHash, position, maxNumMessages } = requestData;
+        const hasLiveFeed = await this.#feedManager.hasWriteableFeed({feedId});
+        if (!hasLiveFeed) {
+            return {
+                requestType: 'getLiveFeedSignedMessages',
+                success: false,
+                errorMessage: errorMessage('Live feed not found.'),
+                signedMessages: null
+            }
+        }
+        const signedMessages = await this.#feedManager.getSignedMessages({feedId, subfeedHash, position, maxNumMessages, waitMsec: 0});
+        return {
+            requestType: 'getLiveFeedSignedMessages',
+            success: true,
+            errorMessage: null,
+            signedMessages
         }
     }
     async _start() {

@@ -159,9 +159,7 @@ class FeedManager {
         }
         return subfeed.getNumMessages();
     }
-    async getFeedInfo({ feedId, timeoutMsec }: {feedId: FeedId, timeoutMsec: number}) {
-        validateObject(feedId, '/FeedId');
-        
+    async getFeedInfo({ feedId, timeoutMsec }: {feedId: FeedId, timeoutMsec: number}): Promise<FindLiveFeedResult> {
         // Get the p2p information about the feed
         // If this is a local and writeable, just return {isWriteable: true}
         // Otherwise we search the p2p network for the feed and if it is found we return {isWriteable: false}
@@ -169,16 +167,13 @@ class FeedManager {
         const privateKey = await this._getPrivateKeyForFeed(feedId);
         if (privateKey) {
             return {
-                isWriteable: true
+                nodeId: this._node.nodeId()
             }
         }
         else {
             // Get the liveFeedInfo. If not found, this will throw an error.
             const liveFeedInfo = await this._remoteFeedManager.findLiveFeedInfo({feedId, timeoutMsec});
-            return {
-                isWriteable: false,
-                liveFeedInfo
-            }
+            return liveFeedInfo;
         }
     }
     async getAccessRules({ feedId, subfeedHash }: {feedId: FeedId, subfeedHash: SubfeedHash}): Promise<SubfeedAccessRules | null> {
@@ -364,9 +359,8 @@ class RemoteFeedManager {
     constructor(node: KacheryP2PNode) {
         this._node = node; // The kachery-p2p node
     }
-    async getSignedMessages({feedId, subfeedHash, position, waitMsec}: {feedId: FeedId, subfeedHash: SubfeedHash, position: number, waitMsec: number}): Promise<SignedSubfeedMessage[] | null> {
+    async getSignedMessages({feedId, subfeedHash, position, maxNumMessages, waitMsec}: {feedId: FeedId, subfeedHash: SubfeedHash, position: number, maxNumMessages: number, waitMsec: number}): Promise<SignedSubfeedMessage[] | null> {
         // Get signed messages from a remote feed
-        console.info('getSignedMessages', {feedId, subfeedHash, position, waitMsec});
 
         // Search and find the info for the feed (channel and node id)
         // If not found, return null
@@ -390,12 +384,12 @@ class RemoteFeedManager {
         }
 
         // Now that we know the channel and nodeId, we can get the messages from the swarm
-        const signedMessages = await this._node.getLiveFeedSignedMessages({
-            channelName: liveFeedInfo.channel,
+        const signedMessages = await this._node.getRemoteLiveFeedSignedMessages({
             nodeId: liveFeedInfo.nodeId,
             feedId,
             subfeedHash,
             position,
+            maxNumMessages,
             waitMsec
         });
 
@@ -437,7 +431,6 @@ class RemoteFeedManager {
 
         // Now that we know the channel and nodeId, we can submit the messages via the swarm
         await this._node.submitMessageToRemoteLiveFeed({
-            channelName: liveFeedInfo.channel,
             nodeId: liveFeedInfo.nodeId,
             feedId,
             subfeedHash,
@@ -449,38 +442,19 @@ class RemoteFeedManager {
         // If not found, throws an error.
 
         // First check if we have the information in the memory cache
+        // todo: avoid a memory leak
         const cachedInfo = this._liveFeedInfos.get(feedId);
         if (cachedInfo) return cachedInfo;
-        const asyncHelper = async (): Promise<FindLiveFeedResult> => {
-            return new Promise((resolve, reject) => {
-                // Find the live feed (this could in theory return multiple results, but ideally it should only return one)
-                const x = this._node.findLiveFeed({feedId, timeoutMsec});
-                let resolved = false;
-                x.onFound(result => {
-                    if (resolved) return;
-                    validateObject(result, '/FindFileOrLiveFeedResult');
 
-                    // We found it! The result will contain channel and nodeId
-                    resolved = true;
-                    resolve(result);
-
-                    // Cancel the request because we have what we need
-                    x.cancel();
-                });
-                x.onFinished(() => {
-                    if (resolved) return;
-                    // I guess we finished without finding anything. Throw an exception
-                    reject(Error(`Unable to find live feed info for feed: ${feedId}`));
-                })
-            });
+        const x = await this._node.findLiveFeed({feedId, timeoutMsec});
+        if (x === null) {
+            throw Error('Unable to find live feed.');
         }
-        const result = await asyncHelper();
 
         // Store in memory cache
-        this._liveFeedInfos.set(feedId, result);
-
-        // Return the result. The result will contain channel and nodeId.
-        return result; 
+        // todo: avoid memory leak
+        this._liveFeedInfos.set(feedId, x);
+        return x;
     }
 }
 
@@ -658,6 +632,7 @@ class Subfeed {
                     feedId: this._feedId,
                     subfeedHash: this._subfeedHash,
                     position: this._signedMessages.length,
+                    maxNumMessages,
                     waitMsec
                 });
                 if ((remoteSignedMessages) && (remoteSignedMessages.length > 0)) {

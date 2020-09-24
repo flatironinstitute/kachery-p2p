@@ -3,7 +3,7 @@ import JsonSocket from 'json-socket';
 import { sleepMsec } from './common/util';
 import start_http_server from './common/start_http_server.js';
 import KacheryP2PNode from './KacheryP2PNode';
-import { ChannelName, FileKey, isSubfeedWatches, NodeId, isNumber, isFeedsConfigFeed, isSubfeedAccessRules, isSubfeedHash, isFileKey, isNodeId, isChannelName, isFeedId, isString, isNull, isSignedSubfeedMessage, isSubfeedMessage, isArrayOf, toSubfeedWatchesRAM, FeedId, isFeedName, SubfeedMessage, SignedSubfeedMessage, FindLiveFeedResult, SubfeedAccessRules, SubfeedWatchName, mapToObject, _validateObject, optional, FeedName, SubfeedHash, SubfeedWatches, isSubmittedSubfeedMessage, SubmittedSubfeedMessage } from './interfaces/core';
+import { ChannelName, FileKey, isSubfeedWatches, NodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isFileKey, isNodeId, isChannelName, isFeedId, isString, isNull, isSignedSubfeedMessage, isSubfeedMessage, isArrayOf, toSubfeedWatchesRAM, FeedId, isFeedName, SubfeedMessage, SignedSubfeedMessage, FindLiveFeedResult, SubfeedAccessRules, SubfeedWatchName, mapToObject, _validateObject, optional, FeedName, SubfeedHash, SubfeedWatches, isSubmittedSubfeedMessage, SubmittedSubfeedMessage, JSONObject, isJSONObject } from './interfaces/core';
 import { Socket } from 'net';
 
 interface Req {
@@ -15,30 +15,30 @@ interface Req {
 interface Res {
     json: (obj: {
         success: boolean
-    }) => void,
+    } & JSONObject) => void,
     end: () => void,
     status: (s: number) => Res,
     send: (x: any) => Res
 }
 
 export default class DaemonApiServer {
-    _node: KacheryP2PNode
-    _stopper_callbacks: (() => void)[]
-    _app: Express
+    #node: KacheryP2PNode
+    #stopperCallbacks: (() => void)[]
+    #app: Express
 
     // This is the API server for the local daemon
     // The local Python code communicates with the daemon
     // via this API
     constructor(node: KacheryP2PNode, {verbose}) {
-        this._node = node; // The kachery-p2p daemon
-        this._stopper_callbacks = [];
-        this._app = express(); // the express app
+        this.#node = node; // The kachery-p2p daemon
+        this.#stopperCallbacks = [];
+        this.#app = express(); // the express app
 
-        this._app.set('json spaces', 4); // when we respond with json, this is how it will be formatted
-        // this._app.use(cors()); // in the future, if we want to do this
-        this._app.use(express.json());
+        this.#app.set('json spaces', 4); // when we respond with json, this is how it will be formatted
+        // this.#app.use(cors()); // in the future, if we want to do this
+        this.#app.use(express.json());
 
-        this._app.all('/*', (req, res, next) => {
+        this.#app.all('/*', (req, res, next) => {
             if (!isLocalRequest(req)) {
                 console.warn(`Rejecting access to remote request from ${req.connection.remoteAddress}`);
                 res.send("API only accessible from the local device").status(403).end();
@@ -48,7 +48,7 @@ export default class DaemonApiServer {
         });
 
         // /probe - check whether the daemon is up and running and return info such as the node ID
-        this._app.get('/probe', async (req, res) => {
+        this.#app.get('/probe', async (req, res) => {
             console.info('/probe');
             try {
                 await this._apiProbe(req, res) 
@@ -58,7 +58,7 @@ export default class DaemonApiServer {
             }
         });
         // /halt - halt the kachery-p2p daemon (stops the server process)
-        this._app.get('/halt', async (req, res) => {
+        this.#app.get('/halt', async (req, res) => {
             console.info('/halt');
             await sleepMsec(100);
             try {
@@ -71,7 +71,7 @@ export default class DaemonApiServer {
             }
         });
         // /findFile - find a file (or feed) in the remote nodes. May return more than one.
-        this._app.post('/findFile', async (req, res) => {
+        this.#app.post('/findFile', async (req, res) => {
             console.info('/findFile');
             try {
                 await this._apiFindFile(req, res)
@@ -81,7 +81,7 @@ export default class DaemonApiServer {
             }
         });
         // /loadFile - download file from remote node(s) and store in kachery storage
-        this._app.post('/loadFile', async (req, res) => {
+        this.#app.post('/loadFile', async (req, res) => {
             console.info('/loadFile');
             try {
                 await this._apiLoadFile(req, res)
@@ -92,7 +92,7 @@ export default class DaemonApiServer {
             }
         });
         // /feed/createFeed - create a new writeable feed on this node
-        this._app.post('/feed/createFeed', async (req, res) => {
+        this.#app.post('/feed/createFeed', async (req, res) => {
             console.info('/feed/createFeed');
             try {
                 await this._feedApiCreateFeed(req, res)
@@ -102,7 +102,7 @@ export default class DaemonApiServer {
             }
         });
         // /feed/deleteFeed - delete feed on this node
-        this._app.post('/feed/deleteFeed', async (req, res) => {
+        this.#app.post('/feed/deleteFeed', async (req, res) => {
             console.info('/feed/deleteFeed');
             try {
                 await this._feedApiDeleteFeed(req, res)
@@ -112,7 +112,7 @@ export default class DaemonApiServer {
             }
         });
         // /feed/getFeedId - lookup the ID of a local feed based on its name
-        this._app.post('/feed/getFeedId', async (req, res) => {
+        this.#app.post('/feed/getFeedId', async (req, res) => {
             console.info('/feed/getFeedId');
             try {
                 await this._feedApiGetFeedId(req, res)
@@ -122,7 +122,7 @@ export default class DaemonApiServer {
             }
         });
         // /feed/appendMessages - append messages to a local writeable subfeed
-        this._app.post('/feed/appendMessages', async (req, res) => {
+        this.#app.post('/feed/appendMessages', async (req, res) => {
             console.info('/feed/appendMessages', req.body.messages.map(msg => (msg.type)));
             try {
                 await this._feedApiAppendMessages(req, res)
@@ -133,7 +133,7 @@ export default class DaemonApiServer {
             }
         });
         // /feed/submitMessage - submit messages to a remote live subfeed (must have permission)
-        this._app.post('/feed/submitMessage', async (req, res) => {
+        this.#app.post('/feed/submitMessage', async (req, res) => {
             console.info('/feed/submitMessage');
             try {
                 await this._feedApiSubmitMessage(req, res)
@@ -144,7 +144,7 @@ export default class DaemonApiServer {
             }
         });
         // /feed/getMessages - get messages from a local or remote subfeed
-        this._app.post('/feed/getMessages', async (req, res) => {
+        this.#app.post('/feed/getMessages', async (req, res) => {
             // important not to log this because then we'll have a feedback loop if we are listening to the log by getting the messages!
             // console.info('/feed/getMessages');
             try {
@@ -156,7 +156,7 @@ export default class DaemonApiServer {
             }
         });
         // /feed/getSignedMessages - get signed messages from a local or remote subfeed
-        this._app.post('/feed/getSignedMessages', async (req, res) => {
+        this.#app.post('/feed/getSignedMessages', async (req, res) => {
             console.info('/feed/getSignedMessages');
             try {
                 await this._feedApiGetSignedMessages(req, res)
@@ -167,7 +167,7 @@ export default class DaemonApiServer {
             }
         });
         // /feed/getNumMessages - get number of messages in a subfeed
-        this._app.post('/feed/getNumMessages', async (req, res) => {
+        this.#app.post('/feed/getNumMessages', async (req, res) => {
             console.info('/feed/getNumMessages');
             try {
                 await this._feedApiGetNumMessages(req, res)
@@ -177,20 +177,20 @@ export default class DaemonApiServer {
                 res.status(500).send('Error getting num. messages.');
             }
         });
-        // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
-        this._app.post('/feed/getFeedInfo', async (req, res) => {
-            console.info('/feed/getFeedInfo');
+        // /feed/getLiveFeedInfo - get info for a feed - such as whether it is writeable
+        this.#app.post('/feed/getLiveFeedInfo', async (req, res) => {
+            console.info('/feed/getLiveFeedInfo');
             try {
-                await this._feedApiGetFeedInfo(req, res)
+                await this._feedApiGetLiveFeedInfo(req, res)
             }
             catch(err) {
                 console.warn(err.stack);
-                console.warn('Error in getFeedInfo', {error: err.message});
+                console.warn('Error in getLiveFeedInfo', {error: err.message});
                 res.status(500).send('Error getting feed info.');
             }
         });
         // /feed/getAccessRules - get access rules for a local writeable subfeed
-        this._app.post('/feed/getAccessRules', async (req, res) => {
+        this.#app.post('/feed/getAccessRules', async (req, res) => {
             console.info('/feed/getAccessRules');
             try {
                 await this._feedApiGetAccessRules(req, res)
@@ -201,7 +201,7 @@ export default class DaemonApiServer {
             }
         });
         // /feed/setAccessRules - set access rules for a local writeable subfeed
-        this._app.post('/feed/setAccessRules', async (req, res) => {
+        this.#app.post('/feed/setAccessRules', async (req, res) => {
             console.info('/feed/setAccessRules');
             try {
                 await this._feedApiSetAccessRules(req, res)
@@ -212,7 +212,7 @@ export default class DaemonApiServer {
             }
         });
         // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
-        this._app.post('/feed/watchForNewMessages', async (req, res) => {
+        this.#app.post('/feed/watchForNewMessages', async (req, res) => {
             console.info('/feed/watchForNewMessages', req.body.subfeedWatches);
             try {
                 await this._feedApiWatchForNewMessages(req, res)
@@ -229,7 +229,8 @@ export default class DaemonApiServer {
             success: boolean,
             nodeId: NodeId
         };
-        const response: ApiProbeResponse = {success: true, nodeId: this._node.nodeId()};
+        const response: ApiProbeResponse = {success: true, nodeId: this.#node.nodeId()};
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /halt - halt the kachery-p2p daemon (stops the server process)
@@ -237,9 +238,10 @@ export default class DaemonApiServer {
         interface ApiHaltResponse {
             success: boolean
         };
-        this._node.halt();
-        this._stopper_callbacks.forEach(cb => {cb();});
+        this.#node.halt();
+        this.#stopperCallbacks.forEach(cb => {cb();});
         const response: ApiHaltResponse = { success: true };
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /findFile - find a file (or feed) in the remote nodes. May return more than one.
@@ -257,7 +259,7 @@ export default class DaemonApiServer {
         const reqData = req.body;
         if (!isApiFindFileRequest(reqData)) throw Error('Invalid request in _apiFindFile');
         const { fileKey, timeoutMsec } = reqData;
-        const x = this._node.findFile({fileKey, timeoutMsec});
+        const x = this.#node.findFile({fileKey, timeoutMsec});
         const jsonSocket = new JsonSocket(res);
         let isDone = false;
         x.onFound(result => {
@@ -296,7 +298,7 @@ export default class DaemonApiServer {
         if (!isApiLoadFileRequest(reqData)) throw Error('Invalid request in _apiLoadFile');
 
         const { fileKey, fromNode, fromChannel } = reqData;
-        const x = this._node.loadFile({
+        const x = this.#node.loadFile({
             fileKey: fileKey,
             opts: {fromNode, fromChannel}
         });
@@ -348,8 +350,9 @@ export default class DaemonApiServer {
         if (!isFeedApiCreateFeedRequest(reqData)) throw Error('Invalid request in _feedApiCreateFeed');
 
         const feedName = reqData.feedName || null;
-        const feedId = await this._node.feedManager().createFeed({feedName});
+        const feedId = await this.#node.feedManager().createFeed({feedName});
         const response: FeedApiCreateFeedResponse = { success: true, feedId };
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /feed/deleteFeed - delete feed on this node
@@ -369,9 +372,10 @@ export default class DaemonApiServer {
         if (!isFeedApiDeleteFeedRequest(reqData)) throw Error('Invalid request in _feedApiDeleteFeed');
 
         const { feedId } = reqData;
-        await this._node.feedManager().deleteFeed({feedId});
+        await this.#node.feedManager().deleteFeed({feedId});
 
         const response: FeedApiDeleteFeedResponse = {success: true}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /feed/getFeedId - lookup the ID of a local feed based on its name
@@ -391,7 +395,7 @@ export default class DaemonApiServer {
         const reqData = req.body;
         if (!isFeedApiGetFeedIdRequest(reqData)) throw Error('Invalid request in _feedApiGetFeedId');
         const { feedName } = reqData;
-        const feedId = await this._node.feedManager().getFeedId({feedName});
+        const feedId = await this.#node.feedManager().getFeedId({feedName});
         let response: FeedApiGetFeedIdResponse;
         if (!feedId) {
             response = { success: false, feedId: null };
@@ -399,6 +403,7 @@ export default class DaemonApiServer {
         else {
             response = { success: true, feedId };
         }
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /feed/appendMessages - append messages to a local writeable subfeed
@@ -423,11 +428,12 @@ export default class DaemonApiServer {
 
         const { feedId, subfeedHash, messages } = reqData;
 
-        await this._node.feedManager().appendMessages({
+        await this.#node.feedManager().appendMessages({
             feedId, subfeedHash, messages
         });
 
         const response: FeedApiAppendMessagesResponse = {success: true}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /feed/submitMessage - submit message to a remote live subfeed (must have permission)
@@ -454,9 +460,10 @@ export default class DaemonApiServer {
 
         const { feedId, subfeedHash, message, timeoutMsec } = reqData;
 
-        await this._node.feedManager().submitMessage({feedId, subfeedHash, message, timeoutMsec});
+        await this.#node.feedManager().submitMessage({feedId, subfeedHash, message, timeoutMsec});
 
         const response: FeedApiSubmitMessageResponse = {success: true}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /feed/getMessages - get messages from a local or remote subfeed
@@ -486,11 +493,12 @@ export default class DaemonApiServer {
 
         const { feedId, subfeedHash, position, maxNumMessages, waitMsec } = reqData;
 
-        const messages = await this._node.feedManager().getMessages({
+        const messages = await this.#node.feedManager().getMessages({
             feedId, subfeedHash, position, maxNumMessages, waitMsec
         });
 
         const response: FeedApiGetMessagesResponse = {success: true, messages}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /feed/getSignedMessages - get signed messages from a local or remote subfeed
@@ -520,11 +528,12 @@ export default class DaemonApiServer {
 
         const { feedId, subfeedHash, position, maxNumMessages, waitMsec } = reqData;
 
-        const signedMessages = await this._node.feedManager().getSignedMessages({
+        const signedMessages = await this.#node.feedManager().getSignedMessages({
             feedId, subfeedHash, position, maxNumMessages, waitMsec
         });
 
         const response: FeedApiGetSignedMessagesResponse = {success: true, signedMessages}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /feed/getNumMessages - get number of messages in a subfeed
@@ -548,36 +557,38 @@ export default class DaemonApiServer {
 
         const { feedId, subfeedHash } = reqData;
 
-        const numMessages = await this._node.feedManager().getNumMessages({
+        const numMessages = await this.#node.feedManager().getNumMessages({
             feedId, subfeedHash
         });
 
         const response: FeedApiGetNumMessagesResponse = {success: true, numMessages}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
-    // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
-    async _feedApiGetFeedInfo(req: Req, res: Res) {
-        interface FeedApiGetFeedInfoRequest {
+    // /feed/getLiveFeedInfo - get info for a feed - such as whether it is writeable
+    async _feedApiGetLiveFeedInfo(req: Req, res: Res) {
+        interface FeedApiGetLiveFeedInfoRequest {
             feedId: FeedId,
             timeoutMsec: number
         }
-        const isFeedApiGetFeedInfoRequest = (x: any): x is FeedApiGetFeedInfoRequest => {
+        const isFeedApiGetLiveFeedInfoRequest = (x: any): x is FeedApiGetLiveFeedInfoRequest => {
             return _validateObject(x, {
                 feedId: isFeedId,
                 subfeedHash: isSubfeedHash
             });
         }
-        interface FeedApiGetFeedInfoResponse {
+        interface FeedApiGetLiveFeedInfoResponse {
             success: boolean,
-            info: FindLiveFeedResult
+            liveFeedInfo: FindLiveFeedResult
         }
         const reqData = req.body;
-        if (!isFeedApiGetFeedInfoRequest(reqData)) throw Error('Invalid request in _feedApiGetFeedInfo');
+        if (!isFeedApiGetLiveFeedInfoRequest(reqData)) throw Error('Invalid request in _feedApiGetLiveFeedInfo');
 
         const { feedId, timeoutMsec } = reqData;
-        const info = await this._node.feedManager().getFeedInfo({feedId, timeoutMsec});
+        const liveFeedInfo = await this.#node.feedManager().getFeedInfo({feedId, timeoutMsec});
 
-        const response: FeedApiGetFeedInfoResponse = {success: true, info}
+        const response: FeedApiGetLiveFeedInfoResponse = {success: true, liveFeedInfo}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /feed/getAccessRules - get access rules for a local writeable subfeed
@@ -601,7 +612,7 @@ export default class DaemonApiServer {
 
         const { feedId, subfeedHash } = reqData;
 
-        const accessRules = await this._node.feedManager().getAccessRules({feedId, subfeedHash});
+        const accessRules = await this.#node.feedManager().getAccessRules({feedId, subfeedHash});
         let response: FeedApiGetAccessRulesResponse;
         if (accessRules) {
             response = {success: true, accessRules}
@@ -609,6 +620,7 @@ export default class DaemonApiServer {
         else {
             response = {success: false}
         };
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /feed/setAccessRules - set access rules for a local writeable subfeed
@@ -633,9 +645,10 @@ export default class DaemonApiServer {
 
         const { feedId, subfeedHash, accessRules } = reqData;
 
-        await this._node.feedManager().setAccessRules({feedId, subfeedHash, accessRules});
+        await this.#node.feedManager().setAccessRules({feedId, subfeedHash, accessRules});
 
         const response: FeedApiSetAccessRulesResponse = {success: true}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
@@ -659,11 +672,12 @@ export default class DaemonApiServer {
 
         const { subfeedWatches, waitMsec } = reqData;
 
-        const messages = await this._node.feedManager().watchForNewMessages({
+        const messages = await this.#node.feedManager().watchForNewMessages({
             subfeedWatches: toSubfeedWatchesRAM(subfeedWatches), waitMsec, maxNumMessages: 0
         });
 
         const response: FeedApiWatchForNewMessagesResponse = {success: true, messages: mapToObject(messages)}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // Helper function for returning http request with an error response
@@ -687,10 +701,10 @@ export default class DaemonApiServer {
     async listen(port) {
         const stopper = {
             onStop: cb => {
-                this._stopper_callbacks.push(cb);
+                this.#stopperCallbacks.push(cb);
             }
         }
-        await start_http_server(this._app, port, stopper);
+        await start_http_server(this.#app, port, stopper);
     }
 }
 
