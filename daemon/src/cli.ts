@@ -8,7 +8,7 @@ import DaemonApiServer from './DaemonApiServer';
 import PublicApiServer from './PublicApiServer';
 import PublicWebSocketServer from './PublicWebSocketServer'; // todo
 import assert from 'assert';
-import { NodeId } from './interfaces/core';
+import { ChannelName, HostName, isAddress, isChannelName, JSONObject, NodeId, Port, isHostName, isPort, Address } from './interfaces/core';
 import { ProxyConnectionToClient } from './ProxyConnectionToClient';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
@@ -79,11 +79,15 @@ function main() {
           type: 'boolean'
         })
       },
-      handler: (argv) => {
-        const channelNames = argv.channel || [];
+      handler: (argv: JSONObject) => {
+        const channelNames = ((argv.channel || []) as string[]).map(ch => {
+          if (!isChannelName(ch)) throw Error('Invalid channel name');
+          return ch;
+        });
+        
         const bootstrapStrings = argv.bootstrap || null;
         const bootstrapInfos = bootstrapStrings ? (
-          bootstrapStrings.map(x => parseBootstrapInfo(x))
+          (bootstrapStrings as string[]).map(x => parseBootstrapInfo(x))
         ): null;
         const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
         if (!fs.existsSync(configDir)) {
@@ -94,9 +98,34 @@ function main() {
         const udpListenPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort;
         const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : 14508;
         const daemonApiPort = process.env.KACHERY_P2P_DAEMON_API_PORT || process.env.KACHERY_P2P_API_PORT || 20431;
-        const label = argv.label;
+        const label = argv.label as string;
         const noBootstrap = argv['no-bootstrap'] ? true : false;
-        const verbose = argv.verbose || 0;
+        const verbose = Number(argv.verbose || 0);
+
+        if (hostName !== null) {
+          if (!isHostName(hostName)) {
+            throw Error('Invalid host name');
+          }
+        }
+        if (!isPort(daemonApiPort)) {
+          throw Error('Invalid daemon api port');
+        }
+        if (httpListenPort !== null) {
+          if (!isPort(httpListenPort)) {
+            throw Error('Invalid http listen port');
+          }
+        }
+        if (webSocketListenPort !== null) {
+          if (!isPort(webSocketListenPort)) {
+            throw Error('Invalid websocket listen port');
+          }
+        }
+        if (udpListenPort !== null) {
+          if (!isPort(udpListenPort)) {
+            throw Error('Invalid udp listen port');
+          }
+        }
+
         startDaemon({
           channelNames,
           configDir,
@@ -121,40 +150,54 @@ function main() {
     .argv
 }
 
-function parseBootstrapInfo(x) {
+function parseBootstrapInfo(x: string): Address {
   const a = x.split(':');
   assert(a.length === 2, 'Improper bootstrap string')
-  return {
+  const b = {
     hostName: a[0],
     port: Number(a[1])
   };
+  if (!isAddress(b)) {
+    throw Error('Improper bootstrap info.');
+  }
+  return b;
 }
 
-const startDaemon = async ({
-  channelNames,
-  configDir,
-  verbose,
-  hostName,
-  daemonApiPort,
-  httpListenPort,
-  webSocketListenPort,
-  udpListenPort,
-  label,
-  bootstrapInfos,
-  opts
+const startDaemon = async (args: {
+  channelNames: ChannelName[],
+  configDir: string,
+  verbose: number,
+  hostName: HostName | null,
+  daemonApiPort: Port,
+  httpListenPort: Port | null,
+  webSocketListenPort: Port | null,
+  udpListenPort: Port | null,
+  label: string,
+  bootstrapInfos: Address[] | null,
+  opts: {
+    noBootstrap: boolean
+  }
 }) => {
+  const {
+    channelNames,
+    configDir,
+    verbose,
+    hostName,
+    daemonApiPort,
+    httpListenPort,
+    webSocketListenPort,
+    udpListenPort,
+    label,
+    bootstrapInfos,
+    opts
+  } = args;
   // const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, udpListenPort: listenPort, label, bootstrapInfos, opts});
   const kNode = new KacheryP2PNode({
     configDir,
     verbose,
-    httpAddress: {
-      hostName,
-      port: httpListenPort
-    },
-    webSocketAddress: {
-      hostName,
-      port: webSocketListenPort
-    },
+    hostName,
+    httpListenPort,
+    webSocketListenPort,
     label,
     bootstrapInfos,
     channelNames,
@@ -163,10 +206,12 @@ const startDaemon = async ({
 
   const daemonApiServer = new DaemonApiServer(kNode, {verbose});
   daemonApiServer.listen(daemonApiPort);
+  console.info(`Daemon http server listening on port ${daemonApiPort}`)
 
   if (httpListenPort) {
     const publicApiServer = new PublicApiServer(kNode, {verbose});
     publicApiServer.listen(httpListenPort);
+    console.info(`Public http server listening on port ${httpListenPort}`)
   }
 
   if (webSocketListenPort) {
@@ -178,10 +223,10 @@ const startDaemon = async ({
     });
   }
 
-  if (udpListenPort) {
-    const publicUdpSocketServer = new PublicWebSocketServer(kNode, {verbose});
-    publicUdpSocketServer.listen(udpListenPort);
-  }
+  // if (udpListenPort) {
+  //   const publicUdpSocketServer = new PublicWebSocketServer(kNode, {verbose});
+  //   publicUdpSocketServer.listen(udpListenPort);
+  // }
 }
 
 main();

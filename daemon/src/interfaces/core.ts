@@ -135,16 +135,19 @@ export const isAddress = (x: any): x is Address => {
 export interface Port extends Number {
     __port__: never
 }
-const isPort = (x: any) : x is Port => {
+export const isPort = (x: any) : x is Port => {
     if (!isNumber(x)) return false;
     return true;
+}
+export const toNumber = (x: Port): number => {
+    return x as any as number;
 }
 
 // HostName
 export interface HostName extends String {
     __hostName__: never
 }
-const isHostName = (x: any): x is HostName => {
+export const isHostName = (x: any): x is HostName => {
     if (!isString(x)) return false;
     return (/^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]*[a-zA-Z0-9])\\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\-]*[A-Za-z0-9])$/.test(x));
 }

@@ -3,12 +3,12 @@ import { verifySignature } from './common/crypto_util';
 import KacheryP2PNode from './KacheryP2PNode.js';
 import { ChannelInfo, ChannelName, ChannelNodeInfo, NodeId, nodeIdToPublicKey } from './interfaces/core';
 import { AnnounceRequestData, AnnounceResponseData, isDownloadRequest, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest.js';
+import { sleepMsec } from './common/util.js';
 
 class RemoteNodeManager {
     #node: KacheryP2PNode
     #remoteNodes: Map<NodeId, RemoteNode> = new Map<NodeId, RemoteNode>()
     #halted: boolean = false
-    #onMessageCallbacks: Function[]
     constructor(node: KacheryP2PNode) {
         this.#node = node;
         this._start();
@@ -134,6 +134,9 @@ class RemoteNodeManager {
     }
     async _start() {
         // this._startCleanup();
+        while (!this.#halted) {
+            await sleepMsec(10000);
+        }
     }
 }
 

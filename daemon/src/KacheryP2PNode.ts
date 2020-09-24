@@ -3,7 +3,7 @@ import BootstrapPeerInterface from './BootstrapPeerInterface';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util';
 import { sleepMsec } from './common/util';
 import FeedManager from './FeedManager';
-import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage, FindFileResult, nowTimestamp, nodeIdToPublicKey, SubmittedSubfeedMessage, errorMessage } from './interfaces/core';
+import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage, FindFileResult, nowTimestamp, nodeIdToPublicKey, SubmittedSubfeedMessage, errorMessage, HostName } from './interfaces/core';
 import RemoteNodeManager from './RemoteNodeManager';
 import { isAddress } from './interfaces/core';
 
@@ -26,16 +26,6 @@ interface LoadFileProgress {
 }
 
 class KacheryP2PNode {
-    #p: {
-        configDir: string,
-        verbose: number,
-        httpAddress: Address,
-        webSocketAddress: Address,
-        label: string,
-        bootstrapInfos: Address[] | null,
-        channelNames: ChannelName[],
-        opts: {noBootstrap: boolean}
-    }
     #bootstrapPeerInterfaces: BootstrapPeerInterface[] = []
     #keyPair: KeyPair
     #nodeId: NodeId
@@ -46,19 +36,18 @@ class KacheryP2PNode {
     #kacheryStorageManager: KacheryStorageManager
     #liveFeedSubscriptionManager: LiveFeedSubscriptionManager
     #proxyConnectionsToClients = new Map<NodeId, ProxyConnectionToClient>()
-    constructor(params : {
+    constructor(private p : {
         configDir: string,
         verbose: number,
-        httpAddress: Address,
-        webSocketAddress: Address,
+        hostName: HostName | null,
+        httpListenPort: Port | null,
+        webSocketListenPort: Port | null,
         label: string,
         bootstrapInfos: Address[] | null,
         channelNames: ChannelName[],
         opts: {noBootstrap: boolean}
     }) {
-        this.#p = params;
-
-        const { publicKey, privateKey } = _loadKeypair(this.#p.configDir); // The keypair for signing messages and the public key is used as the node id
+        const { publicKey, privateKey } = _loadKeypair(this.p.configDir); // The keypair for signing messages and the public key is used as the node id
         this.#keyPair = {publicKey, privateKey}; // the keypair
         this.#nodeId = publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey)); // get the node id from the public key
         this.#halted = false; // Whether we have halted the daemon
@@ -70,9 +59,9 @@ class KacheryP2PNode {
 
         this.#remoteNodeManager = new RemoteNodeManager(this);
 
-        let bootstrapInfos = this.#p.bootstrapInfos;
+        let bootstrapInfos = this.p.bootstrapInfos;
 
-        if (!this.#p.opts.noBootstrap) {
+        if (!this.p.opts.noBootstrap) {
             if (bootstrapInfos === null) {
                 bootstrapInfos = [
                         {hostName: '45.33.92.31', port: <Port><any>46002}, // kachery-p2p-spikeforest
@@ -85,8 +74,8 @@ class KacheryP2PNode {
                         throw Error(`Not an address: ${bpi}`);
                     }
                 }).filter(bpi => {
-                    if ((bpi.hostName === 'localhost') || (bpi.hostName === this.#p.httpAddress.hostName)) {
-                        if (bpi.port === this.#p.httpAddress.port) {
+                    if ((bpi.hostName === 'localhost') || (bpi.hostName === this.p.hostName)) {
+                        if (bpi.port === this.p.httpListenPort) {
                             return false;
                         }
                     }
@@ -275,7 +264,7 @@ class KacheryP2PNode {
             throw Error('Invalid signature in node-to-node request');
         }
         if (toNodeId !== this.#nodeId) {
-            // going to a different node
+            // redirect request to a different node
             const p = this.#proxyConnectionsToClients.get(toNodeId);
             if (!p) {
                 throw Error('No proxy connection to node.');

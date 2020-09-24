@@ -1,6 +1,5 @@
 import { ProxyConnectionToClient } from './ProxyConnectionToClient.js';
-import { Port } from './interfaces.js';
-import { NodeId } from './interfaces/core.js';
+import { NodeId, Port, toNumber } from './interfaces/core.js';
 import KacheryP2PNode from './KacheryP2PNode.js';
 import WebSocket from 'ws';
 
@@ -13,7 +12,7 @@ class PublicWebSocketServer {
     }
     async startListening(port: Port) {
         return new Promise((resolve, reject) => {
-            this.#webSocketServer = new WebSocket.Server({ port });
+            this.#webSocketServer = new WebSocket.Server({ port: toNumber(port) });
             this.#webSocketServer.on('listening', () => {
                 resolve();
             });
