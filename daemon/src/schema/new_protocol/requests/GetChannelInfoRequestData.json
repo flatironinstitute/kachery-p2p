@@ -1,9 +1,0 @@
-{
-    "$id": "/GetChannelInfoRequestData",
-    "type": "object",
-    "properties": {
-        "type": {"const": "getChannelInfoRequest"}
-    },
-    "required": ["type"],
-    "additionalProperties": false
-}

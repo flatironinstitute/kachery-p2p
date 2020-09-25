@@ -1,5 +1,5 @@
-const PROTOCOL_VERSION = 'kachery-p2p-0.4.18';
-const DAEMON_VERSION = 'kachery-p2p-0.4.28';
+const PROTOCOL_VERSION = 'kachery-p2p-0.5.0';
+const DAEMON_VERSION = 'kachery-p2p-0.5.0';
 
 export const protocolVersion = () => {
     return PROTOCOL_VERSION;

@@ -164,7 +164,7 @@ class ProxyClientManager {
             return;
         }
         const c = new ProxyConnectionToServer(this.#node);
-        await c.initialize(remoteNodeId, webSocketAddress, {timeoutMsec});
+        await c.initialize(remoteNodeId, webSocketAddress, {timeoutMsec: 3000});
         this.#outgoingConnections.set(remoteNodeId, c);
     }
     getConnection(remoteNodeId: NodeId): ProxyConnectionToServer | null {

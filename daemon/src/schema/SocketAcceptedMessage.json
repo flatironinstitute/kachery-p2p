@@ -1,9 +1,0 @@
-{
-    "$id": "/SocketAcceptedMessage",
-    "type": "object",
-    "properties": {
-        "type": {"const": "accepted"}
-    },
-    "required": ["type"],
-    "additionalProperties": false
-}

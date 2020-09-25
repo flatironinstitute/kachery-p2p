@@ -255,7 +255,6 @@ export const isSubfeedHash = (x: any): x is SubfeedHash => {
 }
 
 // FileKey
-// todo: expand FileKey type
 export interface FileKey {
     sha1: Sha1Hash,
     chunkOf?: {
@@ -271,7 +270,6 @@ export const isFileKey = (x: any): x is FileKey => {
 }
 
 // FindLiveFeedResult
-// todo
 export interface FindLiveFeedResult {
     nodeId: NodeId
 }

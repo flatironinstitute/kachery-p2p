@@ -1,6 +1,0 @@
-{
-    "$id": "/FeedIdHead",
-    "type": "string",
-    "minLength": 10,
-    "maxLength": 10
-}

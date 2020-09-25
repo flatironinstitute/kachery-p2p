@@ -1,7 +1,5 @@
 import fs from 'fs'
-import BootstrapPeerInterface from './BootstrapPeerInterface';
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util';
-import { sleepMsec } from './common/util';
 import FeedManager from './FeedManager';
 import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage, FindFileResult, nowTimestamp, nodeIdToPublicKey, SubmittedSubfeedMessage, errorMessage, HostName, ChannelInfo, ChannelNodeInfoBody, ChannelNodeInfo } from './interfaces/core';
 import RemoteNodeManager from './RemoteNodeManager';
