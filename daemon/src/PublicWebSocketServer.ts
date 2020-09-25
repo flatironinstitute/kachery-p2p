@@ -2,11 +2,12 @@ import { ProxyConnectionToClient } from './ProxyConnectionToClient.js';
 import { NodeId, Port, toNumber } from './interfaces/core.js';
 import KacheryP2PNode from './KacheryP2PNode.js';
 import WebSocket from 'ws';
+import RemoteNodeManager from './RemoteNodeManager.js';
+import { action } from './action.js';
 
 class PublicWebSocketServer {
     #node: KacheryP2PNode
     #webSocketServer: WebSocket.Server
-    #onIncomingProxyConnectionCallbacks: ((nodeId: NodeId, c: ProxyConnectionToClient) => void)[] = []
     constructor(kNode: KacheryP2PNode, {verbose: number}) {
         this.#node = kNode
     }
@@ -17,16 +18,13 @@ class PublicWebSocketServer {
                 resolve();
             });
             this.#webSocketServer.on('connection', (ws: WebSocket) => {
-                (async () => {
+                action('newProxyConnectionToClient', {context: 'PublicWebSocketServer'}, async () => {
                     const X = new ProxyConnectionToClient(this.#node);
                     await X.initialize(ws);
-                    this.#onIncomingProxyConnectionCallbacks.forEach(cb => {cb(X.remoteNodeId(), X)})
-                })();
+                    this.#node.setProxyConnectionToClient(X.remoteNodeId(), X);
+                }, null);
             });
         });
-    }
-    onIncomingProxyConnection(callback: (nodeId: NodeId, c: ProxyConnectionToClient) => void) {
-        this.#onIncomingProxyConnectionCallbacks.push(callback);
     }
 }
 

@@ -3,8 +3,9 @@ import JsonSocket from 'json-socket';
 import { sleepMsec } from './common/util';
 import start_http_server from './common/start_http_server.js';
 import KacheryP2PNode from './KacheryP2PNode';
-import { ChannelName, FileKey, isSubfeedWatches, NodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isFileKey, isNodeId, isChannelName, isFeedId, isString, isNull, isSignedSubfeedMessage, isSubfeedMessage, isArrayOf, toSubfeedWatchesRAM, FeedId, isFeedName, SubfeedMessage, SignedSubfeedMessage, FindLiveFeedResult, SubfeedAccessRules, SubfeedWatchName, mapToObject, _validateObject, optional, FeedName, SubfeedHash, SubfeedWatches, isSubmittedSubfeedMessage, SubmittedSubfeedMessage, JSONObject, isJSONObject } from './interfaces/core';
+import { ChannelName, FileKey, isSubfeedWatches, NodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isFileKey, isNodeId, isChannelName, isFeedId, isSubfeedMessage, isArrayOf, toSubfeedWatchesRAM, FeedId, isFeedName, SubfeedMessage, SignedSubfeedMessage, FindLiveFeedResult, SubfeedAccessRules, mapToObject, _validateObject, optional, FeedName, SubfeedHash, SubfeedWatches, isSubmittedSubfeedMessage, SubmittedSubfeedMessage, JSONObject, isJSONObject } from './interfaces/core';
 import { Socket } from 'net';
+import { action } from './action';
 
 interface Req {
     body: any,
@@ -49,178 +50,133 @@ export default class DaemonApiServer {
 
         // /probe - check whether the daemon is up and running and return info such as the node ID
         this.#app.get('/probe', async (req, res) => {
-            console.info('/probe');
-            try {
+            await action('/probe', {context: 'Daemon API'}, async () => {
                 await this._apiProbe(req, res) 
-            }
-            catch(err) {
+            }, async (err: Error) => {
                 await this._errorResponse(req, res, 500, err.message);
-            }
+            });
         });
         // /halt - halt the kachery-p2p daemon (stops the server process)
         this.#app.get('/halt', async (req, res) => {
-            console.info('/halt');
-            await sleepMsec(100);
-            try {
+            await action('/halt', {context: 'Daemon API'}, async () => {
                 await this._apiHalt(req, res)
-                await sleepMsec(1000);
+                await sleepMsec(3000);
                 process.exit(0);
-            }
-            catch(err) {
+            }, async (err: Error) => {
                 await this._errorResponse(req, res, 500, err.message);
-            }
+            });
         });
         // /findFile - find a file (or feed) in the remote nodes. May return more than one.
         this.#app.post('/findFile', async (req, res) => {
-            console.info('/findFile');
-            try {
+            await action('/findFile', {context: 'Daemon API'}, async () => {
                 await this._apiFindFile(req, res)
-            }
-            catch(err) {
+            }, async (err: Error) => {
                 await this._errorResponse(req, res, 500, err.message);
-            }
+            });
         });
         // /loadFile - download file from remote node(s) and store in kachery storage
         this.#app.post('/loadFile', async (req, res) => {
-            console.info('/loadFile');
-            try {
+            await action('/loadFile', {context: 'Daemon API'}, async () => {
                 await this._apiLoadFile(req, res)
-            }
-            catch(err) {
-                console.warn(err.stack);
+            }, async (err: Error) => {
                 res.status(500).send('Error loading file.');
-            }
+            });
         });
         // /feed/createFeed - create a new writeable feed on this node
         this.#app.post('/feed/createFeed', async (req, res) => {
-            console.info('/feed/createFeed');
-            try {
+            await action('/feed/createFeed', {context: 'Daemon API'}, async () => {
                 await this._feedApiCreateFeed(req, res)
-            }
-            catch(err) {
-                res.status(500).send('Error creating feed.');
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
         // /feed/deleteFeed - delete feed on this node
         this.#app.post('/feed/deleteFeed', async (req, res) => {
-            console.info('/feed/deleteFeed');
-            try {
+            await action('/feed/deleteFeed', {context: 'Daemon API'}, async () => {
                 await this._feedApiDeleteFeed(req, res)
-            }
-            catch(err) {
-                res.status(500).send(`Error deleting feed: ${err.message}`);
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
         // /feed/getFeedId - lookup the ID of a local feed based on its name
         this.#app.post('/feed/getFeedId', async (req, res) => {
-            console.info('/feed/getFeedId');
-            try {
+            await action('/feed/getFeedId', {context: 'Daemon API'}, async () => {
                 await this._feedApiGetFeedId(req, res)
-            }
-            catch(err) {
-                res.status(500).send('Error getting feed id.');
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
         // /feed/appendMessages - append messages to a local writeable subfeed
         this.#app.post('/feed/appendMessages', async (req, res) => {
-            console.info('/feed/appendMessages', req.body.messages.map(msg => (msg.type)));
-            try {
+            await action('/feed/appendMessages', {context: 'Daemon API'}, async () => {
                 await this._feedApiAppendMessages(req, res)
-            }
-            catch(err) {
-                console.warn('Error in appendMessages', {error: err.message});
-                res.status(500).send('Error appending messages.');
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
         // /feed/submitMessage - submit messages to a remote live subfeed (must have permission)
         this.#app.post('/feed/submitMessage', async (req, res) => {
-            console.info('/feed/submitMessage');
-            try {
+            await action('/feed/submitMessage', {context: 'Daemon API'}, async () => {
                 await this._feedApiSubmitMessage(req, res)
-            }
-            catch(err) {
-                console.warn('Error in submitMessage', {error: err.message});
-                res.status(500).send(`Error appending messages: ${err.message}`);
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
         // /feed/getMessages - get messages from a local or remote subfeed
         this.#app.post('/feed/getMessages', async (req, res) => {
-            // important not to log this because then we'll have a feedback loop if we are listening to the log by getting the messages!
-            // console.info('/feed/getMessages');
-            try {
+            await action('/feed/getMessages', {context: 'Daemon API'}, async () => {
                 await this._feedApiGetMessages(req, res)
-            }
-            catch(err) {
-                console.warn('Error in getMessages', {error: err.message});
-                res.status(500).send('Error getting messages.');
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
         // /feed/getSignedMessages - get signed messages from a local or remote subfeed
         this.#app.post('/feed/getSignedMessages', async (req, res) => {
-            console.info('/feed/getSignedMessages');
-            try {
+            await action('/feed/getSignedMessages', {context: 'Daemon API'}, async () => {
                 await this._feedApiGetSignedMessages(req, res)
-            }
-            catch(err) {
-                console.warn('Error in getSignedMessages', {error: err.message});
-                res.status(500).send('Error getting signed messages.');
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
         // /feed/getNumMessages - get number of messages in a subfeed
         this.#app.post('/feed/getNumMessages', async (req, res) => {
-            console.info('/feed/getNumMessages');
-            try {
+            await action('/feed/getNumMessages', {context: 'Daemon API'}, async () => {
                 await this._feedApiGetNumMessages(req, res)
-            }
-            catch(err) {
-                console.warn('Error in getNumMessages', {error: err.message});
-                res.status(500).send('Error getting num. messages.');
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
         // /feed/getLiveFeedInfo - get info for a feed - such as whether it is writeable
         this.#app.post('/feed/getLiveFeedInfo', async (req, res) => {
-            console.info('/feed/getLiveFeedInfo');
-            try {
+            await action('/feed/getLiveFeedInfo', {context: 'Daemon API'}, async () => {
                 await this._feedApiGetLiveFeedInfo(req, res)
-            }
-            catch(err) {
-                console.warn(err.stack);
-                console.warn('Error in getLiveFeedInfo', {error: err.message});
-                res.status(500).send('Error getting feed info.');
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
         // /feed/getAccessRules - get access rules for a local writeable subfeed
         this.#app.post('/feed/getAccessRules', async (req, res) => {
-            console.info('/feed/getAccessRules');
-            try {
+            await action('/feed/getAccessRules', {context: 'Daemon API'}, async () => {
                 await this._feedApiGetAccessRules(req, res)
-            }
-            catch(err) {
-                console.warn('Error in getAccessRules', {error: err.message});
-                res.status(500).send('Error getting access rules.');
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
         // /feed/setAccessRules - set access rules for a local writeable subfeed
         this.#app.post('/feed/setAccessRules', async (req, res) => {
-            console.info('/feed/setAccessRules');
-            try {
+            await action('/feed/setAccessRules', {context: 'Daemon API'}, async () => {
                 await this._feedApiSetAccessRules(req, res)
-            }
-            catch(err) {
-                console.warn('Error in setAccessRules', {error: err.message});
-                res.status(500).send('Error setting access rules.');
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
         // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
         this.#app.post('/feed/watchForNewMessages', async (req, res) => {
-            console.info('/feed/watchForNewMessages', req.body.subfeedWatches);
-            try {
+            await action('/feed/watchForNewMessages', {context: 'Daemon API'}, async () => {
                 await this._feedApiWatchForNewMessages(req, res)
-            }
-            catch(err) {
-                console.warn('Error in watchForNewMessages', {error: err.message});
-                res.status(500).send('Error watching for new messages.');
-            }
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
         });
     }
     // /probe - check whether the daemon is up and running and return info such as the node ID
@@ -238,7 +194,6 @@ export default class DaemonApiServer {
         interface ApiHaltResponse {
             success: boolean
         };
-        this.#node.halt();
         this.#stopperCallbacks.forEach(cb => {cb();});
         const response: ApiHaltResponse = { success: true };
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
@@ -704,7 +659,7 @@ export default class DaemonApiServer {
                 this.#stopperCallbacks.push(cb);
             }
         }
-        await start_http_server(this.#app, port, stopper);
+        start_http_server(this.#app, port, stopper);
     }
 }
 

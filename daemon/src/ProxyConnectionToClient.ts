@@ -1,4 +1,5 @@
 import WebSocket from 'ws'
+import { action } from './action';
 import { getSignature, verifySignature } from './common/crypto_util';
 import { kacheryP2PDeserialize, kacheryP2PSerialize } from './common/util';
 import { isEqualTo, isNodeId, isTimestamp, NodeId, Signature, isSignature, _validateObject, nodeIdToPublicKey, nowTimestamp, Timestamp, RequestId } from "./interfaces/core";
@@ -80,8 +81,10 @@ export class ProxyConnectionToClient {
         return new Promise((resolve, reject) => {
             this.#ws = ws
             this.#ws.on('close', (code, reason) => {
-                this.#closed = true;
-                this.#onClosedCallbacks.forEach(cb => cb(reason));
+                action('proxyConnectionToClientClosed', {context: "ProxyConnectionToClient", remoteNodeId: this.#remoteNodeId}, async () => {
+                    this.#closed = true;
+                    this.#onClosedCallbacks.forEach(cb => cb(reason));
+                }, null);
             })
 
             this.#ws.on('error', () => {
@@ -98,59 +101,61 @@ export class ProxyConnectionToClient {
             })
             ws.on('message', messageBuffer => {
                 if (this.#closed) return;
-                let messageParsed: Object;
-                try {
-                    messageParsed = kacheryP2PDeserialize(messageBuffer);
-                }
-                catch(err) {
-                    this.#ws.close();
-                    return;
-                }
-                if (!this.#initialized) {
-                    if (!isInitialMessageFromClient(messageParsed)) {
-                        console.warn(`Invalid initial websocket message from client. Closing.`);
+                action('proxyConnectionToClientMessage', {context: "ProxyConnectionToClient", remoteNodeId: this.#remoteNodeId}, async () => {
+                    let messageParsed: Object;
+                    try {
+                        messageParsed = kacheryP2PDeserialize(messageBuffer);
+                    }
+                    catch(err) {
                         this.#ws.close();
                         return;
                     }
-                    if (messageParsed.body.toNodeId !== this.#node.nodeId()) {
-                        console.warn(`Invalid initial websocket message from client (wrong toNodeId). Closing.`);
-                        this.#ws.close();
-                        return;
+                    if (!this.#initialized) {
+                        if (!isInitialMessageFromClient(messageParsed)) {
+                            console.warn(`Invalid initial websocket message from client. Closing.`);
+                            this.#ws.close();
+                            return;
+                        }
+                        if (messageParsed.body.toNodeId !== this.#node.nodeId()) {
+                            console.warn(`Invalid initial websocket message from client (wrong toNodeId). Closing.`);
+                            this.#ws.close();
+                            return;
+                        }
+                        if (messageParsed.body.fromNodeId === this.#node.nodeId()) {
+                            console.warn(`Invalid initial websocket message from client (invalid fromNodeId). Closing.`);
+                            this.#ws.close();
+                            return;
+                        }
+                        if (!verifySignature(messageParsed.body, messageParsed.signature, nodeIdToPublicKey(messageParsed.body.fromNodeId))) {
+                            console.warn(`Invalid initial websocket message from client (invalid signature). Closing.`);
+                            this.#ws.close();
+                            return;
+                        }
+                        this.#initialized = true;
+                        this.#remoteNodeId = messageParsed.body.fromNodeId
+                        const msgBody: InitialMessageFromServerBody = {
+                            type: 'proxyConnectionInitialMessageFromServer',
+                            fromNodeId: this.#node.nodeId(),
+                            toNodeId: this.#remoteNodeId,
+                            timestamp: nowTimestamp()
+                        }
+                        const msg: InitialMessageFromServer = {
+                            body: msgBody,
+                            signature: getSignature(msgBody, this.#node.keyPair())
+                        }
+                        this.#ws.send(kacheryP2PSerialize(msg));
+                        this.#onInitializedCallbacks.forEach(cb => {cb()});
                     }
-                    if (messageParsed.body.fromNodeId === this.#node.nodeId()) {
-                        console.warn(`Invalid initial websocket message from client (invalid fromNodeId). Closing.`);
-                        this.#ws.close();
-                        return;
+                    else {
+                        if (!this.#remoteNodeId) throw Error('Unexpected.');
+                        if (!isMessageFromClient(messageParsed)) {
+                            console.warn(`Invalid websocket message from client. Closing.`);
+                            this.#ws.close();
+                            return;
+                        }
+                        this._handleMessageFromClient(messageParsed);
                     }
-                    if (!verifySignature(messageParsed.body, messageParsed.signature, nodeIdToPublicKey(messageParsed.body.fromNodeId))) {
-                        console.warn(`Invalid initial websocket message from client (invalid signature). Closing.`);
-                        this.#ws.close();
-                        return;
-                    }
-                    this.#initialized = true;
-                    this.#remoteNodeId = messageParsed.body.fromNodeId
-                    const msgBody: InitialMessageFromServerBody = {
-                        type: 'proxyConnectionInitialMessageFromServer',
-                        fromNodeId: this.#node.nodeId(),
-                        toNodeId: this.#remoteNodeId,
-                        timestamp: nowTimestamp()
-                    }
-                    const msg: InitialMessageFromServer = {
-                        body: msgBody,
-                        signature: getSignature(msgBody, this.#node.keyPair())
-                    }
-                    this.#ws.send(kacheryP2PSerialize(msg));
-                    this.#onInitializedCallbacks.forEach(cb => {cb()});
-                }
-                else {
-                    if (!this.#remoteNodeId) throw Error('Unexpected.');
-                    if (!isMessageFromClient(messageParsed)) {
-                        console.warn(`Invalid websocket message from client. Closing.`);
-                        this.#ws.close();
-                        return;
-                    }
-                    this._handleMessageFromClient(messageParsed);
-                }
+                }, null);
             });
         });
     }
@@ -160,6 +165,9 @@ export class ProxyConnectionToClient {
     }
     onInitialized(callback: () => void) {
         this.#onInitializedCallbacks.push(callback);
+    }
+    close() {
+        this.#ws.close();
     }
     onClosed(callback: (reason: any) => void) {
         this.#onClosedCallbacks.push(callback);

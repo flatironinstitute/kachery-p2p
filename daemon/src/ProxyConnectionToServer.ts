@@ -17,11 +17,11 @@ export class ProxyConnectionToServer {
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
-    async initialize(remoteNodeId: NodeId, address: Address) {
+    async initialize(remoteNodeId: NodeId, address: Address, opts: {timeoutMsec: number}) {
         this.#remoteNodeId = remoteNodeId;
         return new Promise((resolve, reject) => {
             const url = `ws://${address.hostName}:${address.port}`;
-            this.#ws = new WebSocket(url);
+            this.#ws = new WebSocket(url, {timeout: opts.timeoutMsec});
             this.#ws.on('close', (code, reason) => {
                 this.#closed = true;
                 this.#onClosedCallbacks.forEach(cb => cb(reason));

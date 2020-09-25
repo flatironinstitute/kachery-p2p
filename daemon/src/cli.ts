@@ -6,7 +6,7 @@ import yargs from 'yargs';
 import KacheryP2PNode from './KacheryP2PNode';
 import DaemonApiServer from './DaemonApiServer';
 import PublicApiServer from './PublicApiServer';
-import PublicWebSocketServer from './PublicWebSocketServer'; // todo
+import PublicWebSocketServer from './PublicWebSocketServer';
 import assert from 'assert';
 import { ChannelName, HostName, isAddress, isChannelName, JSONObject, NodeId, Port, isHostName, isPort, Address } from './interfaces/core';
 import { ProxyConnectionToClient } from './ProxyConnectionToClient';
@@ -31,6 +31,18 @@ process.on('uncaughtException', function (err) {
   console.warn(err.stack);
   console.log('Uncaught exception: ', err);
 });
+
+class CLIError extends Error {
+  constructor(errorString) {
+    super(errorString);
+  }
+}
+
+class StringParseError extends Error {
+  constructor(errorString) {
+    super(errorString);
+  }
+}
 
 function main() {
   const argv = yargs()
@@ -85,7 +97,7 @@ function main() {
       },
       handler: (argv: JSONObject) => {
         const channelNames = ((argv.channel || []) as string[]).map(ch => {
-          if (!isChannelName(ch)) throw Error('Invalid channel name');
+          if (!isChannelName(ch)) throw new CLIError('Invalid channel name');
           return ch;
         });
         
@@ -109,25 +121,25 @@ function main() {
 
         if (hostName !== null) {
           if (!isHostName(hostName)) {
-            throw Error('Invalid host name');
+            throw new CLIError('Invalid host name');
           }
         }
         if (!isPort(daemonApiPort)) {
-          throw Error('Invalid daemon api port');
+          throw new CLIError('Invalid daemon api port');
         }
         if (httpListenPort !== null) {
           if (!isPort(httpListenPort)) {
-            throw Error('Invalid http listen port');
+            throw new CLIError('Invalid http listen port');
           }
         }
         if (webSocketListenPort !== null) {
           if (!isPort(webSocketListenPort)) {
-            throw Error('Invalid websocket listen port');
+            throw new CLIError('Invalid websocket listen port');
           }
         }
         if (udpListenPort !== null) {
           if (!isPort(udpListenPort)) {
-            throw Error('Invalid udp listen port');
+            throw new CLIError('Invalid udp listen port');
           }
         }
 
@@ -164,7 +176,7 @@ function parseBootstrapInfo(x: string): Address {
     port: Number(a[1])
   };
   if (!isAddress(b)) {
-    throw Error('Improper bootstrap info.');
+    throw new StringParseError('Improper bootstrap info.');
   }
   return b;
 }
@@ -225,9 +237,6 @@ const startDaemon = async (args: {
     const publicWebSocketServer = new PublicWebSocketServer(kNode, {verbose});
     await publicWebSocketServer.startListening(webSocketListenPort);
     console.info(`Websocket server listening on port ${webSocketListenPort}`)
-    publicWebSocketServer.onIncomingProxyConnection((nodeId: NodeId, c: ProxyConnectionToClient) => {
-      kNode.setProxyConnectionToClient(nodeId, c);
-    });
   }
 
   // if (udpListenPort) {

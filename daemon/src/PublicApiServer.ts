@@ -2,9 +2,10 @@ import express, {Express} from 'express';
 import start_http_server from './common/start_http_server.js';
 import KacheryP2PNode from './KacheryP2PNode';
 import { sleepMsec } from './common/util.js';
-import { isNodeToNodeRequest, NodeToNodeResponse } from './interfaces/NodeToNodeRequest.js';
-import { NodeId, Port, JSONObject, isJSONObject, _validateObject, isBoolean, isNodeId } from './interfaces/core.js';
+import { isNodeToNodeRequest, NodeToNodeRequest, NodeToNodeResponse } from './interfaces/NodeToNodeRequest.js';
+import { NodeId, Port, JSONObject, isJSONObject, _validateObject, isBoolean, isNodeId, isOneOf, isAddress, Address, isNull } from './interfaces/core.js';
 import { Socket } from 'net';
+import { action } from './action.js';
 
 interface Req {
     body: any,
@@ -21,12 +22,16 @@ interface Res {
 
 export interface ApiProbeResponse {
     success: boolean,
-    nodeId: NodeId
+    nodeId: NodeId,
+    isBootstrapNode: boolean,
+    webSocketAddress: Address | null
 };
 export const isApiProbeResponse = (x: any): x is ApiProbeResponse => {
     return _validateObject(x, {
         success: isBoolean,
-        nodeId: isNodeId
+        nodeId: isNodeId,
+        isBootstrapNode: isBoolean,
+        webSocketAddress: isOneOf([isNull, isAddress])
     });
 }
 
@@ -51,44 +56,51 @@ export default class PublicApiServer {
 
         // /probe - check whether the daemon is up and running and return info such as the node ID
         this.#app.get('/probe', async (req, res) => {
-            console.info('/probe');
-            try {
+            await action('/probe', {context: 'Public API'}, async () => {
                 await this._apiProbe(req, res) 
-            }
-            catch(err) {
+            }, async (err: Error) => {
                 await this._errorResponse(req, res, 500, err.message);
-            }
+            });
         });
         this.#app.post('/probe', async (req, res) => {
-            console.info('/probe');
-            try {
+            await action('/probe', {context: 'Public API'}, async () => {
                 await this._apiProbe(req, res) 
-            }
-            catch(err) {
+            }, async (err: Error) => {
                 await this._errorResponse(req, res, 500, err.message);
-            }
+            });
         });
         // /nodeToNodeRequest
         this.#app.post('/nodeToNodeRequest', async (req, res) => {
-            console.info('/nodeToNodeRequest');
-            try {
-                await this._apiNodeToNodeRequest(req, res)
+            const reqBody = req.body;
+            if (!isNodeToNodeRequest(reqBody)) {
+                await this._errorResponse(req, res, 500, 'Invalid node-to-node request');
+                return;
             }
-            catch(err) {
+            reqBody.body.fromNodeId
+            await action('/nodeToNodeRequest', {
+                context: 'Public API',
+                fromNodeId: reqBody.body.fromNodeId,
+                requestType: reqBody.body.requestData.requestType
+            }, async () => {
+                await this._apiNodeToNodeRequest(reqBody, res) 
+            }, async (err: Error) => {
                 await this._errorResponse(req, res, 500, err.message);
-            }
+            });
         });
     }
     // /probe - check whether the daemon is up and running and return info such as the node ID
     async _apiProbe(req: Req, res: Res) {
-        const response: ApiProbeResponse = {success: true, nodeId: this.#node.nodeId()};
+        const response: ApiProbeResponse = {
+            success: true,
+            nodeId: this.#node.nodeId(),
+            isBootstrapNode: this.#node.isBootstrapNode(),
+            webSocketAddress: this.#node.webSocketAddress()
+        };
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }
     // /nodeToNodeRequest
-    async _apiNodeToNodeRequest(req: Req, res: Res) {
-        const reqBody = req.body;
-        if (!isNodeToNodeRequest(reqBody)) throw Error('Error in NodeToNode request');
+    async _apiNodeToNodeRequest(reqBody: NodeToNodeRequest, res: Res) {
         const response: NodeToNodeResponse = await this.#node.handleNodeToNodeRequest(reqBody);
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
@@ -117,6 +129,6 @@ export default class PublicApiServer {
                 this.#stopperCallbacks.push(cb);
             }
         }
-        await start_http_server(this.#app, port, stopper);
+        start_http_server(this.#app, port, stopper);
     }
 }

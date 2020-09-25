@@ -8,17 +8,9 @@ import { sleepMsec } from './common/util.js';
 class RemoteNodeManager {
     #node: KacheryP2PNode
     #remoteNodes: Map<NodeId, RemoteNode> = new Map<NodeId, RemoteNode>()
-    #halted: boolean = false
     #onNodeChannelAddedCallbacks: ((remoteNodeId: NodeId, channelName: ChannelName) => void)[] = []
     constructor(node: KacheryP2PNode) {
         this.#node = node;
-        this._start();
-    }
-    halt() {
-        this.#remoteNodes.forEach((remoteNode) => {
-            remoteNode.halt();
-        })
-        this.#halted = true;
     }
     async handleAnnounceRequest({fromNodeId, requestData}: {fromNodeId: NodeId, requestData: AnnounceRequestData}): Promise<AnnounceResponseData> {
         // only handle this if we belong to this channel or we are a bootstrap node
@@ -57,7 +49,7 @@ class RemoteNodeManager {
             })
         }
     }
-    async setBootstrapNode(remoteNodeId: NodeId, address: Address) {
+    async setBootstrapNode(remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null) {
         const n = this.#remoteNodes.get(remoteNodeId)
         if (n) {
             if ((!n.isBootstrap()) || (!jsonObjectsMatch(n.bootstrapAddress(), address))) {
@@ -65,7 +57,7 @@ class RemoteNodeManager {
             }
         }
         if (!this.#remoteNodes.has(remoteNodeId)) {
-            this.#remoteNodes.set(remoteNodeId, new RemoteNode(this.#node, remoteNodeId, {isBootstrap: true, bootstrapAddress: address}))
+            this.#remoteNodes.set(remoteNodeId, new RemoteNode(this.#node, remoteNodeId, {isBootstrap: true, bootstrapAddress: address, bootstrapWebSocketAddress: webSocketAddress}))
         }
     }
     async getChannelInfo(channelName: ChannelName): Promise<ChannelInfo> {
@@ -111,23 +103,20 @@ class RemoteNodeManager {
         });
         return ret
     }
+    getRemoteNodeWebSocketAddress(remoteNodeId): Address | null {
+        const remoteNode = this.#remoteNodes.get(remoteNodeId);
+        if (!remoteNode) return null;
+        return remoteNode.bootstrapWebSocketAddress();
+    }
     sendDownloadRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData) {
         if (!isDownloadRequest(requestData)) {
             throw Error('Unexpected, request is not a download request.');
         }
-        // todo: implement
-        const _onDataCallbacks: ((data: Buffer) => void)[] = [];
-        const _onFinishedCallbacks: (() => void)[] = [];
-        const _onErrorCallbacks: ((err: Error) => void)[] = [];
-        const _cancel = () => {
-            // todo
+        const remoteNode = this.#remoteNodes.get(nodeId);
+        if (!remoteNode) {
+            throw Error(`Cannot send request to node: node with ID ${nodeId} not found.`)
         }
-        return {
-            onData: (callback: (data: Buffer) => void) => {_onDataCallbacks.push(callback)},
-            onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
-            onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
-            cancel: _cancel
-        }
+        return remoteNode.sendDownloadRequest(requestData);
     }
     sendRequestToNodesInChannels(requestData: NodeToNodeRequestData, opts: {timeoutMsec: number, channelNames: ChannelName[]}) {
         if (isDownloadRequest(requestData)) {
@@ -193,12 +182,6 @@ class RemoteNodeManager {
             onErrorResponse,
             onFinished,
             cancel: _cancel
-        }
-    }
-    async _start() {
-        // this._startCleanup();
-        while (!this.#halted) {
-            await sleepMsec(10000);
         }
     }
 }

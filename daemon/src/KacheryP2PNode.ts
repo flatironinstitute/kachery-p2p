@@ -28,7 +28,6 @@ interface LoadFileProgress {
 class KacheryP2PNode {
     #keyPair: KeyPair
     #nodeId: NodeId
-    #halted: boolean
     #feedManager: FeedManager
     #channelNames: ChannelName[]
     #remoteNodeManager: RemoteNodeManager
@@ -50,7 +49,6 @@ class KacheryP2PNode {
         const { publicKey, privateKey } = _loadKeypair(this.p.configDir); // The keypair for signing messages and the public key is used as the node id
         this.#keyPair = {publicKey, privateKey}; // the keypair
         this.#nodeId = publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey)); // get the node id from the public key
-        this.#halted = false; // Whether we have halted the daemon
         this.#kacheryStorageManager = new KacheryStorageManager();
         this.#liveFeedSubscriptionManager = new LiveFeedSubscriptionManager();
 
@@ -83,8 +81,6 @@ class KacheryP2PNode {
             }
         }
         this.#bootstrapAddresses = bootstrapAddresses || []
-
-        this._start();
     }
     nodeId() {
         return this.#nodeId;
@@ -94,11 +90,6 @@ class KacheryP2PNode {
     }
     keyPair() {
         return this.#keyPair
-    }
-    halt() {
-        this.#remoteNodeManager.halt();
-        this.#halted = true;
-        // todo: figure out what else we need to halt
     }
     remoteNodeManager() {
         return this.#remoteNodeManager
@@ -171,6 +162,11 @@ class KacheryP2PNode {
         return this.#feedManager
     }
     setProxyConnectionToClient(nodeId: NodeId, c: ProxyConnectionToClient) {
+        if (this.#proxyConnectionsToClients.has(nodeId)) {
+            // we already have this connection
+            c.close();
+            return;
+        }
         this.#proxyConnectionsToClients.set(nodeId, c);
         c.onClosed(() => {
             if (this.#proxyConnectionsToClients.get(nodeId) === c) {
@@ -193,12 +189,18 @@ class KacheryP2PNode {
         }
         return x;
     }
+    httpAddress(): Address | null {
+        return (this.p.hostName !== null) && (this.p.httpListenPort !== null) ? {hostName: this.p.hostName, port: this.p.httpListenPort} : null
+    }
+    webSocketAddress(): Address | null {
+        return (this.p.hostName !== null) && (this.p.webSocketListenPort !== null) ? {hostName: this.p.hostName, port: this.p.webSocketListenPort} : null
+    }
     getChannelNodeInfo(channelName: ChannelName): ChannelNodeInfo {
         const body = {
             channelName,
             nodeId: this.#nodeId,
-            httpAddress: (this.p.hostName !== null) && (this.p.httpListenPort !== null) ? {hostName: this.p.hostName, port: this.p.httpListenPort} : null,
-            webSocketAddress: (this.p.hostName !== null) && (this.p.webSocketListenPort !== null) ? {hostName: this.p.hostName, port: this.p.webSocketListenPort} : null,
+            httpAddress: this.httpAddress(),
+            webSocketAddress: this.webSocketAddress(),
             udpAddress: null, // todo
             proxyHttpAddresses: [], // todo
             timestamp: nowTimestamp()
@@ -393,13 +395,6 @@ class KacheryP2PNode {
             success: true,
             errorMessage: null,
             signedMessages
-        }
-    }
-    async _start() {
-        while (true) {
-            if (this.#halted) return;
-            // maintenance goes here
-            await sleepMsec(10000);
         }
     }
 }

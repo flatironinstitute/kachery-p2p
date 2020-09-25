@@ -7,17 +7,17 @@ import KacheryP2PNode from "./KacheryP2PNode";
 
 class RemoteNode {
     #node: KacheryP2PNode
-    #halted: boolean = false;
     #remoteNodeId: NodeId
     #channelNodeInfoByChannel: Map<ChannelName, ChannelNodeInfo> = new Map<ChannelName, ChannelNodeInfo>()
     #isBootstrap: boolean
     #bootstrapAddress: Address | null
-    constructor(node: KacheryP2PNode, remoteNodeId: NodeId, opts: {isBootstrap: boolean, bootstrapAddress: Address | null} = {isBootstrap: false, bootstrapAddress: null}) {
+    #bootstrapWebSocketAddress: Address | null
+    constructor(node: KacheryP2PNode, remoteNodeId: NodeId, opts: {isBootstrap: boolean, bootstrapAddress: Address | null, bootstrapWebSocketAddress: Address | null} = {isBootstrap: false, bootstrapAddress: null, bootstrapWebSocketAddress: null}) {
         this.#node = node
         this.#remoteNodeId = remoteNodeId;
         this.#isBootstrap = opts.isBootstrap
         this.#bootstrapAddress = opts.bootstrapAddress
-        this._start();
+        this.#bootstrapWebSocketAddress = opts.bootstrapWebSocketAddress
     }
     remoteNodeId() {
         return this.#remoteNodeId;
@@ -27,6 +27,9 @@ class RemoteNode {
     }
     bootstrapAddress() {
         return this.#bootstrapAddress
+    }
+    bootstrapWebSocketAddress() {
+        return this.#bootstrapWebSocketAddress
     }
     setChannelNodeInfoIfMoreRecent(channelName: ChannelName, channelNodeInfo: ChannelNodeInfo) {
         if (this.#channelNodeInfoByChannel.has(channelName)) {
@@ -49,29 +52,7 @@ class RemoteNode {
     getChannelNodeInfo(channelName: ChannelName): ChannelNodeInfo | null {
         return this.#channelNodeInfoByChannel.get(channelName) || null;
     }
-    async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: number}): Promise<NodeToNodeResponseData> {
-        let address: Address | null = null;
-        if (this.#isBootstrap && this.#bootstrapAddress) {
-            address = this.#bootstrapAddress
-        }
-        else {
-            const channelNodeData = this._getMostRecentChannelNodeInfo();
-            if (channelNodeData === null) {
-                throw Error('Unable to send request to non-bootstrap node: no channel node data found.');
-            }
-            const remoteInfo = channelNodeData.body;
-            if (remoteInfo.httpAddress) {
-                address = remoteInfo.httpAddress;
-            }
-            else {
-                if (remoteInfo.proxyHttpAddresses.length > 0) {
-                    address = remoteInfo.proxyHttpAddresses[0];
-                }
-            }
-            if (!address) {
-                throw Error('Unable to send request... no http address found.')
-            }
-        }
+    _formRequestFromRequestData(requestData: NodeToNodeRequestData): NodeToNodeRequest {
         const requestId = createRequestId();
         const requestBody = {
             requestId,
@@ -84,6 +65,39 @@ class RemoteNode {
             body: requestBody,
             signature: getSignature(requestBody, this.#node.keyPair())
         }
+        return request
+    }
+    _getRemoteNodeHttpAddress(): Address | null {
+        let address: Address | null = null;
+        if (this.#isBootstrap && this.#bootstrapAddress) {
+            return this.#bootstrapAddress
+        }
+        else {
+            const channelNodeData = this._getMostRecentChannelNodeInfo();
+            if (channelNodeData === null) {
+                return null;
+            }
+            const remoteInfo = channelNodeData.body;
+            if (remoteInfo.httpAddress) {
+                return remoteInfo.httpAddress;
+            }
+            else {
+                if (remoteInfo.proxyHttpAddresses.length > 0) {
+                    return remoteInfo.proxyHttpAddresses[0];
+                }
+                else {
+                    return null;
+                }
+            }
+        }
+    }
+    async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: number}): Promise<NodeToNodeResponseData> {
+        const address = this._getRemoteNodeHttpAddress();
+        if (!address) {
+            throw Error('Unable to send request... no http address found.')
+        }
+        const request = this._formRequestFromRequestData(requestData);
+        const requestId = request.body.requestId;
         const response = await httpPostJson(address, '/NodeToNodeRequest', request, {timeoutMsec: opts.timeoutMsec});
         if (!isNodeToNodeResponse(response)) {
             // todo: in this situation, do we ban the node?
@@ -110,8 +124,28 @@ class RemoteNode {
         }
         return response.body.responseData;
     }
-    halt() {
-        this.#halted = true;
+    sendDownloadRequest(requestData: NodeToNodeRequestData) {
+        const address = this._getRemoteNodeHttpAddress();
+        if (!address) {
+            throw Error('Unable to send request... no http address found.')
+        }
+        const request = this._formRequestFromRequestData(requestData);
+        const requestId = request.body.requestId;
+
+        // todo: post the request and stream the response
+
+        const _onDataCallbacks: ((data: Buffer) => void)[] = [];
+        const _onFinishedCallbacks: (() => void)[] = [];
+        const _onErrorCallbacks: ((err: Error) => void)[] = [];
+        const _cancel = () => {
+            // todo
+        }
+        return {
+            onData: (callback: (data: Buffer) => void) => {_onDataCallbacks.push(callback)},
+            onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
+            onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
+            cancel: _cancel
+        }
     }
     _getMostRecentChannelNodeInfo(): ChannelNodeInfo | null {
         let result: ChannelNodeInfo | null = null;
@@ -121,11 +155,6 @@ class RemoteNode {
             }
         })
         return result;
-    }
-    async _start() {
-        while (!this.#halted) {
-            await sleepMsec(10000);
-        }
     }
 }
 
