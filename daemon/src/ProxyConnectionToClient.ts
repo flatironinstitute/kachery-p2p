@@ -1,6 +1,7 @@
 import WebSocket from 'ws'
 import { action } from './action';
 import { getSignature, verifySignature } from './common/crypto_util';
+import GarbageMap from './common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize } from './common/util';
 import { isEqualTo, isNodeId, isTimestamp, NodeId, Signature, isSignature, _validateObject, nodeIdToPublicKey, nowTimestamp, Timestamp, RequestId } from "./interfaces/core";
 import { isNodeToNodeRequest, isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeResponse } from "./interfaces/NodeToNodeRequest";
@@ -73,7 +74,7 @@ export class ProxyConnectionToClient {
     #closed = false
     #onClosedCallbacks: ((reason: any) => void)[] = []
     #onInitializedCallbacks: (() => void)[] = []
-    #responseListeners = new Map<RequestId, ((response: NodeToNodeResponse) => void)>()
+    #responseListeners = new GarbageMap<RequestId, ((response: NodeToNodeResponse) => void)>(5 * 60 * 1000)
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }

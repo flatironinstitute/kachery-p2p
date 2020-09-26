@@ -1,26 +1,29 @@
 import { action } from "./action";
 import { sleepMsec } from "./common/util";
 import { httpPostJson } from "./httpPostJson";
-import { Address, ChannelName, NodeId } from "./interfaces/core";
+import { Address, ChannelName, elapsedSince, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "./interfaces/core";
 import { AnnounceRequestData, GetChannelInfoRequestData, isAnnounceResponseData, isGetChannelInfoResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import { ProxyConnectionToServer } from "./ProxyConnectionToServer";
 import { isApiProbeResponse } from "./PublicApiServer";
 import RemoteNode from "./RemoteNode";
 import RemoteNodeManager from "./RemoteNodeManager";
+import GarbageMap from './common/GarbageMap'
 
 export class KacheryP2PController {
     #node: KacheryP2PNode
     #announceService: AnnounceService
-    #findChannelNodesService: FindChannelNodesService
+    #discoverService: DiscoverService
     #bootstrapService: BootstrapService
     #proxyClientService: ProxyClientService
+    #multicastService: MulticastService
     constructor(node: KacheryP2PNode, bootstrapAddresses: Address[]) {
         this.#node = node
         this.#announceService = new AnnounceService(this)
-        this.#findChannelNodesService = new FindChannelNodesService(this)
+        this.#discoverService = new DiscoverService(this)
         this.#bootstrapService = new BootstrapService(this)
         this.#proxyClientService = new ProxyClientService(this)
+        this.#multicastService = new MulticastService(this)
     }
     node() {
         return this.#node
@@ -87,23 +90,41 @@ class AnnounceService {
         }
     }
     async _start() {
-        // announce self to bootstrap nodes periodically
+        // Announce self other nodes in our channels and to bootstrap nodes
+        let lastBootstrapAnnounceTimestamp: Timestamp = zeroTimestamp();
         while (true) {
-            const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes();
+            // periodically announce to bootstrap nodes
+            const elapsedSinceLastBootstrapAnnounce = elapsedSince(lastBootstrapAnnounceTimestamp);
+            if (elapsedSinceLastBootstrapAnnounce > 21000) {
+                const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes();
+                const channelNames = this.#node.channelNames();
+                for (let bootstrapNode of bootstrapNodes) {
+                    for (let channelName of channelNames) {
+                        action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
+                            await this._announceToNode(bootstrapNode.remoteNodeId(), channelName);
+                        }, null);
+                    }
+                }
+                lastBootstrapAnnounceTimestamp = nowTimestamp();
+            }
+            
+            // for each channel, choose a random node and announce to that node
             const channelNames = this.#node.channelNames();
-            for (let bootstrapNode of bootstrapNodes) {
-                for (let channelName of channelNames) {
-                    action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
-                        await this._announceToNode(bootstrapNode.remoteNodeId(), channelName);
+            for (let channelName of channelNames) {
+                let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName);
+                if (nodes.length > 0) {
+                    var randomNode = nodes[randomIndex(nodes.length)];
+                    action('announceToRandomNode', {context: 'AnnounceService', remoteNodeId: randomNode.remoteNodeId(), channelName}, async () => {
+                        await this._announceToNode(randomNode.remoteNodeId(), channelName);
                     }, null);
                 }
             }
-            await sleepMsec(20000);
+            await sleepMsec(2000);
         }
     }
 }
 
-class FindChannelNodesService {
+class DiscoverService {
     #node: KacheryP2PNode
     #remoteNodeManager: RemoteNodeManager
     constructor(controller: KacheryP2PController) {
@@ -126,17 +147,26 @@ class FindChannelNodesService {
         })
     }
     async _start() {
-        // periodically get channel info from bootstrap nodes, and also from a randomly selected node from the channel
+        // Get channel info from other nodes in our channels
+        let lastBootstrapDiscoverTimestamp: Timestamp = zeroTimestamp();
         while (true) {
-            const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes();
-            const channelNames = this.#node.channelNames();
-            for (let bootstrapNode of bootstrapNodes) {
-                for (let channelName of channelNames) {
-                    action('getChannelInfoFromBootstrapNode', {context: 'FindChannelNodesService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
-                        await this._getChannelInfoFromNode(bootstrapNode.remoteNodeId(), channelName);
-                    }, null);
+            // periodically get channel info from bootstrap nodes
+            const elapsedSinceLastBootstrapDiscover = elapsedSince(lastBootstrapDiscoverTimestamp);
+            if (elapsedSinceLastBootstrapDiscover > 30000) {
+                const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes();
+                const channelNames = this.#node.channelNames();
+                for (let bootstrapNode of bootstrapNodes) {
+                    for (let channelName of channelNames) {
+                        action('getChannelInfoFromBootstrapNode', {context: 'FindChannelNodesService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
+                            await this._getChannelInfoFromNode(bootstrapNode.remoteNodeId(), channelName);
+                        }, null);
+                    }
                 }
+                lastBootstrapDiscoverTimestamp = nowTimestamp();
             }
+            
+            // for each channel, choose a random node and get the channel info from that node
+            const channelNames = this.#node.channelNames();
             for (let channelName of channelNames) {
                 let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName);
                 if (nodes.length > 0) {
@@ -146,7 +176,7 @@ class FindChannelNodesService {
                     }, null);
                 }
             }
-            await sleepMsec(25000);
+            await sleepMsec(2000);
         }
     }
 }
@@ -154,6 +184,7 @@ class FindChannelNodesService {
 class ProxyClientManager {
     #node: KacheryP2PNode
     #outgoingConnections = new Map<NodeId, ProxyConnectionToServer>()
+    #failedConnectionAttemptTimestamps = new GarbageMap<NodeId, Timestamp>(120000)
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
@@ -163,9 +194,19 @@ class ProxyClientManager {
         if (!webSocketAddress) {
             return;
         }
-        const c = new ProxyConnectionToServer(this.#node);
-        await c.initialize(remoteNodeId, webSocketAddress, {timeoutMsec: 3000});
-        this.#outgoingConnections.set(remoteNodeId, c);
+        try {
+            const c = new ProxyConnectionToServer(this.#node);
+            await c.initialize(remoteNodeId, webSocketAddress, {timeoutMsec: 3000});
+            this.#outgoingConnections.set(remoteNodeId, c);
+        }
+        catch(err) {
+            this.#failedConnectionAttemptTimestamps.set(remoteNodeId, nowTimestamp())
+            throw(err);
+        }
+    }
+    elapsedMsecSinceLastFailedOutgoingConnection(remoteNodeId: NodeId): number {
+        const timestamp: Timestamp = this.#failedConnectionAttemptTimestamps.get(remoteNodeId) || zeroTimestamp()
+        return elapsedSince(timestamp)
     }
     getConnection(remoteNodeId: NodeId): ProxyConnectionToServer | null {
         return this.#outgoingConnections.get(remoteNodeId) || null
@@ -190,13 +231,29 @@ class ProxyClientService {
                 const remoteNodeId = bootstrapNode.remoteNodeId()
                 const c = this.#proxyClientManager.getConnection(remoteNodeId)
                 if (!c) {
-                    action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
-                        await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: 3000});
-                    }, null);
+                    const elapsedMsec = this.#proxyClientManager.elapsedMsecSinceLastFailedOutgoingConnection(remoteNodeId);
+                    if (elapsedMsec > 15000) {
+                        action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
+                            await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: 3000});
+                        }, null);
+                    }
                 }
             }
-            await sleepMsec(10000);
+            await sleepMsec(3000);
         }
+    }
+}
+
+class MulticastService {
+    #node: KacheryP2PNode
+    #remoteNodeManager: RemoteNodeManager
+    constructor(controller: KacheryP2PController) {
+        this.#node = controller.node()
+        this.#remoteNodeManager = this.#node.remoteNodeManager()
+        this._start();
+    }
+    async _start() {
+        // todo
     }
 }
 

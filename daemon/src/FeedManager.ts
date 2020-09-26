@@ -4,9 +4,9 @@ import { sleepMsec, randomAlphaString } from './common/util';
 import { kacheryStorageDir } from './kachery';
 import { createKeyPair, publicKeyToHex, privateKeyToHex, getSignatureJson, hexToPublicKey, hexToPrivateKey, sha1sum, JSONStringifyDeterministic, verifySignatureJson, publicKeyHexToFeedId } from './common/crypto_util'
 import { assert } from 'console';
-import { validateObject, validateSha1Hash, validateNodeId } from './schema/index.js';
 import KacheryP2PNode from './KacheryP2PNode';
 import { FeedId, feedIdToPublicKeyHex, NodeId, PrivateKeyHex, PublicKey, SubfeedHash, SignedSubfeedMessage, FindLiveFeedResult, isSignedSubfeedMessage, nowTimestamp, FeedsConfig, SubfeedAccessRules, isFeedsConfig, isSubfeedAccessRules, SubfeedWatches, SubfeedMessage, feedSubfeedId, FeedSubfeedId, SubfeedWatchName, SubfeedWatch, FeedsConfigRAM, toFeedsConfigRAM, FeedName, SubfeedWatchesRAM, toFeedsConfig, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from './interfaces/core';
+import GarbageMap from './common/GarbageMap';
 
 // todo fix feeds config on disk (too many in one .json file)
 
@@ -15,7 +15,7 @@ class FeedManager {
     _node: KacheryP2PNode // The kachery-p2p daemon
     _storageDir: string // Where we store the feed data (subdirector of the kachery storage dir)
     _feedsConfig: FeedsConfigRAM | null = null // The config will be loaded from disk as need. Contains all the private keys for the feeds and the local name/ID associations.
-    _subfeeds: Map<FeedSubfeedId, Subfeed> = new Map<FeedSubfeedId, Subfeed>() // The subfeed instances (Subfeed()) that have been loaded into memory
+    _subfeeds = new GarbageMap<FeedSubfeedId, Subfeed>(8 * 60 * 1000) // The subfeed instances (Subfeed()) that have been loaded into memory
     _remoteFeedManager: RemoteFeedManager // Manages the interaction with feeds on remote nodes
     constructor(node: KacheryP2PNode) {
         this._node = node;
@@ -46,8 +46,6 @@ class FeedManager {
         return feedId;
     }
     async deleteFeed({ feedId }: {feedId: FeedId}) {
-        validateObject(feedId, '/FeedId');
-
         const dirPath = _feedDirectory(feedId);
         await fs.promises.rmdir(dirPath, {recursive: true});
 
@@ -84,8 +82,6 @@ class FeedManager {
         return fs.existsSync(_feedDirectory(feedId));
     }
     async appendMessages(args: { feedId: FeedId, subfeedHash: SubfeedHash, messages: SubfeedMessage[]}) {
-        validateObject(args.feedId, '/FeedId');
-        validateObject(args.subfeedHash, '/subfeedHash');
         // assert(Array.isArray(messages));
         // Append messages to a subfeed (must be in a writeable feed on this node)
 
@@ -177,9 +173,6 @@ class FeedManager {
         }
     }
     async getAccessRules({ feedId, subfeedHash }: {feedId: FeedId, subfeedHash: SubfeedHash}): Promise<SubfeedAccessRules | null> {
-        validateObject(feedId, '/FeedId');
-        validateObject(subfeedHash, '/subfeedHash');
-
         // Get the access rules for a local writeable subfeed
         // These determine which remote nodes have permission to submit messages
         // to this subfeed.
@@ -307,7 +300,6 @@ class FeedManager {
         await writeJsonFile(configDir + '/feeds.json', toFeedsConfig(this._feedsConfig));
     }
     async _getPrivateKeyForFeed(feedId: FeedId): Promise<PrivateKeyHex | null> {
-        validateObject(feedId, '/FeedId');
         // Consult the config to get the private key associated with a particular feed ID
         const config = await this._loadFeedsConfig();
         return config.feeds.get(feedId)?.privateKey || null;
@@ -354,7 +346,7 @@ class RemoteFeedManager {
     _node: KacheryP2PNode
     // todo: type
     // todo: fix memory leak
-    _liveFeedInfos: Map<FeedId, FindLiveFeedResult> = new Map<FeedId, FindLiveFeedResult>() // Information about the live feeds (cached in memory)
+    _liveFeedInfos = new GarbageMap<FeedId, FindLiveFeedResult>(5 * 60 * 1000) // Information about the live feeds (cached in memory)
     // Manages interactions with feeds on remote nodes within the p2p network
     constructor(node: KacheryP2PNode) {
         this._node = node; // The kachery-p2p node
@@ -434,7 +426,8 @@ class RemoteFeedManager {
             nodeId: liveFeedInfo.nodeId,
             feedId,
             subfeedHash,
-            message
+            message,
+            timeoutMsec
         });
     }
     async findLiveFeedInfo({feedId, timeoutMsec}: {feedId: FeedId, timeoutMsec: number}): Promise<FindLiveFeedResult> {
@@ -489,7 +482,7 @@ class Subfeed {
     _initializing: boolean = false;
     _onInitializedCallbacks: (() => void)[] = [];
     _onInitializeErrorCallbacks: ((err: Error) => void)[] = [];
-    _newMessageListeners: Map<ListenerId, () => void> = new Map<ListenerId, () => void>();
+    _newMessageListeners = new Map<ListenerId, () => void>();
 
     constructor(params: SubfeedParams) {
         this._node = params.node; // The kachery-p2p daemon

@@ -1,3 +1,4 @@
+import { timeStamp } from "console";
 import { hexToPublicKey, JSONStringifyDeterministic } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
 
@@ -163,6 +164,12 @@ export const isTimestamp = (x: any) : x is Timestamp => {
 export const nowTimestamp = () => {
     const ret = new Date()
     return ret as any as Timestamp
+}
+export const zeroTimestamp = () => {
+    return 0 as any as Timestamp;
+}
+export const elapsedSince = (timestamp: Timestamp) => {
+    return (nowTimestamp() as any as number) - (timestamp as any as number);
 }
 
 // PublicKey
