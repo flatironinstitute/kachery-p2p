@@ -10,6 +10,7 @@ import PublicWebSocketServer from './PublicWebSocketServer';
 import assert from 'assert';
 import { ChannelName, HostName, isAddress, isChannelName, JSONObject, NodeId, Port, isHostName, isPort, Address } from './interfaces/core';
 import { ProxyConnectionToClient } from './ProxyConnectionToClient';
+import PublicUdpSocketServer from './PublicUdpSocketServer';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
 process.on('uncaughtException', function (err) {
@@ -239,10 +240,11 @@ const startDaemon = async (args: {
     console.info(`Websocket server listening on port ${webSocketListenPort}`)
   }
 
-  // if (udpListenPort) {
-  //   const publicUdpSocketServer = new PublicWebSocketServer(kNode, {verbose});
-  //   publicUdpSocketServer.listen(udpListenPort);
-  // }
+  if (udpListenPort) {
+    const publicUdpSocketServer = new PublicUdpSocketServer(kNode);
+    await publicUdpSocketServer.startListening(udpListenPort);
+    console.info(`Udp socket server listening on port ${udpListenPort}`)
+  }
 }
 
 main();

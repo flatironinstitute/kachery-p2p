@@ -1,7 +1,9 @@
-import { ChannelName, isChannelName, isNodeId, isRequestId, NodeId, RequestId, Timestamp, _validateObject, isTimestamp, isOneOf, isEqualTo, ChannelNodeInfo, isChannelNodeInfo, FileKey, isFileKey, FeedId, isFeedId, LiveFeedSubscriptions, isLiveFeedSubscriptions, optional, isBoolean, isNumber, ChannelInfo, isChannelInfo, Signature, SubfeedHash, isSubfeedHash, isNull, SubmittedSubfeedMessage, isSubmittedSubfeedMessage, ErrorMessage, isErrorMessage, isBigInt, SignedSubfeedMessage, isArrayOf, isSignedSubfeedMessage } from "./core"
+import { protocolVersion } from "../protocolVersion"
+import { ChannelName, isChannelName, isNodeId, isRequestId, NodeId, RequestId, Timestamp, _validateObject, isTimestamp, isOneOf, isEqualTo, ChannelNodeInfo, isChannelNodeInfo, FileKey, isFileKey, FeedId, isFeedId, LiveFeedSubscriptions, isLiveFeedSubscriptions, optional, isBoolean, isNumber, ChannelInfo, isChannelInfo, Signature, SubfeedHash, isSubfeedHash, isNull, SubmittedSubfeedMessage, isSubmittedSubfeedMessage, ErrorMessage, isErrorMessage, isBigInt, SignedSubfeedMessage, isArrayOf, isSignedSubfeedMessage, ProtocolVersion } from "./core"
 
 export interface NodeToNodeRequest {
     body: {
+        protocolVersion: ProtocolVersion,
         requestId: RequestId,
         fromNodeId: NodeId,
         toNodeId: NodeId,
@@ -12,6 +14,7 @@ export interface NodeToNodeRequest {
 }
 export const isNodeToNodeRequest = (x: any): x is NodeToNodeRequest => {
     return _validateObject(x, {
+        protocolVersion: isEqualTo(protocolVersion()),
         requestId: isRequestId,
         fromNodeId: isNodeId,
         toNodeId: isNodeId,
@@ -21,6 +24,7 @@ export const isNodeToNodeRequest = (x: any): x is NodeToNodeRequest => {
 }
 export interface NodeToNodeResponse {
     body: {
+        protocolVersion: ProtocolVersion,
         requestId: RequestId,
         fromNodeId: NodeId,
         toNodeId: NodeId,
@@ -31,6 +35,7 @@ export interface NodeToNodeResponse {
 }
 export const isNodeToNodeResponse = (x: any): x is NodeToNodeResponse => {
     return _validateObject(x, {
+        protocolVersion: isEqualTo(protocolVersion()),
         requestId: isRequestId,
         fromNodeId: isNodeId,
         toNodeId: isNodeId,

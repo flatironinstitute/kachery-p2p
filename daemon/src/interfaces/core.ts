@@ -536,7 +536,7 @@ export interface FindFileResult {
 
 // RequestId
 export interface RequestId extends String {
-    __nodeId__: never // phantom type
+    __requestId__: never // phantom type
 }
 export const isRequestId = (x: any): x is RequestId => {
     if (!isString(x)) return false;

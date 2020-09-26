@@ -3,9 +3,10 @@ import JsonSocket from 'json-socket';
 import { sleepMsec } from './common/util';
 import start_http_server from './common/start_http_server.js';
 import KacheryP2PNode from './KacheryP2PNode';
-import { ChannelName, FileKey, isSubfeedWatches, NodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isFileKey, isNodeId, isChannelName, isFeedId, isSubfeedMessage, isArrayOf, toSubfeedWatchesRAM, FeedId, isFeedName, SubfeedMessage, SignedSubfeedMessage, FindLiveFeedResult, SubfeedAccessRules, mapToObject, _validateObject, optional, FeedName, SubfeedHash, SubfeedWatches, isSubmittedSubfeedMessage, SubmittedSubfeedMessage, JSONObject, isJSONObject } from './interfaces/core';
+import { ChannelName, FileKey, isSubfeedWatches, NodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isFileKey, isNodeId, isChannelName, isFeedId, isSubfeedMessage, isArrayOf, toSubfeedWatchesRAM, FeedId, isFeedName, SubfeedMessage, SignedSubfeedMessage, FindLiveFeedResult, SubfeedAccessRules, mapToObject, _validateObject, optional, FeedName, SubfeedHash, SubfeedWatches, isSubmittedSubfeedMessage, SubmittedSubfeedMessage, JSONObject, isJSONObject, ProtocolVersion } from './interfaces/core';
 import { Socket } from 'net';
 import { action } from './action';
+import { protocolVersion } from './protocolVersion';
 
 interface Req {
     body: any,
@@ -183,9 +184,14 @@ export default class DaemonApiServer {
     async _apiProbe(req: Req, res: Res) {
         interface ApiProbeResponse {
             success: boolean,
+            protocolVersion: ProtocolVersion,
             nodeId: NodeId
         };
-        const response: ApiProbeResponse = {success: true, nodeId: this.#node.nodeId()};
+        const response: ApiProbeResponse = {
+            success: true,
+            protocolVersion: protocolVersion(),
+            nodeId: this.#node.nodeId()
+        };
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
     }

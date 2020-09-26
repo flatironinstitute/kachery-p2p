@@ -3,9 +3,10 @@ import start_http_server from './common/start_http_server.js';
 import KacheryP2PNode from './KacheryP2PNode';
 import { sleepMsec } from './common/util.js';
 import { isNodeToNodeRequest, NodeToNodeRequest, NodeToNodeResponse } from './interfaces/NodeToNodeRequest.js';
-import { NodeId, Port, JSONObject, isJSONObject, _validateObject, isBoolean, isNodeId, isOneOf, isAddress, Address, isNull } from './interfaces/core.js';
+import { NodeId, Port, JSONObject, isJSONObject, _validateObject, isBoolean, isNodeId, isOneOf, isAddress, Address, isNull, ProtocolVersion, DaemonVersion, isProtocolVersion, isDaemonVersion } from './interfaces/core.js';
 import { Socket } from 'net';
 import { action } from './action.js';
+import { daemonVersion, protocolVersion } from './protocolVersion.js';
 
 interface Req {
     body: any,
@@ -22,6 +23,8 @@ interface Res {
 
 export interface ApiProbeResponse {
     success: boolean,
+    protocolVersion: ProtocolVersion,
+    daemonVersion: DaemonVersion,
     nodeId: NodeId,
     isBootstrapNode: boolean,
     webSocketAddress: Address | null
@@ -29,6 +32,8 @@ export interface ApiProbeResponse {
 export const isApiProbeResponse = (x: any): x is ApiProbeResponse => {
     return _validateObject(x, {
         success: isBoolean,
+        protocolVersion: isProtocolVersion,
+        daemonVersion: isDaemonVersion,
         nodeId: isNodeId,
         isBootstrapNode: isBoolean,
         webSocketAddress: isOneOf([isNull, isAddress])
@@ -92,6 +97,8 @@ export default class PublicApiServer {
     async _apiProbe(req: Req, res: Res) {
         const response: ApiProbeResponse = {
             success: true,
+            protocolVersion: protocolVersion(),
+            daemonVersion: daemonVersion(),
             nodeId: this.#node.nodeId(),
             isBootstrapNode: this.#node.isBootstrapNode(),
             webSocketAddress: this.#node.webSocketAddress()
