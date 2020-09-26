@@ -1,6 +1,23 @@
 import { timeStamp } from "console";
 import { hexToPublicKey, JSONStringifyDeterministic } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
+import { AnnounceRequestData, isAnnounceRequestData, isAnnounceResponseData } from "./NodeToNodeRequest";
+
+export interface ProtocolVersion extends String {
+    __protocolVersion__: never // phantom
+}
+export const isProtocolVersion = (x: any): x is ProtocolVersion => {
+    if (!isString(x)) return false;
+    return (/^[0-9a-zAz\.\ \-]{4,20}?$/.test(x));
+}
+
+export interface DaemonVersion extends String {
+    __daemonVersion__: never // phantom
+}
+export const isDaemonVersion = (x: any): x is DaemonVersion => {
+    if (!isString(x)) return false;
+    return (/^[0-9a-zAz\.\ \-]{4,20}?$/.test(x));
+}
 
 export type JSONPrimitive = string | number | boolean | null;
 export type JSONValue = JSONPrimitive | JSONObject | JSONArray;
@@ -9,6 +26,17 @@ export interface JSONArray extends Array<JSONValue> {}
 export const isJSONObject = (x: any): x is JSONObject => {
     if (!isObject(x)) return false;
     return isJSONSerializable(x);
+}
+export const tryParseJsonObject = (x: string): JSONObject | null => {
+    let a: any;
+    try {
+        a = JSON.parse(x);
+    }
+    catch {
+        return null;
+    }
+    if (!isJSONObject(a)) return null;
+    return a;
 }
 const isJSONSerializable = (obj: Object): boolean => {
     const isPlainObject = (a: Object) => {
@@ -582,6 +610,32 @@ export const _validateObject = (x: any, spec: ValidateObjectSpec): boolean => {
         }
     }
     return true;
+}
+
+export interface MulticastAnnounceMessageBody {
+    protocolVersion: ProtocolVersion,
+    fromNodeId: NodeId,
+    messageType: 'announce',
+    requestData: AnnounceRequestData
+}
+export const isMulticastAnnounceMessageBody = (x: any): x is MulticastAnnounceMessageBody => {
+    return _validateObject(x, {
+        protocolVersion: isProtocolVersion,
+        nodeId: isNodeId,
+        messageType: isEqualTo('announce'),
+        requestData: isAnnounceRequestData
+    })
+}
+
+export interface MulticastAnnounceMessage {
+    body: MulticastAnnounceMessageBody,
+    signature: Signature
+}
+export const isMulticastAnnounceMessage = (x: any): x is MulticastAnnounceMessage => {
+    return _validateObject(x, {
+        body: isMulticastAnnounceMessageBody,
+        signature: isSignature
+    })
 }
 
 export const jsonObjectsMatch = (x1: any, x2: any): boolean => {
