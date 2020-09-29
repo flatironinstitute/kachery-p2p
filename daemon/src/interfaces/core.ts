@@ -4,8 +4,9 @@ import { randomAlphaString } from "../common/util";
 import { AnnounceRequestData, isAnnounceRequestData, isAnnounceResponseData } from "./NodeToNodeRequest";
 
 export interface ProtocolVersion extends String {
-    __protocolVersion__: never // phantom
+    __protocolVersion__: never // phantom type
 }
+export const exampleProtocolVersion: ProtocolVersion = "example-protocol.Version" as any as ProtocolVersion
 export const isProtocolVersion = (x: any): x is ProtocolVersion => {
     if (!isString(x)) return false;
     return (/^[0-9a-zAz\.\ \-]{4,20}?$/.test(x));
@@ -14,6 +15,7 @@ export const isProtocolVersion = (x: any): x is ProtocolVersion => {
 export interface DaemonVersion extends String {
     __daemonVersion__: never // phantom
 }
+export const exampleDaemonVersion: DaemonVersion = "example-daemon.Version" as any as DaemonVersion
 export const isDaemonVersion = (x: any): x is DaemonVersion => {
     if (!isString(x)) return false;
     return (/^[0-9a-zAz\.\ \-]{4,20}?$/.test(x));
@@ -27,6 +29,7 @@ export const isJSONObject = (x: any): x is JSONObject => {
     if (!isObject(x)) return false;
     return isJSONSerializable(x);
 }
+export const exampleJSONObject = {example: ['json', {object: 1}, '---']}
 export const tryParseJsonObject = (x: string): JSONObject | null => {
     let a: any;
     try {
@@ -108,10 +111,20 @@ export const isOneOf = (testFunctions: Function[]): ((x: any) => boolean) => {
     }
 }
 
-export const optional = (testFunction: Function): ((x: any) => boolean) => {
-    return (x) => {
-        return ((x === undefined) || (testFunction(x)));
+export const optional = (testFunctionOrSpec: Function | ValidateObjectSpec): ((x: any) => boolean) => {
+    if (isFunction(testFunctionOrSpec)) {
+        const testFunction: Function = testFunctionOrSpec
+        return (x) => {
+            return ((x === undefined) || (testFunction(x)));
+        }
     }
+    else {
+        return (x) => {
+            const obj: ValidateObjectSpec = testFunctionOrSpec
+            return _validateObject(x, obj)
+        }
+    }
+    
 }
 
 // isEqualTo
@@ -148,22 +161,12 @@ const isObjectOf = (keyTestFunction: (x: any) => boolean, valueTestFunction: (x:
     }
 }
 
-// Address
-export interface Address {
-    hostName: HostName,
-    port: Port
-}
-export const isAddress = (x: any): x is Address => {
-    return _validateObject(x, {
-        hostName: isHostName,
-        port: isPort
-    });
-}
 
 // Port
 export interface Port extends Number {
     __port__: never
 }
+export const examplePort: Port = 1000 as any as Port
 export const isPort = (x: any) : x is Port => {
     if (!isNumber(x)) return false;
     return true;
@@ -176,21 +179,39 @@ export const toNumber = (x: Port): number => {
 export interface HostName extends String {
     __hostName__: never
 }
+export const exampleHostName: HostName = '0.0.0.0' as any as HostName
 export const isHostName = (x: any): x is HostName => {
     if (!isString(x)) return false;
     return (/^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]*[a-zA-Z0-9])\\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\-]*[A-Za-z0-9])$/.test(x));
+}
+
+// Address
+export interface Address {
+    hostName: HostName,
+    port: Port
+}
+export const exampleAddress = {
+    hostName: exampleHostName,
+    port: examplePort
+}
+export const isAddress = (x: any): x is Address => {
+    return _validateObject(x, {
+        hostName: isHostName,
+        port: isPort
+    });
 }
 
 // TimeStamp
 export interface Timestamp extends Number {
     __timestamp__: never
 }
+export const exampleTimestamp: Timestamp = Number(new Date(2020, 1, 1, 1, 1, 1, 0)) - 0 as any as Timestamp
 export const isTimestamp = (x: any) : x is Timestamp => {
     if (!isNumber(x)) return false;
     return true;
 }
 export const nowTimestamp = () => {
-    const ret = new Date()
+    const ret = Number(new Date()) - 0
     return ret as any as Timestamp
 }
 export const zeroTimestamp = () => {
@@ -204,26 +225,31 @@ export const elapsedSince = (timestamp: Timestamp) => {
 export interface PublicKey extends String {
     __publicKey__: never // phantom type so that we cannot assign directly to a string
 }
+const examplePublicKey: PublicKey = '-----BEGIN PUBLIC KEY-----\nPUBLICKEYAAAAAAAAAAADt4+bJGhgtv/oQvPS03eZrEL8vYBXo0j3D7mNUM=\n-----END PUBLIC KEY-----' as any as PublicKey
 
 // PrivateKey
 export interface PrivateKey extends String {
     __privateKey__: never // phantom type
 }
+const examplePrivateKey: PrivateKey = '-----BEGIN PRIVATE KEY-----\nPRIVATEKEYAAAAAAAAAADt4+bJGhgtv/oQvPS03eZrEL8vYBXo0j3D7mNUM=\n-----END PRIVATE KEY-----' as any as PrivateKey
 
 // PublicKeyHex
 export interface PublicKeyHex extends String {
     __publicKeyHex__: never // phantom type so that we cannot assign directly to a string
 }
+const examplePublicKeyHex: PublicKeyHex = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as any as PublicKeyHex
 
 // PrivateKeyHex
 export interface PrivateKeyHex extends String {
     __privateKeyHex__: never // phantom type
 }
+const examplePrivateKeyHex: PrivateKeyHex = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as any as PrivateKeyHex
 
 // Sha1Hash
 export interface Sha1Hash extends String {
     __sha1Hash__: never // phantom type
 }
+const exampleSha1Hash: Sha1Hash = '63a0f8f44232cba2eca23dea7baa4e176b93e957' as any as Sha1Hash
 
 export const nodeIdToPublicKey = (nodeId: NodeId): PublicKey => {
     return hexToPublicKey(nodeId.toString() as any as PublicKeyHex);
@@ -234,11 +260,16 @@ export interface KeyPair {
     publicKey: PublicKey,
     privateKey: PrivateKey
 }
+const exampleKeyPair: KeyPair = {
+    publicKey: examplePublicKey,
+    privateKey: examplePrivateKey
+}
 
 // Signature
 export interface Signature extends String {
     __signature__: never
 }
+export const exampleSignature: Signature = 'abc000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as any as Signature
 export const isSignature = (x: any): x is Signature => {
     if (!isString(x)) return false;
     return (/^[0-9a-f]{64}?$/.test(x));
@@ -248,6 +279,7 @@ export const isSignature = (x: any): x is Signature => {
 export interface NodeId extends String {
     __nodeId__: never // phantom type
 }
+export const exampleNodeId: NodeId = 'abc123aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as any as NodeId
 export const isNodeId = (x: any): x is NodeId => {
     if (!isString(x)) return false;
     return (/^[0-9a-f]{64}?$/.test(x));
@@ -257,6 +289,7 @@ export const isNodeId = (x: any): x is NodeId => {
 export interface ChannelName extends String {
     __channelName__: never // phantom type
 }
+export const exampleChannelName: ChannelName = 'example.Channel-Name' as any as ChannelName
 export const isChannelName = (x: any): x is ChannelName => {
     if (!isString(x)) return false;
     return (/^[0-9a-zA-Z_\-\.]{4,160}?$/.test(x));
@@ -298,9 +331,24 @@ export interface FileKey {
         endByte: bigint
     }
 }
+export const exampleFileKey: FileKey = {
+    sha1: exampleSha1Hash,
+    chunkOf: {
+        fileKey: {
+            sha1: exampleSha1Hash
+        },
+        startByte: BigInt(0),
+        endByte: BigInt(100)
+    }
+}
 export const isFileKey = (x: any): x is FileKey => {
     return _validateObject(x, {
-        sha1: (a: any) => (isString(a) && /^[0-9a-f]{40}?$/.test(a))
+        sha1: (a: any) => (isString(a) && /^[0-9a-f]{40}?$/.test(a)),
+        chunkOf: optional({
+            fileKey: isFileKey,
+            startByte: isBigInt,
+            endByte: isBigInt
+        })
     });
 }
 

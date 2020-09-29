@@ -12,6 +12,7 @@ const KEEP_ALIVE_MESSAGE_TYPE = 'KeepAlive'
 const MESSAGE_HEADER_SIZE = 1000
 
 type UdpMessageType = "ConfirmUdpMessage" | "NodeToNodeRequest" | "NodeToNodeResponse" | "KeepAlive" | "Data"
+const exampleUdpMessageType: UdpMessageType = "ConfirmUdpMessage"
 const isUdpMessageType = (x: any): x is UdpMessageType => {
     if (!isString(x)) return false;
     return [
@@ -25,6 +26,7 @@ const isUdpMessageType = (x: any): x is UdpMessageType => {
 interface UdpMessageId extends String {
     __udpMessageId__: never // phantom type
 }
+const exampleUdpMessageId: UdpMessageId = "messageIdA" as any as UdpMessageId
 const isUdpMessageId = (x: any): x is UdpMessageId => {
     if (!isString(x)) return false;
     return (/^[A-Fa-f]{10}?$/.test(x));
@@ -33,21 +35,10 @@ const createUdpMessageId = () => {
     return randomAlphaString(10) as any as UdpMessageId;
 }
 
-interface UdpMessagePartId {
-    udpMessageId: UdpMessageId,
-    partIndex: PartIndex
-}
-const isUdpMessagePartId = (x: any): x is UdpMessagePartId => {
-    return _validateObject(x, {
-        udpMessageId: isUdpMessageId,
-        partIndex: isPartIndex
-    })
-}
-
-
 export interface NumParts extends Number {
     __numParts__: never
 }
+const exampleNumParts = 1 as any as NumParts
 export const isNumParts = (x: any) : x is NumParts => {
     if (!isNumber(x)) return false;
     if (x < 1) return false;
@@ -57,16 +48,38 @@ export const numPartsToNumber = (x: NumParts): number => {
     return x as any as number;
 }
 
-export interface PartIndex extends Number {
+interface PartIndex extends Number {
     __partIndex__: never
 }
-export const isPartIndex = (x: any) : x is PartIndex => {
+const examplePartIndex = 0 as any as PartIndex
+const isPartIndex = (x: any) : x is PartIndex => {
     if (!isNumber(x)) return false;
     if (x < 0) return false;
     return true;
 }
-export const partIndexToNumber = (x: PartIndex): number => {
+const partIndexToNumber = (x: PartIndex): number => {
     return x as any as number;
+}
+const partIndex = (i: number) => {
+    return i as any as PartIndex
+}
+
+interface UdpMessagePartId {
+    udpMessageId: UdpMessageId,
+    partIndex: PartIndex,
+    numParts: NumParts
+}
+const exampleUdpMessagePartId: UdpMessagePartId = {
+    udpMessageId: exampleUdpMessageId,
+    partIndex: examplePartIndex,
+    numParts: exampleNumParts
+}
+const isUdpMessagePartId = (x: any): x is UdpMessagePartId => {
+    return _validateObject(x, {
+        udpMessageId: isUdpMessageId,
+        partIndex: isPartIndex,
+        numParts: isNumParts
+    })
 }
 
 interface UdpHeader {
@@ -109,8 +122,10 @@ export default class PublicUdpSocketServer {
     #node: KacheryP2PNode
     #inProgressMessages = new GarbageMap<UdpMessageId, Buffer>(120 * 1000)
     #confirmedUdpMessages = new GarbageMap<UdpMessagePartId, boolean>(120 * 1000)
+    #messagePartManager = new MessagePartManager()
     constructor(node: KacheryP2PNode) {
         this.#node = node
+        this.#messagePartManager.onMessageComplete(this._handleCompleteMessage)
     }
     startListening(listenPort: Port) {
         return new Promise((resolve, reject) => {
@@ -130,8 +145,8 @@ export default class PublicUdpSocketServer {
                     if (!isUdpHeader(header)) {
                         return;
                     }
-                    action('handleUdpMessage', {fromNodeId: header.body.fromNodeId, messageType: header.body.messageType}, async () => {
-                        this._handleMessage(header, dataBuffer);
+                    action('handleUdpMessagePart', {fromNodeId: header.body.fromNodeId, messageType: header.body.messageType}, async () => {
+                        this._handleMessagePart(header, dataBuffer);
                     }, async () => {
                     })
                 })
@@ -141,24 +156,69 @@ export default class PublicUdpSocketServer {
             }
         });
     }
-    _handleMessage(header: UdpHeader, dataBuffer: Buffer) {
+    _handleMessagePart(header: UdpHeader, dataBuffer: Buffer) {
         if (!verifySignature(header.body, header.signature, nodeIdToPublicKey(header.body.fromNodeId))) {
             throw Error('Error verifying signature in udp message')
         }
-        const messageType = header.body.messageType
-        if (messageType === "ConfirmUdpMessage") {
-            const msg = tryParseJsonObject(dataBuffer.toString())
-            if (!isConfirmUdpMessagePayload(msg)) {
-                throw Error('Error in ConfirmUdpMessage')
+        const id = {
+            udpMessageId: header.body.udpMessageId,
+            partIndex: header.body.partIndex,
+            numParts: header.body.numParts
+        }
+        this.#messagePartManager.addMessagePart(id, header, dataBuffer)
+    }
+    _handleCompleteMessage(header: UdpHeader, dataBuffer: Buffer) {
+        // todo
+    }
+}
+
+interface MessagePartData {
+    header: UdpHeader,
+    buffer: Buffer
+}
+
+class MessagePartManager {
+    #messageParts = new GarbageMap<UdpMessagePartId, MessagePartData>(3 * 60 * 1000)
+    #onMessageCompleteCallbacks: ((header: UdpHeader, data: Buffer) => void)[] = []
+    constructor() {}
+    addMessagePart(udpMessagePartId: UdpMessagePartId, header: UdpHeader, buffer: Buffer) {
+        this.#messageParts.set(udpMessagePartId, {header, buffer})
+        let complete = true
+        const numParts = numPartsToNumber(udpMessagePartId.numParts)
+        const buffers: Buffer[] = []
+        const headers: UdpHeader[] = [] 
+        for (let i = 0; i < numParts; i++) {
+            const id = {
+                udpMessageId: udpMessagePartId.udpMessageId,
+                partIndex: partIndex(i),
+                numParts: udpMessagePartId.numParts
             }
-            this.#confirmedUdpMessages.set(msg.udpMessagePartId, true)
+            const d = this.#messageParts.get(id)
+            if (d) {
+                buffers.push(d.buffer)
+                headers.push(d.header)
+            }
+            else {
+                complete = false;
+                break;
+            }
         }
-        else if (messageType === "NodeToNodeRequest") {
-            // todo
+        if (complete) {
+            for (let i = 0; i < numParts; i++) {
+                const id = {
+                    udpMessageId: udpMessagePartId.udpMessageId,
+                    partIndex: partIndex(i),
+                    numParts: udpMessagePartId.numParts
+                }
+                this.#messageParts.delete(id)
+            }
+            const fullBuffer = Buffer.concat(buffers)
+            this.#onMessageCompleteCallbacks.forEach(cb => {
+                cb(headers[0], fullBuffer)
+            })
         }
-        else if (messageType === "NodeToNodeResponse") {
-            // todo
-        }
-        // todo: others
+    }
+    onMessageComplete(callback: (header: UdpHeader, data: Buffer) => void) {
+        this.#onMessageCompleteCallbacks.push(callback)
     }
 }
