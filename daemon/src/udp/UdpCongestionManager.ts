@@ -3,6 +3,8 @@ import { elapsedSince, isNumber, isString, nowTimestamp } from "../interfaces/co
 
 const TARGET_PCT_LOST_BYTES = 2;
 
+export const _tests: {[key: string]: () => Promise<void>} = {}
+
 type Callbacks = (() => void)[]
 
 export interface ByteCount extends Number {
@@ -95,14 +97,13 @@ export const createInternalId = () => {
 }
 
 export default class UdpCongestionManager {
-    // todo, we need to update the estimates
     #maxNumBytesPerSecondToSend = byteCountPerSec(3 * 1000 * 1000) // current number of bytes per second allowed to send
     #estimatedRoundtripLatencyMsec = durationMsec(200) // current estimated roundtrip latency
     #trialDurationMsec = durationMsec(5000); // duration of a single trial
     #currentTrialData = new TrialData();
     #queuedPackets = new Queue<QueuedPacket>()
     constructor() {}
-    queuePacket(packetSize: ByteCount, send: SendCallback) {
+     queuePacket(packetSize: ByteCount, send: SendCallback) {
         this.#queuedPackets.enqueue({
             internalId: createInternalId(),
             packetSize,
@@ -171,7 +172,9 @@ class TrialData {
     #numErrorBytes: ByteCount
     #roundtripLatenciesMsec: DurationMsec[]
     #peakNumUnconfirmedBytes: ByteCount
-    constructor() {}
+    constructor() {
+        this.reset()
+    }
     reset() {
         this.#timestampStarted = nowTimestamp()
         this.#sentPacketInternalIds.clear()
@@ -308,4 +311,24 @@ const median = (x: number[]) => {
         return values[half];
     else
         return (values[half - 1] + values[half]) / 2.0;
+}
+
+_tests.UdpCongestionManager = async () => {
+    return new Promise((resolve, reject) => {
+        const x = new UdpCongestionManager()
+        let numSent = 0
+        const _check = () => {
+            if (numSent === 3) {
+                resolve()
+            }
+        }
+        const send = (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: number}) => {
+            onConfirmed()
+            numSent ++
+            _check()
+        }
+        x.queuePacket(byteCount(100), send)
+        x.queuePacket(byteCount(100), send)
+        x.queuePacket(byteCount(100), send)
+    })
 }

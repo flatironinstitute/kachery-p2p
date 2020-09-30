@@ -1,6 +1,6 @@
 import { action } from "./action";
 import { sleepMsec } from "./common/util";
-import { httpPostJson } from "./httpPostJson";
+import { httpPostJson, urlPath } from "./httpPostJson";
 import { Address, ChannelName, elapsedSince, isMulticastAnnounceMessage, JSONObject, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Timestamp, tryParseJsonObject, zeroTimestamp } from "./interfaces/core";
 import { AnnounceRequestData, GetChannelInfoRequestData, isAnnounceResponseData, isGetChannelInfoResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
@@ -42,7 +42,7 @@ class BootstrapService {
         this._start();
     }
     async _probeBootstrapNode(address: Address) {
-        const response = await httpPostJson(address, '/probe', {}, {timeoutMsec: 2000});
+        const response = await httpPostJson(address, urlPath('/probe'), {}, {timeoutMsec: 2000});
         if (!isApiProbeResponse(response)) {
             throw Error('Invalid probe response from bootstrap node.');
         }
@@ -264,7 +264,6 @@ class MulticastService {
         });
         multicastSocket.on("message", (message, rinfo) => {
             let msg: JSONObject | null = tryParseJsonObject(message.toString());
-            // todo: check protocol version on all incoming messages
             if (isMulticastAnnounceMessage(msg)) {
                 const msg2: MulticastAnnounceMessage = msg;
                 action('handleMulticastAnnounceMessage', {fromNodeId: msg.body.fromNodeId}, async () => {

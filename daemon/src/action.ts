@@ -1,5 +1,3 @@
-import { JSONObject } from "./interfaces/core";
-
 export const action = async (
     actionName: string,
     actionData: any,

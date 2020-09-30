@@ -148,7 +148,7 @@ class FeedManager {
     }
     async getNumMessages({ feedId, subfeedHash }: {feedId: FeedId, subfeedHash: SubfeedHash}) {
         // Get the total number of messages in the local feed only
-        // TODO: we may want to optionally do a p2p search, and retrieve the number of messages without retrieving the actual messages
+        // future: we may want to optionally do a p2p search, and retrieve the number of messages without retrieving the actual messages
         const subfeed = await this._loadSubfeed({feedId, subfeedHash});
         if (!subfeed) {
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
@@ -344,8 +344,6 @@ class FeedManager {
 
 class RemoteFeedManager {
     _node: KacheryP2PNode
-    // todo: type
-    // todo: fix memory leak
     _liveFeedInfos = new GarbageMap<FeedId, FindLiveFeedResult>(5 * 60 * 1000) // Information about the live feeds (cached in memory)
     // Manages interactions with feeds on remote nodes within the p2p network
     constructor(node: KacheryP2PNode) {
