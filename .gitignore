@@ -1,3 +1,4 @@
+daemon/src/old
 daemon/src/schema-old
 node_modules
 .vscode

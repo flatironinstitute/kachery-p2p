@@ -4,6 +4,7 @@ import { httpPostJson } from "./httpPostJson";
 import { Address, ChannelName, ChannelNodeInfo, createRequestId, NodeId, nodeIdToPublicKey, nowTimestamp } from "./interfaces/core";
 import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponseData } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
+import { protocolVersion } from "./protocolVersion";
 
 class RemoteNode {
     #node: KacheryP2PNode
@@ -55,6 +56,7 @@ class RemoteNode {
     _formRequestFromRequestData(requestData: NodeToNodeRequestData): NodeToNodeRequest {
         const requestId = createRequestId();
         const requestBody = {
+            protocolVersion: protocolVersion(),
             requestId,
             fromNodeId: this.#node.nodeId(),
             toNodeId: this.#remoteNodeId,
