@@ -23,7 +23,10 @@ export interface DaemonVersion extends String {
 export const exampleDaemonVersion: DaemonVersion = "example-daemon.Version" as any as DaemonVersion
 export const isDaemonVersion = (x: any): x is DaemonVersion => {
     if (!isString(x)) return false;
-    return (/^[0-9a-zA-z\.\ \-]{4,20}?$/.test(x));
+    return (/^[0-9a-zA-z\.\ \-]{4,40}?$/.test(x));
+}
+_tests.DaemonVersion = () => {
+    assert(isDaemonVersion(exampleDaemonVersion))
 }
 
 export type JSONPrimitive = string | number | boolean | null;
@@ -35,6 +38,7 @@ export const isJSONObject = (x: any): x is JSONObject => {
     return isJSONSerializable(x);
 }
 export const exampleJSONObject = {example: ['json', {object: 1}, '---']}
+export const exampleSerializedJSONObject = JSON.stringify(exampleJSONObject);
 export const tryParseJsonObject = (x: string): JSONObject | null => {
     let a: any;
     try {
@@ -70,41 +74,85 @@ const isJSONSerializable = (obj: Object): boolean => {
     }
     return true;
 }
+_tests.isJSONObject = () => {
+    assert(isJSONObject(exampleJSONObject))
+}
+_tests.isJSONSerializable = () => {
+    assert(isJSONSerializable(exampleJSONObject))
+}
+_tests.tryParseJsonObject = () => {
+    const obj = tryParseJsonObject(exampleSerializedJSONObject)
+    assert(!isNull(obj))
+}
 
 // object
 export const isObject = (x: any): x is Object => {
     return ((x !== null) && (typeof x === 'object'));
+}
+_tests.testIsObjectAcceptsObject = () => {
+    assert(isObject({name: 'Object', type: 'Object', value: 5}))
+}
+_tests.testIsObjectRejectsNonObject = () => {
+    assert(!isObject('I am a string'))
 }
 
 // string
 export const isString = (x: any): x is string => {
     return ((x !== null) && (typeof x === 'string'));
 }
+_tests.testIsStringAcceptsString = () => {
+    assert(isString("5"));
+}
+_tests.testIsStringRejectsNonString = () => {
+    assert(!isString(5))
+}
 
 // function
 const isFunction = (x: any): x is Function => {
     return ((x !== null) && (typeof x === 'function'));
+}
+_tests.testIsFunctionAcceptsFunction = () => {
+    assert(isFunction(_tests.testIsStringAcceptsString))
+}
+_tests.testIsFunctionRejectsNonFunction = () => {
+    assert(!isFunction({object: 'yes', function: () => 5}))
 }
 
 // number
 export const isNumber = (x: any): x is number => {
     return ((x !== null) && (typeof x === 'number'));
 }
+_tests.testIsNumberAcceptsNumber = () => {
+    assert(isNumber(5.432))
+}
+_tests.testIsNumberRejectsNonNumber = () => {
+    assert(!isNumber("5"))
+}
 
 // bigint
 export const isBigInt = (x: any): x is bigint => {
     return ((x !== null) && (typeof x === 'bigint'));
+}
+_tests.testIsBigIntAcceptsBigInt = () => {
+    assert(isBigInt(BigInt(5)))
+}
+_tests.testIsBigIntRejectsNonBigInt = () => {
+    assert(!isBigInt(5))
 }
 
 // null
 export const isNull = (x: any): x is null => {
     return x === null;
 }
+_tests.testIsNullAcceptsNull = () => { assert(isNull(null)) }
+_tests.testIsNullRejectsNonNull = () => { assert(!isNull("null")) }
 
 // boolean
 export const isBoolean = (x: any): x is boolean => {
     return ((x !== null) && (typeof x === 'boolean'));
 }
+_tests.testIsBooleanAcceptsBoolean = () => { assert(isBoolean(false)) }
+_tests.testIsBooleanRejectsNonBoolean = () => { assert(!isBoolean('false')) }
 
 // isOneOf
 export const isOneOf = (testFunctions: Function[]): ((x: any) => boolean) => {
@@ -114,6 +162,12 @@ export const isOneOf = (testFunctions: Function[]): ((x: any) => boolean) => {
         }
         return false;
     }
+}
+_tests.testIsOneOf = () => {
+    const checker = isOneOf([isBoolean, isString]);
+    assert(checker('I am a string'));
+    assert(checker(false));
+    assert(!checker(5));
 }
 
 export const optional = (testFunctionOrSpec: Function | ValidateObjectSpec): ((x: any) => boolean) => {
@@ -128,15 +182,20 @@ export const optional = (testFunctionOrSpec: Function | ValidateObjectSpec): ((x
             const obj: ValidateObjectSpec = testFunctionOrSpec
             return _validateObject(x, obj)
         }
-    }
-    
+    }   
 }
+// TODO
 
 // isEqualTo
 export const isEqualTo = (value: any): ((x: any) => boolean) => {
     return (x) => {
         return x === value;
     }
+}
+_tests.testIsEqualTo = () => {
+    const isMyString = isEqualTo('myString');
+    assert(isMyString('myString'));
+    assert(!isMyString('MyString'));
 }
 
 // isArrayOf
@@ -151,7 +210,15 @@ export const isArrayOf = (testFunction: (x: any) => boolean): ((x: any) => boole
         else return false;
     }
 }
+_tests.testIsArrayOf = () => {
+    const areStrings = isArrayOf(isString);
+    assert(areStrings(['these', 'are', 'strings']));
+    assert(!areStrings('not an array'));
+    assert(!areStrings(['These', 'are', 'not', 5, 'strings']));
+}
 
+//***** NOTE: The "key" test should not be needed here; Javascript converts all keys to strings
+//***** See comments in the tests below
 // isObjectOf
 const isObjectOf = (keyTestFunction: (x: any) => boolean, valueTestFunction: (x: any) => boolean): ((x: any) => boolean) => {
     return (x) => {
@@ -165,6 +232,18 @@ const isObjectOf = (keyTestFunction: (x: any) => boolean, valueTestFunction: (x:
         else return false;
     }
 }
+_tests.testIsObjectOf = () => {
+    const isStringKeyedInts = isObjectOf(isString, isBigInt);
+    assert(isStringKeyedInts({'one': BigInt(4), 'Two': BigInt(5)}));
+    // assert(!isStringKeyedInts({1: BigInt(1), 2: BigInt(2)})); // this FAILS: any key is automatically converted to a string
+    assert(!isStringKeyedInts({'one': 1, 'two': 3.4}));
+}
+
+// NOTE: Failing test to address issue with this function
+_tests.testIsObjectOfForNumberKeys = () => {
+    const isNumberKeyedNumber = isObjectOf(isNumber, isNumber);
+    assert(isNumberKeyedNumber({9: 5, 3.14: 159 }));
+}
 
 
 // Port
@@ -174,10 +253,16 @@ export interface Port extends Number {
 export const examplePort: Port = 1000 as any as Port
 export const isPort = (x: any) : x is Port => {
     if (!isNumber(x)) return false;
-    return true;
+    return x > 0 && x < 65536; // port numbers must be in 16-bit positive range
 }
 export const toNumber = (x: Port): number => {
     return x as any as number;
+}
+_tests.Port = () => {
+    assert(isPort(examplePort));
+    assert(!isPort(-1000)); // negative
+    assert(!isPort('abc')); // not actually a number
+    assert(!isPort(65536)); // too large
 }
 
 // HostName
@@ -219,7 +304,7 @@ export interface Timestamp extends Number {
 export const exampleTimestamp: Timestamp = Number(new Date(2020, 1, 1, 1, 1, 1, 0)) - 0 as any as Timestamp
 export const isTimestamp = (x: any) : x is Timestamp => {
     if (!isNumber(x)) return false;
-    if (x < 0) return false;  // Timestamps should never be negative
+    if (x < 0) return false;  // For our purposes, timestamps should never be negative
     return true;
 }
 export const nowTimestamp = () => {
@@ -232,6 +317,21 @@ export const zeroTimestamp = () => {
 export const elapsedSince = (timestamp: Timestamp) => {
     return (nowTimestamp() as any as number) - (timestamp as any as number);
 }
+_tests.Timestamp = () => {
+    assert(isTimestamp(exampleTimestamp));
+    assert(isTimestamp(50));
+    assert(!isTimestamp(-50));
+}
+_tests.ZeroTimeStamp = () => {
+    assert(0 == (zeroTimestamp() as any as number));
+    assert(isTimestamp(zeroTimestamp())); // make sure 0 is accepted
+}
+_tests.ElapsedSince = () => {
+    const time = nowTimestamp();
+    const newTime = ((time as any as number) - 5) as any as Timestamp; // manually set back the clock 5 ms
+    const diff = elapsedSince(newTime); // should always yield 5, since these operations take <1 ms
+    assert(diff === 5 || diff === 6); // just in case we hit a ms boundary
+}
 
 // PublicKey
 export interface PublicKey extends String {
@@ -243,6 +343,7 @@ export const isPublicKey = (x: any) : x is PublicKey => {
     // TODO: Is there a specific length of the key block?
     return (/^-----BEGIN PUBLIC KEY-----[\s\S]*-----END PUBLIC KEY-----$/.test(x));
 }
+_tests.PublicKey = () => { assert(isPublicKey(examplePublicKey)) }
 
 // PrivateKey
 export interface PrivateKey extends String {
@@ -254,6 +355,7 @@ export const isPrivateKey = (x: any) : x is PublicKey => {
     // TODO: Is there a specific length of the key block?
     return (/^-----BEGIN PRIVATE KEY-----[\s\S]*-----END PRIVATE KEY-----$/.test(x));
 }
+_tests.PrivateKey = () => { assert(isPrivateKey(examplePrivateKey)) }
 
 // PublicKeyHex
 export interface PublicKeyHex extends String {
@@ -264,6 +366,7 @@ export const isPublicKeyHex = (x: any) : x is PublicKeyHex => {
     if (!isString(x)) return false;
     return (/^[0-9a-fA-F]+$/.test(x));
 }
+_tests.PublicKeyHex = () => { assert(isPublicKeyHex(examplePublicKeyHex)) }
 
 // PrivateKeyHex
 export interface PrivateKeyHex extends String {
@@ -274,6 +377,7 @@ export const isPrivateKeyHex = (x: any) : x is PrivateKeyHex => {
     if (!isString(x)) return false;
     return (/^[0-9a-fA-F]+$/.test(x));
 }
+_tests.PrivateKeyHex = () => { assert(isPrivateKeyHex(examplePrivateKeyHex)) }
 
 // Sha1Hash
 export interface Sha1Hash extends String {
@@ -284,7 +388,10 @@ export const isSha1Hash = (x: any) : x is Sha1Hash => {
     if (!isString(x)) return false;
     return (/^[0-9a-fA-F]{40}$/.test(x));  // Sha1 hash must be 40 hexadecimal characters
 }
+_tests.Sha1Hash = () => { assert(isSha1Hash('63a0f8f44232cba2eca23dea7baa4e176b93e957')) }
 
+
+// TODO: IS THIS ACTUALLY A PUBLIC KEY? 
 export const nodeIdToPublicKey = (nodeId: NodeId): PublicKey => {
     return hexToPublicKey(nodeId.toString() as any as PublicKeyHex);
 }
@@ -304,7 +411,10 @@ export const isKeyPair = (x: any) : x is KeyPair => {
         publicKey: (a: any) => (isPublicKey(a)),
         privateKey: (a: any) => (isPrivateKey(a))
     });
+    // TODO: if we trust this function for anything serious, it *REALLY* ought to confirm that the keypair matches
 }
+_tests.IsKeyPair = () => { assert(false) } // Failing test to address above issue
+
 
 // Signature
 export interface Signature extends String {
@@ -315,6 +425,8 @@ export const isSignature = (x: any): x is Signature => {
     if (!isString(x)) return false;
     return (/^[0-9a-f]{64}?$/.test(x));
 }
+_tests.Signature = () => { assert(isSignature(exampleSignature)) }
+
 
 // NodeId
 export interface NodeId extends String {
@@ -325,6 +437,7 @@ export const isNodeId = (x: any): x is NodeId => {
     if (!isString(x)) return false;
     return (/^[0-9a-f]{64}?$/.test(x));
 }
+_tests.NodeId = () => { assert(isNodeId(exampleNodeId)) }
 
 // ChannelName
 export interface ChannelName extends String {
@@ -335,6 +448,7 @@ export const isChannelName = (x: any): x is ChannelName => {
     if (!isString(x)) return false;
     return (/^[0-9a-zA-Z_\-\.]{4,160}?$/.test(x));
 }
+_tests.ChannelName = () => { assert(isChannelName(exampleChannelName)) }
 
 // FeedId
 export interface FeedId extends String {
@@ -345,6 +459,7 @@ export const isFeedId = (x: any): x is FeedId => {
     if (!isString(x)) return false;
     return (/^[0-9a-fA-F]{64}?$/.test(x));
 }
+_tests.FeedId = () => { assert(isFeedId(exampleFeedId)) }
 
 // Conversion between types
 export const feedIdToPublicKeyHex = (feedId: FeedId): PublicKeyHex => {
@@ -364,6 +479,8 @@ export const isSubfeedHash = (x: any): x is SubfeedHash => {
     if (!isString(x)) return false;
     return (/^[0-9a-fA-F]{40}?$/.test(x));
 }
+_tests.SubfeedHash = () => { assert(isSubfeedHash(exampleSubfeedHash)) }
+
 
 // FileKey
 export interface FileKey {
@@ -394,6 +511,8 @@ export const isFileKey = (x: any): x is FileKey => {
         })
     });
 }
+_tests.FileKey = () => { assert(isFileKey(exampleFileKey)) }
+
 
 // FindLiveFeedResult
 export interface FindLiveFeedResult {
@@ -405,6 +524,8 @@ export const isFindLiveFeedResult = (x: any): x is FindLiveFeedResult => {
         nodeId: (a: any) => isNodeId
     });
 }
+_tests.FindLiveFeedReslt = () => { assert(isFindLiveFeedResult(exampleFindLiveFeedResult)) }
+
 
 export interface ChannelNodeInfoBody {
     channelName: ChannelName,
@@ -450,6 +571,8 @@ export const isChannelNodeInfo = (x: any): x is ChannelNodeInfo => {
         signature: isSignature
     })
 }
+_tests.ChannelNodeInfo = () => { assert(isChannelNodeInfo(exampleChannelNodeInfo)) }
+
 
 // SubfeedMessage
 export interface SubfeedMessage extends JSONObject {
@@ -459,6 +582,8 @@ export const exampleSubfeedMessage: SubfeedMessage = {key: 'value'} as any as Su
 export const isSubfeedMessage = (x: any): x is SubfeedMessage => {
     return isObject(x);
 }
+_tests.SubfeedMessage = () => { assert(isSubfeedMessage(exampleSubfeedMessage)) }
+
 
 // SubfeedMessageMetaData
 export type SubfeedMessageMetaData = Object;
@@ -466,6 +591,8 @@ export const exampleSubfeedMessageMetaData: SubfeedMessageMetaData = {metaKey: '
 export const isSubfeedMessageMetaData = (x: any): x is SubfeedMessageMetaData => {
     return isObject(x);
 }
+_tests.SubfeedMessageMetaData = () => { assert(isSubfeedMessageMetaData(exampleSubfeedMessageMetaData)) }
+
 
 // SignedSubfeedMessage
 export interface SignedSubfeedMessage {
@@ -489,17 +616,24 @@ export const exampleSignedSubfeedMessage: SignedSubfeedMessage = {
     signature: exampleSignature
 }
 export const isSignedSubfeedMessage = (x: any): x is SignedSubfeedMessage => {
-    return _validateObject(x, {
+    if (! _validateObject(x, {
         body: {
             previousSignature: isSignature,
             messageNumber: isNumber,
-            message: isObject
-            // TODO: Check timestamp? Enforce rules about messages not coming from the future, etc?
+            message: isObject,
+            timestamp: isTimestamp,
+            // metaData: optional({ isSubfeedMessageMetaData }) // does this work?
         },
         signature: isSignature
-        // TODO: Actually check the signature?
-    });
+    })) return false;
+
+    // TODO: If this is to be trusted elsewhere (which it will be based on its name & its being a
+    // type guard) it's essential we check the signature actually matches the messsage.
+    return true;
 }
+// Test failing, not quite sure why--I think I did something wrong above
+_tests.SignedSubfeedMessage = () => { assert(isSignedSubfeedMessage(exampleSignedSubfeedMessage)) }
+
 
 // SubmittedSubfeedMessage
 export interface SubmittedSubfeedMessage extends JSONObject {
@@ -512,8 +646,8 @@ export const isSubmittedSubfeedMessage = (x: any): x is SubmittedSubfeedMessage 
 export const submittedSubfeedMessageToSubfeedMessage = (x: SubmittedSubfeedMessage) => {
     return x as any as SubfeedMessage;
 }
+_tests.SubmittedSubfeedMessage = () => { assert(isSubmittedSubfeedMessage(exampleSubmittedSubfeedMessage)) }
 
-// TODO: Pick up here
 
 // FeedsConfigFeed
 export interface FeedsConfigFeed {
@@ -525,7 +659,11 @@ export const isFeedsConfigFeed = (x: any): x is FeedsConfigFeed => {
         publicKey: isString,
         privateKey: isString
     });
+    // TODO: Check those public/private key pairs!
 }
+export const exampleFeedsConfigFeed: FeedsConfigFeed = { publicKey: examplePublicKeyHex, privateKey: examplePrivateKeyHex }
+_tests.FeedsConfigFeed = () => { assert(isFeedsConfigFeed(exampleFeedsConfigFeed)) }
+
 
 // FeedName
 export interface FeedName extends String {
@@ -534,6 +672,9 @@ export interface FeedName extends String {
 export const isFeedName = (x: any): x is FeedName => {
     return isString(x);
 }
+export const exampleFeedName: FeedName = "My feed name" as any as FeedName;
+_tests.FeedName = () => { assert(isFeedName(exampleFeedName)) }
+
 
 // ErrorMessage
 export interface ErrorMessage extends String {
@@ -545,10 +686,23 @@ export const isErrorMessage = (x: any): x is ErrorMessage => {
 export const errorMessage = (x: string): ErrorMessage => {
     if (isErrorMessage(x)) return x;
     else {
-        throw Error('Invalid error message');
+        throw Error('Invalid error message: messages cannot exceed 1000 characters.');
+    }
+}
+export const exampleErrorMessage = errorMessage("Nothing's wrong. Everything is fine.");
+_tests.ErrorMessage = () => {
+    assert(isErrorMessage(exampleErrorMessage));
+    try {
+        const overlongMessage = new Array(1001).join('#');
+        let x = errorMessage(overlongMessage);
+        assert(false); // does not occur as error is thrown
+    } catch(err) {
+        // todo: ought to be some neat trick to put this in a variable and refer to it, but oh well.
+        assert(err.message === 'Invalid error message: messages cannot exceed 1000 characters.')
     }
 }
 
+// TODO: Want to discuss this
 // objectToMap and mapToObject
 export const objectToMap = <KeyType extends String, ValueType>(obj: Object) => {
     return new Map<KeyType, ValueType>(Object.keys(obj).map(k => {
@@ -590,16 +744,9 @@ export const isFeedsConfig = (x: any): x is FeedsConfig => {
         feedIdsByName: isObjectOf(isFeedName, isFeedId)
     })
 }
+// Failing test: reminder to fix the FeedsConfig, FeedsConfigRAM area
+_tests.FeedsConfig = () => { assert(false); }
 
-// SubfeedAccessRules
-export interface SubfeedAccessRules {
-    rules: SubfeedAccessRule[]
-}
-export const isSubfeedAccessRules = (x: any): x is SubfeedAccessRules => {
-    return _validateObject(x, {
-        rules: isArrayOf(isSubfeedAccessRule)
-    })
-}
 
 // SubfeedAccessRule
 export interface SubfeedAccessRule {
@@ -612,6 +759,25 @@ export const isSubfeedAccessRule = (x: any): x is SubfeedAccessRule => {
         write: isBoolean
     })
 }
+export const exampleSubfeedAccessDeniedRule = { nodeId: exampleNodeId, write: false } as SubfeedAccessRule
+export const exampleSubfeedAccessAllowedRule = { nodeId: exampleNodeId, write: true } as SubfeedAccessRule
+_tests.SubfeedAccessRule = () => {
+    assert(isSubfeedAccessRule(exampleSubfeedAccessDeniedRule));
+    assert(isSubfeedAccessRule(exampleSubfeedAccessAllowedRule));
+}
+
+// SubfeedAccessRules
+export interface SubfeedAccessRules {
+    rules: SubfeedAccessRule[]
+}
+export const isSubfeedAccessRules = (x: any): x is SubfeedAccessRules => {
+    return _validateObject(x, {
+        rules: isArrayOf(isSubfeedAccessRule)
+    })
+}
+_tests.SubfeedAccessRules = () => {
+    assert(isArrayOf(isSubfeedAccessRule)([exampleSubfeedAccessAllowedRule, exampleSubfeedAccessDeniedRule]))
+}
 
 
 // SubfeedWatchName
@@ -621,20 +787,31 @@ export interface SubfeedWatchName extends String {
 export const isSubfeedWatchName = (x: any) => {
     return isString(x);
 }
+export const exampleSubfeedWatchName = "Example Subfeed Watch Name" as any as SubfeedWatchName;
+_tests.SubfeedWatchName = () => { assert(isSubfeedWatchName(exampleSubfeedWatchName)) }
+
 
 // SubfeedWatch
 export interface SubfeedWatch {
     feedId: FeedId,
     subfeedHash: SubfeedHash,
     position: number
+    // No name?
 }
-const isSubfeedWatch = (x: any): x is SubfeedWatch => {
+export const exampleSubfeedWatch: SubfeedWatch = { 
+    feedId: exampleFeedId,
+    subfeedHash: exampleSubfeedHash,
+    position: 4
+}
+export const isSubfeedWatch = (x: any): x is SubfeedWatch => {
     return _validateObject(x, {
         feedId: isFeedId,
         subfeedHash: isSubfeedHash,
         position: isNumber
     });
 }
+_tests.SubfeedWatch = () => { assert(isSubfeedWatch(exampleSubfeedWatch)) }
+
 
 // FeedSubfeedId
 export interface FeedSubfeedId extends String {
@@ -643,7 +820,20 @@ export interface FeedSubfeedId extends String {
 export const feedSubfeedId = (feedId: FeedId, subfeedHash: SubfeedHash): FeedSubfeedId => {
     return (feedId.toString() + ':' + subfeedHash.toString()) as any as FeedSubfeedId; 
 }
+export const isFeedSubfeedId = (x: any): x is FeedSubfeedId => {
+    if (!isString(x)) return false;
+    const parts = x.split(':');
+    return (parts.length === 2) &&
+           (isFeedId(parts[0])) &&
+           (isSubfeedHash(parts[1]));
+}
+export const exampleFeedSubfeedId: FeedSubfeedId = feedSubfeedId(exampleFeedId, exampleSubfeedHash);
+_tests.FeedSubfeedId = () => {
+    assert(isFeedSubfeedId(exampleFeedSubfeedId));
+}
 
+
+// TODO: Skipped this part--want to discuss
 // SubfeedWatches and SubfeedWatchesRAM
 export type SubfeedWatches = {[key: string]: SubfeedWatch};
 export const isSubfeedWatches = (x: any): x is SubfeedWatches => {
@@ -663,6 +853,21 @@ export interface FindFileResult {
     fileKey: FileKey,
     fileSize: bigint
 }
+export const isFindFileResult = (x: any): x is FindFileResult => {
+    return _validateObject(x, {
+        nodeId: isNodeId,
+        fileKey: isFileKey,
+        fileSize: isBigInt
+    });
+}
+export const exampleFindFileResult: FindFileResult = {
+    nodeId: exampleNodeId,
+    fileKey: exampleFileKey,
+    fileSize: BigInt(20)
+}
+// TODO: This is failing and I'm not sure why
+_tests.FindFileResult = () => { assert(isFindFileResult(exampleFindFileResult)) }
+
 
 // RequestId
 export interface RequestId extends String {
@@ -670,21 +875,12 @@ export interface RequestId extends String {
 }
 export const isRequestId = (x: any): x is RequestId => {
     if (!isString(x)) return false;
-    return (/^[A-Fa-f]{10}?$/.test(x));
+    return (/^[A-Za-z]{10}$/.test(x));
 }
 export const createRequestId = () => {
     return randomAlphaString(10) as any as RequestId;
 }
-
-// LiveFeedSubscriptions
-export interface LiveFeedSubscriptions {
-    subscriptions: LiveFeedSubscription[]
-}
-export const isLiveFeedSubscriptions = (x: any): x is LiveFeedSubscriptions => {
-    return _validateObject(x, {
-        subscriptions: isArrayOf(isLiveFeedSubscription)
-    })
-}
+_tests.RequestId = () => { assert(isRequestId(createRequestId())); }
 
 // ChannelName
 export interface LiveFeedSubscriptionName extends String {
@@ -692,7 +888,7 @@ export interface LiveFeedSubscriptionName extends String {
 }
 export const isLiveFeedSubscriptionName = (x: any): x is LiveFeedSubscriptionName => {
     if (!isString(x)) return false;
-    return (/^[0-9a-zA-Z_\-\.]{4,160}?$/.test(x));
+    return (/^[0-9a-zA-Z_\-\. ]{4,160}?$/.test(x));
 }
 
 // LiveFeedSubscription
@@ -710,6 +906,28 @@ export const isLiveFeedSubscription = (x: any): x is LiveFeedSubscription => {
         position: isNumber
     })
 }
+export const exampleLiveFeedSubscription: LiveFeedSubscription = {
+    subscriptionName: "This is my subscription" as any as LiveFeedSubscriptionName,
+    feedId: exampleFeedId,
+    subfeedHash: exampleSubfeedHash,
+    position: 12
+}
+_tests.LiveFeedSubscription = () => { assert(isLiveFeedSubscription(exampleLiveFeedSubscription)) }
+
+
+// LiveFeedSubscriptions
+export interface LiveFeedSubscriptions {
+    subscriptions: LiveFeedSubscription[]
+}
+export const isLiveFeedSubscriptions = (x: any): x is LiveFeedSubscriptions => {
+    return _validateObject(x, {
+        subscriptions: isArrayOf(isLiveFeedSubscription)
+    })
+}
+_tests.LiveFeedSubscriptions = () => { 
+    assert(isArrayOf(isLiveFeedSubscription)([exampleLiveFeedSubscription]));
+ }
+
 
 // ChannelInfo
 export interface ChannelInfo {
@@ -720,6 +938,9 @@ export const isChannelInfo = (x: any): x is ChannelInfo => {
         nodes: isArrayOf(isChannelNodeInfo)
     })
 }
+export const exampleChannelInfo: ChannelInfo = { nodes: [exampleChannelNodeInfo] } as any as ChannelInfo
+_tests.ChannelInfo = () => { assert(isChannelInfo(exampleChannelInfo)) }
+
 
 type ValidateObjectSpec = {[key: string]: ValidateObjectSpec | (Function & ((a: any) => any))}
 
@@ -745,13 +966,13 @@ export const _validateObject = (x: any, spec: ValidateObjectSpec): boolean => {
 export interface MulticastAnnounceMessageBody {
     protocolVersion: ProtocolVersion,
     fromNodeId: NodeId,
-    messageType: 'announce',
+    messageType: 'announce', // Should be actual type/enum?
     requestData: AnnounceRequestData
 }
 export const isMulticastAnnounceMessageBody = (x: any): x is MulticastAnnounceMessageBody => {
     return _validateObject(x, {
         protocolVersion: isProtocolVersion,
-        nodeId: isNodeId,
+        fromNodeId: isNodeId,
         messageType: isEqualTo('announce'),
         requestData: isAnnounceRequestData
     })
@@ -767,6 +988,22 @@ export const isMulticastAnnounceMessage = (x: any): x is MulticastAnnounceMessag
         signature: isSignature
     })
 }
+export const exampleMulticastAnnounceMessage: MulticastAnnounceMessage = {
+    body: {
+        protocolVersion: exampleProtocolVersion,
+        fromNodeId: exampleNodeId,
+        messageType: 'announce',
+        requestData: {  // TODO: This should be standardized; and we are growing toward a weird cross-import situation.
+            requestType: 'announce',
+            channelNodeInfo: exampleChannelNodeInfo
+        }
+    },
+    signature: exampleSignature
+}
+_tests.MulticastAnnounceMessage = () => {
+    assert(isMulticastAnnounceMessage(exampleMulticastAnnounceMessage));
+}
+
 
 export const jsonObjectsMatch = (x1: any, x2: any): boolean => {
     if (!isJSONObject(x1)) throw Error('x1 is not a json object in jsonObjectsMatch');
