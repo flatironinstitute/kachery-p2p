@@ -38,8 +38,6 @@ export const isJSONObject = (x: any): x is JSONObject => {
     if (!isObject(x)) return false;
     return isJSONSerializable(x);
 }
-export const exampleJSONObject = {example: ['json', {object: 1}, '---']}
-export const exampleSerializedJSONObject = JSON.stringify(exampleJSONObject);
 export const tryParseJsonObject = (x: string): JSONObject | null => {
     let a: any;
     try {
@@ -48,10 +46,10 @@ export const tryParseJsonObject = (x: string): JSONObject | null => {
     catch {
         return null;
     }
-    if (!isJSONObject(a)) return null;
+    if (!isJSONObject(a)) return null; // I think this may just be unreachable
     return a;
 }
-const isJSONSerializable = (obj: any): boolean => {
+export const isJSONSerializable = (obj: any): boolean => {
     if (!isObject(obj)) return false
     const isPlainObject = (a: Object) => {
         return Object.prototype.toString.call(a) === '[object Object]';
@@ -76,85 +74,41 @@ const isJSONSerializable = (obj: any): boolean => {
     }
     return true;
 }
-_tests.isJSONObject = () => {
-    assert(isJSONObject(exampleJSONObject))
-}
-_tests.isJSONSerializable = () => {
-    assert(isJSONSerializable(exampleJSONObject))
-}
-_tests.tryParseJsonObject = () => {
-    const obj = tryParseJsonObject(exampleSerializedJSONObject)
-    assert(!isNull(obj))
-}
 
 // object
 export const isObject = (x: any): x is Object => {
     return ((x !== null) && (typeof x === 'object'));
-}
-_tests.testIsObjectAcceptsObject = () => {
-    assert(isObject({name: 'Object', type: 'Object', value: 5}))
-}
-_tests.testIsObjectRejectsNonObject = () => {
-    assert(!isObject('I am a string'))
 }
 
 // string
 export const isString = (x: any): x is string => {
     return ((x !== null) && (typeof x === 'string'));
 }
-_tests.testIsStringAcceptsString = () => {
-    assert(isString("5"));
-}
-_tests.testIsStringRejectsNonString = () => {
-    assert(!isString(5))
-}
 
 // function
-const isFunction = (x: any): x is Function => {
+export const isFunction = (x: any): x is Function => {
     return ((x !== null) && (typeof x === 'function'));
-}
-_tests.testIsFunctionAcceptsFunction = () => {
-    assert(isFunction(_tests.testIsStringAcceptsString))
-}
-_tests.testIsFunctionRejectsNonFunction = () => {
-    assert(!isFunction({object: 'yes', function: () => 5}))
 }
 
 // number
 export const isNumber = (x: any): x is number => {
     return ((x !== null) && (typeof x === 'number'));
 }
-_tests.testIsNumberAcceptsNumber = () => {
-    assert(isNumber(5.432))
-}
-_tests.testIsNumberRejectsNonNumber = () => {
-    assert(!isNumber("5"))
-}
 
 // bigint
 export const isBigInt = (x: any): x is bigint => {
     return ((x !== null) && (typeof x === 'bigint'));
-}
-_tests.testIsBigIntAcceptsBigInt = () => {
-    assert(isBigInt(BigInt(5)))
-}
-_tests.testIsBigIntRejectsNonBigInt = () => {
-    assert(!isBigInt(5))
 }
 
 // null
 export const isNull = (x: any): x is null => {
     return x === null;
 }
-_tests.testIsNullAcceptsNull = () => { assert(isNull(null)) }
-_tests.testIsNullRejectsNonNull = () => { assert(!isNull("null")) }
 
 // boolean
 export const isBoolean = (x: any): x is boolean => {
     return ((x !== null) && (typeof x === 'boolean'));
 }
-_tests.testIsBooleanAcceptsBoolean = () => { assert(isBoolean(false)) }
-_tests.testIsBooleanRejectsNonBoolean = () => { assert(!isBoolean('false')) }
 
 // isOneOf
 export const isOneOf = (testFunctions: Function[]): ((x: any) => boolean) => {
@@ -164,12 +118,6 @@ export const isOneOf = (testFunctions: Function[]): ((x: any) => boolean) => {
         }
         return false;
     }
-}
-_tests.testIsOneOf = () => {
-    const checker = isOneOf([isBoolean, isString]);
-    assert(checker('I am a string'));
-    assert(checker(false));
-    assert(!checker(5));
 }
 
 export const optional = (testFunctionOrSpec: Function | ValidateObjectSpec): ((x: any) => boolean) => {
@@ -186,18 +134,12 @@ export const optional = (testFunctionOrSpec: Function | ValidateObjectSpec): ((x
         }
     }   
 }
-// TODO
 
 // isEqualTo
 export const isEqualTo = (value: any): ((x: any) => boolean) => {
     return (x) => {
         return x === value;
     }
-}
-_tests.testIsEqualTo = () => {
-    const isMyString = isEqualTo('myString');
-    assert(isMyString('myString'));
-    assert(!isMyString('MyString'));
 }
 
 // isArrayOf
@@ -211,12 +153,6 @@ export const isArrayOf = (testFunction: (x: any) => boolean): ((x: any) => boole
         }
         else return false;
     }
-}
-_tests.testIsArrayOf = () => {
-    const areStrings = isArrayOf(isString);
-    assert(areStrings(['these', 'are', 'strings']));
-    assert(!areStrings('not an array'));
-    assert(!areStrings(['These', 'are', 'not', 5, 'strings']));
 }
 
 //***** NOTE: The "key" test should not be needed here; Javascript converts all keys to strings
@@ -242,10 +178,30 @@ _tests.testIsObjectOf = () => {
 }
 
 // NOTE: Failing test to address issue with this function
-// jfm says: I think we should not support numeric keys, because it is not json-compliant
 _tests.testIsObjectOfForNumberKeys = () => {
     const isNumberKeyedNumber = isObjectOf(isNumber, isNumber);
     assert(isNumberKeyedNumber({9: 5, 3.14: 159 }));
+}
+
+type ValidateObjectSpec = {[key: string]: ValidateObjectSpec | (Function & ((a: any) => any))}
+
+export const _validateObject = (x: any, spec: ValidateObjectSpec): boolean => {
+    if (!x) return false;
+    if (!isObject(x)) return false;
+    for (let k in x) {
+        if (!(k in spec)) return false;
+    }
+    for (let k in spec) {
+        const specK = spec[k];
+        if (isFunction(specK)) {
+            if (!specK(x[k])) return false;
+        }
+        else {
+            if (!(k in x)) return false;
+            if (!_validateObject(x[k], specK as ValidateObjectSpec)) return false;
+        }
+    }
+    return true;
 }
 
 
@@ -343,7 +299,7 @@ export interface PublicKey extends String {
 const examplePublicKey: PublicKey = '-----BEGIN PUBLIC KEY-----\nPUBLICKEYAAAAAAAAAAADt4+bJGhgtv/oQvPS03eZrEL8vYBXo0j3D7mNUM=\n-----END PUBLIC KEY-----' as any as PublicKey
 export const isPublicKey = (x: any) : x is PublicKey => {
     if (!isString(x)) return false;
-    // TODO: Is there a specific length of the key block?
+     // no fixed length for actual key block
     return (/^-----BEGIN PUBLIC KEY-----[\s\S]*-----END PUBLIC KEY-----$/.test(x));
 }
 _tests.PublicKey = () => { assert(isPublicKey(examplePublicKey)) }
@@ -355,7 +311,6 @@ export interface PrivateKey extends String {
 const examplePrivateKey: PrivateKey = '-----BEGIN PRIVATE KEY-----\nPRIVATEKEYAAAAAAAAAADt4+bJGhgtv/oQvPS03eZrEL8vYBXo0j3D7mNUM=\n-----END PRIVATE KEY-----' as any as PrivateKey
 export const isPrivateKey = (x: any) : x is PublicKey => {
     if (!isString(x)) return false;
-    // TODO: Is there a specific length of the key block?
     return (/^-----BEGIN PRIVATE KEY-----[\s\S]*-----END PRIVATE KEY-----$/.test(x));
 }
 _tests.PrivateKey = () => { assert(isPrivateKey(examplePrivateKey)) }
@@ -408,7 +363,6 @@ const exampleKeyPair: KeyPair = {
     publicKey: examplePublicKey,
     privateKey: examplePrivateKey
 }
-// TODO: did I do this right?
 export const isKeyPair = (x: any) : x is KeyPair => {
     return _validateObject(x, {
         publicKey: isPublicKey,
@@ -417,7 +371,7 @@ export const isKeyPair = (x: any) : x is KeyPair => {
     // TODO: if we trust this function for anything serious, it *REALLY* ought to confirm that the keypair matches
     // jfm's response: the keypair is validated elsewhere using a different mechanism
 }
-_tests.IsKeyPair = () => { assert(isKeyPair(exampleKeyPair)) } // Failing test to address above issue
+_tests.IsKeyPair = () => { assert(isKeyPair(exampleKeyPair)) }
 
 
 // Signature
@@ -704,7 +658,6 @@ _tests.ErrorMessage = () => {
         let x = errorMessage(overlongMessage);
         assert(false); // does not occur as error is thrown
     } catch(err) {
-        // todo: ought to be some neat trick to put this in a variable and refer to it, but oh well.
         assert(err.message === 'Invalid error message: messages cannot exceed 1000 characters.')
     }
 }
@@ -948,27 +901,6 @@ export const isChannelInfo = (x: any): x is ChannelInfo => {
 export const exampleChannelInfo: ChannelInfo = { nodes: [exampleChannelNodeInfo] } as any as ChannelInfo
 _tests.ChannelInfo = () => { assert(isChannelInfo(exampleChannelInfo)) }
 
-
-type ValidateObjectSpec = {[key: string]: ValidateObjectSpec | (Function & ((a: any) => any))}
-
-export const _validateObject = (x: any, spec: ValidateObjectSpec): boolean => {
-    if (!x) return false;
-    if (!isObject(x)) return false;
-    for (let k in x) {
-        if (!(k in spec)) return false;
-    }
-    for (let k in spec) {
-        const specK = spec[k];
-        if (isFunction(specK)) {
-            if (!specK(x[k])) return false;
-        }
-        else {
-            if (!(k in x)) return false;
-            if (!_validateObject(x[k], specK as ValidateObjectSpec)) return false;
-        }
-    }
-    return true;
-}
 
 export interface MulticastAnnounceMessageBody {
     protocolVersion: ProtocolVersion,
