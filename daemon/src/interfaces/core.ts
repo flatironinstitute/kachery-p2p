@@ -34,7 +34,7 @@ export const isJSONObject = (x: any): x is JSONObject => {
     if (!isObject(x)) return false;
     return isJSONSerializable(x);
 }
-export const exampleJSONObject = {example: ['json', {object: 1}, '---']}
+export const exampleJSONObject = {example: ['json', {object: 1}, '+++']}
 export const tryParseJsonObject = (x: string): JSONObject | null => {
     let a: any;
     try {
