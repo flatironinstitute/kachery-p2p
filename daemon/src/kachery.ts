@@ -1,10 +1,9 @@
 import { exec } from 'child_process'
-import fs, { writeSync } from 'fs';
-import { sha1sum } from './common/crypto_util';
+import fs from 'fs';
 import { assert } from 'console';
 import { randomAlphaString } from './common/util';
 import crypto from 'crypto';
-import { FileKey, isFileKey, Sha1Hash } from './interfaces/core';
+import { Sha1Hash } from './interfaces/core';
 
 const _getTemporaryDirectory = () => {
     const ret = process.env['KACHERY_STORAGE_DIR'] + '/tmp';

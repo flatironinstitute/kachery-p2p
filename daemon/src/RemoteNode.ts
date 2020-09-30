@@ -1,6 +1,6 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
 import { sleepMsec } from "./common/util";
-import { httpPostJson } from "./httpPostJson";
+import { httpPostJson, httpPostJsonStreamResponse, urlPath } from "./httpPostJson";
 import { Address, ChannelName, ChannelNodeInfo, createRequestId, NodeId, nodeIdToPublicKey, nowTimestamp } from "./interfaces/core";
 import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponseData } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
@@ -100,7 +100,7 @@ class RemoteNode {
         }
         const request = this._formRequestFromRequestData(requestData);
         const requestId = request.body.requestId;
-        const response = await httpPostJson(address, '/NodeToNodeRequest', request, {timeoutMsec: opts.timeoutMsec});
+        const response = await httpPostJson(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
         if (!isNodeToNodeResponse(response)) {
             // todo: in this situation, do we ban the node?
             throw Error('Invalid response from node.');
@@ -126,27 +126,25 @@ class RemoteNode {
         }
         return response.body.responseData;
     }
-    sendDownloadRequest(requestData: NodeToNodeRequestData) {
+    sendDownloadRequest(requestData: NodeToNodeRequestData): {
+        onData: (callback: (data: Buffer) => void) => void,
+        onFinished: (callback: () => void) => void,
+        onError: (callback: (err: Error) => void) => void,
+        cancel: () => void
+    } {
         const address = this._getRemoteNodeHttpAddress();
         if (!address) {
             throw Error('Unable to send request... no http address found.')
         }
         const request = this._formRequestFromRequestData(requestData);
-        const requestId = request.body.requestId;
 
-        // todo: post the request and stream the response
+        const R = httpPostJsonStreamResponse(address, urlPath('/NodeToNodeRequest'), request)
 
-        const _onDataCallbacks: ((data: Buffer) => void)[] = [];
-        const _onFinishedCallbacks: (() => void)[] = [];
-        const _onErrorCallbacks: ((err: Error) => void)[] = [];
-        const _cancel = () => {
-            // todo
-        }
         return {
-            onData: (callback: (data: Buffer) => void) => {_onDataCallbacks.push(callback)},
-            onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
-            onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
-            cancel: _cancel
+            onData: R.onData,
+            onFinished: R.onFinished,
+            onError: R.onError,
+            cancel: R.cancel
         }
     }
     _getMostRecentChannelNodeInfo(): ChannelNodeInfo | null {
