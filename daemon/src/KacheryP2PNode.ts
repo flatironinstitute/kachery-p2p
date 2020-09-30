@@ -16,6 +16,7 @@ import { LiveFeedSubscriptionManager } from './LiveFeedSubscriptionManager';
 import { KacheryStorageManager } from './KacheryStorageManager';
 import { ProxyConnectionToClient } from './ProxyConnectionToClient';
 import RemoteNode from './RemoteNode';
+import { protocolVersion } from './protocolVersion';
 
 interface LoadFileProgress {
     bytesLoaded: bigint,
@@ -329,6 +330,7 @@ class KacheryP2PNode {
             throw Error('Unexpected error: unrecognized request data.')
         }
         const body = {
+            protocolVersion: protocolVersion(),
             requestId,
             fromNodeId: this.#nodeId,
             toNodeId: fromNodeId,

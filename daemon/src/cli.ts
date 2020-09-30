@@ -9,8 +9,7 @@ import PublicApiServer from './PublicApiServer';
 import PublicWebSocketServer from './PublicWebSocketServer';
 import assert from 'assert';
 import { ChannelName, HostName, isAddress, isChannelName, JSONObject, NodeId, Port, isHostName, isPort, Address } from './interfaces/core';
-import { ProxyConnectionToClient } from './ProxyConnectionToClient';
-import PublicUdpSocketServer from './PublicUdpSocketServer';
+import PublicUdpSocketServer from './udp/PublicUdpSocketServer';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
 process.on('uncaughtException', function (err) {

@@ -10,7 +10,7 @@
     "start": "tsc && node dist/cli.js",
     "dev": "ts-node ./src/cli.ts",
     "build": "tsc",
-    "test": "echo \"No tests\" && exit 0",
+    "test": "ts-node ./src/test.ts",
     "publish-dry": "npm publish --dry-run",
     "publish-go": "npm publish"
   },

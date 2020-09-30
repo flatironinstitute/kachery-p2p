@@ -1,7 +1,9 @@
-import { timeStamp } from "console";
+import assert from 'assert'
 import { hexToPublicKey, JSONStringifyDeterministic } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
 import { AnnounceRequestData, isAnnounceRequestData, isAnnounceResponseData } from "./NodeToNodeRequest";
+
+export const _tests: {[key: string]: Function} = {}
 
 export interface ProtocolVersion extends String {
     __protocolVersion__: never // phantom type
@@ -9,7 +11,10 @@ export interface ProtocolVersion extends String {
 export const exampleProtocolVersion: ProtocolVersion = "example-protocol.Version" as any as ProtocolVersion
 export const isProtocolVersion = (x: any): x is ProtocolVersion => {
     if (!isString(x)) return false;
-    return (/^[0-9a-zAz\.\ \-]{4,20}?$/.test(x));
+    return (/^[0-9a-zA-z.\ \-]{4,30}?$/.test(x));
+}
+_tests.ProtocolVersion = () => {
+    assert(isProtocolVersion(exampleProtocolVersion))
 }
 
 export interface DaemonVersion extends String {
@@ -18,7 +23,7 @@ export interface DaemonVersion extends String {
 export const exampleDaemonVersion: DaemonVersion = "example-daemon.Version" as any as DaemonVersion
 export const isDaemonVersion = (x: any): x is DaemonVersion => {
     if (!isString(x)) return false;
-    return (/^[0-9a-zAz\.\ \-]{4,20}?$/.test(x));
+    return (/^[0-9a-zA-z\.\ \-]{4,20}?$/.test(x));
 }
 
 export type JSONPrimitive = string | number | boolean | null;
@@ -182,7 +187,10 @@ export interface HostName extends String {
 export const exampleHostName: HostName = '0.0.0.0' as any as HostName
 export const isHostName = (x: any): x is HostName => {
     if (!isString(x)) return false;
-    return (/^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]*[a-zA-Z0-9])\\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\\-]*[A-Za-z0-9])$/.test(x));
+    return (/^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$/.test(x));
+}
+_tests.HostName = () => {
+    assert(isHostName(exampleHostName))
 }
 
 // Address
@@ -199,6 +207,9 @@ export const isAddress = (x: any): x is Address => {
         hostName: isHostName,
         port: isPort
     });
+}
+_tests.Address = () => {
+    assert(isAddress(exampleAddress))
 }
 
 // TimeStamp
