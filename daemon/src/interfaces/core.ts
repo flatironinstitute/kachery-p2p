@@ -208,6 +208,7 @@ export interface Timestamp extends Number {
 export const exampleTimestamp: Timestamp = Number(new Date(2020, 1, 1, 1, 1, 1, 0)) - 0 as any as Timestamp
 export const isTimestamp = (x: any) : x is Timestamp => {
     if (!isNumber(x)) return false;
+    if (x < 0) return false;  // Timestamps should never be negative
     return true;
 }
 export const nowTimestamp = () => {
@@ -226,30 +227,52 @@ export interface PublicKey extends String {
     __publicKey__: never // phantom type so that we cannot assign directly to a string
 }
 const examplePublicKey: PublicKey = '-----BEGIN PUBLIC KEY-----\nPUBLICKEYAAAAAAAAAAADt4+bJGhgtv/oQvPS03eZrEL8vYBXo0j3D7mNUM=\n-----END PUBLIC KEY-----' as any as PublicKey
+export const isPublicKey = (x: any) : x is PublicKey => {
+    if (!isString(x)) return false;
+    // TODO: Is there a specific length of the key block?
+    return (/^-----BEGIN PUBLIC KEY-----[\s\S]*-----END PUBLIC KEY-----$/.test(x));
+}
 
 // PrivateKey
 export interface PrivateKey extends String {
     __privateKey__: never // phantom type
 }
 const examplePrivateKey: PrivateKey = '-----BEGIN PRIVATE KEY-----\nPRIVATEKEYAAAAAAAAAADt4+bJGhgtv/oQvPS03eZrEL8vYBXo0j3D7mNUM=\n-----END PRIVATE KEY-----' as any as PrivateKey
+export const isPrivateKey = (x: any) : x is PublicKey => {
+    if (!isString(x)) return false;
+    // TODO: Is there a specific length of the key block?
+    return (/^-----BEGIN PRIVATE KEY-----[\s\S]*-----END PRIVATE KEY-----$/.test(x));
+}
 
 // PublicKeyHex
 export interface PublicKeyHex extends String {
     __publicKeyHex__: never // phantom type so that we cannot assign directly to a string
 }
 const examplePublicKeyHex: PublicKeyHex = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as any as PublicKeyHex
+export const isPublicKeyHex = (x: any) : x is PublicKeyHex => {
+    if (!isString(x)) return false;
+    return (/^[0-9a-fA-F]+$/.test(x));
+}
 
 // PrivateKeyHex
 export interface PrivateKeyHex extends String {
     __privateKeyHex__: never // phantom type
 }
 const examplePrivateKeyHex: PrivateKeyHex = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as any as PrivateKeyHex
+export const isPrivateKeyHex = (x: any) : x is PrivateKeyHex => {
+    if (!isString(x)) return false;
+    return (/^[0-9a-fA-F]+$/.test(x));
+}
 
 // Sha1Hash
 export interface Sha1Hash extends String {
     __sha1Hash__: never // phantom type
 }
 const exampleSha1Hash: Sha1Hash = '63a0f8f44232cba2eca23dea7baa4e176b93e957' as any as Sha1Hash
+export const isSha1Hash = (x: any) : x is Sha1Hash => {
+    if (!isString(x)) return false;
+    return (/^[0-9a-fA-F]{40}$/.test(x));  // Sha1 hash must be 40 hexadecimal characters
+}
 
 export const nodeIdToPublicKey = (nodeId: NodeId): PublicKey => {
     return hexToPublicKey(nodeId.toString() as any as PublicKeyHex);
@@ -263,6 +286,13 @@ export interface KeyPair {
 const exampleKeyPair: KeyPair = {
     publicKey: examplePublicKey,
     privateKey: examplePrivateKey
+}
+// TODO: did I do this right?
+export const isKeyPair = (x: any) : x is KeyPair => {
+    return _validateObject(x, {
+        publicKey: (a: any) => (isPublicKey(a)),
+        privateKey: (a: any) => (isPrivateKey(a))
+    });
 }
 
 // Signature
@@ -299,9 +329,10 @@ export const isChannelName = (x: any): x is ChannelName => {
 export interface FeedId extends String {
     __feedId__: never // phantom type
 }
+export const exampleFeedId: FeedId = '0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789ABCDEF' as any as FeedId
 export const isFeedId = (x: any): x is FeedId => {
     if (!isString(x)) return false;
-    return (/^[0-9a-f]{64}?$/.test(x));
+    return (/^[0-9a-fA-F]{64}?$/.test(x));
 }
 
 // Conversion between types
@@ -317,9 +348,10 @@ export const publicKeyHexToNodeId = (x: PublicKeyHex) : NodeId => {
 export interface SubfeedHash extends String {
     __subfeedHash__: never
 }
+export const exampleSubfeedHash: SubfeedHash = '0123456789abcdefABCD9876543210FEDCBAedcb' as any as SubfeedHash;
 export const isSubfeedHash = (x: any): x is SubfeedHash => {
     if (!isString(x)) return false;
-    return (/^[0-9a-f]{40}?$/.test(x));
+    return (/^[0-9a-fA-F]{40}?$/.test(x));
 }
 
 // FileKey
@@ -337,13 +369,13 @@ export const exampleFileKey: FileKey = {
         fileKey: {
             sha1: exampleSha1Hash
         },
-        startByte: BigInt(0),
+        startByte: BigInt(0), // not recognized when targeting versions below es2020
         endByte: BigInt(100)
     }
 }
 export const isFileKey = (x: any): x is FileKey => {
     return _validateObject(x, {
-        sha1: (a: any) => (isString(a) && /^[0-9a-f]{40}?$/.test(a)),
+        sha1: (a: any) => (isString(a) && /^[0-9a-fA-F]{40}?$/.test(a)),
         chunkOf: optional({
             fileKey: isFileKey,
             startByte: isBigInt,
@@ -356,6 +388,12 @@ export const isFileKey = (x: any): x is FileKey => {
 export interface FindLiveFeedResult {
     nodeId: NodeId
 }
+export const exampleFindLiveFeedResult: FindLiveFeedResult = { nodeId: exampleNodeId }
+export const isFindLiveFeedResult = (x: any): x is FindLiveFeedResult => {
+    return _validateObject(x, {
+        nodeId: (a: any) => isNodeId
+    });
+}
 
 export interface ChannelNodeInfoBody {
     channelName: ChannelName,
@@ -366,24 +404,56 @@ export interface ChannelNodeInfoBody {
     proxyHttpAddresses: Address[],
     timestamp: Timestamp
 }
+export const isChannelNodeInfoBody = (x: any): x is ChannelNodeInfoBody => {
+    return _validateObject(x, {
+        channelName: isChannelName,
+        nodeId: isNodeId,
+        httpAddress: isOneOf([isNull, isAddress]),
+        webSocketAddress: isOneOf([isNull, isAddress]),
+        udpAddress: isOneOf([isNull, isAddress]),
+        proxyHttpAddresses: isArrayOf(isAddress),
+        timestamp: isTimestamp
+    })
+}
 
 // ChannelNodeInfo
 export interface ChannelNodeInfo {
     body: ChannelNodeInfoBody,
     signature: Signature
 }
+export const exampleChannelNodeInfo: ChannelNodeInfo = {
+    body: {
+        channelName: exampleChannelName,
+        nodeId: exampleNodeId,
+        httpAddress: exampleAddress,
+        webSocketAddress: null, // todo: should we prefer a non-null value here?
+        udpAddress: null, // todo: should we prefer a non-null value here?
+        proxyHttpAddresses: [exampleAddress],
+        timestamp: nowTimestamp()
+    },
+    signature: exampleSignature
+}
 export const isChannelNodeInfo = (x: any): x is ChannelNodeInfo => {
     return _validateObject(x, {
-        body: {
-            channelName: isChannelName,
-            nodeId: isNodeId,
-            httpAddress: isOneOf([isNull, isAddress]),
-            webSocketAddress: isOneOf([isNull, isAddress]),
-            udpAddress: isOneOf([isNull, isAddress]),
-            timestamp: isTimestamp
-        },
+        body: isChannelNodeInfoBody,
         signature: isSignature
     })
+}
+
+// SubfeedMessage
+export interface SubfeedMessage extends JSONObject {
+    __subfeedMessage__: never;
+};
+export const exampleSubfeedMessage: SubfeedMessage = {key: 'value'} as any as SubfeedMessage;
+export const isSubfeedMessage = (x: any): x is SubfeedMessage => {
+    return isObject(x);
+}
+
+// SubfeedMessageMetaData
+export type SubfeedMessageMetaData = Object;
+export const exampleSubfeedMessageMetaData: SubfeedMessageMetaData = {metaKey: 'metavalue'} as SubfeedMessageMetaData;
+export const isSubfeedMessageMetaData = (x: any): x is SubfeedMessageMetaData => {
+    return isObject(x);
 }
 
 // SignedSubfeedMessage
@@ -397,29 +467,34 @@ export interface SignedSubfeedMessage {
     },
     signature: Signature
 }
+export const exampleSignedSubfeedMessage: SignedSubfeedMessage = {
+    body: {
+        previousSignature: exampleSignature,
+        messageNumber: 5,
+        message: exampleSubfeedMessage,
+        timestamp: nowTimestamp(),
+        metaData: exampleSubfeedMessageMetaData
+    },
+    signature: exampleSignature
+}
 export const isSignedSubfeedMessage = (x: any): x is SignedSubfeedMessage => {
     return _validateObject(x, {
         body: {
             previousSignature: isSignature,
             messageNumber: isNumber,
             message: isObject
+            // TODO: Check timestamp? Enforce rules about messages not coming from the future, etc?
         },
         signature: isSignature
+        // TODO: Actually check the signature?
     });
-}
-
-// SubfeedMessage
-export interface SubfeedMessage extends JSONObject {
-    __subfeedMessage__: never;
-};
-export const isSubfeedMessage = (x: any): x is SubfeedMessage => {
-    return isObject(x);
 }
 
 // SubmittedSubfeedMessage
 export interface SubmittedSubfeedMessage extends JSONObject {
     __submittedSubfeedMessage__: never;
 };
+export const exampleSubmittedSubfeedMessage: SubmittedSubfeedMessage = { msg: "I am a message "} as any as SubmittedSubfeedMessage;
 export const isSubmittedSubfeedMessage = (x: any): x is SubmittedSubfeedMessage => {
     return ((isObject(x)) && (JSON.stringify(x).length < 10000));
 }
@@ -427,11 +502,7 @@ export const submittedSubfeedMessageToSubfeedMessage = (x: SubmittedSubfeedMessa
     return x as any as SubfeedMessage;
 }
 
-// SubfeedMessageMetaData
-export type SubfeedMessageMetaData = Object;
-export const isSubfeedMessageMetaData = (x: any): x is SubfeedMessageMetaData => {
-    return isObject(x);
-}
+// TODO: Pick up here
 
 // FeedsConfigFeed
 export interface FeedsConfigFeed {
