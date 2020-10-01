@@ -2,11 +2,11 @@ import WebSocket from 'ws'
 import { action } from './action';
 import { getSignature, verifySignature } from './common/crypto_util';
 import GarbageMap from './common/GarbageMap';
-import { kacheryP2PDeserialize, kacheryP2PSerialize } from './common/util';
-import { isEqualTo, isNodeId, isTimestamp, NodeId, Signature, isSignature, _validateObject, nodeIdToPublicKey, nowTimestamp, Timestamp, RequestId } from "./interfaces/core";
-import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "./interfaces/NodeToNodeRequest";
+import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString } from './common/util';
+import { isEqualTo, isNodeId, isTimestamp, NodeId, Signature, isSignature, _validateObject, nodeIdToPublicKey, nowTimestamp, Timestamp, RequestId, ErrorMessage, isErrorMessage, isString } from "./interfaces/core";
+import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from './interfaces/NodeToNodeRequest';
 import KacheryP2PNode from './KacheryP2PNode';
-import { ByteCount } from './udp/UdpCongestionManager';
+import { ByteCount, isByteCount } from './udp/UdpCongestionManager';
 
 export interface InitialMessageFromClientBody {
     type: 'proxyConnectionInitialMessageFromClient'
@@ -34,17 +34,104 @@ export const isInitialMessageFromClient = (x: any): x is InitialMessageFromClien
 }
 
 export interface ProxyStreamFileDataRequest {
+    messageType: 'proxyStreamFileDataRequest',
+    proxyStreamFileDataRequestId: ProxyStreamFileDataRequestId,
     streamId: StreamId
 }
 export const isProxyStreamFileDataRequest = (x: any): x is ProxyStreamFileDataRequest => {
     return _validateObject(x, {
+        messageType: isEqualTo('proxyStreamFileDataRequest'),
+        proxyStreamFileDataRequestId: isProxyStreamFileDataRequestId,
         streamId: isStreamId
     })
 }
 
-// export interface ProxyStreamFileDataResponseMessage {
-//     // todo
-// }
+export interface ProxyStreamFileDataCancelRequest {
+    messageType: 'proxyStreamFileDataCancelRequest',
+    proxyStreamFileDataRequestId: ProxyStreamFileDataRequestId
+}
+export const isProxyStreamFileDataCancelRequest = (x: any): x is ProxyStreamFileDataCancelRequest => {
+    return _validateObject(x, {
+        messageType: isEqualTo('proxyStreamFileDataCancelRequest'),
+        proxyStreamFileDataRequestId: isProxyStreamFileDataRequestId
+    })
+}
+
+export const isBuffer = (x: any): x is Buffer => {
+    return ((x !== null) && (x instanceof Buffer));
+}
+
+type ProxyStreamFileDataResponseMessageType = 'started' | 'data' | 'finished' | 'error'
+const isProxyStreamFileDataResponseMessageType = (x: any): x is ProxyStreamFileDataResponseMessageType => {
+    if (!isString(x)) return false;
+    return [
+        'started',
+        'data',
+        'finished',
+        'error'
+    ].includes(x)
+}
+
+export interface ProxyStreamFileDataResponseStartedMessage {
+    proxyStreamFileDataRequestId: ProxyStreamFileDataRequestId,
+    messageType: 'started',
+    size: ByteCount
+}
+const isProxyStreamFileDataResponseStartedMessage = (x: any): x is ProxyStreamFileDataResponseStartedMessage => {
+    return _validateObject(x, {
+        proxyStreamFileDataRequestId: isProxyStreamFileDataRequestId,
+        messageType: isEqualTo('started'),
+        size: isByteCount
+    })
+}
+export interface ProxyStreamFileDataResponseDataMessage {
+    proxyStreamFileDataRequestId: ProxyStreamFileDataRequestId,
+    messageType: 'data',
+    data: Buffer
+}
+const isProxyStreamFileDataResponseDataMessage = (x: any): x is ProxyStreamFileDataResponseDataMessage => {
+    return _validateObject(x, {
+        proxyStreamFileDataRequestId: isProxyStreamFileDataRequestId,
+        messageType: isProxyStreamFileDataResponseMessageType,
+        data: isBuffer
+    })
+}
+export interface ProxyStreamFileDataResponseFinishedMessage {
+    proxyStreamFileDataRequestId: ProxyStreamFileDataRequestId,
+    messageType: 'finished'
+}
+const isProxyStreamFileDataResponseFinishedMessage = (x: any): x is ProxyStreamFileDataResponseFinishedMessage => {
+    return _validateObject(x, {
+        proxyStreamFileDataRequestId: isProxyStreamFileDataRequestId,
+        messageType: isProxyStreamFileDataResponseMessageType
+    })
+}
+export interface ProxyStreamFileDataResponseErrorMessage {
+    proxyStreamFileDataRequestId: ProxyStreamFileDataRequestId,
+    messageType: 'error',
+    errorMessage: ErrorMessage
+}
+const isProxyStreamFileDataResponseErrorMessage = (x: any): x is ProxyStreamFileDataResponseErrorMessage => {
+    return _validateObject(x, {
+        proxyStreamFileDataRequestId: isProxyStreamFileDataRequestId,
+        messageType: isProxyStreamFileDataResponseMessageType,
+        errorMessage: isErrorMessage
+    })
+}
+
+type ProxyStreamFileDataResponseMessage =
+        ProxyStreamFileDataResponseStartedMessage |
+        ProxyStreamFileDataResponseDataMessage |
+        ProxyStreamFileDataResponseFinishedMessage |
+        ProxyStreamFileDataResponseErrorMessage
+const isProxyStreamFileDataResponseMessage = (x: any): x is ProxyStreamFileDataResponseMessage => {
+    return (
+        isProxyStreamFileDataResponseStartedMessage(x) ||
+        isProxyStreamFileDataResponseDataMessage(x) ||
+        isProxyStreamFileDataResponseFinishedMessage(x) ||
+        isProxyStreamFileDataResponseErrorMessage(x)
+    )
+}
 
 export interface InitialMessageFromServerBody {
     type: 'proxyConnectionInitialMessageFromServer',
@@ -71,13 +158,24 @@ export const isInitialMessageFromServer = (x: any): x is InitialMessageFromServe
     })
 }
 
-export type MessageFromClient = NodeToNodeResponse; // | others...
+export type MessageFromClient = NodeToNodeResponse | ProxyStreamFileDataResponseMessage // | others...
 export const isMessageFromClient = (x: any): x is MessageFromClient => {
-    return isNodeToNodeResponse(x); // || others
+    return isNodeToNodeResponse(x) || isProxyStreamFileDataResponseMessage(x)
 }
-export type MessageFromServer = NodeToNodeRequest; // | others...
+export type MessageFromServer = NodeToNodeRequest | ProxyStreamFileDataRequest
 export const isMessageFromServer = (x: any): x is MessageFromServer => {
-    return isNodeToNodeRequest(x); // || others
+    return isNodeToNodeRequest(x) || isProxyStreamFileDataRequest(x)
+}
+
+export interface ProxyStreamFileDataRequestId extends String {
+    __proxyStreamFileDataRequestId__: never // phantom
+}
+export const isProxyStreamFileDataRequestId = (x: any): x is ProxyStreamFileDataRequestId => {
+    if (!isString(x)) return false;
+    return (/^[A-Za-z]{10}$/.test(x));
+}
+const createProxyStreamFileDataRequestId = () => {
+    return randomAlphaString(10) as any as ProxyStreamFileDataRequestId
 }
 
 export class ProxyConnectionToClient {
@@ -89,6 +187,7 @@ export class ProxyConnectionToClient {
     #onClosedCallbacks: ((reason: any) => void)[] = []
     #onInitializedCallbacks: (() => void)[] = []
     #responseListeners = new GarbageMap<RequestId, ((response: NodeToNodeResponse) => void)>(5 * 60 * 1000)
+    #proxyStreamFileDataResponseMessageListeners = new GarbageMap<ProxyStreamFileDataRequestId, (msg: ProxyStreamFileDataResponseMessage) => void>(30 * 60 * 1000)
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
@@ -115,8 +214,15 @@ export class ProxyConnectionToClient {
                 }
             })
             ws.on('message', messageBuffer => {
+                if (!(isBuffer(messageBuffer))) {
+                    console.warn('Incoming message is not a Buffer')
+                    this.#ws.close()
+                }
                 if (this.#closed) return;
                 action('proxyConnectionToClientMessage', {context: "ProxyConnectionToClient", remoteNodeId: this.#remoteNodeId}, async () => {
+                    if (!(isBuffer(messageBuffer))) {
+                        throw Error('Unexpected')
+                    }
                     let messageParsed: Object;
                     try {
                         messageParsed = kacheryP2PDeserialize(messageBuffer);
@@ -218,7 +324,39 @@ export class ProxyConnectionToClient {
             if (complete) return
             _onDataCallbacks.forEach(cb => {cb(data)})
         }
-        // todo
+        const _handleResponseMessageFromServer = (msg: ProxyStreamFileDataResponseMessage) => {
+            if (isProxyStreamFileDataResponseStartedMessage(msg)) {
+                _handleStarted(msg.size)
+            }
+            else if (isProxyStreamFileDataResponseDataMessage(msg)) {
+                _handleData(msg.data)
+            }
+            else if (isProxyStreamFileDataResponseFinishedMessage(msg)) {
+                _handleFinished()
+            }
+            else if (isProxyStreamFileDataResponseErrorMessage(msg)) {
+                _handleError(Error(msg.errorMessage.toString()))
+            }
+            else {
+                throw Error('Unexpected')
+            }
+        }
+        const proxyStreamFileDataRequestId = createProxyStreamFileDataRequestId()
+        const request: ProxyStreamFileDataRequest = {
+            messageType: 'proxyStreamFileDataRequest',
+            proxyStreamFileDataRequestId,
+            streamId
+        }
+        this.#proxyStreamFileDataResponseMessageListeners.set(proxyStreamFileDataRequestId, (msg) => {
+            _handleResponseMessageFromServer(msg)
+        })
+        this._sendMessageToClient(request)
+        _onCancel(() => {
+            const cancelRequest: ProxyStreamFileDataCancelRequest = {
+                messageType: 'proxyStreamFileDataCancelRequest',
+                proxyStreamFileDataRequestId
+            }
+        })
         return {
             onStarted: (callback: (size: ByteCount) => void) => {_onStartedCallbacks.push(callback)},
             onData: (callback: (data: Buffer) => void) => {_onDataCallbacks.push(callback)},
@@ -251,6 +389,12 @@ export class ProxyConnectionToClient {
                 return;
             }
             callback(message);
+        }
+        else if (isProxyStreamFileDataResponseMessage(message)) {
+            const a = this.#proxyStreamFileDataResponseMessageListeners.get(message.proxyStreamFileDataRequestId)
+            if (a) {
+                a(message)
+            }
         }
         else {
             throw Error('Unexpected message from client')

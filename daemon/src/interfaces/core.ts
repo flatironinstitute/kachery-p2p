@@ -50,7 +50,8 @@ export const tryParseJsonObject = (x: string): JSONObject | null => {
     if (!isJSONObject(a)) return null;
     return a;
 }
-const isJSONSerializable = (obj: Object): boolean => {
+const isJSONSerializable = (obj: any): boolean => {
+    if (!isObject(obj)) return false
     const isPlainObject = (a: Object) => {
         return Object.prototype.toString.call(a) === '[object Object]';
     };
@@ -599,7 +600,7 @@ _tests.SubfeedMessageMetaData = () => { assert(isSubfeedMessageMetaData(exampleS
 // SignedSubfeedMessage
 export interface SignedSubfeedMessage {
     body: {
-        previousSignature: Signature,
+        previousSignature?: Signature,
         messageNumber: number,
         message: SubfeedMessage,
         timestamp: Timestamp,
@@ -620,7 +621,7 @@ export const exampleSignedSubfeedMessage: SignedSubfeedMessage = {
 export const isSignedSubfeedMessage = (x: any): x is SignedSubfeedMessage => {
     if (! _validateObject(x, {
         body: {
-            previousSignature: isSignature,
+            previousSignature: optional(isSignature),
             messageNumber: isNumber,
             message: isObject,
             timestamp: isTimestamp,
@@ -706,13 +707,13 @@ _tests.ErrorMessage = () => {
 
 // TODO: Want to discuss this
 // objectToMap and mapToObject
-export const objectToMap = <KeyType extends String, ValueType>(obj: Object) => {
+export const objectToMap = <KeyType extends String, ValueType>(obj: {[key: string]: any}) => {
     return new Map<KeyType, ValueType>(Object.keys(obj).map(k => {
         return [k as any as KeyType, obj[k] as any as ValueType];
     }));
 }
 export const mapToObject = <KeyType extends String, ValueType>(m: Map<KeyType, ValueType>) => {
-    const ret = {};
+    const ret: {[key: string]: any} = {};
     m.forEach((v, k) => {
         ret[k.toString()] = v;
     });

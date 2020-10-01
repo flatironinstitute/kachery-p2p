@@ -1,10 +1,11 @@
 import { FileKey } from "../interfaces/core";
 import { ByteCount } from "../udp/UdpCongestionManager";
+import { FileDownloadJob } from './DownloadOptimizer'
 
 export default class DownloadOptimizerFile {
     #fileKey: FileKey
-    #currentFileDownloadJob = null
-    #onProgressCallbacks: ((arg: {numBytes: ByteCount, totalBytes: ByteCount}) => void)[]
+    #currentFileDownloadJob: FileDownloadJob | null = null
+    #onProgressCallbacks: ((numBytes: ByteCount, totalBytes: ByteCount) => void)[]
     #onErrorCallbacks: ((err: Error) => void)[]
     #onFinishedCallbacks: (() => void)[]
     constructor(fileKey: FileKey) {
@@ -16,7 +17,7 @@ export default class DownloadOptimizerFile {
     isDownloading() {
         return this.#currentFileDownloadJob ? true : false;
     }
-    onProgress(cb: (arg: {numBytes: ByteCount, totalBytes: ByteCount}) => void) {
+    onProgress(cb: (numBytes: ByteCount, totalBytes: ByteCount) => void) {
         this.#onProgressCallbacks.push(cb)
     }
     onError(cb: (err: Error) => void) {
@@ -25,19 +26,18 @@ export default class DownloadOptimizerFile {
     onFinished(cb: () => void) {
         this.#onFinishedCallbacks.push(cb);
     }
-    // todo: type of j
-    setFileDownloadJob(j) {
+    setFileDownloadJob(j: FileDownloadJob) {
         if (this.#currentFileDownloadJob === null) {
             throw Error('Unexpected: provider already has a file download job')
         }
         this.#currentFileDownloadJob = j;
-        j.onProgress(({numBytes, totalBytes}) => {
-            this.#onProgressCallbacks.forEach(cb => cb({numBytes, totalBytes}));
+        j.onProgress((numBytes: ByteCount, totalBytes: ByteCount) => {
+            this.#onProgressCallbacks.forEach(cb => cb(numBytes, totalBytes));
         });
         const _handleComplete = () => {
             this.#currentFileDownloadJob = null;
         }
-        j.onError((err) => {
+        j.onError((err: Error) => {
             _handleComplete();
             this.#onErrorCallbacks.forEach(cb => cb(err));
         });

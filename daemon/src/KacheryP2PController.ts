@@ -191,7 +191,7 @@ class ProxyClientManager {
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
-    async tryConnection(remoteNodeId: NodeId, {timeoutMsec: number}) {
+    async tryConnection(remoteNodeId: NodeId, opts: {timeoutMsec: number}) {
         if (this.#outgoingConnections.has(remoteNodeId)) return;
         const webSocketAddress = this.#node.remoteNodeManager().getRemoteNodeWebSocketAddress(remoteNodeId);
         if (!webSocketAddress) {
@@ -199,7 +199,7 @@ class ProxyClientManager {
         }
         try {
             const c = new ProxyConnectionToServer(this.#node);
-            await c.initialize(remoteNodeId, webSocketAddress, {timeoutMsec: 3000});
+            await c.initialize(remoteNodeId, webSocketAddress, {timeoutMsec: opts.timeoutMsec});
             this.#outgoingConnections.set(remoteNodeId, c);
         }
         catch(err) {

@@ -1,10 +1,11 @@
 import WebSocket from 'ws'
 import { getSignature, verifySignature } from './common/crypto_util';
+import GarbageMap from './common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize } from './common/util';
-import { isEqualTo, isNodeId, isTimestamp, NodeId, Signature, isSignature, _validateObject, nodeIdToPublicKey, nowTimestamp, Timestamp, Address } from "./interfaces/core";
-import { isNodeToNodeRequest, isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeResponse } from "./interfaces/NodeToNodeRequest";
+import { NodeId, _validateObject, nodeIdToPublicKey, nowTimestamp, Address, errorMessage } from "./interfaces/core";
+import { isNodeToNodeRequest } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from './KacheryP2PNode';
-import { InitialMessageFromClientBody, InitialMessageFromClient, isInitialMessageFromServer, MessageFromServer, isMessageFromServer, MessageFromClient } from './ProxyConnectionToClient';
+import { InitialMessageFromClientBody, InitialMessageFromClient, isInitialMessageFromServer, MessageFromServer, isMessageFromServer, MessageFromClient, isProxyStreamFileDataRequest, isProxyStreamFileDataCancelRequest, ProxyStreamFileDataRequest, ProxyStreamFileDataResponseStartedMessage, ProxyStreamFileDataResponseDataMessage, ProxyStreamFileDataResponseFinishedMessage, ProxyStreamFileDataResponseErrorMessage, ProxyStreamFileDataCancelRequest, ProxyStreamFileDataRequestId, isBuffer } from './ProxyConnectionToClient';
 
 export class ProxyConnectionToServer {
     #node: KacheryP2PNode
@@ -14,6 +15,7 @@ export class ProxyConnectionToServer {
     #closed = false
     #onClosedCallbacks: ((reason: any) => void)[] = []
     #onInitializedCallbacks: (() => void)[] = []
+    #proxyStreamFileDataCancelCallbacks = new GarbageMap<ProxyStreamFileDataRequestId, () => void>(30 * 60 * 1000)
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
@@ -50,6 +52,11 @@ export class ProxyConnectionToServer {
             }
             this.#ws.send(kacheryP2PSerialize(msg));
             this.#ws.on('message', messageBuffer => {
+                if (!(isBuffer(messageBuffer))) {
+                    console.warn('Incoming message is not a Buffer')
+                    this.#ws.close()
+                    return
+                }
                 if (this.#closed) return;
                 let messageParsed: Object;
                 try {
@@ -113,9 +120,55 @@ export class ProxyConnectionToServer {
             const response = await this.#node.handleNodeToNodeRequest(message);
             this._sendMessageToServer(response);
         }
+        else if (isProxyStreamFileDataRequest(message)) {
+            this._handleProxyStreamFileDataRequest(message)
+        }
+        else if (isProxyStreamFileDataCancelRequest(message)) {
+            this._handleProxyStreamFileDataCancelRequest(message)
+        }
         else {
             throw Error('Unexpected message from server')
         }
+    }
+    _handleProxyStreamFileDataRequest(request: ProxyStreamFileDataRequest) {
+        const streamId = request.streamId
+        const {onStarted, onData, onFinished, onError, cancel} = this.#node.streamFileData(this.#node.nodeId(), streamId)
+        onStarted(size => {
+            const response: ProxyStreamFileDataResponseStartedMessage = {
+                messageType: 'started',
+                proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId,
+                size
+            }
+            this._sendMessageToServer(response)
+        })
+        onData(data => {
+            const response: ProxyStreamFileDataResponseDataMessage = {
+                messageType: 'data',
+                proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId,
+                data
+            }
+            this._sendMessageToServer(response)
+        })
+        onFinished(() => {
+            const response: ProxyStreamFileDataResponseFinishedMessage = {
+                messageType: 'finished',
+                proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId
+            }
+            this._sendMessageToServer(response)
+        })
+        onError((err: Error) => {
+            const response: ProxyStreamFileDataResponseErrorMessage = {
+                messageType: 'error',
+                proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId,
+                errorMessage: errorMessage(err.message)
+            }
+            this._sendMessageToServer(response)
+        })
+        this.#proxyStreamFileDataCancelCallbacks.set(request.proxyStreamFileDataRequestId, cancel)
+    }
+    _handleProxyStreamFileDataCancelRequest(request: ProxyStreamFileDataCancelRequest) {
+        const cb = this.#proxyStreamFileDataCancelCallbacks.get(request.proxyStreamFileDataRequestId)
+        if (cb) cb()
     }
     _sendMessageToServer(msg: MessageFromClient) {
         if (!this.#initialized) {

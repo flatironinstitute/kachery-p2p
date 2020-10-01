@@ -1,7 +1,7 @@
 import fs from 'fs'
 import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util';
 import FeedManager from './FeedManager';
-import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage, FindFileResult, nowTimestamp, nodeIdToPublicKey, SubmittedSubfeedMessage, errorMessage, HostName, ChannelInfo, ChannelNodeInfoBody, ChannelNodeInfo } from './interfaces/core';
+import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage, FindFileResult, nowTimestamp, nodeIdToPublicKey, SubmittedSubfeedMessage, errorMessage, HostName, ChannelInfo, ChannelNodeInfoBody, ChannelNodeInfo, isKeyPair, JSONObject } from './interfaces/core';
 import RemoteNodeManager from './RemoteNodeManager';
 import { isAddress } from './interfaces/core';
 
@@ -18,7 +18,7 @@ import { ProxyConnectionToClient } from './ProxyConnectionToClient';
 import RemoteNode from './RemoteNode';
 import { protocolVersion } from './protocolVersion';
 import GarbageMap from './common/GarbageMap';
-import { byteCount, ByteCount, ByteCountPerSec, byteCountToNumber } from './udp/UdpCongestionManager';
+import { byteCount, ByteCount } from './udp/UdpCongestionManager';
 
 interface LoadFileProgress {
     bytesLoaded: bigint,
@@ -534,7 +534,7 @@ class KacheryP2PNode {
     }
 }
 
-const _loadKeypair = (configDir): {publicKey: PublicKey, privateKey: PrivateKey} => {
+const _loadKeypair = (configDir: string): {publicKey: PublicKey, privateKey: PrivateKey} => {
     if (!fs.existsSync(configDir)) {
         throw Error(`Config directory does not exist: ${configDir}`);
     }
@@ -556,6 +556,9 @@ const _loadKeypair = (configDir): {publicKey: PublicKey, privateKey: PrivateKey}
         publicKey: fs.readFileSync(publicKeyPath, {encoding: 'utf-8'}),
         privateKey: fs.readFileSync(privateKeyPath, {encoding: 'utf-8'}),
     }
+    if (!isKeyPair(keyPair)) {
+        throw Error('Invalid keyPair')
+    }
     testKeyPair(keyPair);
     return {
         publicKey: (keyPair.publicKey as any as PublicKey),
@@ -563,9 +566,9 @@ const _loadKeypair = (configDir): {publicKey: PublicKey, privateKey: PrivateKey}
     }
 }
 
-const testKeyPair = (keyPair) => {
+const testKeyPair = (keyPair: KeyPair) => {
     const signature = getSignature({test: 1}, keyPair);
-    if (!verifySignature({test: 1}, signature, keyPair.publicKey)) {
+    if (!verifySignature({test: 1} as JSONObject, signature, keyPair.publicKey)) {
         throw new Error('Problem testing public/private keys. Error verifying signature.');
     }
     if (hexToPublicKey(publicKeyToHex(keyPair.publicKey)) !== keyPair.publicKey) {

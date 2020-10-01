@@ -100,7 +100,7 @@ class RemoteNodeManager {
         });
         return ret
     }
-    getRemoteNodeWebSocketAddress(remoteNodeId): Address | null {
+    getRemoteNodeWebSocketAddress(remoteNodeId: NodeId): Address | null {
         const remoteNode = this.#remoteNodes.get(remoteNodeId);
         if (!remoteNode) return null;
         return remoteNode.bootstrapWebSocketAddress();

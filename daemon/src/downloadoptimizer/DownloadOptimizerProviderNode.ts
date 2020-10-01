@@ -1,12 +1,13 @@
 import { NodeId } from "../interfaces/core";
 import { byteCount, ByteCount, ByteCountPerSec, byteCountToNumber } from "../udp/UdpCongestionManager";
+import { FileDownloadJob } from "./DownloadOptimizer";
 import RateEstimator from "./RateEstimator";
 
 class DownloadOptimizerProviderNode {
     #nodeId: NodeId
-    #currentFileDownloadJob = null // todo
+    #currentFileDownloadJob: FileDownloadJob | null = null
     #numBytesDownloadedInCurrentJob: ByteCount = byteCount(0)
-    #rateEstimator = new RateEstimator(); // todo
+    #rateEstimator = new RateEstimator();
     constructor(nodeId: NodeId) {
         this.#nodeId = nodeId
     }
@@ -19,16 +20,15 @@ class DownloadOptimizerProviderNode {
     hasFileDownloadJob() {
         return this.#currentFileDownloadJob ? true : false;
     }
-    // todo: type j
-    setFileDownloadJob(j) {
+    setFileDownloadJob(j: FileDownloadJob) {
         if (this.#currentFileDownloadJob === null) {
             throw Error('Unexpected: provider node already has a file download job')
         }
         this.#currentFileDownloadJob = j
         this.#numBytesDownloadedInCurrentJob = byteCount(0)
         this.#rateEstimator.reportStart();
-        j.onProgress(({numBytes, totalBytes}) => {
-            const deltaBytes = byteCount(numBytes - byteCountToNumber(this.#numBytesDownloadedInCurrentJob))
+        j.onProgress((numBytes, totalBytes) => {
+            const deltaBytes = byteCount(byteCountToNumber(numBytes) - byteCountToNumber(this.#numBytesDownloadedInCurrentJob))
             this.#numBytesDownloadedInCurrentJob = numBytes
             this.#rateEstimator.reportBytes(deltaBytes)
         });

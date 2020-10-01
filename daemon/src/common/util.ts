@@ -1,8 +1,9 @@
 import fs from 'fs';
 import bson from 'bson';
 import { sha1sum } from './crypto_util';
+import { FileKey, Sha1Hash } from '../interfaces/core';
 
-export const randomString = (num_chars) => {
+export const randomString = (num_chars: number) => {
     var text = "";
     var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     for (var i = 0; i < num_chars; i++)
@@ -10,7 +11,7 @@ export const randomString = (num_chars) => {
     return text;
 }
 
-export const randomAlphaString = (num_chars) => {
+export const randomAlphaString = (num_chars: number) => {
     if (!num_chars) {
         throw Error('randomAlphaString: num_chars needs to be a positive integer.')
     }
@@ -21,34 +22,27 @@ export const randomAlphaString = (num_chars) => {
     return text;
 }
 
-export const sha1MatchesFileKey = ({sha1, fileKey}) => {
+export const sha1MatchesFileKey = ({sha1, fileKey}: {sha1: Sha1Hash, fileKey: FileKey}) => {
     if (fileKey.sha1) {
-        return fileKey.sha1 === sha1;
+        return fileKey.sha1 === sha1
     }
-    else if (fileKey.transformedSha1) {
-        if (sha1.startsWith(fileKey.sha1Head)) {
-            if (sha1sum(fileKey.transformNodeId + sha1) === fileKey.transformedSha1) {
-                return true;
-            }
-        }
-    }
-    return false;
+    return false
 }
 
-export const readJsonFile = async (path) => {
+export const readJsonFile = async (path: string) => {
     const txt = await fs.promises.readFile(path, 'utf-8');
     return JSON.parse(txt);
 }
 
-export const kacheryP2PSerialize = (x) => {
+export const kacheryP2PSerialize = (x: Object) => {
     return bson.serialize(sortKeysInObject(x));
 }
 
-export const kacheryP2PDeserialize = (x) => {
+export const kacheryP2PDeserialize = (x: Buffer) => {
     return convertBinaryToBufferInObject(bson.deserialize(x));
 }
 
-const sortKeysInObject = (x) => {
+const sortKeysInObject = (x: any): any => {
     if (x instanceof Buffer) {
         return x;
     }
@@ -58,7 +52,7 @@ const sortKeysInObject = (x) => {
         }
         else {
             const keys = Object.keys(x).sort();
-            let ret = {};
+            let ret: any = {};
             for (let k of keys) {
                 ret[k] = sortKeysInObject(x[k]);
             }
@@ -70,20 +64,27 @@ const sortKeysInObject = (x) => {
     }
 }
 
-const convertBinaryToBufferInObject = (x) => {
+const convertBinaryToBufferInObject = (x: any): any => {
     if (x instanceof bson.Binary) {
         // This might be the troublesome line.
         // We should check to see if the underlying type is byte array before returning the internal buffer.
-        return x.buffer;
+        const ret = x.buffer
+        if (ret instanceof Buffer) {
+            return ret
+        }
+        else {
+            console.warn(ret)
+            throw Error(`Problem in convertBinaryToBufferInObject`)
+        }
     }
     else if (x instanceof Object) {
         if (Array.isArray(x)) {
             return x.map(a => (convertBinaryToBufferInObject(a)));
         }
         else {
-            const ret = {};
+            const ret: any = {};
             for (let k in x) {
-                ret[k] = convertBinaryToBufferInObject(x[k]);
+                ret[k] = convertBinaryToBufferInObject(x[k])
             }
             return ret;
         }
@@ -94,4 +95,4 @@ const convertBinaryToBufferInObject = (x) => {
 }
 
 
-export const sleepMsec = m => new Promise(r => setTimeout(r, m));
+export const sleepMsec = (m: number) => new Promise(r => setTimeout(r, m));

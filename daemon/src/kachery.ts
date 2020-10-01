@@ -11,13 +11,13 @@ const _getTemporaryDirectory = () => {
     return ret;
 }
 
-export const createTemporaryFilePath = ({prefix}) => {
+export const createTemporaryFilePath = ({prefix}: {prefix: string}) => {
     assert(typeof(prefix) === 'string', 'prefix is not a string');
     const dirPath = _getTemporaryDirectory();
     return `${dirPath}/${prefix}-${randomAlphaString(10)}`;
 }
 
-export const concatenateFilesIntoTemporaryFile = async (paths) => {
+export const concatenateFilesIntoTemporaryFile = async (paths: string[]) => {
     return new Promise((resolve, reject) => {
         const tmpPath = createTemporaryFilePath({prefix: 'kachery-p2p-concat-'});
         const writeStream = fs.createWriteStream(tmpPath);
@@ -55,7 +55,7 @@ export const concatenateFilesIntoTemporaryFile = async (paths) => {
     });
 }
 
-export const moveFileIntoKacheryStorage = ({path, sha1}) => {
+export const moveFileIntoKacheryStorage = ({path, sha1}: {path: string, sha1: string}) => {
     const s = sha1;
     const destParentPath = `${kacheryStorageDir()}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`;
     const destPath = `${destParentPath}/${s}`;
@@ -79,7 +79,7 @@ export const kacheryStorageDir = () => {
     return ret;
 }
 
-export const kacheryStoreWithHardLink = async (path) => {
+export const kacheryStoreWithHardLink = async (path: string) => {
     try {
         await executeAndGetStdout(`kachery-store ${path} --use-hard-links`);
     }
@@ -126,7 +126,7 @@ export const kacheryStoreWithHardLink = async (path) => {
 //     return obj;
 // }
 
-const executeAndGetStdout = async (command) => {
+const executeAndGetStdout = async (command: string) => {
     return new Promise((resolve, reject) => {
         exec(command, function(error, stdout, stderr) {
             if (error) {
@@ -138,7 +138,7 @@ const executeAndGetStdout = async (command) => {
     });
 }
 
-const mkdirIfNeeded = (path) => {
+const mkdirIfNeeded = (path: string) => {
     if (!fs.existsSync(path)) {
         try {
             fs.mkdirSync(path);
@@ -163,7 +163,7 @@ export const getLocalFileInfo = async (fileSha1: Sha1Hash): Promise<{path: strin
     }
     return {
         path,
-        size: stat0.size as bigint
+        size: stat0.size as any as bigint
     }
 }
 

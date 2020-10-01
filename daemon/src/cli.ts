@@ -33,69 +33,70 @@ process.on('uncaughtException', function (err) {
 });
 
 class CLIError extends Error {
-  constructor(errorString) {
+  constructor(errorString: string) {
     super(errorString);
   }
 }
 
 class StringParseError extends Error {
-  constructor(errorString) {
+  constructor(errorString: string) {
     super(errorString);
   }
 }
 
 function main() {
-  const argv = yargs()
+  const argv = yargs
     .scriptName('kachery-p2p-daemon')
     .command({
       command: 'start',
-      desc: 'Start the daemon',
-      builder: (yargs) => {
-        yargs.option('channel', {
+      describe: 'Start the daemon',
+      builder: (y) => {
+        y.option('channel', {
           describe: 'Name of a kachery-p2p channel to join (you can join more than one)',
           type: 'array',
         })
-        yargs.option('verbose', {
+        y.option('verbose', {
           describe: 'Verbosity level.',
           type: 'number',
           default: 0
         })
-        yargs.option('host', {
+        y.option('host', {
           describe: 'host name or IP address of this daemon.',
           type: 'string',
           default: ''
         })
-        yargs.option('label', {
+        y.option('label', {
           describe: 'Label for this node.',
           type: 'string',
           default: os.hostname()
         })
-        yargs.option('port', {
+        y.option('port', {
           describe: 'Override the default http port to listen on.',
           type: 'string'
         })
-        yargs.option('udp-port', {
+        y.option('udp-port', {
           describe: 'Override the default UDP port (by default it will equal the http port).',
           type: 'string'
         })
-        yargs.option('websocket-port', {
+        y.option('websocket-port', {
           describe: 'Override the default websocket port to listen on.',
           type: 'string'
         })
-        yargs.option('bootstrap', {
+        y.option('bootstrap', {
           describe: 'Override the default bootstrap nodes. Use --bootstrap <host-or-ip>:<port>',
           type: 'array',
         })
-        yargs.option('no-bootstrap', {
+        y.option('no-bootstrap', {
           describe: 'Do not use bootstrap nodes',
           type: 'boolean'
         })
-        yargs.option('is-bootstrap', {
+        y.option('is-bootstrap', {
           describe: 'Mark this node as a bootstrap node',
           type: 'boolean'
         })
+        return y
       },
-      handler: (argv: JSONObject) => {
+      handler: (argv) => {
         const channelNames = ((argv.channel || []) as string[]).map(ch => {
           if (!isChannelName(ch)) throw new CLIError('Invalid channel name');
           return ch;

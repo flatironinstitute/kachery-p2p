@@ -3,7 +3,7 @@ import JsonSocket from 'json-socket';
 import { sleepMsec } from './common/util';
 import start_http_server from './common/start_http_server.js';
 import KacheryP2PNode from './KacheryP2PNode';
-import { ChannelName, FileKey, isSubfeedWatches, NodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isFileKey, isNodeId, isChannelName, isFeedId, isSubfeedMessage, isArrayOf, toSubfeedWatchesRAM, FeedId, isFeedName, SubfeedMessage, SignedSubfeedMessage, FindLiveFeedResult, SubfeedAccessRules, mapToObject, _validateObject, optional, FeedName, SubfeedHash, SubfeedWatches, isSubmittedSubfeedMessage, SubmittedSubfeedMessage, JSONObject, isJSONObject, ProtocolVersion } from './interfaces/core';
+import { ChannelName, FileKey, isSubfeedWatches, NodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isFileKey, isNodeId, isChannelName, isFeedId, isSubfeedMessage, isArrayOf, toSubfeedWatchesRAM, FeedId, isFeedName, SubfeedMessage, SignedSubfeedMessage, FindLiveFeedResult, SubfeedAccessRules, mapToObject, _validateObject, optional, FeedName, SubfeedHash, SubfeedWatches, isSubmittedSubfeedMessage, SubmittedSubfeedMessage, JSONObject, isJSONObject, ProtocolVersion, Port } from './interfaces/core';
 import { Socket } from 'net';
 import { action } from './action';
 import { protocolVersion } from './protocolVersion';
@@ -31,7 +31,7 @@ export default class DaemonApiServer {
     // This is the API server for the local daemon
     // The local Python code communicates with the daemon
     // via this API
-    constructor(node: KacheryP2PNode, {verbose}) {
+    constructor(node: KacheryP2PNode, opts: {verbose: number}) {
         this.#node = node; // The kachery-p2p daemon
         this.#stopperCallbacks = [];
         this.#app = express(); // the express app
@@ -221,13 +221,13 @@ export default class DaemonApiServer {
         if (!isApiFindFileRequest(reqData)) throw Error('Invalid request in _apiFindFile');
         const { fileKey, timeoutMsec } = reqData;
         const x = this.#node.findFile({fileKey, timeoutMsec});
-        const jsonSocket = new JsonSocket(res);
+        const jsonSocket = new JsonSocket(res as any as Socket);
         let isDone = false;
         x.onFound(result => {
             if (isDone) return;
             // may return more than one result
             // we send them one-by-one
-            jsonSocket.sendMessage(result);
+            jsonSocket.sendMessage(result, () => {});
         });
         x.onFinished(() => {
             if (isDone) return;
@@ -263,20 +263,20 @@ export default class DaemonApiServer {
             fileKey: fileKey,
             opts: {fromNode, fromChannel}
         });
-        const jsonSocket = new JsonSocket(res);
+        const jsonSocket = new JsonSocket(res as any as Socket)
         let isDone = false;
         // todo: track progress
         x.onFinished(() => {
             if (isDone) return;
             // we are done
             isDone = true;
-            jsonSocket.sendMessage({type: 'finished'});
+            jsonSocket.sendMessage({type: 'finished'}, () => {});
             res.end();
         });
         x.onError((err) => {
             if (isDone) return;
             isDone = true;
-            jsonSocket.sendMessage({type: 'error', error: err.message});
+            jsonSocket.sendMessage({type: 'error', error: err.message}, () => {});
             res.end();
         });
         x.onProgress((prog) => {
@@ -285,7 +285,7 @@ export default class DaemonApiServer {
                 bytesLoaded: prog.bytesLoaded,
                 bytesTotal: prog.bytesTotal,
                 nodeId: prog.nodeId || ''
-            });
+            }, () => {});
         });
         req.on('close', () => {
             // if the request socket is closed, we cancel the load request
@@ -659,9 +659,9 @@ export default class DaemonApiServer {
         }
     }
     // Start listening via http/https
-    async listen(port) {
+    async listen(port: Port) {
         const stopper = {
-            onStop: cb => {
+            onStop: (cb: (() => void)) => {
                 this.#stopperCallbacks.push(cb);
             }
         }
@@ -669,6 +669,6 @@ export default class DaemonApiServer {
     }
 }
 
-const isLocalRequest = (req) => {
+const isLocalRequest = (req: any) => {
     return (req.connection.localAddress === req.connection.remoteAddress);
 }

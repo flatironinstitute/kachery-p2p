@@ -8,7 +8,7 @@ import { action } from './action.js';
 class PublicWebSocketServer {
     #node: KacheryP2PNode
     #webSocketServer: WebSocket.Server
-    constructor(kNode: KacheryP2PNode, {verbose: number}) {
+    constructor(kNode: KacheryP2PNode, {verbose}: {verbose: number}) {
         this.#node = kNode
     }
     async startListening(port: Port) {

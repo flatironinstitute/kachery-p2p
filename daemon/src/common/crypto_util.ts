@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { PublicKey, PrivateKey, PublicKeyHex, PrivateKeyHex, KeyPair, Signature, Sha1Hash, FeedId } from '../interfaces/core'
+import { PublicKey, PrivateKey, PublicKeyHex, PrivateKeyHex, KeyPair, Signature, Sha1Hash, FeedId, JSONObject, Timestamp, elapsedSince } from '../interfaces/core'
 import { kacheryP2PSerialize } from './util';
 
 const ed25519PubKeyPrefix = "302a300506032b6570032100";
@@ -27,12 +27,12 @@ export const getSignatureJson = (obj: Object, keyPair: KeyPair): Signature => {
     }
 }
 
-export const verifySignatureJson = (obj: Object, signature: Signature, publicKey: PublicKey, opts: {checkTimestamp: boolean}={checkTimestamp: false}) => {
+export const verifySignatureJson = (obj: JSONObject & {timestamp?: Timestamp}, signature: Signature, publicKey: PublicKey, opts: {checkTimestamp: boolean}={checkTimestamp: false}) => {
     if (opts.checkTimestamp) {
-        if (!obj['timestamp']) {
+        if (!obj.timestamp) {
             return false;
         }
-        const elapsed = Number(new Date()) - obj['timestamp'];
+        const elapsed = elapsedSince(obj.timestamp)
         // needs to be less than 30 minutes old
         const numMinutes = 30;
         if (elapsed > numMinutes * 60 * 1000) {
@@ -49,12 +49,12 @@ export const verifySignatureJson = (obj: Object, signature: Signature, publicKey
     }
 }
 
-export const verifySignature = (obj: Object, signature: Signature, publicKey: PublicKey, opts={checkTimestamp: false}): boolean => {
+export const verifySignature = (obj: Object & {timestamp?: Timestamp}, signature: Signature, publicKey: PublicKey, opts={checkTimestamp: false}): boolean => {
     if (opts.checkTimestamp) {
-        if (!obj['timestamp']) {
+        if (!obj.timestamp) {
             return false;
         }
-        const elapsed = Number(new Date()) - obj['timestamp'];
+        const elapsed = elapsedSince(obj.timestamp)
         // needs to be less than 30 minutes old
         const numMinutes = 30;
         if (elapsed > numMinutes * 60 * 1000) {

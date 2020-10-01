@@ -5,7 +5,7 @@ import { kacheryStorageDir } from './kachery';
 import { createKeyPair, publicKeyToHex, privateKeyToHex, getSignatureJson, hexToPublicKey, hexToPrivateKey, sha1sum, JSONStringifyDeterministic, verifySignatureJson, publicKeyHexToFeedId } from './common/crypto_util'
 import { assert } from 'console';
 import KacheryP2PNode from './KacheryP2PNode';
-import { FeedId, feedIdToPublicKeyHex, NodeId, PrivateKeyHex, PublicKey, SubfeedHash, SignedSubfeedMessage, FindLiveFeedResult, isSignedSubfeedMessage, nowTimestamp, FeedsConfig, SubfeedAccessRules, isFeedsConfig, isSubfeedAccessRules, SubfeedWatches, SubfeedMessage, feedSubfeedId, FeedSubfeedId, SubfeedWatchName, SubfeedWatch, FeedsConfigRAM, toFeedsConfigRAM, FeedName, SubfeedWatchesRAM, toFeedsConfig, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from './interfaces/core';
+import { FeedId, feedIdToPublicKeyHex, NodeId, PrivateKeyHex, PublicKey, SubfeedHash, SignedSubfeedMessage, FindLiveFeedResult, isSignedSubfeedMessage, nowTimestamp, FeedsConfig, SubfeedAccessRules, isFeedsConfig, isSubfeedAccessRules, SubfeedWatches, SubfeedMessage, feedSubfeedId, FeedSubfeedId, SubfeedWatchName, SubfeedWatch, FeedsConfigRAM, toFeedsConfigRAM, FeedName, SubfeedWatchesRAM, toFeedsConfig, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage, JSONObject } from './interfaces/core';
 import GarbageMap from './common/GarbageMap';
 
 // todo fix feeds config on disk (too many in one .json file)
@@ -53,11 +53,11 @@ class FeedManager {
         if (config.feeds.has(feedId)) {
             config.feeds.delete(feedId);
         }
-        for (let feedName in config.feedIdsByName) {
-            if (config.feedIdsByName[feedName] === feedId) {
-                delete config.feedIdsByName[feedName]
+        config.feedIdsByName.forEach((feedId, feedName) => {
+            if (config.feedIdsByName.get(feedName) === feedId) {
+                config.feedIdsByName.delete(feedName)
             }
-        }
+        })
         await this._saveFeedsConfig(config);
     }
     async getFeedId({ feedName }: { feedName: FeedName }) {
@@ -515,7 +515,7 @@ class Subfeed {
             let previousSignature;
             let previousMessageNumber = -1;
             for (let msg of messages) {
-                if (!verifySignatureJson(msg.body, msg.signature, this._publicKey)) {
+                if (!verifySignatureJson(msg.body as any as JSONObject, msg.signature, this._publicKey)) {
                     throw Error(`Unable to verify signature of message in feed: ${this._feedDir} ${msg.signature}`)
                 }
                 if (previousSignature !== (msg.body.previousSignature || null)) {
@@ -735,7 +735,7 @@ class Subfeed {
         for (let signedMessage of signedMessages) {
             const body = signedMessage.body;
             const signature = signedMessage.signature;
-            if (!verifySignatureJson(body, signature, this._publicKey)) {
+            if (!verifySignatureJson(body as any as JSONObject, signature, this._publicKey)) {
                 throw Error(`Error verifying signature when appending signed message for: ${this._feedId} ${this._subfeedHash} ${signature}`);
             }
             if ((body.previousSignature || null) !== (previousSignature || null)) {
@@ -768,7 +768,7 @@ class Subfeed {
     }
 }
 
-const readMessagesFile = async (path): Promise<SignedSubfeedMessage[]> => {
+const readMessagesFile = async (path: string): Promise<SignedSubfeedMessage[]> => {
     let txt: string;
     try {
         txt = await fs.promises.readFile(path, {encoding: 'utf8'});

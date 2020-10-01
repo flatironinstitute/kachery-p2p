@@ -1,16 +1,27 @@
 import { FileKey, NodeId } from "../interfaces/core";
+import { ByteCount } from "../udp/UdpCongestionManager";
 import DownloadOptimizerFile from "./DownloadOptimizerFile";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
+
+export interface FileDownloadJob {
+    onProgress: (callback: (numBytes: ByteCount, totalBytes: ByteCount) => void) => void,
+    onError: (callback: (err: Error) => void) => void,
+    onFinished: (callback: () => void) => void
+}
+
+export interface JobCreator {
+    createFileDownloadJob: (args: { fileKey: FileKey, nodeId: NodeId }) => FileDownloadJob
+}
 
 export default class DownloadOptimizer {
     #files = new Map<FileKey, DownloadOptimizerFile>()
     #providerNodes = new Map<NodeId, DownloadOptimizerProviderNode>()
     #providerNodesForFiles = new Map<FileKey, Set<NodeId>>()
-    #jobCreator
+    #jobCreator: JobCreator
     #maxNumSimultaneousFileDownloads = 5
     #updateScheduled = false
     // todo: type jobCreator
-    constructor(jobCreator) {
+    constructor(jobCreator: JobCreator) {
         this.#jobCreator = jobCreator
     }
     addFile(fileKey: FileKey) {
@@ -25,7 +36,7 @@ export default class DownloadOptimizer {
         this._scheduleUpdate();
         return f;
     }
-    setProviderNodeForFile({ fileKey, nodeId }) {
+    setProviderNodeForFile({ fileKey, nodeId }: {fileKey: FileKey, nodeId: NodeId}) {
         this.#providerNodes.forEach((n: DownloadOptimizerProviderNode, nodeId: NodeId) => {
             if (!this.#providerNodes.has(nodeId)) {
                 const p = new DownloadOptimizerProviderNode(nodeId);
@@ -75,13 +86,13 @@ const chooseFastestProviderNode = (providerNodeList: DownloadOptimizerProviderNo
     if (providerNodeList.length === 0) {
         return null;
     }
-    const estimatedRates = providerNodeList.map(p => p.estimatedRateBps());
+    const estimatedRates = providerNodeList.map(p => p.estimatedRateBps()).map(x => Number(x));
     const bestIndex = argMax(estimatedRates);
     return providerNodeList[bestIndex];
 }
 
 
 // thanks: https://gist.github.com/engelen/fbce4476c9e68c52ff7e5c2da5c24a28
-function argMax(array) {
+function argMax(array: number[]) {
     return array.map((x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
 }
