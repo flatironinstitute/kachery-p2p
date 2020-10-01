@@ -180,7 +180,7 @@ export const optional = (testFunctionOrSpec: Function | ValidateObjectSpec): ((x
     else {
         return (x) => {
             const obj: ValidateObjectSpec = testFunctionOrSpec
-            return _validateObject(x, obj)
+            return ((x === undefined) || (_validateObject(x, obj)))
         }
     }   
 }
@@ -240,6 +240,7 @@ _tests.testIsObjectOf = () => {
 }
 
 // NOTE: Failing test to address issue with this function
+// jfm says: I think we should not support numeric keys, because it is not json-compliant
 _tests.testIsObjectOfForNumberKeys = () => {
     const isNumberKeyedNumber = isObjectOf(isNumber, isNumber);
     assert(isNumberKeyedNumber({9: 5, 3.14: 159 }));
@@ -408,12 +409,13 @@ const exampleKeyPair: KeyPair = {
 // TODO: did I do this right?
 export const isKeyPair = (x: any) : x is KeyPair => {
     return _validateObject(x, {
-        publicKey: (a: any) => (isPublicKey(a)),
-        privateKey: (a: any) => (isPrivateKey(a))
+        publicKey: isPublicKey,
+        privateKey: isPrivateKey
     });
     // TODO: if we trust this function for anything serious, it *REALLY* ought to confirm that the keypair matches
+    // jfm's response: the keypair is validated elsewhere using a different mechanism
 }
-_tests.IsKeyPair = () => { assert(false) } // Failing test to address above issue
+_tests.IsKeyPair = () => { assert(isKeyPair(exampleKeyPair)) } // Failing test to address above issue
 
 
 // Signature
@@ -503,7 +505,7 @@ export const exampleFileKey: FileKey = {
 }
 export const isFileKey = (x: any): x is FileKey => {
     return _validateObject(x, {
-        sha1: (a: any) => (isString(a) && /^[0-9a-fA-F]{40}?$/.test(a)),
+        sha1: isSha1Hash,
         chunkOf: optional({
             fileKey: isFileKey,
             startByte: isBigInt,
@@ -622,7 +624,7 @@ export const isSignedSubfeedMessage = (x: any): x is SignedSubfeedMessage => {
             messageNumber: isNumber,
             message: isObject,
             timestamp: isTimestamp,
-            // metaData: optional({ isSubfeedMessageMetaData }) // does this work?
+            metaData: optional(isSubfeedMessageMetaData)
         },
         signature: isSignature
     })) return false;

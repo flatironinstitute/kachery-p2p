@@ -27,7 +27,7 @@ const runSyncTests = async (x: {[key: string]: Function}) => {
             console.info('  PASSED')
         }
         catch(err) {
-            console.info(`  *********** FAILED: ${testName}`)
+            console.info(`  *********** FAILED: ${testName} [${err.message}]`)
         }
     }
 }
