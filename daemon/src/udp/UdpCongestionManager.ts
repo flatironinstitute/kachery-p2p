@@ -1,4 +1,4 @@
-import { randomAlphaString } from "../common/util"
+import { randomAlphaString } from "../common/util";
 import { elapsedSince, isNumber, isString, nowTimestamp } from "../interfaces/core";
 
 const TARGET_PCT_LOST_BYTES = 2;

@@ -1,7 +1,7 @@
-import fs from 'fs';
-import https from 'https';
-import http from 'http';
 import { Express } from 'express';
+import fs from 'fs';
+import http from 'http';
+import https from 'https';
 import { Port, toNumber } from '../interfaces/core';
 
 const start_http_server = (app: Express, listen_port: Port, stopper: {onStop: (callback: () => void) => void}) => {

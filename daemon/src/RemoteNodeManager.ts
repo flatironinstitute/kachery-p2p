@@ -1,9 +1,8 @@
-import RemoteNode from './RemoteNode.js';
 import { verifySignature } from './common/crypto_util';
-import KacheryP2PNode from './KacheryP2PNode.js';
 import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey } from './interfaces/core';
 import { AnnounceRequestData, AnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest.js';
-import { sleepMsec } from './common/util.js';
+import KacheryP2PNode from './KacheryP2PNode.js';
+import RemoteNode from './RemoteNode.js';
 
 class RemoteNodeManager {
     #node: KacheryP2PNode

@@ -1,6 +1,5 @@
-import fs from 'fs';
 import bson from 'bson';
-import { sha1sum } from './crypto_util';
+import fs from 'fs';
 import { FileKey, Sha1Hash } from '../interfaces/core';
 
 export const randomString = (num_chars: number) => {

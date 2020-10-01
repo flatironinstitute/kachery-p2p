@@ -1,6 +1,5 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
-import { sleepMsec } from "./common/util";
-import { httpPostJson, httpPostJsonStreamResponse, urlPath } from "./httpPostJson";
+import { httpPostJson, urlPath } from "./httpPostJson";
 import { Address, ChannelName, ChannelNodeInfo, createRequestId, NodeId, nodeIdToPublicKey, nowTimestamp } from "./interfaces/core";
 import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponseData } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";

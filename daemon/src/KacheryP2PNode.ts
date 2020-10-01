@@ -1,24 +1,17 @@
-import fs from 'fs'
-import { createKeyPair, getSignature, verifySignature, publicKeyToHex, hexToPublicKey, hexToPrivateKey, privateKeyToHex } from './common/crypto_util';
+import fs from 'fs';
+import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util';
+import GarbageMap from './common/GarbageMap';
 import FeedManager from './FeedManager';
-import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, FileKey, publicKeyHexToNodeId, SubfeedHash, FeedId, FindLiveFeedResult, SignedSubfeedMessage, FindFileResult, nowTimestamp, nodeIdToPublicKey, SubmittedSubfeedMessage, errorMessage, HostName, ChannelInfo, ChannelNodeInfoBody, ChannelNodeInfo, isKeyPair, JSONObject } from './interfaces/core';
-import RemoteNodeManager from './RemoteNodeManager';
-import { isAddress } from './interfaces/core';
-
-import { createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetLiveFeedSignedMessagesResponseData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest';
-import { isAnnounceRequestData, AnnounceRequestData, AnnounceResponseData } from './interfaces/NodeToNodeRequest';
-import { isGetChannelInfoRequestData, GetChannelInfoRequestData, GetChannelInfoResponseData } from './interfaces/NodeToNodeRequest';
-import { isCheckForFileRequestData, CheckForFileRequestData, CheckForFileResponseData } from './interfaces/NodeToNodeRequest';
-import { isCheckForLiveFeedRequestData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData } from './interfaces/NodeToNodeRequest';
-import { isSetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData } from './interfaces/NodeToNodeRequest';
-import { isGetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData } from './interfaces/NodeToNodeRequest';
-import { LiveFeedSubscriptionManager } from './LiveFeedSubscriptionManager';
+import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, FeedId, FileKey, FindFileResult, FindLiveFeedResult, HostName, isAddress, isKeyPair, JSONObject, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, PrivateKey, PublicKey, publicKeyHexToNodeId, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage } from './interfaces/core';
+import { AnnounceRequestData, AnnounceResponseData, CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData, createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, GetChannelInfoRequestData, GetChannelInfoResponseData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest';
 import { KacheryStorageManager } from './KacheryStorageManager';
+import { LiveFeedSubscriptionManager } from './LiveFeedSubscriptionManager';
+import { protocolVersion } from './protocolVersion';
 import { ProxyConnectionToClient } from './ProxyConnectionToClient';
 import RemoteNode from './RemoteNode';
-import { protocolVersion } from './protocolVersion';
-import GarbageMap from './common/GarbageMap';
+import RemoteNodeManager from './RemoteNodeManager';
 import { byteCount, ByteCount } from './udp/UdpCongestionManager';
+
 
 interface LoadFileProgress {
     bytesLoaded: bigint,

@@ -1,10 +1,8 @@
-import dgram from 'dgram'
-import e from 'express';
+import dgram from 'dgram';
 import GarbageMap from '../common/GarbageMap';
-import { randomAlphaString } from '../common/util'
-import { Address, elapsedSince, isBoolean, isProtocolVersion, isString, nowTimestamp, ProtocolVersion, Timestamp, toNumber, tryParseJsonObject, _validateObject } from '../interfaces/core'
-import { UDP_PACKET_SIZE } from '../interfaces/UdpMessage';
-import { protocolVersion } from '../protocolVersion'
+import { randomAlphaString } from '../common/util';
+import { Address, isBoolean, isProtocolVersion, isString, ProtocolVersion, toNumber, tryParseJsonObject, _validateObject } from '../interfaces/core';
+import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { byteCount } from './UdpCongestionManager';
 
 class UdpTimeoutError extends Error {

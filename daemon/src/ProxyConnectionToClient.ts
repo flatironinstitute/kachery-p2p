@@ -1,9 +1,9 @@
-import WebSocket from 'ws'
+import WebSocket from 'ws';
 import { action } from './action';
 import { getSignature, verifySignature } from './common/crypto_util';
 import GarbageMap from './common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString } from './common/util';
-import { isEqualTo, isNodeId, isTimestamp, NodeId, Signature, isSignature, _validateObject, nodeIdToPublicKey, nowTimestamp, Timestamp, RequestId, ErrorMessage, isErrorMessage, isString } from "./interfaces/core";
+import { ErrorMessage, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, Signature, Timestamp, _validateObject } from "./interfaces/core";
 import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from './interfaces/NodeToNodeRequest';
 import KacheryP2PNode from './KacheryP2PNode';
 import { ByteCount, isByteCount } from './udp/UdpCongestionManager';

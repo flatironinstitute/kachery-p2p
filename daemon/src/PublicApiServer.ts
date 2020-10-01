@@ -1,11 +1,11 @@
-import express, {Express, request} from 'express';
-import start_http_server from './common/start_http_server.js';
-import KacheryP2PNode from './KacheryP2PNode';
-import { sleepMsec } from './common/util.js';
-import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from './interfaces/NodeToNodeRequest.js';
-import { NodeId, Port, JSONObject, isJSONObject, _validateObject, isBoolean, isNodeId, isOneOf, isAddress, Address, isNull, ProtocolVersion, DaemonVersion, isProtocolVersion, isDaemonVersion } from './interfaces/core.js';
+import express, { Express } from 'express';
 import { Socket } from 'net';
 import { action } from './action.js';
+import start_http_server from './common/start_http_server.js';
+import { sleepMsec } from './common/util.js';
+import { Address, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, _validateObject } from './interfaces/core.js';
+import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from './interfaces/NodeToNodeRequest.js';
+import KacheryP2PNode from './KacheryP2PNode';
 import { daemonVersion, protocolVersion } from './protocolVersion.js';
 import { ByteCount } from './udp/UdpCongestionManager.js';
 

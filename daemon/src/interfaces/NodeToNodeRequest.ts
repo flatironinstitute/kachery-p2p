@@ -1,7 +1,7 @@
-import { protocolVersion } from "../protocolVersion"
-import { ChannelName, isChannelName, isNodeId, isRequestId, NodeId, RequestId, Timestamp, _validateObject, isTimestamp, isOneOf, isEqualTo, ChannelNodeInfo, isChannelNodeInfo, FileKey, isFileKey, FeedId, isFeedId, LiveFeedSubscriptions, isLiveFeedSubscriptions, optional, isBoolean, isNumber, ChannelInfo, isChannelInfo, Signature, SubfeedHash, isSubfeedHash, isNull, SubmittedSubfeedMessage, isSubmittedSubfeedMessage, ErrorMessage, isErrorMessage, isBigInt, SignedSubfeedMessage, isArrayOf, isSignedSubfeedMessage, ProtocolVersion, isString } from "./core"
 import assert from 'assert'
 import { randomAlphaString } from "../common/util"
+import { protocolVersion } from "../protocolVersion"
+import { ChannelInfo, ChannelName, ChannelNodeInfo, ErrorMessage, FeedId, FileKey, isArrayOf, isBigInt, isBoolean, isChannelInfo, isChannelName, isChannelNodeInfo, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignedSubfeedMessage, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
 

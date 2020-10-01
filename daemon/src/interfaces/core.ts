@@ -1,7 +1,7 @@
-import assert from 'assert'
+import assert from 'assert';
 import { hexToPublicKey, JSONStringifyDeterministic } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
-import { AnnounceRequestData, isAnnounceRequestData, isAnnounceResponseData } from "./NodeToNodeRequest";
+import { AnnounceRequestData, isAnnounceRequestData } from "./NodeToNodeRequest";
 
 export const _tests: {[key: string]: Function} = {}
 

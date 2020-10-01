@@ -1,7 +1,7 @@
-import axios from 'axios'
-import { Readable, ReadableOptions } from 'stream';
+import axios from 'axios';
+import http from 'http';
+import { Readable } from 'stream';
 import { Address, HostName, Port } from './interfaces/core';
-import http from 'http'
 
 export const _tests: {[key: string]: () => Promise<void>} = {}
 

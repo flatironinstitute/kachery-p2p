@@ -1,15 +1,11 @@
 #!/usr/bin/env ts-node
 
-import os from 'os';
-import fs from 'fs';
-import yargs from 'yargs';
-import KacheryP2PNode from './KacheryP2PNode';
-import DaemonApiServer from './DaemonApiServer';
-import PublicApiServer from './PublicApiServer';
-import PublicWebSocketServer from './PublicWebSocketServer';
 import assert from 'assert';
-import { ChannelName, HostName, isAddress, isChannelName, JSONObject, NodeId, Port, isHostName, isPort, Address } from './interfaces/core';
-import PublicUdpSocketServer from './udp/PublicUdpSocketServer';
+import fs from 'fs';
+import os from 'os';
+import yargs from 'yargs';
+import { Address, isAddress, isChannelName, isHostName, isPort } from './interfaces/core';
+import startDaemon from './startDaemon';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
 process.on('uncaughtException', function (err) {
@@ -180,71 +176,6 @@ function parseBootstrapInfo(x: string): Address {
     throw new StringParseError('Improper bootstrap info.');
   }
   return b;
-}
-
-const startDaemon = async (args: {
-  channelNames: ChannelName[],
-  configDir: string,
-  verbose: number,
-  hostName: HostName | null,
-  daemonApiPort: Port,
-  httpListenPort: Port | null,
-  webSocketListenPort: Port | null,
-  udpListenPort: Port | null,
-  label: string,
-  bootstrapAddresses: Address[] | null,
-  opts: {
-    noBootstrap: boolean,
-    isBootstrapNode: boolean
-  }
-}) => {
-  const {
-    channelNames,
-    configDir,
-    verbose,
-    hostName,
-    daemonApiPort,
-    httpListenPort,
-    webSocketListenPort,
-    udpListenPort,
-    label,
-    bootstrapAddresses,
-    opts
-  } = args;
-  // const daemon = new Daemon({configDir, verbose, discoveryVerbose, listenHost, listenPort, udpListenPort: listenPort, label, bootstrapInfos, opts});
-  const kNode = new KacheryP2PNode({
-    configDir,
-    verbose,
-    hostName,
-    httpListenPort,
-    webSocketListenPort,
-    label,
-    bootstrapAddresses,
-    channelNames,
-    opts
-  })
-
-  const daemonApiServer = new DaemonApiServer(kNode, {verbose});
-  daemonApiServer.listen(daemonApiPort);
-  console.info(`Daemon http server listening on port ${daemonApiPort}`)
-
-  if (httpListenPort) {
-    const publicApiServer = new PublicApiServer(kNode, {verbose});
-    publicApiServer.listen(httpListenPort);
-    console.info(`Public http server listening on port ${httpListenPort}`)
-  }
-
-  if (webSocketListenPort) {
-    const publicWebSocketServer = new PublicWebSocketServer(kNode, {verbose});
-    await publicWebSocketServer.startListening(webSocketListenPort);
-    console.info(`Websocket server listening on port ${webSocketListenPort}`)
-  }
-
-  if (udpListenPort) {
-    const publicUdpSocketServer = new PublicUdpSocketServer(kNode);
-    await publicUdpSocketServer.startListening(udpListenPort);
-    console.info(`Udp socket server listening on port ${udpListenPort}`)
-  }
 }
 
 main();
