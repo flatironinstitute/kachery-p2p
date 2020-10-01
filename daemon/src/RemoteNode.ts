@@ -101,6 +101,7 @@ class RemoteNode {
         const request = this._formRequestFromRequestData(requestData);
         const requestId = request.body.requestId;
         const response = await httpPostJson(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
+        // todo: use udp when appropriate
         if (!isNodeToNodeResponse(response)) {
             // todo: in this situation, do we ban the node?
             throw Error('Invalid response from node.');
@@ -125,27 +126,6 @@ class RemoteNode {
             throw Error('Invalid signature in response.');
         }
         return response.body.responseData;
-    }
-    sendDownloadRequest(requestData: NodeToNodeRequestData): {
-        onData: (callback: (data: Buffer) => void) => void,
-        onFinished: (callback: () => void) => void,
-        onError: (callback: (err: Error) => void) => void,
-        cancel: () => void
-    } {
-        const address = this._getRemoteNodeHttpAddress();
-        if (!address) {
-            throw Error('Unable to send request... no http address found.')
-        }
-        const request = this._formRequestFromRequestData(requestData);
-
-        const R = httpPostJsonStreamResponse(address, urlPath('/NodeToNodeRequest'), request)
-
-        return {
-            onData: R.onData,
-            onFinished: R.onFinished,
-            onError: R.onError,
-            cancel: R.cancel
-        }
     }
     _getMostRecentChannelNodeInfo(): ChannelNodeInfo | null {
         let result: ChannelNodeInfo | null = null;

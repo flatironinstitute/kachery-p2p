@@ -1,21 +1,33 @@
 import KacheryP2PNode from "../KacheryP2PNode"
 import dgram from 'dgram'
-import { Address, HostName, JSONObject, nodeIdToPublicKey, Port, toNumber, tryParseJsonObject, _validateObject } from "../interfaces/core";
+import { Address, HostName, JSONObject, nodeIdToPublicKey, Port, RequestId, toNumber, tryParseJsonObject, _validateObject } from "../interfaces/core";
 import { getSignature, verifySignature } from "../common/crypto_util";
 import { action } from "../action";
-import { isUdpHeader, UDP_MESSAGE_HEADER_SIZE, UdpHeader, UdpMessagePart, UdpMessageType, UDP_PACKET_SIZE, createUdpMessageId, partIndex, numParts } from "../interfaces/UdpMessage";
+import { isUdpHeader, UDP_MESSAGE_HEADER_SIZE, UdpHeader, UdpMessagePart, UdpMessageType, UDP_PACKET_SIZE, createUdpMessageId, partIndex, numParts, PartIndex, NumParts } from "../interfaces/UdpMessage";
 import UdpMessagePartManager from './UdpMessagePartManager'
 import { isNodeToNodeRequest, isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeResponse } from "../interfaces/NodeToNodeRequest";
 import { protocolVersion } from "../protocolVersion";
 import UdpPacketSender from "./UdpPacketSender";
+import GarbageMap from "../common/GarbageMap";
+import { rejects } from "assert";
+import { response } from "express";
+
+interface ResponseListener {
+    onResponse: (response: NodeToNodeResponse) => void
+}
+
+interface DataListener {
+    onData: (partIndex: PartIndex, numParts: NumParts, data: Buffer) => void,
+    onFinished: () => void
+}
 
 export default class PublicUdpSocketServer {
     #node: KacheryP2PNode
     #messagePartManager = new UdpMessagePartManager()
-    #onRequestCallbacks: ((request: NodeToNodeRequest) => void)[] = []
-    #onResponseCallbacks: ((response: NodeToNodeResponse) => void)[] = []
     #socket: dgram.Socket | null = null
     #udpPacketSender: UdpPacketSender | null = null
+    #responseListeners = new GarbageMap<RequestId, ResponseListener>(3 * 60 * 1000)
+    #dataListeners = new GarbageMap<RequestId, DataListener>(60 * 60 * 1000)
     constructor(node: KacheryP2PNode) {
         this.#node = node
         this.#messagePartManager.onMessageComplete(this._handleCompleteMessage)
@@ -60,19 +72,38 @@ export default class PublicUdpSocketServer {
             }
         });
     }
-    onRequest(callback: (request: NodeToNodeRequest) => void) {
-        this.#onRequestCallbacks.push(callback)
+    async sendRequest(address: Address, request: NodeToNodeRequest, opts: {timeoutMsec: number}): Promise<NodeToNodeResponse> {
+        await this._sendMessage(address, "NodeToNodeRequest", request as any as JSONObject, {timeoutMsec: opts.timeoutMsec, requestId: request.body.requestId})
+        return new Promise<NodeToNodeResponse>((resolve, reject) => {
+            let complete = false
+            const _handleError = ((err: Error) => {
+                if (complete) return
+                complete = true
+                if (this.#responseListeners.has(request.body.requestId)) {
+                    this.#responseListeners.delete(request.body.requestId)
+                }
+                reject(err)
+            })
+            const _handleFinished = ((response: NodeToNodeResponse) => {
+                if (complete) return
+                complete = true
+                if (this.#responseListeners.has(request.body.requestId)) {
+                    this.#responseListeners.delete(request.body.requestId)
+                }
+                resolve(response)
+            })
+            
+            this.#responseListeners.set(request.body.requestId, {
+                onResponse: (response: NodeToNodeResponse) => {
+                    _handleFinished(response)
+                }
+            })
+            setTimeout(() => {
+                _handleError(Error('Timeout waiting for response'))
+            }, opts.timeoutMsec)
+        })
     }
-    onResponse(callback: (response: NodeToNodeResponse) => void) {
-        this.#onResponseCallbacks.push(callback)
-    }
-    async sendRequest(address: Address, request: NodeToNodeRequest, opts: {timeoutMsec: number}): Promise<void> {
-        return await this._sendMessage(address, "NodeToNodeRequest", request as any as JSONObject, {timeoutMsec: opts.timeoutMsec})
-    }
-    async sendResponse(address: Address, response: NodeToNodeResponse, opts: {timeoutMsec: number}): Promise<void> {
-        return await this._sendMessage(address, "NodeToNodeResponse", response as any as JSONObject, {timeoutMsec: opts.timeoutMsec})
-    }
-    async _sendMessage(address: Address, messageType: UdpMessageType, messageData: Buffer | JSONObject, opts: {timeoutMsec: number}): Promise<void> {
+    async _sendMessage(address: Address, messageType: UdpMessageType, messageData: Buffer | JSONObject, opts: {timeoutMsec: number, requestId: RequestId | null}): Promise<void> {
         if ((this.#socket === null) || (this.#udpPacketSender === null)) {
             throw Error("Cannot _sendMessage before calling startListening()")
         }
@@ -86,7 +117,7 @@ export default class PublicUdpSocketServer {
             payloadIsJson = true;
             messageBuffer = Buffer.from(JSON.stringify(messageData))
         }
-        const parts: UdpMessagePart[] = this._createUdpMessageParts("NodeToNodeRequest", messageBuffer, {payloadIsJson})
+        const parts: UdpMessagePart[] = this._createUdpMessageParts("NodeToNodeRequest", messageBuffer, {payloadIsJson, requestId: opts.requestId})
         const packets: Buffer[] = []
         for (let part of parts) {
             const b = Buffer.concat([
@@ -106,9 +137,9 @@ export default class PublicUdpSocketServer {
             partIndex: header.body.partIndex,
             numParts: header.body.numParts
         }
-        this.#messagePartManager.addMessagePart(id, header, dataBuffer)
+        this.#messagePartManager.addMessagePart(fromAddress, id, header, dataBuffer)
     }
-    _handleCompleteMessage(header: UdpHeader, dataBuffer: Buffer) {
+    _handleCompleteMessage(remoteAddress: Address, header: UdpHeader, dataBuffer: Buffer) {
         const mt = header.body.udpMessageType
         if (mt === "NodeToNodeRequest") {
             const req = tryParseJsonObject(dataBuffer.toString())
@@ -116,7 +147,11 @@ export default class PublicUdpSocketServer {
                 // todo: what to do here? throw error? ban peer?
                 return
             }
-            this.#onRequestCallbacks.forEach(cb => cb(req))
+            action('/Udp/NodeToNodeRequest', {}, async () => {
+                const response: NodeToNodeResponse = await this.#node.handleNodeToNodeRequest(req)
+                await this._sendMessage(remoteAddress, "NodeToNodeResponse", response as any as JSONObject, {timeoutMsec: 5000, requestId: req.body.requestId})
+            }, async () => {
+            })
         }
         else if (mt === "NodeToNodeResponse") {
             const res = tryParseJsonObject(dataBuffer.toString())
@@ -124,7 +159,10 @@ export default class PublicUdpSocketServer {
                 // todo: what to do here? throw error? ban peer?
                 return
             }
-            this.#onResponseCallbacks.forEach(cb => cb(res))
+            const responseListener = this.#responseListeners.get(res.body.requestId)
+            if (responseListener) {
+                responseListener.onResponse(res)
+            }
         }
         else if (mt === "KeepAlive") {
             // todo
@@ -133,7 +171,7 @@ export default class PublicUdpSocketServer {
             // todo
         }
     }
-    _createUdpMessageParts(udpMessageType: UdpMessageType, messageData: Buffer, opts: {payloadIsJson: boolean}): UdpMessagePart[] {
+    _createUdpMessageParts(udpMessageType: UdpMessageType, messageData: Buffer, opts: {payloadIsJson: boolean, requestId: RequestId | null}): UdpMessagePart[] {
         const parts: UdpMessagePart[] = []
         const partSize = UDP_PACKET_SIZE - UDP_MESSAGE_HEADER_SIZE
         const buffers: Buffer[] = []
@@ -151,7 +189,8 @@ export default class PublicUdpSocketServer {
                 udpMessageType: udpMessageType,
                 partIndex: partIndex(ii),
                 numParts: numParts(buffers.length),
-                payloadIsJson: opts.payloadIsJson
+                payloadIsJson: opts.payloadIsJson,
+                requestId: opts.requestId
             }
             const header: UdpHeader = {
                 body,

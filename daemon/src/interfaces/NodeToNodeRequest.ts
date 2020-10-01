@@ -1,5 +1,23 @@
 import { protocolVersion } from "../protocolVersion"
-import { ChannelName, isChannelName, isNodeId, isRequestId, NodeId, RequestId, Timestamp, _validateObject, isTimestamp, isOneOf, isEqualTo, ChannelNodeInfo, isChannelNodeInfo, FileKey, isFileKey, FeedId, isFeedId, LiveFeedSubscriptions, isLiveFeedSubscriptions, optional, isBoolean, isNumber, ChannelInfo, isChannelInfo, Signature, SubfeedHash, isSubfeedHash, isNull, SubmittedSubfeedMessage, isSubmittedSubfeedMessage, ErrorMessage, isErrorMessage, isBigInt, SignedSubfeedMessage, isArrayOf, isSignedSubfeedMessage, ProtocolVersion } from "./core"
+import { ChannelName, isChannelName, isNodeId, isRequestId, NodeId, RequestId, Timestamp, _validateObject, isTimestamp, isOneOf, isEqualTo, ChannelNodeInfo, isChannelNodeInfo, FileKey, isFileKey, FeedId, isFeedId, LiveFeedSubscriptions, isLiveFeedSubscriptions, optional, isBoolean, isNumber, ChannelInfo, isChannelInfo, Signature, SubfeedHash, isSubfeedHash, isNull, SubmittedSubfeedMessage, isSubmittedSubfeedMessage, ErrorMessage, isErrorMessage, isBigInt, SignedSubfeedMessage, isArrayOf, isSignedSubfeedMessage, ProtocolVersion, isString } from "./core"
+import assert from 'assert'
+import { randomAlphaString } from "../common/util"
+
+export const _tests: {[key: string]: () => void} = {}
+
+// StreamId
+export interface StreamId extends String {
+    __streamId__: never // phantom type
+}
+export const isStreamId = (x: any): x is StreamId => {
+    if (!isString(x)) return false;
+    return (/^[A-Za-z]{10}$/.test(x))
+}
+export const createStreamId = () => {
+    return randomAlphaString(10) as any as StreamId
+}
+_tests.StreamId = () => { assert(isStreamId(createStreamId())) }
+
 
 export interface NodeToNodeRequest {
     body: {
@@ -73,7 +91,8 @@ export type NodeToNodeResponseData = (
     CheckForLiveFeedResponseData |
     SetLiveFeedSubscriptionsResponseData |
     SubmitMessageToLiveFeedResponseData |
-    GetLiveFeedSignedMessagesResponseData
+    GetLiveFeedSignedMessagesResponseData |
+    DownloadFileDataResponseData
 )
 export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData => {
     return isOneOf([
@@ -83,11 +102,9 @@ export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData =>
         isCheckForLiveFeedResponseData,
         isSetLiveFeedSubscriptionsResponseData,
         isSubmitMessageToLiveFeedResponseData,
-        isGetLiveFeedSignedMessagesResponseData
+        isGetLiveFeedSignedMessagesResponseData,
+        isDownloadFileDataResponseData
     ]) ? true : false;
-}
-export const isDownloadRequest = (x: NodeToNodeRequestData) => {
-    return ['downloadFileData'].includes(x.requestType);
 }
 
 // getChannelInfo
@@ -270,7 +287,7 @@ export const isGetLiveFeedSignedMessagesResponseData = (x: any): x is GetLiveFee
 // downloadFileData
 export interface DownloadFileDataRequestData {
     requestType: 'downloadFileData',
-    fileKey,
+    fileKey: FileKey,
     startByte: bigint,
     endByte: bigint
 }
@@ -280,5 +297,19 @@ export const isDownloadFileDataRequestData = (x: any): x is DownloadFileDataRequ
         fileKey: isFileKey,
         startByte: isBigInt,
         endByte: isBigInt
+    })
+}
+export interface DownloadFileDataResponseData {
+    requestType: 'downloadFileData',
+    success: boolean,
+    streamId: StreamId | null,
+    errorMessage: ErrorMessage | null
+}
+export const isDownloadFileDataResponseData = (x: any): x is DownloadFileDataResponseData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('downloadFileData'),
+        success: isBoolean,
+        streamId: isOneOf([isNull, isStreamId]),
+        errorMessage: isOneOf([isNull, isErrorMessage])
     })
 }

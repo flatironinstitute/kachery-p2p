@@ -267,7 +267,7 @@ class TrialData {
         }
         else {
             // We lost too many bytes, so let's decrease the rate
-            // todo: should we check whether the loss was likely due to rate?
+            // question: should we check whether the loss was likely due to rate?
             maxNumBytesPerSecondToSend = byteCountPerSec(byteCountPerSecToNumber(maxNumBytesPerSecondToSend) / 1.2)
         }
 

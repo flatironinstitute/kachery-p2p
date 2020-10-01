@@ -2,7 +2,7 @@ import RemoteNode from './RemoteNode.js';
 import { verifySignature } from './common/crypto_util';
 import KacheryP2PNode from './KacheryP2PNode.js';
 import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey } from './interfaces/core';
-import { AnnounceRequestData, AnnounceResponseData, isDownloadRequest, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest.js';
+import { AnnounceRequestData, AnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest.js';
 import { sleepMsec } from './common/util.js';
 
 class RemoteNodeManager {
@@ -73,9 +73,6 @@ class RemoteNodeManager {
         }
     }
     async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: number}): Promise<NodeToNodeResponseData> {
-        if (isDownloadRequest(requestData)) {
-            throw Error('Unexpected, request is a download request.');
-        }
         const remoteNode = this.#remoteNodes.get(nodeId);
         if (!remoteNode) {
             throw Error(`Cannot send request to node: node with ID ${nodeId} not found.`)
@@ -108,20 +105,7 @@ class RemoteNodeManager {
         if (!remoteNode) return null;
         return remoteNode.bootstrapWebSocketAddress();
     }
-    sendDownloadRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData) {
-        if (!isDownloadRequest(requestData)) {
-            throw Error('Unexpected, request is not a download request.');
-        }
-        const remoteNode = this.#remoteNodes.get(nodeId);
-        if (!remoteNode) {
-            throw Error(`Cannot send request to node: node with ID ${nodeId} not found.`)
-        }
-        return remoteNode.sendDownloadRequest(requestData);
-    }
     sendRequestToNodesInChannels(requestData: NodeToNodeRequestData, opts: {timeoutMsec: number, channelNames: ChannelName[]}) {
-        if (isDownloadRequest(requestData)) {
-            throw Error('Unexpected, request is a download request.');
-        }
         let finished = false;
         const _onResponseCallbacks: ((nodeId: NodeId, responseData: NodeToNodeResponseData) => void)[] = [];
         const _onErrorResponseCallbacks: ((nodeId: NodeId, reason: any) => void)[] = [];

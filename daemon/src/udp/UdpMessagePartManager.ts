@@ -1,11 +1,12 @@
 import GarbageMap from '../common/GarbageMap'
+import { Address } from '../interfaces/core'
 import { MessagePartData, numPartsToNumber, partIndex, UdpHeader, UdpMessagePartId } from '../interfaces/UdpMessage'
 
 export default class UdpMessagePartManager {
-    #messageParts = new GarbageMap<UdpMessagePartId, MessagePartData>(3 * 60 * 1000)
-    #onMessageCompleteCallbacks: ((header: UdpHeader, data: Buffer) => void)[] = []
+    #messageParts = new GarbageMap<UdpMessagePartId, MessagePartData>(30 * 60 * 1000)
+    #onMessageCompleteCallbacks: ((remoteAddress: Address, header: UdpHeader, data: Buffer) => void)[] = []
     constructor() {}
-    addMessagePart(udpMessagePartId: UdpMessagePartId, header: UdpHeader, buffer: Buffer) {
+    addMessagePart(remoteAddress: Address, udpMessagePartId: UdpMessagePartId, header: UdpHeader, buffer: Buffer) {
         this.#messageParts.set(udpMessagePartId, {header, buffer})
         let complete = true
         const numParts = numPartsToNumber(udpMessagePartId.numParts)
@@ -38,11 +39,11 @@ export default class UdpMessagePartManager {
             }
             const fullBuffer = Buffer.concat(buffers)
             this.#onMessageCompleteCallbacks.forEach(cb => {
-                cb(headers[0], fullBuffer)
+                cb(remoteAddress, headers[0], fullBuffer)
             })
         }
     }
-    onMessageComplete(callback: (header: UdpHeader, data: Buffer) => void) {
+    onMessageComplete(callback: (remoteAddress: Address, header: UdpHeader, data: Buffer) => void) {
         this.#onMessageCompleteCallbacks.push(callback)
     }
 }

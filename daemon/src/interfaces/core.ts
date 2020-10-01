@@ -524,7 +524,7 @@ export const isFindLiveFeedResult = (x: any): x is FindLiveFeedResult => {
         nodeId: (a: any) => isNodeId
     });
 }
-_tests.FindLiveFeedReslt = () => { assert(isFindLiveFeedResult(exampleFindLiveFeedResult)) }
+_tests.FindLiveFeedResult = () => { assert(isFindLiveFeedResult(exampleFindLiveFeedResult)) }
 
 
 export interface ChannelNodeInfoBody {
@@ -587,7 +587,7 @@ _tests.SubfeedMessage = () => { assert(isSubfeedMessage(exampleSubfeedMessage)) 
 
 // SubfeedMessageMetaData
 export type SubfeedMessageMetaData = Object;
-export const exampleSubfeedMessageMetaData: SubfeedMessageMetaData = {metaKey: 'metavalue'} as SubfeedMessageMetaData;
+export const exampleSubfeedMessageMetaData: SubfeedMessageMetaData = {metaKey: 'metaValue'} as SubfeedMessageMetaData;
 export const isSubfeedMessageMetaData = (x: any): x is SubfeedMessageMetaData => {
     return isObject(x);
 }
@@ -628,7 +628,7 @@ export const isSignedSubfeedMessage = (x: any): x is SignedSubfeedMessage => {
     })) return false;
 
     // TODO: If this is to be trusted elsewhere (which it will be based on its name & its being a
-    // type guard) it's essential we check the signature actually matches the messsage.
+    // type guard) it's essential we check the signature actually matches the message.
     return true;
 }
 // Test failing, not quite sure why--I think I did something wrong above

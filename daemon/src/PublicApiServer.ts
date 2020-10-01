@@ -1,8 +1,8 @@
-import express, {Express} from 'express';
+import express, {Express, request} from 'express';
 import start_http_server from './common/start_http_server.js';
 import KacheryP2PNode from './KacheryP2PNode';
 import { sleepMsec } from './common/util.js';
-import { isNodeToNodeRequest, NodeToNodeRequest, NodeToNodeResponse } from './interfaces/NodeToNodeRequest.js';
+import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from './interfaces/NodeToNodeRequest.js';
 import { NodeId, Port, JSONObject, isJSONObject, _validateObject, isBoolean, isNodeId, isOneOf, isAddress, Address, isNull, ProtocolVersion, DaemonVersion, isProtocolVersion, isDaemonVersion } from './interfaces/core.js';
 import { Socket } from 'net';
 import { action } from './action.js';
@@ -92,6 +92,22 @@ export default class PublicApiServer {
                 await this._errorResponse(req, res, 500, err.message);
             });
         });
+        // /download
+        this.#app.get('/download/:streamId', async (req, res) => {
+            const streamId = req.params.streamId
+            await action('/download', {
+                context: 'Public API',
+                streamId
+            }, async () => {
+                if (!isStreamId(streamId)) {
+                    throw Error ('Invalid stream ID')
+                }
+                this._apiDownload(streamId, res)
+            }, async (err: Error) => {
+                await this._errorResponse(req, res, 500, err.message);
+            });
+            req.params.streamId
+        });
     }
     // /probe - check whether the daemon is up and running and return info such as the node ID
     async _apiProbe(req: Req, res: Res) {
@@ -111,6 +127,15 @@ export default class PublicApiServer {
         const response: NodeToNodeResponse = await this.#node.handleNodeToNodeRequest(reqBody);
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
+    }
+    // /download
+    _apiDownload(streamId: StreamId, res: Res) {
+        // todo
+        // this.#node.stream(streamId, {
+        //     onData: (data: Buffer) => {
+        //         res.send()
+        //     }
+        // })
     }
     // Helper function for returning http request with an error response
     async _errorResponse(req: Req, res: Res, code: number, errorString: string) {

@@ -1,5 +1,5 @@
 import { randomAlphaString } from '../common/util'
-import { isBoolean, isNodeId, isNumber, isProtocolVersion, isSignature, isString, NodeId, ProtocolVersion, Signature, _validateObject } from './core'
+import { isBoolean, isNodeId, isNull, isNumber, isOneOf, isProtocolVersion, isRequestId, isSignature, isString, NodeId, ProtocolVersion, RequestId, Signature, _validateObject } from './core'
 
 export const UDP_MESSAGE_HEADER_SIZE = 1000
 export const UDP_PACKET_SIZE = 20000
@@ -110,7 +110,8 @@ export const isUdpHeader = (x: any): x is UdpHeader => {
             udpMessageType: isUdpMessageType,
             partIndex: isPartIndex,
             numParts: isNumParts,
-            payloadIsJson: isBoolean
+            payloadIsJson: isBoolean,
+            requestId: isOneOf([isNull, isRequestId])
         },
         signature: isSignature
     })

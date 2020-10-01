@@ -5,7 +5,7 @@ import { PublicKey, Address, ChannelName, KeyPair, NodeId, Port, PrivateKey, Fil
 import RemoteNodeManager from './RemoteNodeManager';
 import { isAddress } from './interfaces/core';
 
-import { isCheckForLiveFeedResponseData, isGetLiveFeedSignedMessagesResponseData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest';
+import { createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetLiveFeedSignedMessagesResponseData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest';
 import { isAnnounceRequestData, AnnounceRequestData, AnnounceResponseData } from './interfaces/NodeToNodeRequest';
 import { isGetChannelInfoRequestData, GetChannelInfoRequestData, GetChannelInfoResponseData } from './interfaces/NodeToNodeRequest';
 import { isCheckForFileRequestData, CheckForFileRequestData, CheckForFileResponseData } from './interfaces/NodeToNodeRequest';
@@ -17,6 +17,7 @@ import { KacheryStorageManager } from './KacheryStorageManager';
 import { ProxyConnectionToClient } from './ProxyConnectionToClient';
 import RemoteNode from './RemoteNode';
 import { protocolVersion } from './protocolVersion';
+import GarbageMap from './common/GarbageMap';
 
 interface LoadFileProgress {
     bytesLoaded: bigint,
@@ -34,6 +35,7 @@ class KacheryP2PNode {
     #liveFeedSubscriptionManager: LiveFeedSubscriptionManager
     #proxyConnectionsToClients = new Map<NodeId, ProxyConnectionToClient>()
     #bootstrapAddresses: Address[] // not same as argument to constructor
+    #downloadStreamInfos = new GarbageMap<StreamId, DownloadFileDataRequestData>(30 * 60 * 1000)
     constructor(private p : {
         configDir: string,
         verbose: number,
@@ -325,6 +327,9 @@ class KacheryP2PNode {
         else if (isGetLiveFeedSignedMessagesRequestData(requestData)) {
             responseData = await this._handleGetLiveFeedSignedMessagesRequest({fromNodeId, requestData});
         }
+        else if (isDownloadFileDataRequestData(requestData)) {
+            responseData = await this._handleDownloadFileDataRequest({fromNodeId, requestData})
+        }
         else {
             console.warn(requestData);
             throw Error('Unexpected error: unrecognized request data.')
@@ -395,6 +400,45 @@ class KacheryP2PNode {
             success: true,
             errorMessage: null,
             signedMessages
+        }
+    }
+    async _handleDownloadFileDataRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: DownloadFileDataRequestData}): Promise<DownloadFileDataResponseData> {
+        const { fileKey, startByte, endByte } = requestData
+        if ((startByte < 0) || (startByte >= endByte)) {
+            return {
+                requestType: 'downloadFileData',
+                success: false,
+                streamId: null,
+                errorMessage: errorMessage('Invalid start/end bytes')
+            }
+        }
+        const {found, size} = await this.#kacheryStorageManager.hasFile(fileKey);
+        if (!found) {
+            return {
+                requestType: 'downloadFileData',
+                success: false,
+                streamId: null,
+                errorMessage: errorMessage('Unable to find file')
+            }
+        }
+        if (size === null) {
+            throw Error('Unexpected')
+        }
+        if (endByte > size) {
+            return {
+                requestType: 'downloadFileData',
+                success: false,
+                streamId: null,
+                errorMessage: errorMessage('Start/end bytes out of range')
+            }
+        }
+        const streamId = createStreamId()
+        this.#downloadStreamInfos.set(streamId, requestData)
+        return {
+            requestType: 'downloadFileData',
+            success: true,
+            streamId,
+            errorMessage: null
         }
     }
 }
