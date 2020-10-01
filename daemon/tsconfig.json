@@ -9,5 +9,8 @@
     "strictNullChecks": true,
     "noImplicitAny": true
   },
+  "exclude": [
+    "./tests/"
+  ],
   "lib": ["es2015"]
 }
