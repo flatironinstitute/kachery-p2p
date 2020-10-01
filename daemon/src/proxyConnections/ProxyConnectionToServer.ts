@@ -1,10 +1,10 @@
 import WebSocket from 'ws';
-import { getSignature, verifySignature } from './common/crypto_util';
-import GarbageMap from './common/GarbageMap';
-import { kacheryP2PDeserialize, kacheryP2PSerialize } from './common/util';
-import { Address, errorMessage, NodeId, nodeIdToPublicKey, nowTimestamp } from "./interfaces/core";
-import { isNodeToNodeRequest } from "./interfaces/NodeToNodeRequest";
-import KacheryP2PNode from './KacheryP2PNode';
+import { getSignature, verifySignature } from '../common/crypto_util';
+import GarbageMap from '../common/GarbageMap';
+import { kacheryP2PDeserialize, kacheryP2PSerialize } from '../common/util';
+import { Address, errorMessage, NodeId, nodeIdToPublicKey, nowTimestamp } from "../interfaces/core";
+import { isNodeToNodeRequest } from "../interfaces/NodeToNodeRequest";
+import KacheryP2PNode from '../KacheryP2PNode';
 import { InitialMessageFromClient, InitialMessageFromClientBody, isBuffer, isInitialMessageFromServer, isMessageFromServer, isProxyStreamFileDataCancelRequest, isProxyStreamFileDataRequest, MessageFromClient, MessageFromServer, ProxyStreamFileDataCancelRequest, ProxyStreamFileDataRequest, ProxyStreamFileDataRequestId, ProxyStreamFileDataResponseDataMessage, ProxyStreamFileDataResponseErrorMessage, ProxyStreamFileDataResponseFinishedMessage, ProxyStreamFileDataResponseStartedMessage } from './ProxyConnectionToClient';
 
 export class ProxyConnectionToServer {

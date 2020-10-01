@@ -5,8 +5,8 @@ import { createKeyPair, getSignatureJson, hexToPrivateKey, hexToPublicKey, JSONS
 import GarbageMap from './common/GarbageMap';
 import { randomAlphaString, sleepMsec } from './common/util';
 import { FeedId, feedIdToPublicKeyHex, FeedName, FeedsConfigRAM, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, isFeedsConfig, isSignedSubfeedMessage, isSubfeedAccessRules, JSONObject, NodeId, nowTimestamp, PrivateKeyHex, PublicKey, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage, toFeedsConfig, toFeedsConfigRAM } from './interfaces/core';
-import { kacheryStorageDir } from './kachery';
 import KacheryP2PNode from './KacheryP2PNode';
+import { kacheryStorageDir } from './kacheryStorage/kachery';
 
 // todo fix feeds config on disk (too many in one .json file)
 
