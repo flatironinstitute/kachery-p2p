@@ -7,6 +7,7 @@ import { NodeId, Port, JSONObject, isJSONObject, _validateObject, isBoolean, isN
 import { Socket } from 'net';
 import { action } from './action.js';
 import { daemonVersion, protocolVersion } from './protocolVersion.js';
+import { ByteCount } from './udp/UdpCongestionManager.js';
 
 interface Req {
     body: any,
@@ -18,7 +19,8 @@ interface Res {
     json: (obj: JSONObject) => void,
     end: () => void,
     status: (s: number) => Res,
-    send: (x: any) => Res
+    send: (x: any) => Res,
+    writeHead: Function
 }
 
 export interface ApiProbeResponse {
@@ -93,8 +95,9 @@ export default class PublicApiServer {
             });
         });
         // /download
-        this.#app.get('/download/:streamId', async (req, res) => {
+        this.#app.get('/download/:nodeId/:streamId', async (req, res) => {
             const streamId = req.params.streamId
+            const nodeId = req.params.nodeId
             await action('/download', {
                 context: 'Public API',
                 streamId
@@ -102,7 +105,10 @@ export default class PublicApiServer {
                 if (!isStreamId(streamId)) {
                     throw Error ('Invalid stream ID')
                 }
-                this._apiDownload(streamId, res)
+                if (!isNodeId(nodeId)) {
+                    throw Error ('Invalid node ID')
+                }
+                this._apiDownload(nodeId, streamId, req, res)
             }, async (err: Error) => {
                 await this._errorResponse(req, res, 500, err.message);
             });
@@ -129,13 +135,36 @@ export default class PublicApiServer {
         res.json(response);
     }
     // /download
-    _apiDownload(streamId: StreamId, res: Res) {
-        // todo
-        // this.#node.stream(streamId, {
-        //     onData: (data: Buffer) => {
-        //         res.send()
-        //     }
-        // })
+    _apiDownload(nodeId: NodeId, streamId: StreamId, req: Req, res: Res) {
+        const {onData, onStarted, onFinished, onError, cancel} = this.#node.streamFileData(nodeId, streamId)
+        let started = false
+        onStarted((size: ByteCount) => {
+            started = true
+            res.writeHead(200, {
+                'Content-Type': 'application/octet-stream',
+                'Content-Length': size
+            });
+        })
+        
+        onData((data: Buffer) => {
+            res.send(data)
+        })
+        onFinished(() => {
+            res.end()
+        })
+        onError((err: Error) => {
+            if (started) {
+                console.warn(err)
+                console.warn('Error in streaming file data')
+                res.end()
+            }
+            else {
+                res.status(500).send(err.message);
+            }
+        })
+        req.on('close', () => {
+            cancel()
+        });
     }
     // Helper function for returning http request with an error response
     async _errorResponse(req: Req, res: Res, code: number, errorString: string) {

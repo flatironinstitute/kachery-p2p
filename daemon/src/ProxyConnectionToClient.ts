@@ -4,8 +4,9 @@ import { getSignature, verifySignature } from './common/crypto_util';
 import GarbageMap from './common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize } from './common/util';
 import { isEqualTo, isNodeId, isTimestamp, NodeId, Signature, isSignature, _validateObject, nodeIdToPublicKey, nowTimestamp, Timestamp, RequestId } from "./interfaces/core";
-import { isNodeToNodeRequest, isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeResponse } from "./interfaces/NodeToNodeRequest";
+import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from './KacheryP2PNode';
+import { ByteCount } from './udp/UdpCongestionManager';
 
 export interface InitialMessageFromClientBody {
     type: 'proxyConnectionInitialMessageFromClient'
@@ -31,6 +32,19 @@ export const isInitialMessageFromClient = (x: any): x is InitialMessageFromClien
         signature: isSignature
     })
 }
+
+export interface ProxyStreamFileDataRequest {
+    streamId: StreamId
+}
+export const isProxyStreamFileDataRequest = (x: any): x is ProxyStreamFileDataRequest => {
+    return _validateObject(x, {
+        streamId: isStreamId
+    })
+}
+
+// export interface ProxyStreamFileDataResponseMessage {
+//     // todo
+// }
 
 export interface InitialMessageFromServerBody {
     type: 'proxyConnectionInitialMessageFromServer',
@@ -163,6 +177,55 @@ export class ProxyConnectionToClient {
     async sendRequest(request: NodeToNodeRequest): Promise<NodeToNodeResponse> {
         this._sendMessageToClient(request);
         return await this._waitForResponse(request.body.requestId, {timeoutMsec: 10000});
+    }
+    streamFileData(streamId: StreamId): {
+        onStarted: (callback: (size: ByteCount) => void) => void,
+        onData: (callback: (data: Buffer) => void) => void,
+        onFinished: (callback: () => void) => void,
+        onError: (callback: (err: Error) => void) => void,
+        cancel: () => void
+    } {
+        // note: much of this code is duplicated from KacheryP2PNode.streamFileData
+        const _onStartedCallbacks: ((size: ByteCount) => void)[] = []
+        const _onDataCallbacks: ((data: Buffer) => void)[] = []
+        const _onFinishedCallbacks: (() => void)[] = []
+        const _onErrorCallbacks: ((err: Error) => void)[] = []
+        const _onCancelCallbacks: (() => void)[] = []
+        let complete = false
+        let cancelled = false
+        const _cancel = () => {
+            if (cancelled) return
+            cancelled = true
+            _onCancelCallbacks.forEach(cb => {cb()})
+            _handleError(Error('Cancelled'))
+        }
+        const _onCancel = (callback: () => void) => {_onCancelCallbacks.push(callback)}
+        const _handleStarted = (size: ByteCount) => {
+            if (complete) return
+            _onStartedCallbacks.forEach(cb => {cb(size)})
+        }
+        const _handleError = (err: Error) => {
+            if (complete) return
+            complete = true
+            _onErrorCallbacks.forEach(cb => {cb(err)})
+        }
+        const _handleFinished = () => {
+            if (complete) return
+            complete = true
+            _onFinishedCallbacks.forEach(cb => {cb()})
+        }
+        const _handleData = (data: Buffer) => {
+            if (complete) return
+            _onDataCallbacks.forEach(cb => {cb(data)})
+        }
+        // todo
+        return {
+            onStarted: (callback: (size: ByteCount) => void) => {_onStartedCallbacks.push(callback)},
+            onData: (callback: (data: Buffer) => void) => {_onDataCallbacks.push(callback)},
+            onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
+            onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
+            cancel: _cancel
+        }
     }
     onInitialized(callback: () => void) {
         this.#onInitializedCallbacks.push(callback);

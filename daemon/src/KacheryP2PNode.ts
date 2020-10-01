@@ -18,6 +18,7 @@ import { ProxyConnectionToClient } from './ProxyConnectionToClient';
 import RemoteNode from './RemoteNode';
 import { protocolVersion } from './protocolVersion';
 import GarbageMap from './common/GarbageMap';
+import { byteCount, ByteCount, ByteCountPerSec, byteCountToNumber } from './udp/UdpCongestionManager';
 
 interface LoadFileProgress {
     bytesLoaded: bigint,
@@ -297,41 +298,41 @@ class KacheryP2PNode {
         const { requestId, fromNodeId, toNodeId, timestamp, requestData } = request.body;
         if (!verifySignature(request.body, request.signature, nodeIdToPublicKey(fromNodeId))) {
             // todo: is this the right way to handle this situation?
-            throw Error('Invalid signature in node-to-node request');
+            throw Error('Invalid signature in node-to-node request')
         }
         if (toNodeId !== this.#nodeId) {
             // redirect request to a different node
-            const p = this.#proxyConnectionsToClients.get(toNodeId);
+            const p = this.#proxyConnectionsToClients.get(toNodeId)
             if (!p) {
-                throw Error('No proxy connection to node.');
+                throw Error('No proxy connection to node.')
             }
-            return await p.sendRequest(request);
+            return await p.sendRequest(request)
         }
         
         let responseData: NodeToNodeResponseData;
         if (isGetChannelInfoRequestData(requestData)) {
-            responseData = await this._handleGetChannelInfoRequest({fromNodeId, requestData});
+            responseData = await this._handleGetChannelInfoRequest({fromNodeId, requestData})
         }
         else if (isAnnounceRequestData(requestData)) {
-            responseData = await this._handleAnnounceRequest({fromNodeId, requestData});
+            responseData = await this._handleAnnounceRequest({fromNodeId, requestData})
         }
         else if (isCheckForFileRequestData(requestData)) {
-            responseData = await this._handleCheckForFileRequest({fromNodeId, requestData});
+            responseData = await this._handleCheckForFileRequest({fromNodeId, requestData})
         }
         else if (isCheckForLiveFeedRequestData(requestData)) {
-            responseData = await this._handleCheckForLiveFeedRequest({fromNodeId, requestData});
+            responseData = await this._handleCheckForLiveFeedRequest({fromNodeId, requestData})
         }
         else if (isSetLiveFeedSubscriptionsRequestData(requestData)) {
-            responseData = await this._handleSetLiveFeedSubscriptionsRequest({fromNodeId, requestData});
+            responseData = await this._handleSetLiveFeedSubscriptionsRequest({fromNodeId, requestData})
         }
         else if (isGetLiveFeedSignedMessagesRequestData(requestData)) {
-            responseData = await this._handleGetLiveFeedSignedMessagesRequest({fromNodeId, requestData});
+            responseData = await this._handleGetLiveFeedSignedMessagesRequest({fromNodeId, requestData})
         }
         else if (isDownloadFileDataRequestData(requestData)) {
             responseData = await this._handleDownloadFileDataRequest({fromNodeId, requestData})
         }
         else {
-            console.warn(requestData);
+            console.warn(requestData)
             throw Error('Unexpected error: unrecognized request data.')
         }
         const body = {
@@ -341,10 +342,100 @@ class KacheryP2PNode {
             toNodeId: fromNodeId,
             timestamp: nowTimestamp(),
             responseData: responseData
-        };
+        }
         return {
             body,
             signature: getSignature(body, this.#keyPair)
+        }
+    }
+    streamFileData(nodeId: NodeId, streamId: StreamId): {
+        onStarted: (callback: (size: ByteCount) => void) => void,
+        onData: (callback: (data: Buffer) => void) => void,
+        onFinished: (callback: () => void) => void,
+        onError: (callback: (err: Error) => void) => void,
+        cancel: () => void
+    } {
+        if (nodeId !== this.#nodeId) {
+            // redirect to a different node
+            const p = this.#proxyConnectionsToClients.get(nodeId)
+            if (!p) {
+                throw Error('No proxy connection to node.')
+            }
+            return p.streamFileData(streamId)
+        }
+        const _onStartedCallbacks: ((size: ByteCount) => void)[] = []
+        const _onDataCallbacks: ((data: Buffer) => void)[] = []
+        const _onFinishedCallbacks: (() => void)[] = []
+        const _onErrorCallbacks: ((err: Error) => void)[] = []
+        const _onCancelCallbacks: (() => void)[] = []
+        let complete = false
+        let cancelled = false
+        const _cancel = () => {
+            if (cancelled) return
+            cancelled = true
+            _onCancelCallbacks.forEach(cb => {cb()})
+            _handleError(Error('Cancelled'))
+        }
+        const _onCancel = (callback: () => void) => {_onCancelCallbacks.push(callback)}
+        const _handleStarted = (size: ByteCount) => {
+            if (complete) return
+            _onStartedCallbacks.forEach(cb => {cb(size)})
+        }
+        const _handleError = (err: Error) => {
+            if (complete) return
+            complete = true
+            this.#downloadStreamInfos.delete(streamId)
+            _onErrorCallbacks.forEach(cb => {cb(err)})
+        }
+        const _handleFinished = () => {
+            if (complete) return
+            complete = true
+            this.#downloadStreamInfos.delete(streamId)
+            _onFinishedCallbacks.forEach(cb => {cb()})
+        }
+        const _handleData = (data: Buffer) => {
+            if (complete) return
+            _onDataCallbacks.forEach(cb => {cb(data)})
+        }
+        const s = this.#downloadStreamInfos.get(streamId)
+        if (!s) {
+            throw Error('Unable to find download info for stream.')
+        }
+        (async () => {
+            if (complete) return
+            const {found, size, localPath, byteOffset} = await this.#kacheryStorageManager.findFile(s.fileKey)
+            if ((found) && (size !== null) && (localPath !== null) && (byteOffset !== null)) {
+                try {
+                    if (complete) return
+                    const readStream = fs.createReadStream(localPath.toString(), {encoding: 'binary', start: Number(byteOffset) + Number(s.startByte), end: Number(byteOffset) + Number(s.endByte)})
+                    _handleStarted(byteCount(Number(s.endByte - s.startByte)))
+                    _onCancel(() => {
+                        readStream.close()
+                    })
+                    readStream.on('data', (chunk: Buffer) => {
+                        _handleData(chunk)
+                    })
+                    readStream.on('end', () => {
+                        _handleFinished()
+                    })
+                    readStream.on('error', (err: Error) => {
+                        _handleError(err)
+                    })
+                }
+                catch(err) {
+                    _handleError(err)
+                }
+            }
+            else {
+                _handleError(Error('file not found'))
+            }
+        })()
+        return {
+            onStarted: (callback: (size: ByteCount) => void) => {_onStartedCallbacks.push(callback)},
+            onData: (callback: (data: Buffer) => void) => {_onDataCallbacks.push(callback)},
+            onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
+            onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
+            cancel: _cancel
         }
     }
     async _handleGetChannelInfoRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: GetChannelInfoRequestData}): Promise<GetChannelInfoResponseData> {
@@ -360,7 +451,7 @@ class KacheryP2PNode {
     }
     async _handleCheckForFileRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: CheckForFileRequestData}): Promise<CheckForFileResponseData> {
         const { fileKey } = requestData;
-        const {found, size} = await this.#kacheryStorageManager.hasFile(fileKey);
+        const {found, size, localPath, byteOffset} = await this.#kacheryStorageManager.findFile(fileKey);
         return {
             requestType: 'checkForFile',
             found,
@@ -412,7 +503,7 @@ class KacheryP2PNode {
                 errorMessage: errorMessage('Invalid start/end bytes')
             }
         }
-        const {found, size} = await this.#kacheryStorageManager.hasFile(fileKey);
+        const {found, size, localPath, byteOffset} = await this.#kacheryStorageManager.findFile(fileKey);
         if (!found) {
             return {
                 requestType: 'downloadFileData',
