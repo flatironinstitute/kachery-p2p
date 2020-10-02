@@ -1,4 +1,4 @@
-import { FileKey } from "./interfaces/core";
+import { FileKey } from "../interfaces/core";
 import { getLocalFileInfo } from "./kachery";
 
 interface LocalFilePath extends String {

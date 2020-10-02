@@ -1,5 +1,4 @@
-daemon/src/old
-daemon/src/schema-old
+old
 node_modules
 .vscode
 data

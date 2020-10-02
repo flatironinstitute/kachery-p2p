@@ -1,13 +1,13 @@
 import fs from 'fs';
 import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util';
 import GarbageMap from './common/GarbageMap';
-import FeedManager from './FeedManager';
+import FeedManager from './feeds/FeedManager';
+import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager';
 import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, FeedId, FileKey, FindFileResult, FindLiveFeedResult, HostName, isAddress, isKeyPair, JSONObject, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, PrivateKey, PublicKey, publicKeyHexToNodeId, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage } from './interfaces/core';
 import { AnnounceRequestData, AnnounceResponseData, CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData, createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, GetChannelInfoRequestData, GetChannelInfoResponseData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest';
-import { KacheryStorageManager } from './KacheryStorageManager';
-import { LiveFeedSubscriptionManager } from './LiveFeedSubscriptionManager';
+import { KacheryStorageManager } from './kacheryStorage/KacheryStorageManager';
 import { protocolVersion } from './protocolVersion';
-import { ProxyConnectionToClient } from './ProxyConnectionToClient';
+import { ProxyConnectionToClient } from './proxyConnections/ProxyConnectionToClient';
 import RemoteNode from './RemoteNode';
 import RemoteNodeManager from './RemoteNodeManager';
 import { byteCount, ByteCount } from './udp/UdpCongestionManager';

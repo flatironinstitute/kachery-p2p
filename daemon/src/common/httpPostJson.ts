@@ -1,7 +1,7 @@
 import axios from 'axios';
 import http from 'http';
 import { Readable } from 'stream';
-import { Address, HostName, Port } from './interfaces/core';
+import { Address, HostName, Port } from '../interfaces/core';
 
 export const _tests: {[key: string]: () => Promise<void>} = {}
 

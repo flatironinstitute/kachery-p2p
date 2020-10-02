@@ -1,5 +1,5 @@
+import { _tests as httpPostJsonTests } from './common/httpPostJson'
 import { _tests as interfacesCoreTests } from './interfaces/core'
-import { _tests as httpPostJsonTests } from './httpPostJson'
 import { _tests as udpCongestionManagerTests } from './udp/UdpCongestionManager'
 
 // for (let testName in interfacesCoreTests) {

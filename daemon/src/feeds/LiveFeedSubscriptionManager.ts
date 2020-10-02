@@ -1,4 +1,4 @@
-import { LiveFeedSubscriptions, NodeId } from "./interfaces/core";
+import { LiveFeedSubscriptions, NodeId } from "../interfaces/core";
 
 export class LiveFeedSubscriptionManager {
     #subscriptionsByNodeId = new Map<NodeId, LiveFeedSubscriptions>();
