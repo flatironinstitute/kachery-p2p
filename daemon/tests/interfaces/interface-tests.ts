@@ -1,12 +1,13 @@
-import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import { expect } from 'chai'; // test library
-
+import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import * as ut from '../../src/interfaces/core';
+
 
 // Example objects (test fixtures)
 
 
-describe('Basic typeguards', () => {
+ // need to explicitly use mocha prefix once or the dependency gets wrongly cleaned up
+mocha.describe('Basic typeguards', () => {
     describe('JSON Handling', () => {
         // Test fixture for JSON object handling
         const exampleJSONObject = {example: ['json', {object: 1}, '---']}
@@ -14,8 +15,14 @@ describe('Basic typeguards', () => {
         it('JSON object successfully recognized', () => {
             expect(ut.isJSONObject(exampleJSONObject)).to.be.true;
         });
+        it('isJSONObject() returns false for non-object input', () => {
+            expect(ut.isJSONObject('string')).to.be.false;
+        });
         it('JSON object recognized as serializable', () => {
             expect(ut.isJSONSerializable(exampleJSONObject)).to.be.true;
+        });
+        it('isJSONSerializable() returns false on non-object input', () => {
+            expect(ut.isJSONSerializable("string input")).to.be.false;
         });
         it('JSON object parsed successfully', () => {
             const obj = ut.tryParseJsonObject(JSON.stringify(exampleJSONObject));
@@ -123,7 +130,12 @@ describe('Utility comparisons', () => {
     });
     describe('Object validation to spec', () => {
         // TODO -- see notes in core.ts.
-        it('_validateObject() returns false on non-object input')
+        it('_validateObject() returns false on non-object input', () => {
+            expect(ut._validateObject('foo', { x: ut.isBigInt }));
+        });
+        it('_validateObject() returns false on null input', () => {
+            expect(ut._validateObject(null, { x: ut.isBigInt }));
+        });
     });
 
 })

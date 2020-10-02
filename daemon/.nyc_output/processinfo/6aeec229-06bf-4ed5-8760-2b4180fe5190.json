@@ -1,0 +1,1 @@
+{"parent":null,"pid":14457,"argv":["/usr/bin/node","/usr/share/yarn/bin/yarn.js","test"],"execArgv":[],"cwd":"/home/jsoules/src/kachery-p2p/daemon","time":1601657945313,"ppid":14446,"coverageFilename":"/home/jsoules/src/kachery-p2p/daemon/.nyc_output/6aeec229-06bf-4ed5-8760-2b4180fe5190.json","externalId":"","uuid":"6aeec229-06bf-4ed5-8760-2b4180fe5190","files":[]}
