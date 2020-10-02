@@ -1,18 +1,18 @@
 import { randomAlphaString } from '../common/util'
-import { isBoolean, isNodeId, isNull, isNumber, isOneOf, isProtocolVersion, isRequestId, isSignature, isString, NodeId, ProtocolVersion, RequestId, Signature, _validateObject } from './core'
+import { isBoolean, isNodeId, isNull, isNumber, isOneOf, isProtocolVersion, isRequestId, isSignature, isString, NodeId, ProtocolVersion, Signature, _validateObject } from './core'
 
 export const UDP_MESSAGE_HEADER_SIZE = 1000
 export const UDP_PACKET_SIZE = 20000
 
-export type UdpMessageType = "NodeToNodeRequest" | "NodeToNodeResponse" | "KeepAlive" | "Data"
+// todo: do we use KeepAlive?
+export type UdpMessageType = "NodeToNodeRequest" | "NodeToNodeResponse" | "KeepAlive"
 const exampleUdpMessageType: UdpMessageType = "NodeToNodeRequest"
 export const isUdpMessageType = (x: any): x is UdpMessageType => {
     if (!isString(x)) return false;
     const possible: UdpMessageType[] = [
         "NodeToNodeRequest",
         "NodeToNodeResponse",
-        "KeepAlive",
-        "Data"
+        "KeepAlive"
     ]
     return possible.includes(x as any as UdpMessageType)
 }

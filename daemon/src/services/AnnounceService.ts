@@ -1,4 +1,4 @@
-import { action } from "../action";
+import { action } from "../common/action";
 import { sleepMsec } from "../common/util";
 import { ChannelName, elapsedSince, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core";
 import { AnnounceRequestData, isAnnounceResponseData } from "../interfaces/NodeToNodeRequest";
@@ -14,9 +14,13 @@ export default class AnnounceService {
         this.#remoteNodeManager = node.remoteNodeManager()
         // announce self when a new node-channel has been added
         this.#remoteNodeManager.onNodeChannelAdded((remoteNodeId: NodeId, channelName: ChannelName) => {
+
+            /////////////////////////////////////////////////////////////////////////
             action('announceToNewNode', {context: 'AnnounceService', remoteNodeId, channelName}, async () => {
                 await this._announceToNode(remoteNodeId, channelName)
             }, null);
+            /////////////////////////////////////////////////////////////////////////
+
         })
         this._start();
     }
@@ -44,9 +48,13 @@ export default class AnnounceService {
                 const channelNames = this.#node.channelNames();
                 for (let bootstrapNode of bootstrapNodes) {
                     for (let channelName of channelNames) {
+
+                        /////////////////////////////////////////////////////////////////////////
                         action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
                             await this._announceToNode(bootstrapNode.remoteNodeId(), channelName);
                         }, null);
+                        /////////////////////////////////////////////////////////////////////////
+
                     }
                 }
                 lastBootstrapAnnounceTimestamp = nowTimestamp();
@@ -58,9 +66,13 @@ export default class AnnounceService {
                 let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName);
                 if (nodes.length > 0) {
                     var randomNode = nodes[randomIndex(nodes.length)];
+
+                    /////////////////////////////////////////////////////////////////////////
                     action('announceToRandomNode', {context: 'AnnounceService', remoteNodeId: randomNode.remoteNodeId(), channelName}, async () => {
                         await this._announceToNode(randomNode.remoteNodeId(), channelName);
                     }, null);
+                    /////////////////////////////////////////////////////////////////////////
+
                 }
             }
             await sleepMsec(2000);

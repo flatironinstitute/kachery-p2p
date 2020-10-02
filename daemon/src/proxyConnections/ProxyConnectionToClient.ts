@@ -1,12 +1,12 @@
 import WebSocket from 'ws';
-import { action } from './action';
-import { getSignature, verifySignature } from './common/crypto_util';
-import GarbageMap from './common/GarbageMap';
-import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString } from './common/util';
-import { ErrorMessage, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, Signature, Timestamp, _validateObject } from "./interfaces/core";
-import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from './interfaces/NodeToNodeRequest';
-import KacheryP2PNode from './KacheryP2PNode';
-import { ByteCount, isByteCount } from './udp/UdpCongestionManager';
+import { action } from '../common/action';
+import { getSignature, verifySignature } from '../common/crypto_util';
+import GarbageMap from '../common/GarbageMap';
+import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString } from '../common/util';
+import { ErrorMessage, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, Signature, Timestamp, _validateObject } from "../interfaces/core";
+import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
+import KacheryP2PNode from '../KacheryP2PNode';
+import { ByteCount, isByteCount } from '../udp/UdpCongestionManager';
 
 export interface InitialMessageFromClientBody {
     type: 'proxyConnectionInitialMessageFromClient'
@@ -195,10 +195,12 @@ export class ProxyConnectionToClient {
         return new Promise((resolve, reject) => {
             this.#ws = ws
             this.#ws.on('close', (code, reason) => {
+                /////////////////////////////////////////////////////////////////////////
                 action('proxyConnectionToClientClosed', {context: "ProxyConnectionToClient", remoteNodeId: this.#remoteNodeId}, async () => {
                     this.#closed = true;
                     this.#onClosedCallbacks.forEach(cb => cb(reason));
                 }, null);
+                /////////////////////////////////////////////////////////////////////////
             })
 
             this.#ws.on('error', () => {
@@ -219,6 +221,7 @@ export class ProxyConnectionToClient {
                     this.#ws.close()
                 }
                 if (this.#closed) return;
+                /////////////////////////////////////////////////////////////////////////
                 action('proxyConnectionToClientMessage', {context: "ProxyConnectionToClient", remoteNodeId: this.#remoteNodeId}, async () => {
                     if (!(isBuffer(messageBuffer))) {
                         throw Error('Unexpected')
@@ -277,6 +280,7 @@ export class ProxyConnectionToClient {
                         this._handleMessageFromClient(messageParsed);
                     }
                 }, null);
+                /////////////////////////////////////////////////////////////////////////
             });
         });
     }

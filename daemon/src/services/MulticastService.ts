@@ -1,5 +1,5 @@
 import dgram from 'dgram';
-import { action } from "../action";
+import { action } from "../common/action";
 import { getSignature, verifySignature } from "../common/crypto_util";
 import { sleepMsec } from "../common/util";
 import { isMulticastAnnounceMessage, JSONObject, MulticastAnnounceMessage, MulticastAnnounceMessageBody, nodeIdToPublicKey, tryParseJsonObject } from "../interfaces/core";
@@ -26,6 +26,7 @@ export default class MulticastService {
             let msg: JSONObject | null = tryParseJsonObject(message.toString());
             if (isMulticastAnnounceMessage(msg)) {
                 const msg2: MulticastAnnounceMessage = msg;
+                /////////////////////////////////////////////////////////////////////////
                 action('handleMulticastAnnounceMessage', {fromNodeId: msg.body.fromNodeId}, async () => {
                     if (verifySignature(msg2.body, msg2.signature, nodeIdToPublicKey(msg2.body.fromNodeId), {checkTimestamp: true})) {
                         const response = this.#node._handleAnnounceRequest({ fromNodeId: msg2.body.fromNodeId, requestData: msg2.body.requestData });
@@ -34,6 +35,7 @@ export default class MulticastService {
                 }, async (err: Error) => {
                     //
                 });
+                /////////////////////////////////////////////////////////////////////////
             }
         });
         await sleepMsec(1000);
@@ -54,6 +56,7 @@ export default class MulticastService {
                     signature: getSignature(body, this.#node.keyPair())
                 };
                 const mJson: string = JSON.stringify(m);
+                /////////////////////////////////////////////////////////////////////////
                 action('sendMulticastAnnounceMessage', {}, async () => {
                     multicastSocket.send(
                         mJson,
@@ -64,6 +67,7 @@ export default class MulticastService {
                     );
                 }, async () => {
                 })
+                /////////////////////////////////////////////////////////////////////////
             }
             await sleepMsec(12000);
         }

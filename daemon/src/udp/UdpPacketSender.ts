@@ -1,7 +1,7 @@
 import dgram from 'dgram';
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
-import { Address, isBoolean, isProtocolVersion, isString, ProtocolVersion, toNumber, tryParseJsonObject, _validateObject } from '../interfaces/core';
+import { Address, isBoolean, isProtocolVersion, isString, ProtocolVersion, toNumber, _validateObject } from '../interfaces/core';
 import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { byteCount } from './UdpCongestionManager';
 
@@ -11,7 +11,7 @@ class UdpTimeoutError extends Error {
     }
 }
 
-const UDP_PACKET_HEADER_SIZE = 200
+export const UDP_PACKET_HEADER_SIZE = 200
 
 export interface PacketId extends String {
     __packetId__: never // phantom type
@@ -40,45 +40,10 @@ export const isUdpPacketSenderHeader = (x: any): x is UdpPacketSenderHeader => {
 
 export default class UdpPacketSender {
     #socket: dgram.Socket
-    #onPacketCallbacks: ((buffer: Buffer, remoteInfo: dgram.RemoteInfo) => void)[] = []
     #congestionManagers = new GarbageMap<Address, UdpCongestionManager>(5 * 60 * 1000)
     #unconfirmedOutgoingPackets = new Map<PacketId, OutgoingPacket>()
     constructor(socket: dgram.Socket) {
         this.#socket = socket
-
-        this.#socket.on("message", (message, remoteInfo) => {
-            const headerTxt = message.slice(0, UDP_PACKET_HEADER_SIZE).toString().trimEnd()
-            const dataBuffer = message.slice(UDP_PACKET_HEADER_SIZE);
-            const header = tryParseJsonObject(headerTxt)
-            if (header === null) {
-                return;
-            }
-            if (!isUdpPacketSenderHeader(header)) {
-                return;
-            }
-            if (header.isConfirmation) {
-                const p = this.#unconfirmedOutgoingPackets.get(header.packetId)
-                if (p) {
-                    p.confirm()
-                    this.#unconfirmedOutgoingPackets.delete(header.packetId)
-                }
-                return
-            }
-            // send confirmation
-            const h: UdpPacketSenderHeader = {
-                protocolVersion: protocolVersion(),
-                packetId: header.packetId,
-                isConfirmation: true
-            }
-            this.#socket.send(Buffer.from(JSON.stringify(h).padEnd(UDP_PACKET_HEADER_SIZE)), remoteInfo.port, remoteInfo.address)
-
-            this.#onPacketCallbacks.forEach(cb => {
-                cb(dataBuffer, remoteInfo)
-            })
-        })
-    }
-    onPacket(callback: (buffer: Buffer, remoteInfo: dgram.RemoteInfo) => void) {
-        this.#onPacketCallbacks.push(callback)
     }
     socket() {
         return this.#socket
@@ -95,6 +60,13 @@ export default class UdpPacketSender {
         catch(err) {
             outgoingPackets.forEach(p => {p.cancel()})
             throw(err)
+        }
+    }
+    confirmPacket(packetId: PacketId) {
+        const p = this.#unconfirmedOutgoingPackets.get(packetId)
+        if (p) {
+            p.confirm()
+            this.#unconfirmedOutgoingPackets.delete(packetId)
         }
     }
     congestionManagers(address: Address) {

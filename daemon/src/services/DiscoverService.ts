@@ -1,4 +1,4 @@
-import { action } from "../action";
+import { action } from "../common/action";
 import { sleepMsec } from "../common/util";
 import { ChannelName, elapsedSince, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core";
 import { GetChannelInfoRequestData, isGetChannelInfoResponseData } from "../interfaces/NodeToNodeRequest";
@@ -39,9 +39,11 @@ export default class DiscoverService {
                 const channelNames = this.#node.channelNames();
                 for (let bootstrapNode of bootstrapNodes) {
                     for (let channelName of channelNames) {
+                        /////////////////////////////////////////////////////////////////////////
                         action('getChannelInfoFromBootstrapNode', {context: 'FindChannelNodesService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
                             await this._getChannelInfoFromNode(bootstrapNode.remoteNodeId(), channelName);
                         }, null);
+                        /////////////////////////////////////////////////////////////////////////
                     }
                 }
                 lastBootstrapDiscoverTimestamp = nowTimestamp();
@@ -53,9 +55,11 @@ export default class DiscoverService {
                 let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName);
                 if (nodes.length > 0) {
                     var randomNode = nodes[randomIndex(nodes.length)];
+                    /////////////////////////////////////////////////////////////////////////
                     action('getChannelInfoFromRandomNode', {context: 'FindChannelNodesService', remoteNodeId: randomNode.remoteNodeId(), channelName}, async () => {
                         await this._getChannelInfoFromNode(randomNode.remoteNodeId(), channelName);
                     }, null);
+                    /////////////////////////////////////////////////////////////////////////
                 }
             }
             await sleepMsec(2000);

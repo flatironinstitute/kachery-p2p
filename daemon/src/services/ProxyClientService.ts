@@ -27,9 +27,11 @@ export default class ProxyClientService {
                 if (!c) {
                     const elapsedMsec = this.#proxyClientManager.elapsedMsecSinceLastFailedOutgoingConnection(remoteNodeId);
                     if (elapsedMsec > 15000) {
+                        /////////////////////////////////////////////////////////////////////////
                         action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
                             await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: 3000});
                         }, null);
+                        /////////////////////////////////////////////////////////////////////////
                     }
                 }
             }

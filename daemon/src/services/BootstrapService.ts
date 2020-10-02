@@ -1,10 +1,10 @@
-import { action } from "../action";
+import { action } from "../common/action";
+import { httpPostJson, urlPath } from "../common/httpPostJson";
 import { sleepMsec } from "../common/util";
-import { httpPostJson, urlPath } from "../httpPostJson";
 import { Address } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
-import { isApiProbeResponse } from "../PublicApiServer";
 import RemoteNodeManager from "../RemoteNodeManager";
+import { isApiProbeResponse } from "../services/PublicApiServer";
 
 export default class BootstrapService {
     #node: KacheryP2PNode
@@ -29,9 +29,13 @@ export default class BootstrapService {
         // probe the bootstrap nodes periodically
         while (true) {
             for (let address of this.#node.bootstrapAddresses()) {
+
+                /////////////////////////////////////////////////////////////////////////
                 action('probeBootstrapNode', {context: 'BootstrapService', address}, async () => {
                     await this._probeBootstrapNode(address)
                 }, null);
+                /////////////////////////////////////////////////////////////////////////
+                
             }
             await sleepMsec(15000);
         }
