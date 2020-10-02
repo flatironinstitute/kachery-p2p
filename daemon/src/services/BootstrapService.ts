@@ -23,7 +23,8 @@ export default class BootstrapService {
         if (!isBootstrapNode) {
             throw Error('isBootstrapNode is false in probe response from bootstrap node.')
         }
-        this.#remoteNodeManager.setBootstrapNode(remoteNodeId, address, webSocketAddress)
+        const publicUdpSocketAddress = response.publicUdpSocketAddress
+        this.#remoteNodeManager.setBootstrapNode(remoteNodeId, address, webSocketAddress, publicUdpSocketAddress)
     }
     async _start() {
         // probe the bootstrap nodes periodically

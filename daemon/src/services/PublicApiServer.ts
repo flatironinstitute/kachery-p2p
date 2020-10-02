@@ -29,7 +29,8 @@ export interface ApiProbeResponse {
     daemonVersion: DaemonVersion,
     nodeId: NodeId,
     isBootstrapNode: boolean,
-    webSocketAddress: Address | null
+    webSocketAddress: Address | null,
+    publicUdpSocketAddress: Address | null
 };
 export const isApiProbeResponse = (x: any): x is ApiProbeResponse => {
     return _validateObject(x, {
@@ -38,7 +39,8 @@ export const isApiProbeResponse = (x: any): x is ApiProbeResponse => {
         daemonVersion: isDaemonVersion,
         nodeId: isNodeId,
         isBootstrapNode: isBoolean,
-        webSocketAddress: isOneOf([isNull, isAddress])
+        webSocketAddress: isOneOf([isNull, isAddress]),
+        publicUdpSocketAddress: isOneOf([isNull, isAddress])
     });
 }
 
@@ -132,7 +134,8 @@ export default class PublicApiServer {
             daemonVersion: daemonVersion(),
             nodeId: this.#node.nodeId(),
             isBootstrapNode: this.#node.isBootstrapNode(),
-            webSocketAddress: this.#node.webSocketAddress()
+            webSocketAddress: this.#node.webSocketAddress(),
+            publicUdpSocketAddress: this.#node.publicUdpSocketAddress()
         };
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);

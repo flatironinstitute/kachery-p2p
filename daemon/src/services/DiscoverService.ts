@@ -19,7 +19,7 @@ export default class DiscoverService {
             requestType: 'getChannelInfo',
             channelName
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: 3000})
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: 3000, method: 'default'})
         if (!isGetChannelInfoResponseData(responseData)) {
             throw Error('Unexpected.');
         }

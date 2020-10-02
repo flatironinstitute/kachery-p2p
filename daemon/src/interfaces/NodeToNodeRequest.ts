@@ -1,6 +1,7 @@
 import assert from 'assert'
 import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
+import { ApiProbeResponse, isApiProbeResponse } from '../services/PublicApiServer'
 import { ChannelInfo, ChannelName, ChannelNodeInfo, ErrorMessage, FeedId, FileKey, isArrayOf, isBigInt, isBoolean, isChannelInfo, isChannelName, isChannelNodeInfo, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignedSubfeedMessage, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
@@ -63,6 +64,7 @@ export const isNodeToNodeResponse = (x: any): x is NodeToNodeResponse => {
 }
 
 export type NodeToNodeRequestData = (
+    ProbeRequestData |
     GetChannelInfoRequestData |
     AnnounceRequestData |
     CheckForFileRequestData |
@@ -85,6 +87,7 @@ export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
     ]) ? true : false;
 }
 export type NodeToNodeResponseData = (
+    ProbeResponseData |
     GetChannelInfoResponseData |
     AnnounceResponseData |
     CheckForFileResponseData |
@@ -105,6 +108,26 @@ export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData =>
         isGetLiveFeedSignedMessagesResponseData,
         isDownloadFileDataResponseData
     ]) ? true : false;
+}
+
+// probe
+export interface ProbeRequestData {
+    requestType: 'probe'
+}
+export const isProbeRequestData = (x: any): x is ProbeRequestData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('probe')
+    })
+}
+export interface ProbeResponseData {
+    requestType: 'probe',
+    probeResponse: ApiProbeResponse
+}
+export const isProbeResponseData = (x: any): x is ProbeResponseData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('probe'),
+        probeResponse: isApiProbeResponse
+    })
 }
 
 // getChannelInfo

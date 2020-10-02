@@ -4,9 +4,10 @@ import { Socket } from 'net';
 import { action } from '../common/action';
 import start_http_server from '../common/start_http_server.js';
 import { sleepMsec } from '../common/util';
-import { ChannelName, FeedId, FeedName, FileKey, FindLiveFeedResult, isArrayOf, isChannelName, isFeedId, isFeedName, isFileKey, isJSONObject, isNodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, NodeId, optional, Port, ProtocolVersion, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
+import { ChannelName, FeedId, FeedName, FileKey, FindLiveFeedResult, isArrayOf, isChannelName, isFeedId, isFeedName, isFileKey, isJSONObject, isNodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
-import { protocolVersion } from '../protocolVersion';
+import { daemonVersion, protocolVersion } from '../protocolVersion';
+import { ApiProbeResponse } from './PublicApiServer';
 
 interface Req {
     body: any,
@@ -214,15 +215,14 @@ export default class DaemonApiServer {
     }
     // /probe - check whether the daemon is up and running and return info such as the node ID
     async _apiProbe(req: Req, res: Res) {
-        interface ApiProbeResponse {
-            success: boolean,
-            protocolVersion: ProtocolVersion,
-            nodeId: NodeId
-        };
         const response: ApiProbeResponse = {
             success: true,
             protocolVersion: protocolVersion(),
-            nodeId: this.#node.nodeId()
+            daemonVersion: daemonVersion(),
+            nodeId: this.#node.nodeId(),
+            isBootstrapNode: this.#node.isBootstrapNode(),
+            webSocketAddress: this.#node.webSocketAddress(),
+            publicUdpSocketAddress: this.#node.publicUdpSocketAddress()
         };
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);

@@ -29,7 +29,7 @@ export default class AnnounceService {
             requestType: 'announce',
             channelNodeInfo: this.#node.getChannelNodeInfo(channelName)
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: 2000})
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: 2000, method: 'default'})
         if (!isAnnounceResponseData(responseData)) {
             throw Error('Unexpected.');
         }

@@ -4,12 +4,14 @@ import GarbageMap from './common/GarbageMap';
 import FeedManager from './feeds/FeedManager';
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager';
 import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, FeedId, FileKey, FindFileResult, FindLiveFeedResult, HostName, isAddress, isKeyPair, JSONObject, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, PrivateKey, PublicKey, publicKeyHexToNodeId, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage } from './interfaces/core';
-import { AnnounceRequestData, AnnounceResponseData, CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData, createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, GetChannelInfoRequestData, GetChannelInfoResponseData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest';
+import { AnnounceRequestData, AnnounceResponseData, CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData, createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, GetChannelInfoRequestData, GetChannelInfoResponseData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isProbeRequestData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, ProbeRequestData, ProbeResponseData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest';
 import { KacheryStorageManager } from './kacheryStorage/KacheryStorageManager';
-import { protocolVersion } from './protocolVersion';
+import { daemonVersion, protocolVersion } from './protocolVersion';
 import { ProxyConnectionToClient } from './proxyConnections/ProxyConnectionToClient';
 import RemoteNode from './RemoteNode';
 import RemoteNodeManager from './RemoteNodeManager';
+import { ApiProbeResponse } from './services/PublicApiServer';
+import PublicUdpSocketServer from './services/PublicUdpSocketServer';
 import { byteCount, ByteCount } from './udp/UdpCongestionManager';
 
 
@@ -30,16 +32,22 @@ class KacheryP2PNode {
     #proxyConnectionsToClients = new Map<NodeId, ProxyConnectionToClient>()
     #bootstrapAddresses: Address[] // not same as argument to constructor
     #downloadStreamInfos = new GarbageMap<StreamId, DownloadFileDataRequestData>(30 * 60 * 1000)
+    #publicUdpSocketAddress: Address | null = null
+    #publicUdpSocketServer: PublicUdpSocketServer | null = null
     constructor(private p : {
         configDir: string,
         verbose: number,
         hostName: HostName | null,
         httpListenPort: Port | null,
+        udpListenPort: Port | null,
         webSocketListenPort: Port | null,
         label: string,
         bootstrapAddresses: Address[] | null,
         channelNames: ChannelName[],
-        opts: {noBootstrap: boolean, isBootstrapNode: boolean}
+        opts: {
+            noBootstrap: boolean,
+            isBootstrapNode: boolean
+        }
     }) {
         const { publicKey, privateKey } = _loadKeypair(this.p.configDir); // The keypair for signing messages and the public key is used as the node id
         this.#keyPair = {publicKey, privateKey}; // the keypair
@@ -190,6 +198,31 @@ class KacheryP2PNode {
     webSocketAddress(): Address | null {
         return (this.p.hostName !== null) && (this.p.webSocketListenPort !== null) ? {hostName: this.p.hostName, port: this.p.webSocketListenPort} : null
     }
+    publicUdpSocketAddress(): Address | null {
+        if (this.#publicUdpSocketAddress !== null) {
+            return this.#publicUdpSocketAddress
+        }
+        else {
+            if ((this.p.hostName !== null) && (this.p.udpListenPort !== null)) {
+                return {
+                    hostName: this.p.hostName,
+                    port: this.p.udpListenPort
+                }
+            }
+            else {
+                return null
+            }
+        }
+    }
+    setPublicUdpSocketAddress(a: Address) {
+        this.#publicUdpSocketAddress = a
+    }
+    setPublicUdpSocketServer(s: PublicUdpSocketServer) {
+        this.#publicUdpSocketServer = s
+    }
+    publicUdpSocketServer() {
+        return this.#publicUdpSocketServer
+    }
     getChannelNodeInfo(channelName: ChannelName): ChannelNodeInfo {
         const body = {
             channelName,
@@ -222,7 +255,7 @@ class KacheryP2PNode {
             maxNumMessages,
             waitMsec
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, {timeoutMsec: waitMsec + 1000});
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, {timeoutMsec: waitMsec + 1000, method: 'default'});
         if (!isGetLiveFeedSignedMessagesResponseData(responseData)) {
             throw Error('Unexpected response type.');
         }
@@ -248,7 +281,7 @@ class KacheryP2PNode {
             subfeedHash,
             message
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, {timeoutMsec: timeoutMsec});
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, {timeoutMsec: timeoutMsec, method: 'default'});
         if (!isSubmitMessageToLiveFeedResponseData(responseData)) {
             throw Error(`Error submitting message to remote live feed: Unexpected response data.`);
         }
@@ -303,7 +336,10 @@ class KacheryP2PNode {
         }
         
         let responseData: NodeToNodeResponseData;
-        if (isGetChannelInfoRequestData(requestData)) {
+        if (isProbeRequestData(requestData)) {
+            responseData = await this._handleProbeRequest({fromNodeId, requestData})
+        }
+        else if (isGetChannelInfoRequestData(requestData)) {
             responseData = await this._handleGetChannelInfoRequest({fromNodeId, requestData})
         }
         else if (isAnnounceRequestData(requestData)) {
@@ -429,6 +465,21 @@ class KacheryP2PNode {
             onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
             onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
             cancel: _cancel
+        }
+    }
+    async _handleProbeRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: ProbeRequestData}): Promise<ProbeResponseData> {
+        const probeResponse: ApiProbeResponse = {
+            success: true,
+            protocolVersion: protocolVersion(),
+            daemonVersion: daemonVersion(),
+            nodeId: this.nodeId(),
+            isBootstrapNode: this.isBootstrapNode(),
+            webSocketAddress: this.webSocketAddress(),
+            publicUdpSocketAddress: this.publicUdpSocketAddress()
+        };
+        return {
+            requestType: 'probe',
+            probeResponse
         }
     }
     async _handleGetChannelInfoRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: GetChannelInfoRequestData}): Promise<GetChannelInfoResponseData> {

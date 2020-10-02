@@ -46,6 +46,7 @@ const startDaemon = async (args: {
         hostName,
         httpListenPort,
         webSocketListenPort,
+        udpListenPort,
         label,
         bootstrapAddresses,
         channelNames,
@@ -75,6 +76,7 @@ const startDaemon = async (args: {
     if (udpListenPort) {
         const publicUdpSocketServer = new PublicUdpSocketServer(kNode);
         await publicUdpSocketServer.startListening(udpListenPort);
+        kNode.setPublicUdpSocketServer(publicUdpSocketServer)
         console.info(`Udp socket server listening on port ${udpListenPort}`)
     }
 

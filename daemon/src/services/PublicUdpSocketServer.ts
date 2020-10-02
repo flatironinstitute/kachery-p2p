@@ -12,7 +12,7 @@ import UdpPacketReceiver from '../udp/UdpPacketReceiver';
 import UdpPacketSender from "../udp/UdpPacketSender";
 
 interface ResponseListener {
-    onResponse: (response: NodeToNodeResponse) => void
+    onResponse: (response: NodeToNodeResponse, header: UdpHeader) => void
 }
 
 interface DataListener {
@@ -82,14 +82,14 @@ export default class PublicUdpSocketServer {
             }
         });
     }
-    async sendRequest(address: Address, request: NodeToNodeRequest, opts: {timeoutMsec: number}): Promise<NodeToNodeResponse> {
+    async sendRequest(address: Address, request: NodeToNodeRequest, opts: {timeoutMsec: number}): Promise<{response: NodeToNodeResponse, header: UdpHeader}> {
         /////////////////////////////////////////////////////////////////////////
         await action('/Udp/sendNodeToNodeRequest', {}, async () => {
             await this._sendMessage(address, "NodeToNodeRequest", request as any as JSONObject, {timeoutMsec: opts.timeoutMsec, requestId: request.body.requestId})
         }, async () => {
         })
         /////////////////////////////////////////////////////////////////////////
-        return new Promise<NodeToNodeResponse>((resolve, reject) => {
+        return new Promise<{response: NodeToNodeResponse, header: UdpHeader}>((resolve, reject) => {
             let complete = false
             const _handleError = ((err: Error) => {
                 if (complete) return
@@ -99,18 +99,18 @@ export default class PublicUdpSocketServer {
                 }
                 reject(err)
             })
-            const _handleFinished = ((response: NodeToNodeResponse) => {
+            const _handleFinished = ((response: NodeToNodeResponse, header: UdpHeader) => {
                 if (complete) return
                 complete = true
                 if (this.#responseListeners.has(request.body.requestId)) {
                     this.#responseListeners.delete(request.body.requestId)
                 }
-                resolve(response)
+                resolve({response, header})
             })
             
             this.#responseListeners.set(request.body.requestId, {
-                onResponse: (response: NodeToNodeResponse) => {
-                    _handleFinished(response)
+                onResponse: (response: NodeToNodeResponse, header: UdpHeader) => {
+                    _handleFinished(response, header)
                 }
             })
             setTimeout(() => {
@@ -132,7 +132,7 @@ export default class PublicUdpSocketServer {
             payloadIsJson = true;
             messageBuffer = Buffer.from(JSON.stringify(messageData))
         }
-        const parts: UdpMessagePart[] = this._createUdpMessageParts("NodeToNodeRequest", messageBuffer, {payloadIsJson, requestId: opts.requestId})
+        const parts: UdpMessagePart[] = this._createUdpMessageParts("NodeToNodeRequest", address, messageBuffer, {payloadIsJson, requestId: opts.requestId})
         const packets: Buffer[] = []
         for (let part of parts) {
             const b = Buffer.concat([
@@ -180,7 +180,7 @@ export default class PublicUdpSocketServer {
             action('/Udp/handleNodeToNodeResponse', {fromNodeId: res.body.fromNodeId, requestId: res.body.requestId, requestType: res.body.responseData.requestType}, async () => {
                 const responseListener = this.#responseListeners.get(res.body.requestId)
                 if (responseListener) {
-                    responseListener.onResponse(res)
+                    responseListener.onResponse(res, header)
                 }
             }, async () => {                
             })
@@ -190,7 +190,7 @@ export default class PublicUdpSocketServer {
             // todo
         }
     }
-    _createUdpMessageParts(udpMessageType: UdpMessageType, messageData: Buffer, opts: {payloadIsJson: boolean, requestId: RequestId | null}): UdpMessagePart[] {
+    _createUdpMessageParts(udpMessageType: UdpMessageType, toAddress: Address, messageData: Buffer, opts: {payloadIsJson: boolean, requestId: RequestId | null}): UdpMessagePart[] {
         const parts: UdpMessagePart[] = []
         const partSize = UDP_PACKET_SIZE - UDP_MESSAGE_HEADER_SIZE
         const buffers: Buffer[] = []
@@ -205,6 +205,7 @@ export default class PublicUdpSocketServer {
                 udpMessageId,
                 protocolVersion: protocolVersion(),
                 fromNodeId: this.#node.nodeId(),
+                toAddress,
                 udpMessageType: udpMessageType,
                 partIndex: partIndex(ii),
                 numParts: numParts(buffers.length),

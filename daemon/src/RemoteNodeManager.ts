@@ -1,13 +1,14 @@
 import { verifySignature } from './common/crypto_util';
 import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey } from './interfaces/core';
-import { AnnounceRequestData, AnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest.js';
-import KacheryP2PNode from './KacheryP2PNode.js';
-import RemoteNode from './RemoteNode.js';
+import { AnnounceRequestData, AnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest';
+import KacheryP2PNode from './KacheryP2PNode';
+import RemoteNode, { SendRequestMethod } from './RemoteNode';
 
 class RemoteNodeManager {
     #node: KacheryP2PNode
     #remoteNodes: Map<NodeId, RemoteNode> = new Map<NodeId, RemoteNode>()
     #onNodeChannelAddedCallbacks: ((remoteNodeId: NodeId, channelName: ChannelName) => void)[] = []
+    #onBootstrapNodeAddedCallbacks: ((bootstrapNodeId: NodeId) => void)[]
     constructor(node: KacheryP2PNode) {
         this.#node = node;
     }
@@ -48,7 +49,7 @@ class RemoteNodeManager {
             })
         }
     }
-    async setBootstrapNode(remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null) {
+    async setBootstrapNode(remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, udpSocketAddress: Address | null) {
         const n = this.#remoteNodes.get(remoteNodeId)
         if (n) {
             if ((!n.isBootstrap()) || (!jsonObjectsMatch(n.bootstrapAddress(), address))) {
@@ -56,7 +57,20 @@ class RemoteNodeManager {
             }
         }
         if (!this.#remoteNodes.has(remoteNodeId)) {
-            this.#remoteNodes.set(remoteNodeId, new RemoteNode(this.#node, remoteNodeId, {isBootstrap: true, bootstrapAddress: address, bootstrapWebSocketAddress: webSocketAddress}))
+            const remoteNode = new RemoteNode(
+                this.#node,
+                remoteNodeId,
+                {
+                    isBootstrap: true,
+                    bootstrapAddress: address,
+                    bootstrapWebSocketAddress: webSocketAddress,
+                    bootstrapUdpSocketAddress: udpSocketAddress
+                }
+            )
+            this.#remoteNodes.set(remoteNodeId, remoteNode)
+            this.#onBootstrapNodeAddedCallbacks.forEach(cb => {
+                cb(remoteNode.remoteNodeId())
+            })
         }
     }
     async getChannelInfo(channelName: ChannelName): Promise<ChannelInfo> {
@@ -71,15 +85,18 @@ class RemoteNodeManager {
             nodes
         }
     }
-    async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: number}): Promise<NodeToNodeResponseData> {
+    async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: number, method: SendRequestMethod}): Promise<NodeToNodeResponseData> {
         const remoteNode = this.#remoteNodes.get(nodeId);
         if (!remoteNode) {
             throw Error(`Cannot send request to node: node with ID ${nodeId} not found.`)
         }
-        return await remoteNode.sendRequest(requestData, {timeoutMsec: opts.timeoutMsec});
+        return await remoteNode.sendRequest(requestData, {timeoutMsec: opts.timeoutMsec, method: opts.method})
     }
     onNodeChannelAdded(callback: (remoteNodeId: NodeId, channelName: ChannelName) => void) {
-        this.#onNodeChannelAddedCallbacks.push(callback);
+        this.#onNodeChannelAddedCallbacks.push(callback)
+    }
+    onBootstrapNodeAdded(callback: (bootstrapNodeId: NodeId) => void) {
+        this.#onBootstrapNodeAddedCallbacks.push(callback)
     }
     getRemoteNodesInChannel(channelName: ChannelName): RemoteNode[] {
         const ret: RemoteNode[] = []
@@ -98,6 +115,9 @@ class RemoteNodeManager {
             }
         });
         return ret
+    }
+    getRemoteNode(remoteNodeId: NodeId): RemoteNode | null {
+        return this.#remoteNodes.get(remoteNodeId) || null
     }
     getRemoteNodeWebSocketAddress(remoteNodeId: NodeId): Address | null {
         const remoteNode = this.#remoteNodes.get(remoteNodeId);
@@ -119,7 +139,7 @@ class RemoteNodeManager {
                 }
             })
             if (okay) {
-                const promise = this.sendRequestToNode(n.remoteNodeId(), requestData, {timeoutMsec: opts.timeoutMsec});
+                const promise = this.sendRequestToNode(n.remoteNodeId(), requestData, {timeoutMsec: opts.timeoutMsec, method: 'default'});
                 promise.then(responseData => {
                     if (finished) return;
                     _onResponseCallbacks.forEach(cb => {

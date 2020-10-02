@@ -1,9 +1,11 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
 import { httpPostJson, urlPath } from "./common/httpPostJson";
 import { Address, ChannelName, ChannelNodeInfo, createRequestId, NodeId, nodeIdToPublicKey, nowTimestamp } from "./interfaces/core";
-import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponseData } from "./interfaces/NodeToNodeRequest";
+import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import { protocolVersion } from "./protocolVersion";
+
+export type SendRequestMethod = 'default' | 'udp'
 
 class RemoteNode {
     #node: KacheryP2PNode
@@ -12,12 +14,19 @@ class RemoteNode {
     #isBootstrap: boolean
     #bootstrapAddress: Address | null
     #bootstrapWebSocketAddress: Address | null
-    constructor(node: KacheryP2PNode, remoteNodeId: NodeId, opts: {isBootstrap: boolean, bootstrapAddress: Address | null, bootstrapWebSocketAddress: Address | null} = {isBootstrap: false, bootstrapAddress: null, bootstrapWebSocketAddress: null}) {
+    #bootstrapUdpSocketAddress: Address | null
+    constructor(node: KacheryP2PNode, remoteNodeId: NodeId, opts: {
+        isBootstrap: boolean,
+        bootstrapAddress: Address | null,
+        bootstrapWebSocketAddress: Address | null,
+        bootstrapUdpSocketAddress: Address | null,
+    } = {isBootstrap: false, bootstrapAddress: null, bootstrapWebSocketAddress: null, bootstrapUdpSocketAddress: null}) {
         this.#node = node
         this.#remoteNodeId = remoteNodeId;
         this.#isBootstrap = opts.isBootstrap
         this.#bootstrapAddress = opts.bootstrapAddress
         this.#bootstrapWebSocketAddress = opts.bootstrapWebSocketAddress
+        this.#bootstrapUdpSocketAddress = opts.bootstrapUdpSocketAddress
     }
     remoteNodeId() {
         return this.#remoteNodeId;
@@ -30,6 +39,9 @@ class RemoteNode {
     }
     bootstrapWebSocketAddress() {
         return this.#bootstrapWebSocketAddress
+    }
+    bootstrapUdpSocketAddress() {
+        return this.#bootstrapUdpSocketAddress
     }
     setChannelNodeInfoIfMoreRecent(channelName: ChannelName, channelNodeInfo: ChannelNodeInfo) {
         if (this.#channelNodeInfoByChannel.has(channelName)) {
@@ -92,18 +104,42 @@ class RemoteNode {
             }
         }
     }
-    async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: number}): Promise<NodeToNodeResponseData> {
+    async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: number, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
         const address = this._getRemoteNodeHttpAddress();
         if (!address) {
             throw Error('Unable to send request... no http address found.')
         }
         const request = this._formRequestFromRequestData(requestData);
         const requestId = request.body.requestId;
-        const response = await httpPostJson(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
         // todo: use udp when appropriate
-        if (!isNodeToNodeResponse(response)) {
-            // todo: in this situation, do we ban the node?
-            throw Error('Invalid response from node.');
+        let response: NodeToNodeResponse
+        if (opts.method === 'default') {
+            const R = await httpPostJson(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
+            if (!isNodeToNodeResponse(R)) {
+                // todo: in this situation, do we ban the node?
+                throw Error('Invalid response from node.');
+            }
+            response = R
+        }
+        else if (opts.method === 'udp') {
+            const udpS = this.#node.publicUdpSocketServer()
+            const udpA = this.#bootstrapUdpSocketAddress
+            if (!udpS) {
+                throw Error('Cannot use udp method when there is no udp socket server')
+            }
+            if (!udpA) {
+                throw Error('Cannot use udp method when there is no udp address')
+            }
+            const R = await udpS.sendRequest(udpA, request, {timeoutMsec: opts.timeoutMsec})
+            response = R.response
+            const udpHeader = R.header
+            if (this.#isBootstrap) {
+                const publicUdpAddress = udpHeader.body.toAddress
+                this.#node.setPublicUdpSocketAddress(publicUdpAddress)
+            }
+        }
+        else {
+            throw Error ('Unexpected')
         }
         if (response.body.responseData.requestType !== request.body.requestData.requestType) {
             throw Error('Unexpected requestType in response.')
