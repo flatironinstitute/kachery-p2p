@@ -2,6 +2,7 @@ import assert from 'assert'
 import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
 import { ApiProbeResponse, isApiProbeResponse } from '../services/PublicApiServer'
+import { ByteCount } from '../udp/UdpCongestionManager'
 import { ChannelInfo, ChannelName, ChannelNodeInfo, ErrorMessage, FeedId, FileKey, isArrayOf, isBigInt, isBoolean, isChannelInfo, isChannelName, isChannelNodeInfo, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignedSubfeedMessage, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
@@ -190,7 +191,7 @@ export const isCheckForFileRequestData = (x: any): x is CheckForFileRequestData 
 export interface CheckForFileResponseData {
     requestType: 'checkForFile',
     found: boolean,
-    size: bigint | null
+    size: ByteCount | null
 }
 export const isCheckForFileResponseData = (x: any): x is CheckForFileResponseData => {
     return _validateObject(x, {
@@ -311,8 +312,8 @@ export const isGetLiveFeedSignedMessagesResponseData = (x: any): x is GetLiveFee
 export interface DownloadFileDataRequestData {
     requestType: 'downloadFileData',
     fileKey: FileKey,
-    startByte: bigint,
-    endByte: bigint
+    startByte: ByteCount,
+    endByte: ByteCount
 }
 export const isDownloadFileDataRequestData = (x: any): x is DownloadFileDataRequestData => {
     return _validateObject(x, {

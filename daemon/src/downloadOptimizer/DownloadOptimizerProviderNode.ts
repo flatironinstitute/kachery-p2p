@@ -1,6 +1,6 @@
 import { NodeId } from "../interfaces/core";
 import { byteCount, ByteCount, byteCountToNumber } from "../udp/UdpCongestionManager";
-import { FileDownloadJob } from "./DownloadOptimizer";
+import { FileDownloadJob } from "./FileDownloadJobCreator";
 import RateEstimator from "./RateEstimator";
 
 class DownloadOptimizerProviderNode {

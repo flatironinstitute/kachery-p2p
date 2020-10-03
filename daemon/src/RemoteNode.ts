@@ -64,6 +64,10 @@ class RemoteNode {
     getChannelNodeInfo(channelName: ChannelName): ChannelNodeInfo | null {
         return this.#channelNodeInfoByChannel.get(channelName) || null;
     }
+    getRemoteNodeWebSocketAddress(): Address | null {
+        // todo: if not a bootstrap node, check the channel node infos
+        return this.bootstrapWebSocketAddress();
+    }
     _formRequestFromRequestData(requestData: NodeToNodeRequestData): NodeToNodeRequest {
         const requestId = createRequestId();
         const requestBody = {

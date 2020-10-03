@@ -1,27 +1,16 @@
 import { FileKey, NodeId } from "../interfaces/core";
-import { ByteCount } from "../udp/UdpCongestionManager";
 import DownloadOptimizerFile from "./DownloadOptimizerFile";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
-
-export interface FileDownloadJob {
-    onProgress: (callback: (numBytes: ByteCount, totalBytes: ByteCount) => void) => void,
-    onError: (callback: (err: Error) => void) => void,
-    onFinished: (callback: () => void) => void
-}
-
-export interface JobCreator {
-    createFileDownloadJob: (args: { fileKey: FileKey, nodeId: NodeId }) => FileDownloadJob
-}
+import FileDownloadJobCreator from "./FileDownloadJobCreator";
 
 export default class DownloadOptimizer {
     #files = new Map<FileKey, DownloadOptimizerFile>()
     #providerNodes = new Map<NodeId, DownloadOptimizerProviderNode>()
     #providerNodesForFiles = new Map<FileKey, Set<NodeId>>()
-    #jobCreator: JobCreator
+    #jobCreator: FileDownloadJobCreator
     #maxNumSimultaneousFileDownloads = 5
     #updateScheduled = false
-    // todo: type jobCreator
-    constructor(jobCreator: JobCreator) {
+    constructor(jobCreator: FileDownloadJobCreator) {
         this.#jobCreator = jobCreator
     }
     addFile(fileKey: FileKey) {
@@ -71,7 +60,7 @@ export default class DownloadOptimizer {
                     })
                     const providerNode = chooseFastestProviderNode(providerNodeCandidates);
                     if (providerNode) {
-                        const fileDownloadJob = this.#jobCreator.createFileDownloadJob({ fileKey: file.fileKey(), nodeId: providerNode.nodeId() }); // todo
+                        const fileDownloadJob = this.#jobCreator.createFileDownloadJob({ fileKey: file.fileKey(), nodeId: providerNode.nodeId() });
                         file.setFileDownloadJob(fileDownloadJob);
                         providerNode.setFileDownloadJob(fileDownloadJob);
                         numActiveFileDownloads++;

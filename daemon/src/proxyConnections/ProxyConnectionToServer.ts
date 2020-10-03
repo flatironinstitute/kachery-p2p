@@ -112,6 +112,9 @@ export class ProxyConnectionToServer {
     onInitialized(callback: () => void) {
         this.#onInitializedCallbacks.push(callback);
     }
+    close() {
+        this.#ws.close();
+    }
     onClosed(callback: (reason: any) => void) {
         this.#onClosedCallbacks.push(callback);
     }

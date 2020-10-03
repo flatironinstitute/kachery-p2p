@@ -1,6 +1,7 @@
 import assert from 'assert';
 import { hexToPublicKey, JSONStringifyDeterministic } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
+import { byteCount, ByteCount, isByteCount } from '../udp/UdpCongestionManager';
 import { AnnounceRequestData, isAnnounceRequestData } from "./NodeToNodeRequest";
 
 export const _tests: {[key: string]: Function} = {}
@@ -488,29 +489,32 @@ _tests.SubfeedHash = () => { assert(isSubfeedHash(exampleSubfeedHash)) }
 // FileKey
 export interface FileKey {
     sha1: Sha1Hash,
+    manifestSha1?: Sha1Hash,
     chunkOf?: {
         fileKey: FileKey,
-        startByte: bigint,
-        endByte: bigint
+        startByte: ByteCount,
+        endByte: ByteCount
     }
 }
 export const exampleFileKey: FileKey = {
     sha1: exampleSha1Hash,
     chunkOf: {
         fileKey: {
-            sha1: exampleSha1Hash
+            sha1: exampleSha1Hash,
+            manifestSha1: exampleSha1Hash
         },
-        startByte: BigInt(0), // not recognized when targeting versions below es2020
-        endByte: BigInt(100)
+        startByte: byteCount(0), // not recognized when targeting versions below es2020
+        endByte: byteCount(100)
     }
 }
 export const isFileKey = (x: any): x is FileKey => {
     return _validateObject(x, {
         sha1: isSha1Hash,
+        manifestSha1: optional(isSha1Hash),
         chunkOf: optional({
             fileKey: isFileKey,
-            startByte: isBigInt,
-            endByte: isBigInt
+            startByte: isByteCount,
+            endByte: isByteCount
         })
     });
 }
@@ -535,7 +539,7 @@ export interface ChannelNodeInfoBody {
     nodeId: NodeId,
     httpAddress: Address | null,
     webSocketAddress: Address | null,
-    udpAddress: Address | null,
+    publicUdpSocketAddress: Address | null,
     proxyHttpAddresses: Address[],
     timestamp: Timestamp
 }
@@ -545,7 +549,7 @@ export const isChannelNodeInfoBody = (x: any): x is ChannelNodeInfoBody => {
         nodeId: isNodeId,
         httpAddress: isOneOf([isNull, isAddress]),
         webSocketAddress: isOneOf([isNull, isAddress]),
-        udpAddress: isOneOf([isNull, isAddress]),
+        publicUdpSocketAddress: isOneOf([isNull, isAddress]),
         proxyHttpAddresses: isArrayOf(isAddress),
         timestamp: isTimestamp
     })
@@ -562,7 +566,7 @@ export const exampleChannelNodeInfo: ChannelNodeInfo = {
         nodeId: exampleNodeId,
         httpAddress: exampleAddress,
         webSocketAddress: null, // todo: should we prefer a non-null value here?
-        udpAddress: null, // todo: should we prefer a non-null value here?
+        publicUdpSocketAddress: null,
         proxyHttpAddresses: [exampleAddress],
         timestamp: nowTimestamp()
     },
@@ -854,19 +858,19 @@ export const toSubfeedWatches = (x: SubfeedWatchesRAM) => {
 export interface FindFileResult {
     nodeId: NodeId,
     fileKey: FileKey,
-    fileSize: bigint
+    fileSize: ByteCount
 }
 export const isFindFileResult = (x: any): x is FindFileResult => {
     return _validateObject(x, {
         nodeId: isNodeId,
         fileKey: isFileKey,
-        fileSize: isBigInt
+        fileSize: isByteCount
     });
 }
 export const exampleFindFileResult: FindFileResult = {
     nodeId: exampleNodeId,
     fileKey: exampleFileKey,
-    fileSize: BigInt(20)
+    fileSize: byteCount(20)
 }
 // TODO: This is failing and I'm not sure why
 _tests.FindFileResult = () => { assert(isFindFileResult(exampleFindFileResult)) }

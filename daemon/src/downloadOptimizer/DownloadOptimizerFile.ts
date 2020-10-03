@@ -1,6 +1,6 @@
 import { FileKey } from "../interfaces/core";
 import { ByteCount } from "../udp/UdpCongestionManager";
-import { FileDownloadJob } from './DownloadOptimizer';
+import { FileDownloadJob } from "./FileDownloadJobCreator";
 
 export default class DownloadOptimizerFile {
     #fileKey: FileKey

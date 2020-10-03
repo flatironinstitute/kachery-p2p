@@ -113,16 +113,18 @@ class RemoteNodeManager {
             if (n.isBootstrap() && (n.bootstrapAddress() !== null)) {
                 ret.push(n)
             }
-        });
+        })
+        return ret
+    }
+    getAllRemoteNodes(): RemoteNode[] {
+        const ret: RemoteNode[] = []
+        this.#remoteNodes.forEach((n, nodeId) => {
+            ret.push(n)
+        })
         return ret
     }
     getRemoteNode(remoteNodeId: NodeId): RemoteNode | null {
         return this.#remoteNodes.get(remoteNodeId) || null
-    }
-    getRemoteNodeWebSocketAddress(remoteNodeId: NodeId): Address | null {
-        const remoteNode = this.#remoteNodes.get(remoteNodeId);
-        if (!remoteNode) return null;
-        return remoteNode.bootstrapWebSocketAddress();
     }
     sendRequestToNodesInChannels(requestData: NodeToNodeRequestData, opts: {timeoutMsec: number, channelNames: ChannelName[]}) {
         let finished = false;
@@ -161,7 +163,7 @@ class RemoteNodeManager {
             }
         }
         const _cancel = () => {
-            // todo - cancel the pending requests
+            // at some point in the future - cancel the pending requests
             _finalize();
         }
         const onResponse = (callback: (nodeId: NodeId, responseData: NodeToNodeResponseData) => void) => {

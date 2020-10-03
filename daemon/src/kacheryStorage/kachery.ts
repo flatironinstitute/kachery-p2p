@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import { randomAlphaString } from '../common/util';
 import { Sha1Hash } from '../interfaces/core';
+import { byteCount, ByteCount } from '../udp/UdpCongestionManager';
 
 const _getTemporaryDirectory = () => {
     const ret = process.env['KACHERY_STORAGE_DIR'] + '/tmp';
@@ -151,7 +152,7 @@ const mkdirIfNeeded = (path: string) => {
     }
 }
 
-export const getLocalFileInfo = async (fileSha1: Sha1Hash): Promise<{path: string | null, size: bigint | null}> => {
+export const getLocalFileInfo = async (fileSha1: Sha1Hash): Promise<{path: string | null, size: ByteCount | null}> => {
     const s = fileSha1;
     const path = `${kacheryStorageDir()}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}/${s}`;
     let stat0;
@@ -163,7 +164,7 @@ export const getLocalFileInfo = async (fileSha1: Sha1Hash): Promise<{path: strin
     }
     return {
         path,
-        size: stat0.size as any as bigint
+        size: byteCount(stat0.size)
     }
 }
 

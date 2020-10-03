@@ -4,7 +4,6 @@ import { sleepMsec } from "../common/util";
 import { elapsedSince, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import { ProxyConnectionToServer } from "../proxyConnections/ProxyConnectionToServer";
-import RemoteNode from "../RemoteNode";
 import RemoteNodeManager from "../RemoteNodeManager";
 
 export default class ProxyClientService {
@@ -18,20 +17,22 @@ export default class ProxyClientService {
         this._start();
     }
     async _start() {
-        // periodically try to establish proxy connections to the bootstrap servers
+        // periodically try to establish proxy connections to the remote nodes
         while (true) {
-            const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes();
-            for (let bootstrapNode of bootstrapNodes) {
-                const remoteNodeId = bootstrapNode.remoteNodeId()
-                const c = this.#proxyClientManager.getConnection(remoteNodeId)
-                if (!c) {
-                    const elapsedMsec = this.#proxyClientManager.elapsedMsecSinceLastFailedOutgoingConnection(remoteNodeId);
-                    if (elapsedMsec > 15000) {
-                        /////////////////////////////////////////////////////////////////////////
-                        action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
-                            await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: 3000});
-                        }, null);
-                        /////////////////////////////////////////////////////////////////////////
+            const remoteNodes = this.#remoteNodeManager.getAllRemoteNodes()
+            for (let remoteNode of remoteNodes) {
+                if (remoteNode.getRemoteNodeWebSocketAddress()) {
+                    const remoteNodeId = remoteNode.remoteNodeId()
+                    const c = this.#node.getProxyConnectionToServer(remoteNodeId)
+                    if (!c) {
+                        const elapsedMsec = this.#proxyClientManager.elapsedMsecSinceLastFailedOutgoingConnection(remoteNodeId);
+                        if (elapsedMsec > 15000) {
+                            /////////////////////////////////////////////////////////////////////////
+                            action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
+                                await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: 3000});
+                            }, null);
+                            /////////////////////////////////////////////////////////////////////////
+                        }
                     }
                 }
             }
@@ -42,21 +43,22 @@ export default class ProxyClientService {
 
 class ProxyClientManager {
     #node: KacheryP2PNode
-    #outgoingConnections = new Map<NodeId, ProxyConnectionToServer>()
+    // #outgoingConnections = new Map<NodeId, ProxyConnectionToServer>()
     #failedConnectionAttemptTimestamps = new GarbageMap<NodeId, Timestamp>(120000)
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
     async tryConnection(remoteNodeId: NodeId, opts: {timeoutMsec: number}) {
-        if (this.#outgoingConnections.has(remoteNodeId)) return;
-        const webSocketAddress = this.#node.remoteNodeManager().getRemoteNodeWebSocketAddress(remoteNodeId);
+        const remoteNode = this.#node.remoteNodeManager().getRemoteNode(remoteNodeId)
+        if (!remoteNode) return
+        const webSocketAddress = remoteNode.getRemoteNodeWebSocketAddress();
         if (!webSocketAddress) {
             return;
         }
         try {
             const c = new ProxyConnectionToServer(this.#node);
             await c.initialize(remoteNodeId, webSocketAddress, {timeoutMsec: opts.timeoutMsec});
-            this.#outgoingConnections.set(remoteNodeId, c);
+            this.#node.setProxyConnectionToServer(remoteNodeId, c)
         }
         catch(err) {
             this.#failedConnectionAttemptTimestamps.set(remoteNodeId, nowTimestamp())
@@ -68,6 +70,6 @@ class ProxyClientManager {
         return elapsedSince(timestamp)
     }
     getConnection(remoteNodeId: NodeId): ProxyConnectionToServer | null {
-        return this.#outgoingConnections.get(remoteNodeId) || null
+        return this.#node.getProxyConnectionToServer(remoteNodeId)
     }
 }
