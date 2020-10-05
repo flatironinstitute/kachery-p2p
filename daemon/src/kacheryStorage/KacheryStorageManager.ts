@@ -2,18 +2,25 @@ import { FileKey } from "../interfaces/core";
 import { ByteCount, byteCount, byteCountToNumber } from "../udp/UdpCongestionManager";
 import { getLocalFileInfo } from "./kachery";
 
-interface LocalFilePath extends String {
+export interface LocalFilePath extends String {
     __localFilePath__: never // phantom
 }
-const localFilePath = (p: string) => {
+export const localFilePath = (p: string) => {
     return p as any as LocalFilePath
+}
+
+export interface FindFileReturnValue {
+    found: boolean,
+    size: ByteCount | null,
+    localPath: LocalFilePath | null,
+    byteOffset: ByteCount | null
 }
 
 export class KacheryStorageManager {
     constructor() {
         
     }
-    async findFile(fileKey: FileKey): Promise<{found: boolean, size: ByteCount | null, localPath: LocalFilePath | null, byteOffset: ByteCount | null}> {
+    async findFile(fileKey: FileKey): Promise<FindFileReturnValue> {
         if (fileKey.sha1) {
             const {path: filePath, size: fileSize} = await getLocalFileInfo(fileKey.sha1);
             if (filePath) {

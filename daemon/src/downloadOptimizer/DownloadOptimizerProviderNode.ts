@@ -1,12 +1,13 @@
 import { NodeId } from "../interfaces/core";
+import { LoadFileProgress } from "../KacheryP2PNode";
 import { byteCount, ByteCount, byteCountToNumber } from "../udp/UdpCongestionManager";
-import { FileDownloadJob } from "./FileDownloadJobCreator";
+import { Downloader } from "./DownloaderCreator";
 import RateEstimator from "./RateEstimator";
 
 class DownloadOptimizerProviderNode {
     #nodeId: NodeId
-    #currentFileDownloadJob: FileDownloadJob | null = null
-    #numBytesDownloadedInCurrentJob: ByteCount = byteCount(0)
+    #currentDownloader: Downloader | null = null
+    #numBytesDownloadedInCurrentDownloader: ByteCount = byteCount(0)
     #rateEstimator = new RateEstimator();
     constructor(nodeId: NodeId) {
         this.#nodeId = nodeId
@@ -17,24 +18,24 @@ class DownloadOptimizerProviderNode {
     estimatedRateBps() {
         return this.#rateEstimator.estimatedRateBps()
     }
-    hasFileDownloadJob() {
-        return this.#currentFileDownloadJob ? true : false;
+    isDownloading() {
+        return this.#currentDownloader ? true : false;
     }
-    setFileDownloadJob(j: FileDownloadJob) {
-        if (this.#currentFileDownloadJob === null) {
-            throw Error('Unexpected: provider node already has a file download job')
+    setDownloader(j: Downloader) {
+        if (this.#currentDownloader !== null) {
+            throw Error('Unexpected: provider node already has a file downloader')
         }
-        this.#currentFileDownloadJob = j
-        this.#numBytesDownloadedInCurrentJob = byteCount(0)
+        this.#currentDownloader = j
+        this.#numBytesDownloadedInCurrentDownloader = byteCount(0)
         this.#rateEstimator.reportStart();
-        j.onProgress((numBytes, totalBytes) => {
-            const deltaBytes = byteCount(byteCountToNumber(numBytes) - byteCountToNumber(this.#numBytesDownloadedInCurrentJob))
-            this.#numBytesDownloadedInCurrentJob = numBytes
+        j.onProgress((progress: LoadFileProgress) => {
+            const deltaBytes = byteCount(byteCountToNumber(progress.bytesLoaded) - byteCountToNumber(this.#numBytesDownloadedInCurrentDownloader))
+            this.#numBytesDownloadedInCurrentDownloader = progress.bytesLoaded
             this.#rateEstimator.reportBytes(deltaBytes)
         });
         const _handleComplete = () => {
             this.#rateEstimator.reportStop()
-            this.#currentFileDownloadJob = null
+            this.#currentDownloader = null
         }
         j.onError((err: Error) => {
             _handleComplete()
@@ -43,7 +44,6 @@ class DownloadOptimizerProviderNode {
             _handleComplete();
         });
     }
-
 }
 
 export default DownloadOptimizerProviderNode;

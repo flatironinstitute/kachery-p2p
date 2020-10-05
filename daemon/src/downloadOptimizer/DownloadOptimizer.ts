@@ -1,29 +1,32 @@
 import { FileKey, NodeId } from "../interfaces/core";
-import DownloadOptimizerFile from "./DownloadOptimizerFile";
+import { default as DownloaderCreator } from "./DownloaderCreator";
+import DownloadOptimizerJob from "./DownloadOptimizerJob";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
-import FileDownloadJobCreator from "./FileDownloadJobCreator";
 
 export default class DownloadOptimizer {
-    #files = new Map<FileKey, DownloadOptimizerFile>()
+    #files = new Map<FileKey, DownloadOptimizerJob>()
     #providerNodes = new Map<NodeId, DownloadOptimizerProviderNode>()
     #providerNodesForFiles = new Map<FileKey, Set<NodeId>>()
-    #jobCreator: FileDownloadJobCreator
+    #downloaderCreator: DownloaderCreator
     #maxNumSimultaneousFileDownloads = 5
     #updateScheduled = false
-    constructor(jobCreator: FileDownloadJobCreator) {
-        this.#jobCreator = jobCreator
+    constructor(downloaderCreator: DownloaderCreator) {
+        this.#downloaderCreator = downloaderCreator
     }
-    addFile(fileKey: FileKey) {
-        const f = new DownloadOptimizerFile(fileKey)
-        this.#files.set(fileKey, f)
+    addFile(fileKey: FileKey): DownloadOptimizerJob {
+        let f = this.#files.get(fileKey)
+        if (!f) {
+            f = new DownloadOptimizerJob(fileKey)
+            this.#files.set(fileKey, f)
+        }
         f.onError(() => {
             this.#files.delete(fileKey)
         });
         f.onFinished(() => {
             this.#files.delete(fileKey)
         });
-        this._scheduleUpdate();
-        return f;
+        this._scheduleUpdate()
+        return f
     }
     setProviderNodeForFile({ fileKey, nodeId }: {fileKey: FileKey, nodeId: NodeId}) {
         this.#providerNodes.forEach((n: DownloadOptimizerProviderNode, nodeId: NodeId) => {
@@ -39,11 +42,11 @@ export default class DownloadOptimizer {
         })
     }
     _scheduleUpdate() {
-        if (this.#updateScheduled) return;
-        this.#updateScheduled = true;
+        if (this.#updateScheduled) return
+        this.#updateScheduled = true
         setTimeout(() => {
-            this.#updateScheduled = false;
-            this._update();
+            this.#updateScheduled = false
+            this._update()
         }, 1);
     }
     _update() {
@@ -51,19 +54,21 @@ export default class DownloadOptimizer {
         if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
             this.#files.forEach((file, fileKey) => {
                 if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
-                    const providerNodeCandidates: DownloadOptimizerProviderNode[] = []
-                    this.#providerNodesForFiles.get(fileKey)?.forEach(providerNodeId => {
-                        const providerNode = this.#providerNodes.get(providerNodeId)
-                        if ((providerNode) && (!providerNode.hasFileDownloadJob())) {
-                            providerNodeCandidates.push(providerNode);
+                    if (!file.isDownloading()) {
+                        const providerNodeCandidates: DownloadOptimizerProviderNode[] = []
+                        this.#providerNodesForFiles.get(fileKey)?.forEach(providerNodeId => {
+                            const providerNode = this.#providerNodes.get(providerNodeId)
+                            if ((providerNode) && (!providerNode.isDownloading())) {
+                                providerNodeCandidates.push(providerNode);
+                            }
+                        })
+                        const providerNode = chooseFastestProviderNode(providerNodeCandidates);
+                        if (providerNode) {
+                            const downloader = this.#downloaderCreator.createDownloader({ fileKey: file.fileKey(), nodeId: providerNode.nodeId() });
+                            file.setDownloader(downloader)
+                            providerNode.setDownloader(downloader)
+                            numActiveFileDownloads++;
                         }
-                    })
-                    const providerNode = chooseFastestProviderNode(providerNodeCandidates);
-                    if (providerNode) {
-                        const fileDownloadJob = this.#jobCreator.createFileDownloadJob({ fileKey: file.fileKey(), nodeId: providerNode.nodeId() });
-                        file.setFileDownloadJob(fileDownloadJob);
-                        providerNode.setFileDownloadJob(fileDownloadJob);
-                        numActiveFileDownloads++;
                     }
                 }
             })

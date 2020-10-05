@@ -1,73 +1,7 @@
 import { exec } from 'child_process';
-import { assert } from 'console';
-import crypto from 'crypto';
 import fs from 'fs';
-import { randomAlphaString } from '../common/util';
 import { Sha1Hash } from '../interfaces/core';
 import { byteCount, ByteCount } from '../udp/UdpCongestionManager';
-
-const _getTemporaryDirectory = () => {
-    const ret = process.env['KACHERY_STORAGE_DIR'] + '/tmp';
-    mkdirIfNeeded(ret);
-    return ret;
-}
-
-export const createTemporaryFilePath = ({prefix}: {prefix: string}) => {
-    assert(typeof(prefix) === 'string', 'prefix is not a string');
-    const dirPath = _getTemporaryDirectory();
-    return `${dirPath}/${prefix}-${randomAlphaString(10)}`;
-}
-
-export const concatenateFilesIntoTemporaryFile = async (paths: string[]) => {
-    return new Promise((resolve, reject) => {
-        const tmpPath = createTemporaryFilePath({prefix: 'kachery-p2p-concat-'});
-        const writeStream = fs.createWriteStream(tmpPath);
-        const sha = crypto.createHash('sha1');
-        let done = false;
-        let ii = 0;
-        const _handleNextFile = () => {
-            if (done) return;
-            if (ii >= paths.length) {
-                writeStream.end(() => {
-                    if (done) return;
-                    done = true;
-                    const sha1 = sha.digest('hex');
-                    resolve({sha1, path: tmpPath});
-                });
-                return;
-            }
-            const readStream = fs.createReadStream(paths[ii]);
-            readStream.on('error', (err) => {
-                if (done) return;
-                done = true;
-                reject(err);
-            });
-            readStream.on('data', data => {
-                if (done) return;
-                sha.update(data);
-                writeStream.write(data);
-            });
-            readStream.on('end', () => {
-                ii ++;
-                _handleNextFile();
-            });
-        }
-        _handleNextFile();
-    });
-}
-
-export const moveFileIntoKacheryStorage = ({path, sha1}: {path: string, sha1: string}) => {
-    const s = sha1;
-    const destParentPath = `${kacheryStorageDir()}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`;
-    const destPath = `${destParentPath}/${s}`;
-    if (fs.existsSync(destPath)) {
-        fs.unlinkSync(path);
-        return destPath;
-    }
-    fs.mkdirSync(destParentPath, {recursive: true});
-    fs.renameSync(path, destPath);
-    return destPath;
-}
 
 export const kacheryStorageDir = () => {
     const ret = process.env['KACHERY_STORAGE_DIR'];
@@ -139,23 +73,10 @@ const executeAndGetStdout = async (command: string) => {
     });
 }
 
-const mkdirIfNeeded = (path: string) => {
-    if (!fs.existsSync(path)) {
-        try {
-            fs.mkdirSync(path);
-        }
-        catch(err) {
-            if (!fs.existsSync(path)) {
-                fs.mkdirSync(path);
-            }
-        }
-    }
-}
-
 export const getLocalFileInfo = async (fileSha1: Sha1Hash): Promise<{path: string | null, size: ByteCount | null}> => {
     const s = fileSha1;
     const path = `${kacheryStorageDir()}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}/${s}`;
-    let stat0;
+    let stat0: fs.Stats
     try {
         stat0 = await fs.promises.stat(path);
     }
