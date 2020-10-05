@@ -1,34 +1,10 @@
 import assert from 'assert';
 import { hexToPublicKey, JSONStringifyDeterministic } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
-import { byteCount, ByteCount, isByteCount } from '../udp/UdpCongestionManager';
+import { ByteCount, isByteCount } from '../udp/UdpCongestionManager';
 import { AnnounceRequestData, isAnnounceRequestData } from "./NodeToNodeRequest";
 
 export const _tests: {[key: string]: Function} = {}
-
-export interface ProtocolVersion extends String {
-    __protocolVersion__: never // phantom type
-}
-export const exampleProtocolVersion: ProtocolVersion = "example-protocol.Version" as any as ProtocolVersion
-export const isProtocolVersion = (x: any): x is ProtocolVersion => {
-    if (!isString(x)) return false;
-    return (/^[0-9a-zA-z.\ \-]{4,30}?$/.test(x));
-}
-_tests.ProtocolVersion = () => {
-    assert(isProtocolVersion(exampleProtocolVersion))
-}
-
-export interface DaemonVersion extends String {
-    __daemonVersion__: never // phantom
-}
-export const exampleDaemonVersion: DaemonVersion = "example-daemon.Version" as any as DaemonVersion
-export const isDaemonVersion = (x: any): x is DaemonVersion => {
-    if (!isString(x)) return false;
-    return (/^[0-9a-zA-z\.\ \-]{4,40}?$/.test(x));
-}
-_tests.DaemonVersion = () => {
-    assert(isDaemonVersion(exampleDaemonVersion))
-}
 
 export type JSONPrimitive = string | number | boolean | null;
 export type JSONValue = JSONPrimitive | JSONObject | JSONArray;
@@ -46,7 +22,7 @@ export const tryParseJsonObject = (x: string): JSONObject | null => {
     catch {
         return null;
     }
-    if (!isJSONObject(a)) return null; // I think this may just be unreachable
+    if (!isJSONObject(a)) return null; // TODO: I think this may just be unreachable--parse should throw on failure
     return a;
 }
 export const isJSONSerializable = (obj: any): boolean => {
@@ -66,7 +42,7 @@ export const isJSONSerializable = (obj: any): boolean => {
           return false;
         }
         if (typeof obj[property] === "object") {
-          if (!isJSONSerializable(obj[property])) {
+          if (!isJSONSerializable(obj[property])) { // TODO: I'm not sure how to reach this code.
             return false;
           }
         }
@@ -155,10 +131,8 @@ export const isArrayOf = (testFunction: (x: any) => boolean): ((x: any) => boole
     }
 }
 
-//***** NOTE: The "key" test should not be needed here; Javascript converts all keys to strings
-//***** See comments in the tests below
 // isObjectOf
-const isObjectOf = (keyTestFunction: (x: any) => boolean, valueTestFunction: (x: any) => boolean): ((x: any) => boolean) => {
+export const isObjectOf = (keyTestFunction: (x: any) => boolean, valueTestFunction: (x: any) => boolean): ((x: any) => boolean) => {
     return (x) => {
         if (isObject(x)) {
             for (let k in x) {
@@ -170,20 +144,8 @@ const isObjectOf = (keyTestFunction: (x: any) => boolean, valueTestFunction: (x:
         else return false;
     }
 }
-_tests.testIsObjectOf = () => {
-    const isStringKeyedInts = isObjectOf(isString, isBigInt);
-    assert(isStringKeyedInts({'one': BigInt(4), 'Two': BigInt(5)}));
-    // assert(!isStringKeyedInts({1: BigInt(1), 2: BigInt(2)})); // this FAILS: any key is automatically converted to a string
-    assert(!isStringKeyedInts({'one': 1, 'two': 3.4}));
-}
 
-// NOTE: Failing test to address issue with this function
-_tests.testIsObjectOfForNumberKeys = () => {
-    const isNumberKeyedNumber = isObjectOf(isNumber, isNumber);
-    assert(isNumberKeyedNumber({9: 5, 3.14: 159 }));
-}
-
-type ValidateObjectSpec = {[key: string]: ValidateObjectSpec | (Function & ((a: any) => any))}
+export type ValidateObjectSpec = {[key: string]: ValidateObjectSpec | (Function & ((a: any) => any))}
 
 export const _validateObject = (x: any, spec: ValidateObjectSpec): boolean => {
     if (!x) return false;
@@ -204,12 +166,29 @@ export const _validateObject = (x: any, spec: ValidateObjectSpec): boolean => {
     return true;
 }
 
+// Versioning
+export interface ProtocolVersion extends String {
+    __protocolVersion__: never // phantom type
+}
+export const isProtocolVersion = (x: any): x is ProtocolVersion => {
+    if (!isString(x)) return false;
+    return (/^[0-9a-zA-z.\ \-]{4,30}$/.test(x));
+}
+
+export interface DaemonVersion extends String {
+    __daemonVersion__: never // phantom
+}
+export const exampleDaemonVersion: DaemonVersion = "example-daemon.Version" as any as DaemonVersion
+export const isDaemonVersion = (x: any): x is DaemonVersion => {
+    if (!isString(x)) return false;
+    return (/^[0-9a-zA-z\.\ \-]{4,40}?$/.test(x));
+}
+
 
 // Port
 export interface Port extends Number {
     __port__: never
 }
-export const examplePort: Port = 1000 as any as Port
 export const isPort = (x: any) : x is Port => {
     if (!isNumber(x)) return false;
     return x > 0 && x < 65536; // port numbers must be in 16-bit positive range
@@ -217,24 +196,23 @@ export const isPort = (x: any) : x is Port => {
 export const toNumber = (x: Port): number => {
     return x as any as number;
 }
-_tests.Port = () => {
-    assert(isPort(examplePort));
-    assert(!isPort(-1000)); // negative
-    assert(!isPort('abc')); // not actually a number
-    assert(!isPort(65536)); // too large
-}
 
 // HostName
 export interface HostName extends String {
     __hostName__: never
 }
-export const exampleHostName: HostName = '0.0.0.0' as any as HostName
 export const isHostName = (x: any): x is HostName => {
+    // TODO: can we be even more precise here? e.g. restrict number of elements?
     if (!isString(x)) return false;
-    return (/^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$/.test(x));
-}
-_tests.HostName = () => {
-    assert(isHostName(exampleHostName))
+    let result = true;
+    x.split(".").forEach((element) => {
+        if (element.length === 0) result = false;
+        if (!/^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?$/.test(element)) result = false;
+    });
+    // we cannot short-circuit by returning false from the anonymous function in the forEach loop.
+    // Doing so returns false *from that function*, then ignores the result (since nothing is checking
+    // the result of the anonymous function) and moves on to check the next chunk.
+    return result;
 }
 
 // Address
@@ -242,18 +220,11 @@ export interface Address {
     hostName: HostName,
     port: Port
 }
-export const exampleAddress = {
-    hostName: exampleHostName,
-    port: examplePort
-}
 export const isAddress = (x: any): x is Address => {
     return _validateObject(x, {
         hostName: isHostName,
         port: isPort
     });
-}
-_tests.Address = () => {
-    assert(isAddress(exampleAddress))
 }
 
 // TimeStamp
@@ -264,6 +235,7 @@ export const exampleTimestamp: Timestamp = Number(new Date(2020, 1, 1, 1, 1, 1, 
 export const isTimestamp = (x: any) : x is Timestamp => {
     if (!isNumber(x)) return false;
     if (x < 0) return false;  // For our purposes, timestamps should never be negative
+    if (!Number.isInteger(x)) return false; // our timestamps should be whole numbers
     return true;
 }
 export const nowTimestamp = () => {
@@ -276,82 +248,29 @@ export const zeroTimestamp = () => {
 export const elapsedSince = (timestamp: Timestamp) => {
     return (nowTimestamp() as any as number) - (timestamp as any as number);
 }
-_tests.Timestamp = () => {
-    assert(isTimestamp(exampleTimestamp));
-    assert(isTimestamp(50));
-    assert(!isTimestamp(-50));
-}
-_tests.ZeroTimeStamp = () => {
-    assert(0 == (zeroTimestamp() as any as number));
-    assert(isTimestamp(zeroTimestamp())); // make sure 0 is accepted
-}
-_tests.ElapsedSince = () => {
-    const time = nowTimestamp();
-    const newTime = ((time as any as number) - 5) as any as Timestamp; // manually set back the clock 5 ms
-    const diff = elapsedSince(newTime); // should always yield 5, since these operations take <1 ms
-    assert(diff === 5 || diff === 6); // just in case we hit a ms boundary
-}
 
 // PublicKey
 export interface PublicKey extends String {
     __publicKey__: never // phantom type so that we cannot assign directly to a string
 }
-const examplePublicKey: PublicKey = '-----BEGIN PUBLIC KEY-----\nPUBLICKEYAAAAAAAAAAADt4+bJGhgtv/oQvPS03eZrEL8vYBXo0j3D7mNUM=\n-----END PUBLIC KEY-----' as any as PublicKey
 export const isPublicKey = (x: any) : x is PublicKey => {
     if (!isString(x)) return false;
-     // no fixed length for actual key block
-    return (/^-----BEGIN PUBLIC KEY-----[\s\S]*-----END PUBLIC KEY-----$/.test(x));
+    return checkKeyblockHeader(x, 'PUBLIC');
 }
-_tests.PublicKey = () => { assert(isPublicKey(examplePublicKey)) }
 
 // PrivateKey
 export interface PrivateKey extends String {
     __privateKey__: never // phantom type
 }
-const examplePrivateKey: PrivateKey = '-----BEGIN PRIVATE KEY-----\nPRIVATEKEYAAAAAAAAAADt4+bJGhgtv/oQvPS03eZrEL8vYBXo0j3D7mNUM=\n-----END PRIVATE KEY-----' as any as PrivateKey
 export const isPrivateKey = (x: any) : x is PublicKey => {
     if (!isString(x)) return false;
-    return (/^-----BEGIN PRIVATE KEY-----[\s\S]*-----END PRIVATE KEY-----$/.test(x));
+    return checkKeyblockHeader(x, 'PRIVATE');
 }
-_tests.PrivateKey = () => { assert(isPrivateKey(examplePrivateKey)) }
 
-// PublicKeyHex
-export interface PublicKeyHex extends String {
-    __publicKeyHex__: never // phantom type so that we cannot assign directly to a string
-}
-const examplePublicKeyHex: PublicKeyHex = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as any as PublicKeyHex
-export const isPublicKeyHex = (x: any) : x is PublicKeyHex => {
-    if (!isString(x)) return false;
-    return (/^[0-9a-fA-F]+$/.test(x));
-}
-_tests.PublicKeyHex = () => { assert(isPublicKeyHex(examplePublicKeyHex)) }
-
-// PrivateKeyHex
-export interface PrivateKeyHex extends String {
-    __privateKeyHex__: never // phantom type
-}
-const examplePrivateKeyHex: PrivateKeyHex = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as any as PrivateKeyHex
-export const isPrivateKeyHex = (x: any) : x is PrivateKeyHex => {
-    if (!isString(x)) return false;
-    return (/^[0-9a-fA-F]+$/.test(x));
-}
-_tests.PrivateKeyHex = () => { assert(isPrivateKeyHex(examplePrivateKeyHex)) }
-
-// Sha1Hash
-export interface Sha1Hash extends String {
-    __sha1Hash__: never // phantom type
-}
-const exampleSha1Hash: Sha1Hash = '63a0f8f44232cba2eca23dea7baa4e176b93e957' as any as Sha1Hash
-export const isSha1Hash = (x: any) : x is Sha1Hash => {
-    if (!isString(x)) return false;
-    return (/^[0-9a-fA-F]{40}$/.test(x));  // Sha1 hash must be 40 hexadecimal characters
-}
-_tests.Sha1Hash = () => { assert(isSha1Hash('63a0f8f44232cba2eca23dea7baa4e176b93e957')) }
-
-
-// TODO: IS THIS ACTUALLY A PUBLIC KEY? 
-export const nodeIdToPublicKey = (nodeId: NodeId): PublicKey => {
-    return hexToPublicKey(nodeId.toString() as any as PublicKeyHex);
+const checkKeyblockHeader = (key: string, type: 'PUBLIC' | 'PRIVATE') => {
+    // note we need to double-escape the backslashes here.
+    const pattern = new RegExp(`-----BEGIN ${type} KEY-----[\\s\\S]*-----END ${type} KEY-----$`);
+    return (pattern.test(key));
 }
 
 // KeyPair
@@ -359,86 +278,99 @@ export interface KeyPair {
     publicKey: PublicKey,
     privateKey: PrivateKey
 }
-const exampleKeyPair: KeyPair = {
-    publicKey: examplePublicKey,
-    privateKey: examplePrivateKey
-}
 export const isKeyPair = (x: any) : x is KeyPair => {
     return _validateObject(x, {
         publicKey: isPublicKey,
         privateKey: isPrivateKey
     });
-    // TODO: if we trust this function for anything serious, it *REALLY* ought to confirm that the keypair matches
-    // jfm's response: the keypair is validated elsewhere using a different mechanism
 }
-_tests.IsKeyPair = () => { assert(isKeyPair(exampleKeyPair)) }
 
+export const isHexadecimal = (x: string, length?: number) : boolean => {
+    const basePattern: string = '[0-9a-fA-F]';
+    let pattern: string = `^${basePattern}*$`;
+    if (length !== undefined) {
+        assert(Number.isInteger(length));
+        assert(length > 0);
+        pattern = `^${basePattern}{${length}}$`;
+    }
+    const regex = new RegExp(pattern);
+
+    return (regex.test(x));
+}
+
+// PublicKeyHex
+export interface PublicKeyHex extends String {
+    __publicKeyHex__: never // phantom type so that we cannot assign directly to a string
+}
+export const isPublicKeyHex = (x: any) : x is PublicKeyHex => {
+    if (!isString(x)) return false;
+    return isHexadecimal(x);
+}
+
+// PrivateKeyHex
+export interface PrivateKeyHex extends String {
+    __privateKeyHex__: never // phantom type
+}
+export const isPrivateKeyHex = (x: any) : x is PrivateKeyHex => {
+    if (!isString(x)) return false;
+    return isHexadecimal(x);
+}
+
+// Sha1Hash
+export interface Sha1Hash extends String {
+    __sha1Hash__: never // phantom type
+}
+export const isSha1Hash = (x: any) : x is Sha1Hash => {
+    if (!isString(x)) return false;
+    return isHexadecimal(x, 40); // Sha1 should be 40 hex characters
+}
 
 // Signature
 export interface Signature extends String {
     __signature__: never
 }
-export const exampleSignature: Signature = 'abc000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as any as Signature
 export const isSignature = (x: any): x is Signature => {
     if (!isString(x)) return false;
-    return (/^[0-9a-f]{64}?$/.test(x));
+    return isHexadecimal(x, 64);
 }
-_tests.Signature = () => { assert(isSignature(exampleSignature)) }
 
 
 // NodeId
 export interface NodeId extends String {
     __nodeId__: never // phantom type
 }
-export const exampleNodeId: NodeId = 'abc123aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as any as NodeId
 export const isNodeId = (x: any): x is NodeId => {
     if (!isString(x)) return false;
-    return (/^[0-9a-f]{64}?$/.test(x));
+    return isHexadecimal(x, 64);
 }
-_tests.NodeId = () => { assert(isNodeId(exampleNodeId)) }
+
 
 // ChannelName
 export interface ChannelName extends String {
     __channelName__: never // phantom type
 }
-export const exampleChannelName: ChannelName = 'example.Channel-Name' as any as ChannelName
 export const isChannelName = (x: any): x is ChannelName => {
     if (!isString(x)) return false;
     return (/^[0-9a-zA-Z_\-\.]{4,160}?$/.test(x));
 }
-_tests.ChannelName = () => { assert(isChannelName(exampleChannelName)) }
 
 // FeedId
 export interface FeedId extends String {
     __feedId__: never // phantom type
 }
-export const exampleFeedId: FeedId = '0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789ABCDEF' as any as FeedId
 export const isFeedId = (x: any): x is FeedId => {
     if (!isString(x)) return false;
-    return (/^[0-9a-fA-F]{64}?$/.test(x));
+    return isHexadecimal(x, 64);
 }
-_tests.FeedId = () => { assert(isFeedId(exampleFeedId)) }
-
-// Conversion between types
-export const feedIdToPublicKeyHex = (feedId: FeedId): PublicKeyHex => {
-    return feedId as any as PublicKeyHex;
-}
-export const publicKeyHexToNodeId = (x: PublicKeyHex) : NodeId => {
-    return x as any as NodeId;
-}
-
 
 // SubfeedHash
 export interface SubfeedHash extends String {
     __subfeedHash__: never
 }
-export const exampleSubfeedHash: SubfeedHash = '0123456789abcdefABCD9876543210FEDCBAedcb' as any as SubfeedHash;
 export const isSubfeedHash = (x: any): x is SubfeedHash => {
     if (!isString(x)) return false;
     return (/^[0-9a-fA-F]{40}?$/.test(x));
 }
-_tests.SubfeedHash = () => { assert(isSubfeedHash(exampleSubfeedHash)) }
-
 
 // FileKey
 export interface FileKey {
@@ -450,17 +382,7 @@ export interface FileKey {
         endByte: ByteCount
     }
 }
-export const exampleFileKey: FileKey = {
-    sha1: exampleSha1Hash,
-    chunkOf: {
-        fileKey: {
-            sha1: exampleSha1Hash,
-            manifestSha1: exampleSha1Hash
-        },
-        startByte: byteCount(0), // not recognized when targeting versions below es2020
-        endByte: byteCount(100)
-    }
-}
+
 export const isFileKey = (x: any): x is FileKey => {
     return _validateObject(x, {
         sha1: isSha1Hash,
@@ -472,20 +394,59 @@ export const isFileKey = (x: any): x is FileKey => {
         })
     });
 }
-_tests.FileKey = () => { assert(isFileKey(exampleFileKey)) }
+
+// Conversion between types
+export const nodeIdToPublicKey = (nodeId: NodeId): PublicKey => {
+    // TODO: Is this implementation right?
+    return hexToPublicKey(nodeId.toString() as any as PublicKeyHex);
+}
+export const feedIdToPublicKeyHex = (feedId: FeedId): PublicKeyHex => {
+    return feedId as any as PublicKeyHex;
+}
+// TODO: Note: PublicKeyHex has no length limit, but nodeId must be 64 characters. Check for this?
+export const publicKeyHexToNodeId = (x: PublicKeyHex) : NodeId => {
+    return x as any as NodeId;
+}
+
 
 
 // FindLiveFeedResult
 export interface FindLiveFeedResult {
     nodeId: NodeId
 }
-export const exampleFindLiveFeedResult: FindLiveFeedResult = { nodeId: exampleNodeId }
 export const isFindLiveFeedResult = (x: any): x is FindLiveFeedResult => {
     return _validateObject(x, {
         nodeId: (a: any) => isNodeId
     });
 }
-_tests.FindLiveFeedResult = () => { assert(isFindLiveFeedResult(exampleFindLiveFeedResult)) }
+
+// FindFileResult
+export interface FindFileResult {
+    nodeId: NodeId,
+    fileKey: FileKey,
+    fileSize: bigint
+}
+export const isFindFileResult = (x: any): x is FindFileResult => {
+    if (!_validateObject(x, {
+        nodeId: isNodeId,
+        fileKey: isFileKey,
+        fileSize: isBigInt
+    })) return false;
+    return (x.fileSize >= 0);
+}
+
+
+// RequestId
+export interface RequestId extends String {
+    __requestId__: never // phantom type
+}
+export const isRequestId = (x: any): x is RequestId => {
+    if (!isString(x)) return false;
+    return (/^[A-Za-z]{10}$/.test(x));
+}
+export const createRequestId = () => {
+    return randomAlphaString(10) as any as RequestId;
+}
 
 
 export interface ChannelNodeInfoBody {
@@ -514,17 +475,21 @@ export interface ChannelNodeInfo {
     body: ChannelNodeInfoBody,
     signature: Signature
 }
+export const exampleAddress: Address = {
+    hostName: 'www.flatironinstitute.org' as any as HostName,
+    port: 15351 as any as Port,
+} as any as Address;
 export const exampleChannelNodeInfo: ChannelNodeInfo = {
     body: {
-        channelName: exampleChannelName,
-        nodeId: exampleNodeId,
+        channelName: 'exampleChannelName' as any as ChannelName,
+        nodeId: new Array(65).join('a') as any as NodeId,
         httpAddress: exampleAddress,
         webSocketAddress: null, // todo: should we prefer a non-null value here?
         publicUdpSocketAddress: null,
         proxyHttpAddresses: [exampleAddress],
         timestamp: nowTimestamp()
     },
-    signature: exampleSignature
+    signature: new Array(65).join('a') as any as Signature,
 }
 export const isChannelNodeInfo = (x: any): x is ChannelNodeInfo => {
     return _validateObject(x, {
@@ -532,7 +497,7 @@ export const isChannelNodeInfo = (x: any): x is ChannelNodeInfo => {
         signature: isSignature
     })
 }
-_tests.ChannelNodeInfo = () => { assert(isChannelNodeInfo(exampleChannelNodeInfo)) }
+_tests.ChannelNodeInfo = () => { assert(isChannelNodeInfo('exampleChannelNodeInfo')) }
 
 
 // SubfeedMessage
@@ -568,13 +533,13 @@ export interface SignedSubfeedMessage {
 }
 export const exampleSignedSubfeedMessage: SignedSubfeedMessage = {
     body: {
-        previousSignature: exampleSignature,
+        previousSignature: new Array(65).join('a') as any as Signature,
         messageNumber: 5,
         message: exampleSubfeedMessage,
         timestamp: nowTimestamp(),
         metaData: exampleSubfeedMessageMetaData
     },
-    signature: exampleSignature
+    signature: new Array(65).join('a') as any as Signature,
 }
 export const isSignedSubfeedMessage = (x: any): x is SignedSubfeedMessage => {
     if (! _validateObject(x, {
@@ -622,7 +587,7 @@ export const isFeedsConfigFeed = (x: any): x is FeedsConfigFeed => {
     });
     // TODO: Check those public/private key pairs!
 }
-export const exampleFeedsConfigFeed: FeedsConfigFeed = { publicKey: examplePublicKeyHex, privateKey: examplePrivateKeyHex }
+export const exampleFeedsConfigFeed: FeedsConfigFeed = { publicKey: "aa" as any as PublicKeyHex, privateKey: "bb" as any as PrivateKeyHex }
 _tests.FeedsConfigFeed = () => { assert(isFeedsConfigFeed(exampleFeedsConfigFeed)) }
 
 
@@ -662,7 +627,6 @@ _tests.ErrorMessage = () => {
     }
 }
 
-// TODO: Want to discuss this
 // objectToMap and mapToObject
 export const objectToMap = <KeyType extends String, ValueType>(obj: {[key: string]: any}) => {
     return new Map<KeyType, ValueType>(Object.keys(obj).map(k => {
@@ -677,6 +641,7 @@ export const mapToObject = <KeyType extends String, ValueType>(m: Map<KeyType, V
     return ret;
 }
 
+// TODO: What is this?
 // FeedsConfig and FeedsConfigRAM
 export interface FeedsConfig {
     feeds: {[key: string]: FeedsConfigFeed},
@@ -704,8 +669,6 @@ export const isFeedsConfig = (x: any): x is FeedsConfig => {
         feedIdsByName: isObjectOf(isFeedName, isFeedId)
     })
 }
-// Failing test: reminder to fix the FeedsConfig, FeedsConfigRAM area
-_tests.FeedsConfig = () => { assert(false); }
 
 
 // SubfeedAccessRule
@@ -719,8 +682,8 @@ export const isSubfeedAccessRule = (x: any): x is SubfeedAccessRule => {
         write: isBoolean
     })
 }
-export const exampleSubfeedAccessDeniedRule = { nodeId: exampleNodeId, write: false } as SubfeedAccessRule
-export const exampleSubfeedAccessAllowedRule = { nodeId: exampleNodeId, write: true } as SubfeedAccessRule
+export const exampleSubfeedAccessDeniedRule = { nodeId: new Array(65).join('a') as any as NodeId, write: false } as SubfeedAccessRule
+export const exampleSubfeedAccessAllowedRule = { nodeId: new Array(65).join('a') as any as NodeId, write: true } as SubfeedAccessRule
 _tests.SubfeedAccessRule = () => {
     assert(isSubfeedAccessRule(exampleSubfeedAccessDeniedRule));
     assert(isSubfeedAccessRule(exampleSubfeedAccessAllowedRule));
@@ -759,8 +722,8 @@ export interface SubfeedWatch {
     // No name?
 }
 export const exampleSubfeedWatch: SubfeedWatch = { 
-    feedId: exampleFeedId,
-    subfeedHash: exampleSubfeedHash,
+    feedId: new Array(65).join('F') as any as FeedId,
+    subfeedHash: new Array(41).join('b') as any as SubfeedHash,
     position: 4
 }
 export const isSubfeedWatch = (x: any): x is SubfeedWatch => {
@@ -787,7 +750,7 @@ export const isFeedSubfeedId = (x: any): x is FeedSubfeedId => {
            (isFeedId(parts[0])) &&
            (isSubfeedHash(parts[1]));
 }
-export const exampleFeedSubfeedId: FeedSubfeedId = feedSubfeedId(exampleFeedId, exampleSubfeedHash);
+export const exampleFeedSubfeedId: FeedSubfeedId = feedSubfeedId(new Array(65).join('F') as any as FeedId, new Array(41).join('b') as any as SubfeedHash);
 _tests.FeedSubfeedId = () => {
     assert(isFeedSubfeedId(exampleFeedSubfeedId));
 }
@@ -806,41 +769,6 @@ export const toSubfeedWatchesRAM = (x: SubfeedWatches) => {
 export const toSubfeedWatches = (x: SubfeedWatchesRAM) => {
     return mapToObject<SubfeedWatchName, SubfeedWatch>(x);
 }
-
-// FindFileResult
-export interface FindFileResult {
-    nodeId: NodeId,
-    fileKey: FileKey,
-    fileSize: ByteCount
-}
-export const isFindFileResult = (x: any): x is FindFileResult => {
-    return _validateObject(x, {
-        nodeId: isNodeId,
-        fileKey: isFileKey,
-        fileSize: isByteCount
-    });
-}
-export const exampleFindFileResult: FindFileResult = {
-    nodeId: exampleNodeId,
-    fileKey: exampleFileKey,
-    fileSize: byteCount(20)
-}
-// TODO: This is failing and I'm not sure why
-_tests.FindFileResult = () => { assert(isFindFileResult(exampleFindFileResult)) }
-
-
-// RequestId
-export interface RequestId extends String {
-    __requestId__: never // phantom type
-}
-export const isRequestId = (x: any): x is RequestId => {
-    if (!isString(x)) return false;
-    return (/^[A-Za-z]{10}$/.test(x));
-}
-export const createRequestId = () => {
-    return randomAlphaString(10) as any as RequestId;
-}
-_tests.RequestId = () => { assert(isRequestId(createRequestId())); }
 
 // ChannelName
 export interface LiveFeedSubscriptionName extends String {
@@ -868,8 +796,8 @@ export const isLiveFeedSubscription = (x: any): x is LiveFeedSubscription => {
 }
 export const exampleLiveFeedSubscription: LiveFeedSubscription = {
     subscriptionName: "This is my subscription" as any as LiveFeedSubscriptionName,
-    feedId: exampleFeedId,
-    subfeedHash: exampleSubfeedHash,
+    feedId: new Array(65).join('F') as any as FeedId,
+    subfeedHash: new Array(41).join('b') as any as SubfeedHash,
     position: 12
 }
 _tests.LiveFeedSubscription = () => { assert(isLiveFeedSubscription(exampleLiveFeedSubscription)) }
@@ -929,15 +857,15 @@ export const isMulticastAnnounceMessage = (x: any): x is MulticastAnnounceMessag
 }
 export const exampleMulticastAnnounceMessage: MulticastAnnounceMessage = {
     body: {
-        protocolVersion: exampleProtocolVersion,
-        fromNodeId: exampleNodeId,
+        protocolVersion: "valid example protocol" as any as ProtocolVersion,
+        fromNodeId: new Array(65).join('a') as any as NodeId,
         messageType: 'announce',
         requestData: {  // TODO: This should be standardized; and we are growing toward a weird cross-import situation.
             requestType: 'announce',
             channelNodeInfo: exampleChannelNodeInfo
         }
     },
-    signature: exampleSignature
+    signature: new Array(65).join('a') as any as Signature
 }
 _tests.MulticastAnnounceMessage = () => {
     assert(isMulticastAnnounceMessage(exampleMulticastAnnounceMessage));
