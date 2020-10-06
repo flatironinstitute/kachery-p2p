@@ -271,7 +271,7 @@ class KacheryP2PNode {
                                 endByte: chunk.end
                             }
                         }
-                        const f = this.#downloadOptimizer.addFile(chunkFileKey)
+                        const f = this.#downloadOptimizer.addFile(chunkFileKey, byteCount(byteCountToNumber(chunk.end) - byteCountToNumber(chunk.start)))
                         f.incrementNumPointers()
                         inProgressFiles.push(f)
                         f.onError(err => {
@@ -325,7 +325,8 @@ class KacheryP2PNode {
                     }
                 }
                 else {
-                    const f = this.#downloadOptimizer.addFile(fileKey)
+                    let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null
+                    const f = this.#downloadOptimizer.addFile(fileKey, fileSize)
                     f.incrementNumPointers()
                     inProgressFiles.push(f)
                     f.onError(err => {
@@ -757,7 +758,7 @@ class KacheryP2PNode {
     }
     async _handleDownloadFileDataRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: DownloadFileDataRequestData}): Promise<DownloadFileDataResponseData> {
         const { fileKey, startByte, endByte } = requestData
-        if ((byteCountToNumber(startByte) < 0) || (byteCountToNumber(startByte) >= byteCountToNumber(endByte))) {
+        if ((byteCountToNumber(startByte) < 0) || ((endByte !== null) && (byteCountToNumber(startByte) >= byteCountToNumber(endByte)))) {
             return {
                 requestType: 'downloadFileData',
                 success: false,
@@ -765,7 +766,7 @@ class KacheryP2PNode {
                 errorMessage: errorMessage('Invalid start/end bytes')
             }
         }
-        const {found, size, localPath, byteOffset} = await this.#kacheryStorageManager.findFile(fileKey);
+        const {found, size, localPath, byteOffset} = await this.#kacheryStorageManager.findFile(fileKey)
         if (!found) {
             return {
                 requestType: 'downloadFileData',

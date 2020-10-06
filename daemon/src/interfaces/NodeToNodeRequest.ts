@@ -320,7 +320,7 @@ export const isDownloadFileDataRequestData = (x: any): x is DownloadFileDataRequ
         requestType: isEqualTo('downloadFileData'),
         fileKey: isFileKey,
         startByte: isBigInt,
-        endByte: isBigInt
+        endByte: isOneOf([isNull, isBigInt])
     })
 }
 export interface DownloadFileDataResponseData {

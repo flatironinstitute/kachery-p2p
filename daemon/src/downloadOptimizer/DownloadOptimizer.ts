@@ -1,10 +1,11 @@
 import { FileKey, NodeId } from "../interfaces/core";
+import { ByteCount } from "../udp/UdpCongestionManager";
 import { default as DownloaderCreator } from "./DownloaderCreator";
 import DownloadOptimizerJob from "./DownloadOptimizerJob";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
 
 export default class DownloadOptimizer {
-    #files = new Map<FileKey, DownloadOptimizerJob>()
+    #jobs = new Map<FileKey, DownloadOptimizerJob>()
     #providerNodes = new Map<NodeId, DownloadOptimizerProviderNode>()
     #providerNodesForFiles = new Map<FileKey, Set<NodeId>>()
     #downloaderCreator: DownloaderCreator
@@ -13,20 +14,20 @@ export default class DownloadOptimizer {
     constructor(downloaderCreator: DownloaderCreator) {
         this.#downloaderCreator = downloaderCreator
     }
-    addFile(fileKey: FileKey): DownloadOptimizerJob {
-        let f = this.#files.get(fileKey)
-        if (!f) {
-            f = new DownloadOptimizerJob(fileKey)
-            this.#files.set(fileKey, f)
+    addFile(fileKey: FileKey, fileSize: ByteCount | null): DownloadOptimizerJob {
+        let j = this.#jobs.get(fileKey)
+        if (!j) {
+            j = new DownloadOptimizerJob(fileKey, fileSize)
+            this.#jobs.set(fileKey, j)
         }
-        f.onError(() => {
-            this.#files.delete(fileKey)
+        j.onError(() => {
+            this.#jobs.delete(fileKey)
         });
-        f.onFinished(() => {
-            this.#files.delete(fileKey)
+        j.onFinished(() => {
+            this.#jobs.delete(fileKey)
         });
         this._scheduleUpdate()
-        return f
+        return j
     }
     setProviderNodeForFile({ fileKey, nodeId }: {fileKey: FileKey, nodeId: NodeId}) {
         this.#providerNodes.forEach((n: DownloadOptimizerProviderNode, nodeId: NodeId) => {
@@ -50,11 +51,11 @@ export default class DownloadOptimizer {
         }, 1);
     }
     _update() {
-        let numActiveFileDownloads = Array.from(this.#files.values()).filter(file => file.isDownloading).length;
+        let numActiveFileDownloads = Array.from(this.#jobs.values()).filter(file => file.isDownloading).length;
         if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
-            this.#files.forEach((file, fileKey) => {
+            this.#jobs.forEach((job, fileKey) => {
                 if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
-                    if (!file.isDownloading()) {
+                    if (!job.isDownloading()) {
                         const providerNodeCandidates: DownloadOptimizerProviderNode[] = []
                         this.#providerNodesForFiles.get(fileKey)?.forEach(providerNodeId => {
                             const providerNode = this.#providerNodes.get(providerNodeId)
@@ -64,8 +65,8 @@ export default class DownloadOptimizer {
                         })
                         const providerNode = chooseFastestProviderNode(providerNodeCandidates);
                         if (providerNode) {
-                            const downloader = this.#downloaderCreator.createDownloader({ fileKey: file.fileKey(), nodeId: providerNode.nodeId() });
-                            file.setDownloader(downloader)
+                            const downloader = this.#downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId() });
+                            job.setDownloader(downloader)
                             providerNode.setDownloader(downloader)
                             numActiveFileDownloads++;
                         }

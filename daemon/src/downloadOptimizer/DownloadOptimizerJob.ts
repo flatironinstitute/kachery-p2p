@@ -1,6 +1,6 @@
 import { FileKey } from "../interfaces/core";
 import { LoadFileProgress } from '../KacheryP2PNode';
-import { byteCount } from "../udp/UdpCongestionManager";
+import { ByteCount, byteCount } from "../udp/UdpCongestionManager";
 import { Downloader } from "./DownloaderCreator";
 
 export default class DownloadOptimizerJob {
@@ -11,11 +11,16 @@ export default class DownloadOptimizerJob {
     #onFinishedCallbacks: (() => void)[]
     #numPointers = 0
     #bytesLoaded = byteCount(0)
-    constructor(fileKey: FileKey) {
+    #fileSize: ByteCount | null
+    constructor(fileKey: FileKey, fileSize: ByteCount | null) {
         this.#fileKey = fileKey
+        this.#fileSize = fileSize
     }
     fileKey() {
-        return this.#fileKey;
+        return this.#fileKey
+    }
+    fileSize() {
+        return this.#fileSize
     }
     incrementNumPointers() {
         this.#numPointers ++

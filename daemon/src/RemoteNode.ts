@@ -1,9 +1,10 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
 import { httpPostJson, urlPath } from "./common/httpPostJson";
-import { Address, ChannelName, ChannelNodeInfo, createRequestId, NodeId, nodeIdToPublicKey, nowTimestamp } from "./interfaces/core";
+import { Address, ChannelName, ChannelNodeInfo, createRequestId, FileKey, NodeId, nodeIdToPublicKey, nowTimestamp } from "./interfaces/core";
 import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import { protocolVersion } from "./protocolVersion";
+import { ByteCount } from "./udp/UdpCongestionManager";
 
 export type SendRequestMethod = 'default' | 'udp'
 
@@ -15,6 +16,7 @@ class RemoteNode {
     #bootstrapAddress: Address | null
     #bootstrapWebSocketAddress: Address | null
     #bootstrapUdpSocketAddress: Address | null
+    #fileSizesByFileKey: ByteCount | null
     constructor(node: KacheryP2PNode, remoteNodeId: NodeId, opts: {
         isBootstrap: boolean,
         bootstrapAddress: Address | null,
@@ -67,6 +69,9 @@ class RemoteNode {
     getRemoteNodeWebSocketAddress(): Address | null {
         // todo: if not a bootstrap node, check the channel node infos
         return this.bootstrapWebSocketAddress();
+    }
+    getFileSizeForFileKey(fileKey: FileKey): ByteCount | null {
+        return this.#fileSizesByFileKey.get(fileKey) || null
     }
     _formRequestFromRequestData(requestData: NodeToNodeRequestData): NodeToNodeRequest {
         const requestId = createRequestId();
