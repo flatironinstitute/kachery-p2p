@@ -2,7 +2,7 @@ import express, { Express } from 'express';
 import JsonSocket from 'json-socket';
 import { Socket } from 'net';
 import { action } from '../common/action';
-import start_http_server from '../common/start_http_server.js';
+import start_http_server from '../common/start_http_server';
 import { sleepMsec } from '../common/util';
 import { ChannelName, FeedId, FeedName, FileKey, FindLiveFeedResult, isArrayOf, isChannelName, isFeedId, isFeedName, isFileKey, isJSONObject, isNodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';

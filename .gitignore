@@ -5,8 +5,15 @@ data
 data2
 kachery-storage*
 old-*
+package-lock.json
+yarn.lock
+daemon/coverage/
 daemon/lib
+daemon/.nyc_output
+daemon/package-lock.json
+daemon/yarn.lock
 dist
+
 
 __pycache__
 *.egg-info

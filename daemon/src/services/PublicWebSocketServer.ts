@@ -1,8 +1,8 @@
 import WebSocket from 'ws';
-import { action } from '../common/action.js';
-import { Port, toNumber } from '../interfaces/core.js';
-import KacheryP2PNode from '../KacheryP2PNode.js';
-import { ProxyConnectionToClient } from '../proxyConnections/ProxyConnectionToClient.js';
+import { action } from '../common/action';
+import { Port, toNumber } from '../interfaces/core';
+import KacheryP2PNode from '../KacheryP2PNode';
+import { ProxyConnectionToClient } from '../proxyConnections/ProxyConnectionToClient';
 
 class PublicWebSocketServer {
     #node: KacheryP2PNode

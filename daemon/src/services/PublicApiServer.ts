@@ -1,13 +1,13 @@
 import express, { Express } from 'express';
 import { Socket } from 'net';
-import { action } from '../common/action.js';
-import start_http_server from '../common/start_http_server.js';
-import { sleepMsec } from '../common/util.js';
-import { Address, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, _validateObject } from '../interfaces/core.js';
-import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest.js';
+import { action } from '../common/action';
+import start_http_server from '../common/start_http_server';
+import { sleepMsec } from '../common/util';
+import { Address, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, _validateObject } from '../interfaces/core';
+import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
-import { daemonVersion, protocolVersion } from '../protocolVersion.js';
-import { ByteCount } from '../udp/UdpCongestionManager.js';
+import { daemonVersion, protocolVersion } from '../protocolVersion';
+import { ByteCount } from '../udp/UdpCongestionManager';
 
 interface Req {
     body: any,
