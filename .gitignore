@@ -7,6 +7,8 @@ kachery-storage*
 old-*
 daemon/lib
 dist
+daemon/.nyc_output
+daemon/coverage/
 
 __pycache__
 *.egg-info
