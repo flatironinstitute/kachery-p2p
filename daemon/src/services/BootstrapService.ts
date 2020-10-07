@@ -1,23 +1,40 @@
 import { action } from "../common/action";
-import { httpPostJson, urlPath } from "../common/httpPostJson";
+import { httpPostJson, UrlPath, urlPath } from "../common/httpPostJson";
 import { sleepMsec } from "../common/util";
-import { Address } from "../interfaces/core";
-import KacheryP2PNode from "../KacheryP2PNode";
-import RemoteNodeManager from "../RemoteNodeManager";
+import { Address, JSONObject, NodeId } from "../interfaces/core";
 import { isApiProbeResponse } from "../services/PublicApiServer";
+import { DurationMsec, durationMsec, durationMsecToNumber } from "../udp/UdpCongestionManager";
+
+interface RemoteNodeManagerInterface {
+    setBootstrapNode: (remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, publicUdpSocketAddress: Address | null) => void
+}
+
+interface RemoteNodeInterface {
+}
+
+interface KacheryP2PNodeInterface {
+    remoteNodeManager: () => RemoteNodeManagerInterface
+    bootstrapAddresses: () => Address[]
+}
+
+export type HttpPostJson = (address: Address, path: UrlPath, data: JSONObject, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>
 
 export default class BootstrapService {
-    #node: KacheryP2PNode
-    #remoteNodeManager: RemoteNodeManager
-    constructor(node: KacheryP2PNode) {
+    #node: KacheryP2PNodeInterface
+    #remoteNodeManager: RemoteNodeManagerInterface
+    #halted = false
+    constructor(node: KacheryP2PNodeInterface, private opts: {probeIntervalMsec: DurationMsec, httpPostJson: HttpPostJson} = {probeIntervalMsec: durationMsec(15000), httpPostJson: httpPostJson}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
-        this._start();
+        this._start()
+    }
+    stop() {
+        this.#halted = true
     }
     async _probeBootstrapNode(address: Address) {
-        const response = await httpPostJson(address, urlPath('/probe'), {}, {timeoutMsec: 2000});
+        const response = await this.opts.httpPostJson(address, urlPath('/probe'), {}, {timeoutMsec: durationMsec(2000)});
         if (!isApiProbeResponse(response)) {
-            throw Error('Invalid probe response from bootstrap node.');
+            throw Error('Invalid probe response from bootstrap node.')
         }
         const {nodeId: remoteNodeId, isBootstrapNode, webSocketAddress} = response
         if (!isBootstrapNode) {
@@ -27,18 +44,20 @@ export default class BootstrapService {
         this.#remoteNodeManager.setBootstrapNode(remoteNodeId, address, webSocketAddress, publicUdpSocketAddress)
     }
     async _start() {
+        await sleepMsec(2) // important for tests
         // probe the bootstrap nodes periodically
         while (true) {
+            if (this.#halted) return
             for (let address of this.#node.bootstrapAddresses()) {
 
                 /////////////////////////////////////////////////////////////////////////
                 action('probeBootstrapNode', {context: 'BootstrapService', address}, async () => {
                     await this._probeBootstrapNode(address)
-                }, null);
+                }, null)
                 /////////////////////////////////////////////////////////////////////////
                 
             }
-            await sleepMsec(15000);
+            await sleepMsec(durationMsecToNumber(this.opts.probeIntervalMsec))
         }
     }
 }

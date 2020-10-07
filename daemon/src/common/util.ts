@@ -21,6 +21,17 @@ export const randomAlphaString = (num_chars: number) => {
     return text;
 }
 
+export const randomHexString = (num_chars: number) => {
+    if (!num_chars) {
+        throw Error('randomHexString: num_chars needs to be a positive integer.')
+    }
+    var text = "";
+    var possible = "0123456789abcdef";
+    for (var i = 0; i < num_chars; i++)
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    return text;
+}
+
 export const sha1MatchesFileKey = ({sha1, fileKey}: {sha1: Sha1Hash, fileKey: FileKey}) => {
     if (fileKey.sha1) {
         return fileKey.sha1 === sha1
