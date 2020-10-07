@@ -302,7 +302,13 @@ class FeedManager {
     async _getPrivateKeyForFeed(feedId: FeedId): Promise<PrivateKeyHex | null> {
         // Consult the config to get the private key associated with a particular feed ID
         const config = await this._loadFeedsConfig();
-        return config.feeds.get(feedId)?.privateKey || null;
+        const x = config.feeds.get(feedId)
+        if (x) {
+            return x.privateKey || null
+        }
+        else {
+            return null
+        }
     }
     async _loadSubfeed({feedId, subfeedHash}: {feedId: FeedId, subfeedHash: SubfeedHash}) {
         // Load a subfeed (Subfeed() instance

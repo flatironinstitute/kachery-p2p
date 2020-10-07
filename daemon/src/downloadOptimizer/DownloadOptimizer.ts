@@ -1,17 +1,21 @@
 import { FileKey, NodeId } from "../interfaces/core";
 import { ByteCount } from "../udp/UdpCongestionManager";
-import { default as DownloaderCreator } from "./DownloaderCreator";
+import { Downloader } from "./DownloaderCreator";
 import DownloadOptimizerJob from "./DownloadOptimizerJob";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
+
+interface DownloaderCreatorInterface {
+    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId}) => Downloader
+}
 
 export default class DownloadOptimizer {
     #jobs = new Map<FileKey, DownloadOptimizerJob>()
     #providerNodes = new Map<NodeId, DownloadOptimizerProviderNode>()
     #providerNodesForFiles = new Map<FileKey, Set<NodeId>>()
-    #downloaderCreator: DownloaderCreator
+    #downloaderCreator: DownloaderCreatorInterface
     #maxNumSimultaneousFileDownloads = 5
     #updateScheduled = false
-    constructor(downloaderCreator: DownloaderCreator) {
+    constructor(downloaderCreator: DownloaderCreatorInterface) {
         this.#downloaderCreator = downloaderCreator
     }
     addFile(fileKey: FileKey, fileSize: ByteCount | null): DownloadOptimizerJob {
@@ -30,17 +34,17 @@ export default class DownloadOptimizer {
         return j
     }
     setProviderNodeForFile({ fileKey, nodeId }: {fileKey: FileKey, nodeId: NodeId}) {
-        this.#providerNodes.forEach((n: DownloadOptimizerProviderNode, nodeId: NodeId) => {
-            if (!this.#providerNodes.has(nodeId)) {
-                const p = new DownloadOptimizerProviderNode(nodeId);
-                this.#providerNodes.set(nodeId, p)
-            }
-            if (!this.#providerNodesForFiles.has(fileKey)) {
-                this.#providerNodesForFiles.set(fileKey, new Set<NodeId>())
-            }
-            this.#providerNodesForFiles.get(fileKey)?.add(nodeId);
-            this._scheduleUpdate();
-        })
+        if (!this.#providerNodes.has(nodeId)) {
+            const p = new DownloadOptimizerProviderNode(nodeId)
+            this.#providerNodes.set(nodeId, p)
+        }
+        let s: Set<NodeId> | null = this.#providerNodesForFiles.get(fileKey) || null
+        if (s == null) {
+            s = new Set<NodeId>()
+            this.#providerNodesForFiles.set(fileKey, s)
+        }
+        s.add(nodeId)
+        this._scheduleUpdate()
     }
     _scheduleUpdate() {
         if (this.#updateScheduled) return
@@ -55,14 +59,17 @@ export default class DownloadOptimizer {
         if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
             this.#jobs.forEach((job, fileKey) => {
                 if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
-                    if (!job.isDownloading()) {
+                    if ((!job.isDownloading()) && (job.numPointers() > 0)) {
                         const providerNodeCandidates: DownloadOptimizerProviderNode[] = []
-                        this.#providerNodesForFiles.get(fileKey)?.forEach(providerNodeId => {
-                            const providerNode = this.#providerNodes.get(providerNodeId)
-                            if ((providerNode) && (!providerNode.isDownloading())) {
-                                providerNodeCandidates.push(providerNode);
-                            }
-                        })
+                        let providerNodeIds = this.#providerNodesForFiles.get(fileKey)
+                        if (providerNodeIds) {
+                            providerNodeIds.forEach(providerNodeId => {
+                                const providerNode = this.#providerNodes.get(providerNodeId)
+                                if ((providerNode) && (!providerNode.isDownloading())) {
+                                    providerNodeCandidates.push(providerNode);
+                                }
+                            })
+                        }
                         const providerNode = chooseFastestProviderNode(providerNodeCandidates);
                         if (providerNode) {
                             const downloader = this.#downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId() });

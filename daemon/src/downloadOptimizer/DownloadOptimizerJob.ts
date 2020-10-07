@@ -6,9 +6,9 @@ import { Downloader } from "./DownloaderCreator";
 export default class DownloadOptimizerJob {
     #fileKey: FileKey
     #currentDownloader: Downloader | null = null
-    #onProgressCallbacks: ((progress: LoadFileProgress) => void)[]
-    #onErrorCallbacks: ((err: Error) => void)[]
-    #onFinishedCallbacks: (() => void)[]
+    #onProgressCallbacks: ((progress: LoadFileProgress) => void)[] = []
+    #onErrorCallbacks: ((err: Error) => void)[] = []
+    #onFinishedCallbacks: (() => void)[] = []
     #numPointers = 0
     #bytesLoaded = byteCount(0)
     #fileSize: ByteCount | null
@@ -33,6 +33,9 @@ export default class DownloadOptimizerJob {
             }
         }
     }
+    numPointers() {
+        return this.#numPointers
+    }
     isDownloading() {
         return this.#currentDownloader ? true : false;
     }
@@ -50,6 +53,7 @@ export default class DownloadOptimizerJob {
     }
     setDownloader(downloader: Downloader) {
         if (this.#currentDownloader !== null) {
+            /* istanbul ignore next */
             throw Error('Unexpected: job already has a downloader')
         }
         this.#currentDownloader = downloader

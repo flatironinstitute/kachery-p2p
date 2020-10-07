@@ -23,6 +23,7 @@ class DownloadOptimizerProviderNode {
     }
     setDownloader(j: Downloader) {
         if (this.#currentDownloader !== null) {
+            /* istanbul ignore next */
             throw Error('Unexpected: provider node already has a file downloader')
         }
         this.#currentDownloader = j

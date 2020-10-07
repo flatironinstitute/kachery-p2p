@@ -1,6 +1,7 @@
 import { expect } from 'chai'; // test library
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import * as ut from '../../src/interfaces/core';
+import { byteCount } from '../../src/udp/UdpCongestionManager';
 
 
 // Example objects (test fixtures)
@@ -12,8 +13,8 @@ const validFileKey = {
     sha1: new Array(41).join('5'),
     chunkOf: {
         fileKey: { sha1: new Array(41).join('6') },
-        startByte: BigInt(0),
-        endByte: BigInt(100)
+        startByte: byteCount(0),
+        endByte: byteCount(100)
     }
 }
 

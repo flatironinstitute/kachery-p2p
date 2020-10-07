@@ -18,6 +18,7 @@ export default class RateEstimator {
     }
     reportStart() {
         if (this.#running) {
+            /* istanbul ignore next */
             throw Error('Cannot start when already running');    
         }
         this.#currentEstimateTimestamp = nowTimestamp();
@@ -25,6 +26,7 @@ export default class RateEstimator {
     }
     reportStop() {
         if (!this.#running) {
+            /* istanbul ignore next */
             throw Error('Cannot stop when not running');
         }
         this.reportBytes(byteCount(0));
@@ -32,6 +34,7 @@ export default class RateEstimator {
     }
     reportBytes(numBytes: ByteCount) {
         if (!this.#running) {
+            /* istanbul ignore next */
             throw Error('Cannot report bytes when not running');
         }
         const elapsedSecSinceLastEstimate = elapsedSince(this.#currentEstimateTimestamp) / 1000;

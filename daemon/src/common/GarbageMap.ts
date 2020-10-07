@@ -9,7 +9,13 @@ export default class GarbageMap<Key, Value> {
         this.#expirationTimeoutMsec = expirationTimeoutMSec
     }
     get(key: Key): Value | undefined {
-        return this.#map.get(key) ? this.#map.get(key)?.value : undefined
+        const x = this.#map.get(key)
+        if (x) {
+            return x.value
+        }
+        else {
+            return undefined
+        }
     }
     set(key: Key, value: Value) {
         this.#map.set(key, {
