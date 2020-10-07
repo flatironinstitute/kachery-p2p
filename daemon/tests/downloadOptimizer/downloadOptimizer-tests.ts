@@ -1,3 +1,4 @@
+import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import { sleepMsec } from '../../src/common/util';
 import DownloadOptimizer from '../../src/downloadOptimizer/DownloadOptimizer';
@@ -58,58 +59,48 @@ class MockDownloaderCreator {
  // need to explicitly use mocha prefix once or the dependency gets wrongly cleaned up
  mocha.describe('downloadOptimizer', () => {
     describe('Add file', () => {
-        it('Add file', async () => {
-            return new Promise((resolve, reject) => {
-                (async () => {
-                    const fileKey = exampleFileKey
-                    const downloaderCreator = new MockDownloaderCreator()
-                    const downloadOptimizer = new DownloadOptimizer(downloaderCreator)
-                    const f: DownloadOptimizerJob = downloadOptimizer.addFile(fileKey, null)
-                    let gotProgress = false
-                    f.incrementNumPointers()
-                    f.onProgress((progress) => {
-                        gotProgress = true
-                    })
-                    f.onFinished(() => {
-                        if (!gotProgress) {
-                            reject(Error('Did not get progress.'))
-                            return
-                        }
-                        if (f.bytesLoaded() !== byteCount(100)) {
-                            reject(Error('Unexpected number of bytes loaded.'))
-                            return
-                        }
-                        resolve()
-                    })
-                    f.onError((err: Error) => {
-                        reject(err)
-                    })
-                    await sleepMsec(2)
-                    downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: exampleNodeId1})
-                    downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: exampleNodeId2})
-                })()
-            })
+        it('Add file', (done) => {
+            (async () => {
+                const fileKey = exampleFileKey
+                const downloaderCreator = new MockDownloaderCreator()
+                const downloadOptimizer = new DownloadOptimizer(downloaderCreator)
+                const f: DownloadOptimizerJob = downloadOptimizer.addFile(fileKey, null)
+                let gotProgress = false
+                f.incrementNumPointers()
+                f.onProgress((progress) => {
+                    gotProgress = true
+                })
+                f.onFinished(() => {
+                    expect(gotProgress).is.true
+                    expect(f.bytesLoaded()).to.equal(byteCount(100))
+                    done()
+                })
+                f.onError((err: Error) => {
+                    throw err
+                })
+                await sleepMsec(2)
+                downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: exampleNodeId1})
+                downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: exampleNodeId2})
+            })()
         });
-        it('Add error file', async () => {
-            return new Promise((resolve, reject) => {
-                (async () => {
-                    const fileKey = exampleErrorFileKey
-                    const downloaderCreator = new MockDownloaderCreator()
-                    const downloadOptimizer = new DownloadOptimizer(downloaderCreator)
-                    const f: DownloadOptimizerJob = downloadOptimizer.addFile(fileKey, null)
-                    f.incrementNumPointers()
-                    f.onFinished(() => {
-                        reject(Error('Did not get the expected error'))
-                    })
-                    f.onError((err: Error) => {
-                        // todo: check the error type
-                        resolve()
-                    })
-                    await sleepMsec(2)
-                    downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: exampleNodeId1})
-                    downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: exampleNodeId2})
-                })()
-            })
+        it('Add error file', (done) => {
+            (async () => {
+                const fileKey = exampleErrorFileKey
+                const downloaderCreator = new MockDownloaderCreator()
+                const downloadOptimizer = new DownloadOptimizer(downloaderCreator)
+                const f: DownloadOptimizerJob = downloadOptimizer.addFile(fileKey, null)
+                f.incrementNumPointers()
+                f.onFinished(() => {
+                    throw Error('Did not get the expected error')
+                })
+                f.onError((err: Error) => {
+                    // todo: check the error type
+                    done()
+                })
+                await sleepMsec(2)
+                downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: exampleNodeId1})
+                downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: exampleNodeId2})
+            })()
         });
     })
  })

@@ -54,10 +54,12 @@ export default class AnnounceService {
             throw Error('Unexpected.')
         }
         if (!responseData.success) {
+            // what should we do here? remove the node?
             console.warn(`Response error for announce: ${responseData.errorMessage}`)
         }
     }
     async _start() {
+        await sleepMsec(2) // important for tests
         // Announce self other nodes in our channels and to bootstrap nodes
         let lastBootstrapAnnounceTimestamp: Timestamp = zeroTimestamp()
         while (true) {

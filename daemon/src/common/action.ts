@@ -1,3 +1,7 @@
+const _globalData: {verbose: number} = {
+    verbose: 0
+}
+
 export const action = async (
     actionName: string,
     actionData: any,
@@ -5,7 +9,9 @@ export const action = async (
     onError: ((err: Error) => Promise<void>) | null
 ) => {
     try {
-        console.info(`${actionName} ${actionData}`);
+        if (_globalData.verbose > 0) {
+            console.info(`${actionName} ${actionData}`);
+        }
         await operation()
     }
     catch(err) {
