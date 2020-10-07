@@ -3,7 +3,7 @@ import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { Address, isBoolean, isProtocolVersion, isString, ProtocolVersion, toNumber, _validateObject } from '../interfaces/core';
 import { protocolVersion } from '../protocolVersion';
-import UdpCongestionManager, { byteCount } from './UdpCongestionManager';
+import UdpCongestionManager, { byteCount, DurationMsec } from './UdpCongestionManager';
 
 class UdpTimeoutError extends Error {
     constructor(errorString: string) {
@@ -48,7 +48,7 @@ export default class UdpPacketSender {
     socket() {
         return this.#socket
     }
-    async sendPackets(address: Address, packets: Buffer[], opts: {timeoutMsec: number}): Promise<void> {
+    async sendPackets(address: Address, packets: Buffer[], opts: {timeoutMsec: DurationMsec}): Promise<void> {
         const outgoingPackets = packets.map(p => (
             new OutgoingPacket(this, address, p, opts.timeoutMsec)
         ))
@@ -86,8 +86,8 @@ class OutgoingPacket {
     #onCancelled: (() => void) | null
     #confirmed = false
     #cancelled = false
-    #timeoutMsec: number
-    constructor(manager: UdpPacketSender, address: Address, buffer: Buffer, timeoutMsec: number) {
+    #timeoutMsec: DurationMsec
+    constructor(manager: UdpPacketSender, address: Address, buffer: Buffer, timeoutMsec: DurationMsec) {
         this.#manager = manager
         this.#address = address
         this.#buffer = buffer

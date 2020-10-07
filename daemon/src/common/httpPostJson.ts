@@ -2,6 +2,7 @@ import axios from 'axios';
 import http from 'http';
 import { Readable } from 'stream';
 import { Address, HostName, Port } from '../interfaces/core';
+import { durationMsec, DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager';
 
 export const _tests: {[key: string]: () => Promise<void>} = {}
 
@@ -12,8 +13,8 @@ export const urlPath = (x: string) => {
     return x as any as UrlPath
 }
 
-export const httpPostJson = async (address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: number}): Promise<Object> => {
-    const res = await axios.post('http://' + address.hostName + ':' + address.port + path, data, {timeout: opts.timeoutMsec, responseType: 'json'})
+export const httpPostJson = async (address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}): Promise<Object> => {
+    const res = await axios.post('http://' + address.hostName + ':' + address.port + path, data, {timeout: durationMsecToNumber(opts.timeoutMsec), responseType: 'json'})
     return res.data
 }
 _tests.httpPostJson = async () => {
@@ -51,7 +52,7 @@ _tests.httpPostJson = async () => {
             const x = await httpPostJson({
                 hostName: 'localhost' as any as HostName,
                 port: PORT as any as Port
-            }, urlPath('/test'), {test: 'data'}, {timeoutMsec: 4000})
+            }, urlPath('/test'), {test: 'data'}, {timeoutMsec: durationMsec(4000)})
             if (JSON.stringify(x) !== JSON.stringify({echo: {test: 'data'}})) {
                 _error(Error('Problem with response'))
                 return

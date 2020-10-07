@@ -3,6 +3,7 @@ import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, jsonO
 import { AnnounceRequestData, AnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest';
 import KacheryP2PNode from './KacheryP2PNode';
 import RemoteNode, { SendRequestMethod } from './RemoteNode';
+import { DurationMsec, durationMsecToNumber } from './udp/UdpCongestionManager';
 
 class RemoteNodeManager {
     #node: KacheryP2PNode
@@ -74,19 +75,19 @@ class RemoteNodeManager {
         }
     }
     async getChannelInfo(channelName: ChannelName): Promise<ChannelInfo> {
-        const nodes: ChannelNodeInfo[] = [];
+        const nodes: ChannelNodeInfo[] = []
         this.#remoteNodes.forEach(n => {
-            const cni = n.getChannelNodeInfo(channelName);
+            const cni = n.getChannelNodeInfo(channelName)
             if (cni !== null) {
-                nodes.push(cni);
+                nodes.push(cni)
             }
         })
         return {
             nodes
         }
     }
-    async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: number, method: SendRequestMethod}): Promise<NodeToNodeResponseData> {
-        const remoteNode = this.#remoteNodes.get(nodeId);
+    async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}): Promise<NodeToNodeResponseData> {
+        const remoteNode = this.#remoteNodes.get(nodeId)
         if (!remoteNode) {
             throw Error(`Cannot send request to node: node with ID ${nodeId} not found.`)
         }
@@ -126,7 +127,7 @@ class RemoteNodeManager {
     getRemoteNode(remoteNodeId: NodeId): RemoteNode | null {
         return this.#remoteNodes.get(remoteNodeId) || null
     }
-    sendRequestToNodesInChannels(requestData: NodeToNodeRequestData, opts: {timeoutMsec: number, channelNames: ChannelName[]}) {
+    sendRequestToNodesInChannels(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, channelNames: ChannelName[]}) {
         let finished = false;
         const _onResponseCallbacks: ((nodeId: NodeId, responseData: NodeToNodeResponseData) => void)[] = [];
         const _onErrorResponseCallbacks: ((nodeId: NodeId, reason: any) => void)[] = [];
@@ -164,23 +165,23 @@ class RemoteNodeManager {
         }
         const _cancel = () => {
             // at some point in the future - cancel the pending requests
-            _finalize();
+            _finalize()
         }
         const onResponse = (callback: (nodeId: NodeId, responseData: NodeToNodeResponseData) => void) => {
-            _onResponseCallbacks.push(callback);
+            _onResponseCallbacks.push(callback)
         }
         const onErrorResponse = (callback: (nodeId: NodeId, reason: any) => void) => {
-            _onErrorResponseCallbacks.push(callback);
+            _onErrorResponseCallbacks.push(callback)
         }
         const onFinished = (callback: () => void) => {
-            _onFinishedCallbacks.push(callback);
+            _onFinishedCallbacks.push(callback)
         }
         setTimeout(() => {
             _cancel();
-        }, opts.timeoutMsec);
+        }, durationMsecToNumber(opts.timeoutMsec))
         // the .map is required so that we wait until all are settled
         Promise.all(promises.map(p => p.catch(e => e))).finally(() => {
-            _finalize();
+            _finalize()
         })
         return {
             onResponse,

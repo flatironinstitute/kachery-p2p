@@ -4,7 +4,7 @@ import { Address, ChannelName, ChannelNodeInfo, createRequestId, FileKey, NodeId
 import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import { protocolVersion } from "./protocolVersion";
-import { ByteCount } from "./udp/UdpCongestionManager";
+import { ByteCount, DurationMsec } from "./udp/UdpCongestionManager";
 
 export type SendRequestMethod = 'default' | 'udp'
 
@@ -61,20 +61,22 @@ class RemoteNode {
         this.#channelNodeInfoByChannel.forEach((channelNodeInfo, channelName) => {
             ret.push(channelName);
         });
-        return ret;
+        return ret
     }
     getChannelNodeInfo(channelName: ChannelName): ChannelNodeInfo | null {
-        return this.#channelNodeInfoByChannel.get(channelName) || null;
+        return this.#channelNodeInfoByChannel.get(channelName) || null
     }
     getRemoteNodeWebSocketAddress(): Address | null {
         // todo: if not a bootstrap node, check the channel node infos
-        return this.bootstrapWebSocketAddress();
+        return this.bootstrapWebSocketAddress()
     }
     getFileSizeForFileKey(fileKey: FileKey): ByteCount | null {
-        return this.#fileSizesByFileKey.get(fileKey) || null
+        // todo
+        return null
+        // return this.#fileSizesByFileKey.get(fileKey) || null
     }
     _formRequestFromRequestData(requestData: NodeToNodeRequestData): NodeToNodeRequest {
-        const requestId = createRequestId();
+        const requestId = createRequestId()
         const requestBody = {
             protocolVersion: protocolVersion(),
             requestId,
@@ -90,7 +92,7 @@ class RemoteNode {
         return request
     }
     _getRemoteNodeHttpAddress(): Address | null {
-        let address: Address | null = null;
+        let address: Address | null = null
         if (this.#isBootstrap && this.#bootstrapAddress) {
             return this.#bootstrapAddress
         }
@@ -113,7 +115,7 @@ class RemoteNode {
             }
         }
     }
-    async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: number, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
+    async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
         const address = this._getRemoteNodeHttpAddress();
         if (!address) {
             throw Error('Unable to send request... no http address found.')

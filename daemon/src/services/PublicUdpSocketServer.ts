@@ -7,6 +7,7 @@ import { isNodeToNodeRequest, isNodeToNodeResponse, NodeToNodeRequest, NodeToNod
 import { createUdpMessageId, isUdpHeader, numParts, NumParts, partIndex, PartIndex, UdpHeader, UdpMessagePart, UdpMessageType, UDP_MESSAGE_HEADER_SIZE, UDP_PACKET_SIZE } from "../interfaces/UdpMessage";
 import KacheryP2PNode from "../KacheryP2PNode";
 import { protocolVersion } from "../protocolVersion";
+import { durationMsec, DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager';
 import UdpMessagePartManager from '../udp/UdpMessagePartManager';
 import UdpPacketReceiver from '../udp/UdpPacketReceiver';
 import UdpPacketSender from "../udp/UdpPacketSender";
@@ -82,7 +83,7 @@ export default class PublicUdpSocketServer {
             }
         });
     }
-    async sendRequest(address: Address, request: NodeToNodeRequest, opts: {timeoutMsec: number}): Promise<{response: NodeToNodeResponse, header: UdpHeader}> {
+    async sendRequest(address: Address, request: NodeToNodeRequest, opts: {timeoutMsec: DurationMsec}): Promise<{response: NodeToNodeResponse, header: UdpHeader}> {
         /////////////////////////////////////////////////////////////////////////
         await action('/Udp/sendNodeToNodeRequest', {}, async () => {
             await this._sendMessage(address, "NodeToNodeRequest", request as any as JSONObject, {timeoutMsec: opts.timeoutMsec, requestId: request.body.requestId})
@@ -115,21 +116,21 @@ export default class PublicUdpSocketServer {
             })
             setTimeout(() => {
                 _handleError(Error('Timeout waiting for response'))
-            }, opts.timeoutMsec)
+            }, durationMsecToNumber(opts.timeoutMsec))
         })
     }
-    async _sendMessage(address: Address, messageType: UdpMessageType, messageData: Buffer | JSONObject, opts: {timeoutMsec: number, requestId: RequestId | null}): Promise<void> {
+    async _sendMessage(address: Address, messageType: UdpMessageType, messageData: Buffer | JSONObject, opts: {timeoutMsec: DurationMsec, requestId: RequestId | null}): Promise<void> {
         if ((this.#socket === null) || (this.#udpPacketSender === null)) {
             throw Error("Cannot _sendMessage before calling startListening()")
         }
-        let payloadIsJson: boolean;
+        let payloadIsJson: boolean
         let messageBuffer: Buffer
         if (Buffer.isBuffer(messageData)) {
             payloadIsJson = false
             messageBuffer = messageData
         }
         else {
-            payloadIsJson = true;
+            payloadIsJson = true
             messageBuffer = Buffer.from(JSON.stringify(messageData))
         }
         const parts: UdpMessagePart[] = this._createUdpMessageParts("NodeToNodeRequest", address, messageBuffer, {payloadIsJson, requestId: opts.requestId})
@@ -165,7 +166,7 @@ export default class PublicUdpSocketServer {
             /////////////////////////////////////////////////////////////////////////
             action('/Udp/handleNodeToNodeRequest', {fromNodeId: req.body.fromNodeId, requestId: req.body.requestId, requestType: req.body.requestData.requestType}, async () => {
                 const response: NodeToNodeResponse = await this.#node.handleNodeToNodeRequest(req)
-                await this._sendMessage(remoteAddress, "NodeToNodeResponse", response as any as JSONObject, {timeoutMsec: 5000, requestId: req.body.requestId})
+                await this._sendMessage(remoteAddress, "NodeToNodeResponse", response as any as JSONObject, {timeoutMsec: durationMsec(5000), requestId: req.body.requestId})
             }, async () => {
             })
             /////////////////////////////////////////////////////////////////////////
