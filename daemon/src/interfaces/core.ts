@@ -37,7 +37,7 @@ export const isJSONSerializable = (obj: any): boolean => {
       return false;
     }
     for (let property in obj) {
-      if (obj.hasOwnProperty(property)) { // probably unnecessary: obj only enumerates own properties?
+      if (obj.hasOwnProperty(property)) {
         if (!isPlain(obj[property])) {
           return false;
         }
