@@ -1,7 +1,8 @@
 import { expect } from 'chai'; // test library
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
+import { hexToPublicKey } from '../../src/common/crypto_util';
 import * as ut from '../../src/interfaces/core';
-import { byteCount } from '../../src/udp/UdpCongestionManager';
+import { ByteCount } from '../../src/udp/UdpCongestionManager';
 
 
 // Example objects (test fixtures)
@@ -13,8 +14,8 @@ const validFileKey = {
     sha1: new Array(41).join('5'),
     chunkOf: {
         fileKey: { sha1: new Array(41).join('6') },
-        startByte: byteCount(0),
-        endByte: byteCount(100)
+        startByte: 0 as any as ByteCount,
+        endByte: 100 as any as ByteCount
     }
 }
 
@@ -30,6 +31,10 @@ mocha.describe('Basic typeguards', () => {
         it('isJSONObject() returns false for non-object input', () => {
             expect(ut.isJSONObject('string')).to.be.false;
         });
+        it('JSON object parsed successfully', () => {
+            const obj = ut.tryParseJsonObject(JSON.stringify(exampleJSONObject));
+            expect(obj).to.deep.equal(exampleJSONObject);
+        });
         it('JSON object recognized as serializable', () => {
             expect(ut.isJSONSerializable(exampleJSONObject)).to.be.true;
         });
@@ -42,12 +47,23 @@ mocha.describe('Basic typeguards', () => {
         it('isJSONSerializable() returns false on non-plain property', () => {
             expect(ut.isJSONSerializable( { map: new Map() } )).to.be.false;
         });
-        it('JSON object parsed successfully', () => {
-            const obj = ut.tryParseJsonObject(JSON.stringify(exampleJSONObject));
-            expect(obj).to.deep.equal(exampleJSONObject);
+        it('isJSONSerializable() returns false on non-serializable property', () => {
+            expect(ut.isJSONSerializable( { outerkey: { key: new Date() }} )).to.be.false;
         });
         it('TryParse returns null without throwing on parse failure', () => {
             expect(ut.tryParseJsonObject('This is not json')).to.be.null;
+        });
+        // The following is just to create a situation where isJSONSerializable has actual inherited properties to test.
+        // It gets us one additional line of code coverage. It would not be unreasonable to remove it.
+        interface MyParent { key: string }
+        interface MyChild extends MyParent { key2: string }
+        const MyParent = function(this: MyParent) { this.key = 'value'; } as any; 
+        const MyChild = function(this: MyChild) { MyParent.call(this); this.key2 = 'value2'; } as any;
+        MyChild.prototype = Object.create(MyParent.prototype);
+        MyChild.prototype.constructor = MyChild;
+        let kid = new MyChild();
+        it('isJSONSerializable() skips checking inherited-property serializability', () => {
+            expect(ut.isJSONSerializable(kid)).to.be.true;
         });
     });
     describe('Object handling', () => {
@@ -533,8 +549,24 @@ describe('Kachery primitives', () => {
         });
     });
     describe('Conversions', () => {
-        it('TODO: determine if anything exists here to check.', () => {
-            
+        const value = new Array(65).join('3');
+        it('Conversion functions are identity function', () => {
+            expect(ut.nodeIdToPublicKey(value as any as ut.NodeId)).to.equal(hexToPublicKey(value as any as ut.PublicKeyHex));
+            expect(ut.feedIdToPublicKeyHex(value as any as ut.FeedId)).to.equal(value);
+            expect(ut.publicKeyHexToNodeId(value as any as ut.PublicKeyHex)).to.equal(value);
+        });
+        it('nodeIdToPublicKey() returns valid public key', () => {
+            const ret = ut.nodeIdToPublicKey(value as any as ut.NodeId);
+            console.log(ret);
+            expect(ut.isPublicKey(ret)).to.be.true;
+        });
+        it('feedToPublicKeyHex() returns valid PublicKeyHex', () => {
+            const ret = ut.feedIdToPublicKeyHex(value as any as ut.FeedId);
+            expect(ut.isPublicKeyHex(ret)).to.be.true;
+        });
+        it('publicKeyHexToNodeId() returnsvalid NodeId', () => {
+            const ret = ut.publicKeyHexToNodeId(value as any as ut.PublicKeyHex);
+            expect(ut.isNodeId(ret)).to.be.true;
         });
     });
 });

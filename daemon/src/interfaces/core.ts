@@ -37,12 +37,12 @@ export const isJSONSerializable = (obj: any): boolean => {
       return false;
     }
     for (let property in obj) {
-      if (obj.hasOwnProperty(property)) {
+      if (obj.hasOwnProperty(property)) { // probably unnecessary: obj only enumerates own properties?
         if (!isPlain(obj[property])) {
           return false;
         }
         if (typeof obj[property] === "object") {
-          if (!isJSONSerializable(obj[property])) { // TODO: I'm not sure how to reach this code.
+          if (!isJSONSerializable(obj[property])) {
             return false;
           }
         }
@@ -269,7 +269,8 @@ export const isPrivateKey = (x: any) : x is PublicKey => {
 
 const checkKeyblockHeader = (key: string, type: 'PUBLIC' | 'PRIVATE') => {
     // note we need to double-escape the backslashes here.
-    const pattern = new RegExp(`-----BEGIN ${type} KEY-----[\\s\\S]*-----END ${type} KEY-----$`);
+    console.log(`Checking >${key}< against pattern.`)
+    const pattern = new RegExp(`-----BEGIN ${type} KEY-----[\\s\\S]*-----END ${type} KEY-----\n*$`);
     return (pattern.test(key));
 }
 
@@ -397,13 +398,13 @@ export const isFileKey = (x: any): x is FileKey => {
 
 // Conversion between types
 export const nodeIdToPublicKey = (nodeId: NodeId): PublicKey => {
-    // TODO: Is this implementation right?
+    // NOTE INCONSISTENCY: Our example keys do not end with a newline, but this function adds one.
     return hexToPublicKey(nodeId.toString() as any as PublicKeyHex);
 }
 export const feedIdToPublicKeyHex = (feedId: FeedId): PublicKeyHex => {
     return feedId as any as PublicKeyHex;
 }
-// TODO: Note: PublicKeyHex has no length limit, but nodeId must be 64 characters. Check for this?
+// TODO: Note: PublicKeyHex has no length limit, but nodeId must be 64 characters--> NEED TO ADD 64-char restriction to publickeyhex,privatekeyhex
 export const publicKeyHexToNodeId = (x: PublicKeyHex) : NodeId => {
     return x as any as NodeId;
 }
@@ -770,7 +771,7 @@ export const toSubfeedWatches = (x: SubfeedWatchesRAM) => {
     return mapToObject<SubfeedWatchName, SubfeedWatch>(x);
 }
 
-// ChannelName
+// LiveFeedSbuscriptionName
 export interface LiveFeedSubscriptionName extends String {
     __liveFeedSubscriptionName__: never // phantom type
 }
