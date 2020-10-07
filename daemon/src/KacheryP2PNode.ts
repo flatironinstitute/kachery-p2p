@@ -18,7 +18,7 @@ import RemoteNode from './RemoteNode';
 import RemoteNodeManager from './RemoteNodeManager';
 import { ApiProbeResponse } from './services/PublicApiServer';
 import PublicUdpSocketServer from './services/PublicUdpSocketServer';
-import { byteCount, ByteCount, byteCountToNumber, isByteCount } from './udp/UdpCongestionManager';
+import { byteCount, ByteCount, byteCountToNumber, durationMsec, DurationMsec, durationMsecToNumber, isByteCount } from './udp/UdpCongestionManager';
 
 
 export interface LoadFileProgress {
@@ -64,7 +64,7 @@ class KacheryP2PNode {
     #proxyConnectionsToClients = new Map<NodeId, ProxyConnectionToClient>()
     #proxyConnectionsToServers = new Map<NodeId, ProxyConnectionToServer>()
     #bootstrapAddresses: Address[] // not same as argument to constructor
-    #downloadStreamInfos = new GarbageMap<StreamId, DownloadFileDataRequestData>(30 * 60 * 1000)
+    #downloadStreamInfos = new GarbageMap<StreamId, DownloadFileDataRequestData>(durationMsec(30 * 60 * 1000))
     #publicUdpSocketAddress: Address | null = null
     #publicUdpSocketServer: PublicUdpSocketServer | null = null
     #downloadOptimizer: DownloadOptimizer
@@ -140,7 +140,7 @@ class KacheryP2PNode {
     isBootstrapNode() {
         return this.p.opts.isBootstrapNode;
     }
-    findFile(args: {fileKey: FileKey, timeoutMsec: number}): {
+    findFile(args: {fileKey: FileKey, timeoutMsec: DurationMsec}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
         onFinished: (callback: () => void) => void,
         cancel: () => void
@@ -463,7 +463,7 @@ class KacheryP2PNode {
         subfeedHash: SubfeedHash,
         position: number,
         maxNumMessages: number,
-        waitMsec: number
+        waitMsec: DurationMsec
     }): Promise<SignedSubfeedMessage[]> {
         const { nodeId, feedId, subfeedHash, position, maxNumMessages, waitMsec } = args;
         const requestData: GetLiveFeedSignedMessagesRequestData = {
@@ -474,7 +474,7 @@ class KacheryP2PNode {
             maxNumMessages,
             waitMsec
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, {timeoutMsec: waitMsec + 1000, method: 'default'});
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, {timeoutMsec: durationMsec(durationMsecToNumber(waitMsec) + 1000), method: 'default'});
         if (!isGetLiveFeedSignedMessagesResponseData(responseData)) {
             throw Error('Unexpected response type.');
         }
@@ -492,7 +492,7 @@ class KacheryP2PNode {
         feedId: FeedId,
         subfeedHash: SubfeedHash,
         message: SubmittedSubfeedMessage,
-        timeoutMsec: number
+        timeoutMsec: DurationMsec
     }) {
         const requestData: SubmitMessageToLiveFeedRequestData = {
             requestType: 'submitMessageToLiveFeed',
@@ -510,7 +510,7 @@ class KacheryP2PNode {
     }
     async findLiveFeed(args: {
         feedId: FeedId,
-        timeoutMsec: number
+        timeoutMsec: DurationMsec
     }): Promise<FindLiveFeedResult | null> {
         const {feedId, timeoutMsec} = args;
         return new Promise<FindLiveFeedResult | null>((resolve, reject) => {

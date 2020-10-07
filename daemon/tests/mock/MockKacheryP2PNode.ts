@@ -1,6 +1,7 @@
+import { createKeyPair, publicKeyToHex } from '../../src/common/crypto_util';
 import { randomHexString } from '../../src/common/util';
-import { Address, ChannelName, ChannelNodeInfo, exampleChannelNodeInfo, HostName, jsonObjectsMatch, NodeId, Port } from '../../src/interfaces/core';
-import { AnnounceResponseData, isAnnounceRequestData, isProbeRequestData, NodeToNodeRequestData, NodeToNodeResponseData, ProbeResponseData } from '../../src/interfaces/NodeToNodeRequest';
+import { Address, ChannelName, ChannelNodeInfo, exampleChannelNodeInfo, HostName, jsonObjectsMatch, KeyPair, NodeId, Port, publicKeyHexToNodeId } from '../../src/interfaces/core';
+import { AnnounceRequestData, AnnounceResponseData, isAnnounceRequestData, isProbeRequestData, NodeToNodeRequestData, NodeToNodeResponseData, ProbeResponseData } from '../../src/interfaces/NodeToNodeRequest';
 import { daemonVersion, protocolVersion } from '../../src/protocolVersion';
 import { SendRequestMethod } from '../../src/RemoteNode';
 import { DurationMsec } from '../../src/udp/UdpCongestionManager';
@@ -94,6 +95,7 @@ class MockRemoteNodeManager {
     #remoteNodes = new Map<NodeId, MockRemoteNode>()
     #onNodeChannelAddedCallbacks: ((remoteNodeId: NodeId, channelName: ChannelName) => void)[] = []
     #onBootstrapNodeAddedCallbacks: ((nodeId: NodeId) => void)[] = []
+    #channelNodeInfos = new Map<NodeId, Map<ChannelName, ChannelNodeInfo>>()
     constructor() {
     }
     onNodeChannelAdded(callback: (remoteNodeId: NodeId, channelName: ChannelName) => void) {
@@ -143,11 +145,36 @@ class MockRemoteNodeManager {
             })
         }
     }
+    setChannelNodeInfo(channelNodeInfo: ChannelNodeInfo) {
+        const nodeId = channelNodeInfo.body.nodeId
+        const channelName = channelNodeInfo.body.channelName
+        let x = this.#channelNodeInfos.get(nodeId)
+        if (!x) {
+            x = new Map<ChannelName, ChannelNodeInfo>()
+            this.#channelNodeInfos.set(nodeId, x)
+        }
+        x.set(channelName, channelNodeInfo)
+    }
 }
 
 export class MockKacheryP2PNode {
+    #keyPair: KeyPair = createKeyPair()
     #remoteNodeManager = new MockRemoteNodeManager()
     #bootstrapAddresses: Address[] = [{hostName: 'bootstrap-host-name' as any as HostName, port: 23 as any as Port}]
+    nodeId() {
+        return publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey))
+    }
+    keyPair() {
+        return this.#keyPair
+    }
+    async _handleAnnounceRequest(args: {fromNodeId: NodeId, requestData: AnnounceRequestData}): Promise<AnnounceResponseData> {
+        const responseData: AnnounceResponseData = {
+            requestType: 'announce',
+            success: true,
+            errorMessage: null
+        }
+        return responseData
+    }
     remoteNodeManager() {
         return this.#remoteNodeManager
     }

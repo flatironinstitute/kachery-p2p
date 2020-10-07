@@ -455,7 +455,7 @@ export const isFindLiveFeedResult = (x: any): x is FindLiveFeedResult => {
 export interface FindFileResult {
     nodeId: NodeId,
     fileKey: FileKey,
-    fileSize: bigint
+    fileSize: ByteCount
 }
 export const isFindFileResult = (x: any): x is FindFileResult => {
     if (!_validateObject(x, {

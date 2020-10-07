@@ -2,7 +2,7 @@ import assert from 'assert'
 import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
 import { ApiProbeResponse, isApiProbeResponse } from '../services/PublicApiServer'
-import { ByteCount } from '../udp/UdpCongestionManager'
+import { ByteCount, DurationMsec, isDurationMsec } from '../udp/UdpCongestionManager'
 import { ChannelInfo, ChannelName, ChannelNodeInfo, ErrorMessage, FeedId, FileKey, isArrayOf, isBigInt, isBoolean, isChannelInfo, isChannelName, isChannelNodeInfo, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignedSubfeedMessage, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
@@ -281,7 +281,7 @@ export interface GetLiveFeedSignedMessagesRequestData {
     subfeedHash: SubfeedHash,
     position: number,
     maxNumMessages: number,
-    waitMsec: number
+    waitMsec: DurationMsec
 }
 export const isGetLiveFeedSignedMessagesRequestData = (x: any): x is GetLiveFeedSignedMessagesRequestData => {
     return _validateObject(x, {
@@ -290,7 +290,7 @@ export const isGetLiveFeedSignedMessagesRequestData = (x: any): x is GetLiveFeed
         subfeedHash: isSubfeedHash,
         position: isNumber,
         maxNumMessages: isNumber,
-        waitMsec: isNumber
+        waitMsec: isDurationMsec
     })
 }
 export interface GetLiveFeedSignedMessagesResponseData {

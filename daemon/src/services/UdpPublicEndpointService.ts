@@ -5,6 +5,7 @@ import { ProbeRequestData } from "../interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "../KacheryP2PNode";
 import RemoteNode from "../RemoteNode";
 import RemoteNodeManager from "../RemoteNodeManager";
+import { durationMsec } from "../udp/UdpCongestionManager";
 
 export default class UdpPublicEndpointService {
     #node: KacheryP2PNode
@@ -44,7 +45,7 @@ export default class UdpPublicEndpointService {
             requestType: 'probe'
         }
         // Many any request, and force the method to be udp. We will then implicitly find out our public endpoint when the udp response comes back
-        const response = bootstrapNode.sendRequest(probeRequestData, {timeoutMsec: 5000, method: 'udp'})
+        const response = bootstrapNode.sendRequest(probeRequestData, {timeoutMsec: durationMsec(5000), method: 'udp'})
         if (!this.#node.publicUdpSocketAddress()) {
             throw Error('Still no public udp address. This is unexpected.')
         }

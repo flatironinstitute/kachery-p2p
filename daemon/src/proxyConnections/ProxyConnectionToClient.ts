@@ -6,7 +6,7 @@ import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString } from '.
 import { ErrorMessage, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, Signature, Timestamp, _validateObject } from "../interfaces/core";
 import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
-import { ByteCount, isByteCount } from '../udp/UdpCongestionManager';
+import { ByteCount, DurationMsec, durationMsec, durationMsecToNumber, isByteCount } from '../udp/UdpCongestionManager';
 
 export interface InitialMessageFromClientBody {
     type: 'proxyConnectionInitialMessageFromClient'
@@ -186,8 +186,8 @@ export class ProxyConnectionToClient {
     #closed = false
     #onClosedCallbacks: ((reason: any) => void)[] = []
     #onInitializedCallbacks: (() => void)[] = []
-    #responseListeners = new GarbageMap<RequestId, ((response: NodeToNodeResponse) => void)>(5 * 60 * 1000)
-    #proxyStreamFileDataResponseMessageListeners = new GarbageMap<ProxyStreamFileDataRequestId, (msg: ProxyStreamFileDataResponseMessage) => void>(30 * 60 * 1000)
+    #responseListeners = new GarbageMap<RequestId, ((response: NodeToNodeResponse) => void)>(durationMsec(5 * 60 * 1000))
+    #proxyStreamFileDataResponseMessageListeners = new GarbageMap<ProxyStreamFileDataRequestId, (msg: ProxyStreamFileDataResponseMessage) => void>(durationMsec(30 * 60 * 1000))
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
@@ -286,7 +286,7 @@ export class ProxyConnectionToClient {
     }
     async sendRequest(request: NodeToNodeRequest): Promise<NodeToNodeResponse> {
         this._sendMessageToClient(request);
-        return await this._waitForResponse(request.body.requestId, {timeoutMsec: 10000});
+        return await this._waitForResponse(request.body.requestId, {timeoutMsec: durationMsec(10000)});
     }
     streamFileData(streamId: StreamId): {
         onStarted: (callback: (size: ByteCount) => void) => void,
@@ -411,7 +411,7 @@ export class ProxyConnectionToClient {
         if (this.#closed) return;
         this.#ws.send(kacheryP2PSerialize(msg));
     }
-    async _waitForResponse(requestId: RequestId, {timeoutMsec}: {timeoutMsec: number}): Promise<NodeToNodeResponse> {
+    async _waitForResponse(requestId: RequestId, {timeoutMsec}: {timeoutMsec: DurationMsec}): Promise<NodeToNodeResponse> {
         return new Promise((resolve, reject) => {
             let completed = false;
             this.#responseListeners.set(requestId, (response: NodeToNodeResponse) => {
@@ -427,7 +427,7 @@ export class ProxyConnectionToClient {
                     this.#responseListeners.delete(requestId);
                     reject('Timeout while waiting for response.');
                 }
-            }, timeoutMsec);
+            }, durationMsecToNumber(timeoutMsec));
         });
     }
 }

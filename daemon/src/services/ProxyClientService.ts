@@ -5,6 +5,7 @@ import { elapsedSince, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "..
 import KacheryP2PNode from "../KacheryP2PNode";
 import { ProxyConnectionToServer } from "../proxyConnections/ProxyConnectionToServer";
 import RemoteNodeManager from "../RemoteNodeManager";
+import { DurationMsec, durationMsec } from "../udp/UdpCongestionManager";
 
 export default class ProxyClientService {
     #node: KacheryP2PNode
@@ -29,7 +30,7 @@ export default class ProxyClientService {
                         if (elapsedMsec > 15000) {
                             /////////////////////////////////////////////////////////////////////////
                             action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
-                                await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: 3000});
+                                await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: durationMsec(3000)});
                             }, null);
                             /////////////////////////////////////////////////////////////////////////
                         }
@@ -44,11 +45,11 @@ export default class ProxyClientService {
 class ProxyClientManager {
     #node: KacheryP2PNode
     // #outgoingConnections = new Map<NodeId, ProxyConnectionToServer>()
-    #failedConnectionAttemptTimestamps = new GarbageMap<NodeId, Timestamp>(120000)
+    #failedConnectionAttemptTimestamps = new GarbageMap<NodeId, Timestamp>(durationMsec(120000))
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
-    async tryConnection(remoteNodeId: NodeId, opts: {timeoutMsec: number}) {
+    async tryConnection(remoteNodeId: NodeId, opts: {timeoutMsec: DurationMsec}) {
         const remoteNode = this.#node.remoteNodeManager().getRemoteNode(remoteNodeId)
         if (!remoteNode) return
         const webSocketAddress = remoteNode.getRemoteNodeWebSocketAddress();

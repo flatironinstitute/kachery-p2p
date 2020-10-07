@@ -3,7 +3,7 @@ import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { Address, isBoolean, isProtocolVersion, isString, ProtocolVersion, toNumber, _validateObject } from '../interfaces/core';
 import { protocolVersion } from '../protocolVersion';
-import UdpCongestionManager, { byteCount, DurationMsec } from './UdpCongestionManager';
+import UdpCongestionManager, { byteCount, durationMsec, DurationMsec, durationMsecToNumber } from './UdpCongestionManager';
 
 class UdpTimeoutError extends Error {
     constructor(errorString: string) {
@@ -40,7 +40,7 @@ export const isUdpPacketSenderHeader = (x: any): x is UdpPacketSenderHeader => {
 
 export default class UdpPacketSender {
     #socket: dgram.Socket
-    #congestionManagers = new GarbageMap<Address, UdpCongestionManager>(5 * 60 * 1000)
+    #congestionManagers = new GarbageMap<Address, UdpCongestionManager>(durationMsec(5 * 60 * 1000))
     #unconfirmedOutgoingPackets = new Map<PacketId, OutgoingPacket>()
     constructor(socket: dgram.Socket) {
         this.#socket = socket
@@ -98,7 +98,7 @@ class OutgoingPacket {
         this.#onConfirmed && this.#onConfirmed()
     }
     async send() {
-        this.#manager.congestionManagers(this.#address).queuePacket(byteCount(this.#buffer.length), (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: number}) => {
+        this.#manager.congestionManagers(this.#address).queuePacket(byteCount(this.#buffer.length), (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: DurationMsec}) => {
             (async () => {
                 try {
                     await this._trySend(opts.timeoutMsec)
@@ -116,7 +116,7 @@ class OutgoingPacket {
             })()
         })
     }
-    async _trySend(timeoutMsec: number) {
+    async _trySend(timeoutMsec: DurationMsec) {
         const socket = this.#manager.socket()
         const b = this.#buffer
         return new Promise((resolve, reject) => {
@@ -164,7 +164,7 @@ class OutgoingPacket {
                         completed = true;
                         reject(new UdpTimeoutError('Timed out'))
                     }
-                }, timeoutMsec)
+                }, durationMsecToNumber(timeoutMsec))
             })
         })
     }

@@ -24,10 +24,14 @@ interface KacheryP2PNodeInterface {
 export default class DiscoverService {
     #node: KacheryP2PNodeInterface
     #remoteNodeManager: RemoteNodeManagerInterface
+    #halted = false
     constructor(node: KacheryP2PNodeInterface, private opts: {discoverBootstrapIntervalMsec: DurationMsec, discoverRandomNodeIntervalMsec: DurationMsec} = {discoverBootstrapIntervalMsec: durationMsec(30000), discoverRandomNodeIntervalMsec: durationMsec(2200)}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
         this._start();
+    }
+    stop() {
+        this.#halted = true
     }
     async _getChannelInfoFromNode(remoteNodeId: NodeId, channelName: ChannelName) {
         const requestData: GetChannelInfoRequestData = {
@@ -47,6 +51,7 @@ export default class DiscoverService {
         // Get channel info from other nodes in our channels
         let lastBootstrapDiscoverTimestamp: Timestamp = zeroTimestamp();
         while (true) {
+            if (this.#halted) return
             // periodically get channel info from bootstrap nodes
             const elapsedSinceLastBootstrapDiscover = elapsedSince(lastBootstrapDiscoverTimestamp);
             if (elapsedSinceLastBootstrapDiscover > durationMsecToNumber(this.opts.discoverBootstrapIntervalMsec)) {

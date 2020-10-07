@@ -7,6 +7,7 @@ import { sleepMsec } from '../common/util';
 import { ChannelName, FeedId, FeedName, FileKey, FindLiveFeedResult, isArrayOf, isChannelName, isFeedId, isFeedName, isFileKey, isJSONObject, isNodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
+import { DurationMsec, isDurationMsec } from '../udp/UdpCongestionManager';
 import { ApiProbeResponse } from './PublicApiServer';
 
 interface Req {
@@ -241,12 +242,12 @@ export default class DaemonApiServer {
     async _apiFindFile(req: Req, res: Res) {
         interface ApiFindFileRequest {
             fileKey: FileKey,
-            timeoutMsec: number
+            timeoutMsec: DurationMsec
         }
         const isApiFindFileRequest = (x: any): x is ApiFindFileRequest => {
             return _validateObject(x, {
                 fileKey: isFileKey,
-                timeoutMsec: isNumber
+                timeoutMsec: isDurationMsec
             });
         }
         const reqData = req.body;
@@ -435,14 +436,14 @@ export default class DaemonApiServer {
             feedId: FeedId,
             subfeedHash: SubfeedHash,
             message: SubmittedSubfeedMessage,
-            timeoutMsec: number
+            timeoutMsec: DurationMsec
         }
         const isFeedApiSubmitMessageRequest = (x: any): x is FeedApiSubmitMessageRequest => {
             return _validateObject(x, {
                 feedId: isFeedId,
                 subfeedHash: isSubfeedHash,
                 message: isSubmittedSubfeedMessage,
-                timeoutMsec: isNumber
+                timeoutMsec: isDurationMsec
             });
         }
         interface FeedApiSubmitMessageResponse {
@@ -466,7 +467,7 @@ export default class DaemonApiServer {
             subfeedHash: SubfeedHash,
             position: number,
             maxNumMessages: number,
-            waitMsec: number
+            waitMsec: DurationMsec
         }
         const isFeedApiGetMessagesRequest = (x: any): x is FeedApiGetMessagesRequest => {
             return _validateObject(x, {
@@ -474,7 +475,7 @@ export default class DaemonApiServer {
                 subfeedHash: isSubfeedHash,
                 position: isNumber,
                 maxNumMessages: isNumber,
-                waitMsec: isNumber,
+                waitMsec: isDurationMsec,
             });
         }
         interface FeedApiGetMessagesResponse {
@@ -501,7 +502,7 @@ export default class DaemonApiServer {
             subfeedHash: SubfeedHash,
             position: number,
             maxNumMessages: number,
-            waitMsec: number
+            waitMsec: DurationMsec
         }
         const isFeedApiGetSignedMessagesRequest = (x: any): x is FeedApiGetSignedMessagesRequest => {
             return _validateObject(x, {
@@ -509,7 +510,7 @@ export default class DaemonApiServer {
                 subfeedHash: isSubfeedHash,
                 position: isNumber,
                 maxNumMessages: isNumber,
-                waitMsec: isNumber,
+                waitMsec: isDurationMsec,
             });
         }
         interface FeedApiGetSignedMessagesResponse {
@@ -562,7 +563,7 @@ export default class DaemonApiServer {
     async _feedApiGetLiveFeedInfo(req: Req, res: Res) {
         interface FeedApiGetLiveFeedInfoRequest {
             feedId: FeedId,
-            timeoutMsec: number
+            timeoutMsec: DurationMsec
         }
         const isFeedApiGetLiveFeedInfoRequest = (x: any): x is FeedApiGetLiveFeedInfoRequest => {
             return _validateObject(x, {
@@ -648,12 +649,12 @@ export default class DaemonApiServer {
     async _feedApiWatchForNewMessages(req: Req, res: Res) {
         interface FeedApiWatchForNewMessagesRequest {
             subfeedWatches: SubfeedWatches,
-            waitMsec: number
+            waitMsec: DurationMsec
         }
         const isFeedApiWatchForNewMessagesRequest = (x: any): x is FeedApiWatchForNewMessagesRequest => {
             return _validateObject(x, {
                 subfeedWatches: isSubfeedWatches,
-                waitMsec: isNumber
+                waitMsec: isDurationMsec
             });
         }
         interface FeedApiWatchForNewMessagesResponse {

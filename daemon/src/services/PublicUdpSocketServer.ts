@@ -27,7 +27,7 @@ export default class PublicUdpSocketServer {
     #socket: dgram.Socket | null = null
     #udpPacketSender: UdpPacketSender | null = null
     #udpPacketReceiver: UdpPacketReceiver | null = null
-    #responseListeners = new GarbageMap<RequestId, ResponseListener>(3 * 60 * 1000)
+    #responseListeners = new GarbageMap<RequestId, ResponseListener>(durationMsec(3 * 60 * 1000))
     constructor(node: KacheryP2PNode) {
         this.#node = node
         this.#messagePartManager.onMessageComplete(this._handleCompleteMessage)

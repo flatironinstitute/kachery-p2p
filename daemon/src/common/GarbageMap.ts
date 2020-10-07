@@ -1,11 +1,12 @@
 import { elapsedSince, nowTimestamp, Timestamp } from '../interfaces/core'
+import { DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager'
 import { sleepMsec } from './util'
 
 export default class GarbageMap<Key, Value> {
     #map = new Map<Key, {value: Value, timestamp: Timestamp}>()
-    #expirationTimeoutMsec: number
+    #expirationTimeoutMsec: DurationMsec
     #garbageCollectionRunning = false
-    constructor(expirationTimeoutMSec: number) {
+    constructor(expirationTimeoutMSec: DurationMsec) {
         this.#expirationTimeoutMsec = expirationTimeoutMSec
     }
     get(key: Key): Value | undefined {
@@ -40,7 +41,7 @@ export default class GarbageMap<Key, Value> {
             this.#map.forEach((v, k) => {
                 hasSomething = true;
                 const elapsed = elapsedSince(v.timestamp);
-                if (elapsed > this.#expirationTimeoutMsec) {
+                if (elapsed > durationMsecToNumber(this.#expirationTimeoutMsec)) {
                     keysToDelete.push(k)
                 }
             })

@@ -6,6 +6,7 @@ import { kacheryP2PDeserialize, kacheryP2PSerialize } from '../common/util';
 import { Address, errorMessage, NodeId, nodeIdToPublicKey, nowTimestamp } from "../interfaces/core";
 import { isNodeToNodeRequest } from "../interfaces/NodeToNodeRequest";
 import KacheryP2PNode from '../KacheryP2PNode';
+import { durationMsec, DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager';
 import { InitialMessageFromClient, InitialMessageFromClientBody, isBuffer, isInitialMessageFromServer, isMessageFromServer, isProxyStreamFileDataCancelRequest, isProxyStreamFileDataRequest, MessageFromClient, MessageFromServer, ProxyStreamFileDataCancelRequest, ProxyStreamFileDataRequest, ProxyStreamFileDataRequestId, ProxyStreamFileDataResponseDataMessage, ProxyStreamFileDataResponseErrorMessage, ProxyStreamFileDataResponseFinishedMessage, ProxyStreamFileDataResponseStartedMessage } from './ProxyConnectionToClient';
 
 export class ProxyConnectionToServer {
@@ -16,15 +17,15 @@ export class ProxyConnectionToServer {
     #closed = false
     #onClosedCallbacks: ((reason: any) => void)[] = []
     #onInitializedCallbacks: (() => void)[] = []
-    #proxyStreamFileDataCancelCallbacks = new GarbageMap<ProxyStreamFileDataRequestId, () => void>(30 * 60 * 1000)
+    #proxyStreamFileDataCancelCallbacks = new GarbageMap<ProxyStreamFileDataRequestId, () => void>(durationMsec(30 * 60 * 1000))
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
-    async initialize(remoteNodeId: NodeId, address: Address, opts: {timeoutMsec: number}) {
+    async initialize(remoteNodeId: NodeId, address: Address, opts: {timeoutMsec: DurationMsec}) {
         this.#remoteNodeId = remoteNodeId;
         return new Promise((resolve, reject) => {
             const url = `ws://${address.hostName}:${address.port}`;
-            this.#ws = new WebSocket(url, {timeout: opts.timeoutMsec});
+            this.#ws = new WebSocket(url, {timeout: durationMsecToNumber(opts.timeoutMsec)});
             this.#ws.on('close', (code, reason) => {
                 this.#closed = true;
                 this.#onClosedCallbacks.forEach(cb => cb(reason));

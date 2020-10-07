@@ -1,7 +1,7 @@
 import { FileKey, NodeId } from "../interfaces/core"
 import { DownloadFileDataRequestData } from "../interfaces/NodeToNodeRequest"
 import KacheryP2PNode, { LoadFileProgress } from "../KacheryP2PNode"
-import { ByteCount, byteCount } from "../udp/UdpCongestionManager"
+import { ByteCount, byteCount, durationMsec } from "../udp/UdpCongestionManager"
 
 export interface Downloader {
     onProgress: (callback: (progress: LoadFileProgress) => void) => void,
@@ -69,7 +69,7 @@ export default class DownloaderCreator {
                 startByte: byteCount(0),
                 endByte: fileSize
             }
-            const responseData = await n.sendRequest(requestData, {timeoutMsec: 5000, method: 'default'})
+            const responseData = await n.sendRequest(requestData, {timeoutMsec: durationMsec(5000), method: 'default'})
             // todo
         })()
 

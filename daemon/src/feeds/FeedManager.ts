@@ -7,6 +7,7 @@ import { randomAlphaString, sleepMsec } from '../common/util';
 import { FeedId, feedIdToPublicKeyHex, FeedName, FeedsConfigRAM, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, isFeedsConfig, isSignedSubfeedMessage, isSubfeedAccessRules, JSONObject, NodeId, nowTimestamp, PrivateKeyHex, PublicKey, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage, toFeedsConfig, toFeedsConfigRAM } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { kacheryStorageDir } from '../kacheryStorage/kachery';
+import { durationMsec, DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager';
 
 // todo fix feeds config on disk (too many in one .json file)
 
@@ -15,7 +16,7 @@ class FeedManager {
     _node: KacheryP2PNode // The kachery-p2p daemon
     _storageDir: string // Where we store the feed data (subdirector of the kachery storage dir)
     _feedsConfig: FeedsConfigRAM | null = null // The config will be loaded from disk as need. Contains all the private keys for the feeds and the local name/ID associations.
-    _subfeeds = new GarbageMap<FeedSubfeedId, Subfeed>(8 * 60 * 1000) // The subfeed instances (Subfeed()) that have been loaded into memory
+    _subfeeds = new GarbageMap<FeedSubfeedId, Subfeed>(durationMsec(8 * 60 * 1000)) // The subfeed instances (Subfeed()) that have been loaded into memory
     _remoteFeedManager: RemoteFeedManager // Manages the interaction with feeds on remote nodes
     constructor(node: KacheryP2PNode) {
         this._node = node;
@@ -100,7 +101,7 @@ class FeedManager {
         // Append the messages
         subfeed.appendMessages(args.messages, {metaData: undefined});
     }
-    async submitMessage({ feedId, subfeedHash, message, timeoutMsec }: { feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage, timeoutMsec: number}) {
+    async submitMessage({ feedId, subfeedHash, message, timeoutMsec }: { feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage, timeoutMsec: DurationMsec}) {
         // Same as appendMessages, except if we don't have a writeable feed, we submit it to the p2p network
         // and then, on success, it will append the messages on the node where the feed is writeable
         const subfeed = await this._loadSubfeed({feedId, subfeedHash});
@@ -126,7 +127,7 @@ class FeedManager {
         }
         subfeed.appendSignedMessages(signedMessages);
     }
-    async getMessages({ feedId, subfeedHash, position, maxNumMessages, waitMsec }: {feedId: FeedId, subfeedHash: SubfeedHash, position: number, maxNumMessages: number, waitMsec: number}) {
+    async getMessages({ feedId, subfeedHash, position, maxNumMessages, waitMsec }: {feedId: FeedId, subfeedHash: SubfeedHash, position: number, maxNumMessages: number, waitMsec: DurationMsec}) {
         // Load messages from a subfeed.
         // If there are no messages available locally, and waitMsec > 0, then we will search
         // for the messages on the p2p network
@@ -137,7 +138,7 @@ class FeedManager {
         // Return just the messages (not the signed messages)
         return signedMessages.map(sm => (sm.body.message));
     }
-    async getSignedMessages({ feedId, subfeedHash, position, maxNumMessages, waitMsec }: {feedId: FeedId, subfeedHash: SubfeedHash, position: number, maxNumMessages: number, waitMsec: number}) {
+    async getSignedMessages({ feedId, subfeedHash, position, maxNumMessages, waitMsec }: {feedId: FeedId, subfeedHash: SubfeedHash, position: number, maxNumMessages: number, waitMsec: DurationMsec}) {
         // Same as getMessages() except we return the signed messages. This is also called by getMessages().
         const subfeed = await this._loadSubfeed({feedId, subfeedHash});
         if (!subfeed) {
@@ -155,7 +156,7 @@ class FeedManager {
         }
         return subfeed.getNumMessages();
     }
-    async getFeedInfo({ feedId, timeoutMsec }: {feedId: FeedId, timeoutMsec: number}): Promise<FindLiveFeedResult> {
+    async getFeedInfo({ feedId, timeoutMsec }: {feedId: FeedId, timeoutMsec: DurationMsec}): Promise<FindLiveFeedResult> {
         // Get the p2p information about the feed
         // If this is a local and writeable, just return {isWriteable: true}
         // Otherwise we search the p2p network for the feed and if it is found we return {isWriteable: false}
@@ -204,7 +205,7 @@ class FeedManager {
         maxNumMessages
     }: {
         subfeedWatches: SubfeedWatchesRAM,
-        waitMsec: number,
+        waitMsec: DurationMsec,
         maxNumMessages: number
     }): Promise<Map<SubfeedWatchName, (SubfeedMessage[])>> {
         // assert(typeof(waitMsec) === 'number');
@@ -243,7 +244,7 @@ class FeedManager {
 
             setTimeout(() => {
                 if (!finished) doFinish();
-            }, waitMsec);
+            }, durationMsecToNumber(waitMsec));
         });
     }
     async _submitMessageToLiveFeedFromRemoteNode({fromNodeId, feedId, subfeedHash, message}: {fromNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage}) {
@@ -350,27 +351,29 @@ class FeedManager {
 
 class RemoteFeedManager {
     _node: KacheryP2PNode
-    _liveFeedInfos = new GarbageMap<FeedId, FindLiveFeedResult>(5 * 60 * 1000) // Information about the live feeds (cached in memory)
+    _liveFeedInfos = new GarbageMap<FeedId, FindLiveFeedResult>(durationMsec(5 * 60 * 1000)) // Information about the live feeds (cached in memory)
     // Manages interactions with feeds on remote nodes within the p2p network
     constructor(node: KacheryP2PNode) {
         this._node = node; // The kachery-p2p node
     }
-    async getSignedMessages({feedId, subfeedHash, position, maxNumMessages, waitMsec}: {feedId: FeedId, subfeedHash: SubfeedHash, position: number, maxNumMessages: number, waitMsec: number}): Promise<SignedSubfeedMessage[] | null> {
+    async getSignedMessages({feedId, subfeedHash, position, maxNumMessages, waitMsec}: {feedId: FeedId, subfeedHash: SubfeedHash, position: number, maxNumMessages: number, waitMsec: DurationMsec}): Promise<SignedSubfeedMessage[] | null> {
         // Get signed messages from a remote feed
+
+        let w = durationMsecToNumber(waitMsec)
 
         // Search and find the info for the feed (channel and node id)
         // If not found, return null
         let liveFeedInfo;
         while (true) {
             try {
-                liveFeedInfo = await this.findLiveFeedInfo({feedId, timeoutMsec: 0});
+                liveFeedInfo = await this.findLiveFeedInfo({feedId, timeoutMsec: durationMsec(0)});
                 break;
             }
             catch(err) {
-                if (waitMsec >= 1000) {
+                if (w >= 1000) {
                     // Let's wait a second and try again
                     await sleepMsec(1000);
-                    waitMsec -= 1000;   
+                    w -= 1000
                 }
                 else {
                     console.info('Unable to get signed messages (cannot find live feed info)', {feedId});
@@ -394,7 +397,7 @@ class RemoteFeedManager {
         // Return the retrieved messages
         return signedMessages;
     }
-    async submitMessage(args: {feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage, timeoutMsec: number}) {
+    async submitMessage(args: {feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage, timeoutMsec: DurationMsec}) {
         const {feedId, subfeedHash, message, timeoutMsec} = args;
 
         // Submit messages to a subfeed on a remote node
@@ -434,7 +437,7 @@ class RemoteFeedManager {
             timeoutMsec
         });
     }
-    async findLiveFeedInfo({feedId, timeoutMsec}: {feedId: FeedId, timeoutMsec: number}): Promise<FindLiveFeedResult> {
+    async findLiveFeedInfo({feedId, timeoutMsec}: {feedId: FeedId, timeoutMsec: DurationMsec}): Promise<FindLiveFeedResult> {
         // Find the channel and nodeId for a feed that is owned by a remote node on the p2p network
         // If not found, throws an error.
 
@@ -555,7 +558,7 @@ class Subfeed {
             this._accessRules = null;
 
             // Let's try to load messages from remote nodes on the p2p network
-            await this.getSignedMessages({position: 0, maxNumMessages: 10, waitMsec: 1});
+            await this.getSignedMessages({position: 0, maxNumMessages: 10, waitMsec: durationMsec(1)});
         }
         this._initializing = false;
         this._initialized = true;
@@ -611,7 +614,7 @@ class Subfeed {
         }
         return signedMessages;
     }
-    async getSignedMessages({position, maxNumMessages, waitMsec}: {position: number, maxNumMessages: number, waitMsec: number}): Promise<SignedSubfeedMessage[]> {
+    async getSignedMessages({position, maxNumMessages, waitMsec}: {position: number, maxNumMessages: number, waitMsec: DurationMsec}): Promise<SignedSubfeedMessage[]> {
         // Get some signed messages starting at position
         if (!this._signedMessages) {
             throw Error('_signedMessages is null. Perhaps getSignedMessages was called before subfeed was initialized.');
@@ -650,7 +653,7 @@ class Subfeed {
                     }
                 }
             }
-            else if (waitMsec > 0) {
+            else if (durationMsecToNumber(waitMsec) > 0) {
                 // If this is a writeable subfeed, and we have been instructed to wait, then let's just wait for a bit and maybe some new messages will arrive.
 
                 await new Promise((resolve) => {
@@ -669,7 +672,7 @@ class Subfeed {
                         resolved = true;
                         this._newMessageListeners.delete(listenerId);
                         resolve();
-                    }, waitMsec);
+                    }, durationMsecToNumber(waitMsec));
                 });
                 
                 // const timer = new Date();

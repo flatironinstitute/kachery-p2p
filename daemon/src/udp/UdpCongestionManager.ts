@@ -77,7 +77,7 @@ export const durationMsec = (n: number) => {
     return n as any as DurationMsec
 }
 
-type SendCallback = (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: number}) => void
+type SendCallback = (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: DurationMsec}) => void
 interface QueuedPacket {
     internalId: InternalId,
     packetSize: ByteCount,
@@ -126,7 +126,7 @@ export default class UdpCongestionManager {
             this.#currentTrialData.reportError(p.internalId, p.packetSize)
             this._handleNextPackets()
         }
-        p.send(_onConfirmed, _onTimedOut, _onError, {timeoutMsec: durationMsecToNumber(this.#estimatedRoundtripLatencyMsec) * 5})
+        p.send(_onConfirmed, _onTimedOut, _onError, {timeoutMsec: durationMsec(durationMsecToNumber(this.#estimatedRoundtripLatencyMsec) * 5)})
         this.#currentTrialData.reportSent(p.internalId, p.packetSize)
         this._handleNextPackets()
     }
@@ -322,7 +322,7 @@ _tests.UdpCongestionManager = async () => {
                 resolve()
             }
         }
-        const send = (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: number}) => {
+        const send = (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: DurationMsec}) => {
             onConfirmed()
             numSent ++
             _check()
