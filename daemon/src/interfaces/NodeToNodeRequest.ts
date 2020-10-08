@@ -46,7 +46,7 @@ export const isNodeToNodeRequest = (x: any): x is NodeToNodeRequest => {
     return _validateObject(x, {
         body: isNodeToNodeRequestBody,
         signature: isSignature
-    }, {verbose: true})
+    }, (x: string) => (console.log(x)))
 }
 
 

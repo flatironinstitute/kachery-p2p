@@ -4,8 +4,6 @@ import { randomAlphaString } from "../common/util";
 import { ByteCount, isByteCount } from '../udp/UdpCongestionManager';
 import { AnnounceRequestData, isAnnounceRequestData } from "./NodeToNodeRequest";
 
-export const _tests: {[key: string]: Function} = {}
-
 export type JSONPrimitive = string | number | boolean | null;
 export type JSONValue = JSONPrimitive | JSONObject | JSONArray;
 export type JSONObject = { [member: string]: JSONValue };
@@ -149,24 +147,18 @@ export const isObjectOf = (keyTestFunction: (x: any) => boolean, valueTestFuncti
 
 export type ValidateObjectSpec = {[key: string]: ValidateObjectSpec | (Function & ((a: any) => any))}
 
-export const _validateObject = (x: any, spec: ValidateObjectSpec, opts: {verbose: boolean} = {verbose: false}): boolean => {
+export const _validateObject = (x: any, spec: ValidateObjectSpec, callback?: (x: string) => any): boolean => {
     if (!x) {
-        if (opts.verbose) {
-            console.warn(`Not an object *.`)
-        }
+        callback && callback('x is undefined/null.')
         return false;
     }
     if (!isObject(x)) {
-        if (opts.verbose) {
-            console.warn('Not an object.')
-        }
+        callback && callback('x is not an Object.')
         return false;
     }
     for (let k in x) {
         if (!(k in spec)) {
-            if (opts.verbose) {
-                console.warn(`Key not in spec: ${k}`)
-            }
+            callback && callback(`Key not in spec: ${k}`)
             return false;
         }
     }
@@ -174,29 +166,45 @@ export const _validateObject = (x: any, spec: ValidateObjectSpec, opts: {verbose
         const specK = spec[k];
         if (isFunction(specK)) {
             if (!specK(x[k])) {
-                if (opts.verbose) {
-                    console.warn(`Problem validating: ${k}`)
-                }
+                callback && callback(`Problem validating: ${k}`)
                 return false;
             }
         }
         else {
             if (!(k in x)) {
-                if (opts.verbose) {
-                    console.warn(`Key not in x: ${k}`)
-                }
+                callback && callback(`Key not in x: ${k}`)
                 return false;
             }
-            if (!_validateObject(x[k], specK as ValidateObjectSpec, opts)) {
-                if (opts.verbose) {
-                    console.warn(`Problem with: ${k}`)
-                }
+            if (!_validateObject(x[k], specK as ValidateObjectSpec, callback)) {
+                callback && callback(`Value of key > ${k} < itself failed validation.`)
                 return false;
             }
         }
     }
     return true;
 }
+
+// objectToMap and mapToObject
+export const objectToMap = <KeyType extends String, ValueType>(obj: {[key: string]: any}) => {
+    return new Map<KeyType, ValueType>(Object.keys(obj).map(k => {
+        return [k as any as KeyType, obj[k] as any as ValueType];
+    }));
+}
+export const mapToObject = <KeyType extends String, ValueType>(m: Map<KeyType, ValueType>) => {
+    const ret: {[key: string]: any} = {};
+    m.forEach((v, k) => {
+        ret[k.toString()] = v;
+    });
+    return ret;
+}
+
+// jsonObjectsMatch
+export const jsonObjectsMatch = (x1: any, x2: any): boolean => {
+    if (!isJSONObject(x1)) throw Error('x1 is not a json object in jsonObjectsMatch');
+    if (!isJSONObject(x2)) throw Error('x2 is not a json object in jsonObjectsMatch');
+    return (JSONStringifyDeterministic(x1) === JSONStringifyDeterministic(x2));
+}
+
 
 // Versioning
 export interface ProtocolVersion extends String {
@@ -210,7 +218,6 @@ export const isProtocolVersion = (x: any): x is ProtocolVersion => {
 export interface DaemonVersion extends String {
     __daemonVersion__: never // phantom
 }
-export const exampleDaemonVersion: DaemonVersion = "example-daemon.Version" as any as DaemonVersion
 export const isDaemonVersion = (x: any): x is DaemonVersion => {
     if (!isString(x)) return false;
     return (/^[0-9a-zA-z\.\ \-]{4,40}?$/.test(x));
@@ -263,7 +270,6 @@ export const isAddress = (x: any): x is Address => {
 export interface Timestamp extends Number {
     __timestamp__: never
 }
-export const exampleTimestamp: Timestamp = Number(new Date(2020, 1, 1, 1, 1, 1, 0)) - 0 as any as Timestamp
 export const isTimestamp = (x: any) : x is Timestamp => {
     if (!isNumber(x)) return false;
     if (x < 0) return false;  // For our purposes, timestamps should never be negative
@@ -301,7 +307,6 @@ export const isPrivateKey = (x: any) : x is PublicKey => {
 
 const checkKeyblockHeader = (key: string, type: 'PUBLIC' | 'PRIVATE') => {
     // note we need to double-escape the backslashes here.
-    // console.log(`Checking >${key}< against pattern.`)
     const pattern = new RegExp(`-----BEGIN ${type} KEY-----[\\s\\S]*-----END ${type} KEY-----\n*$`);
     return (pattern.test(key));
 }
@@ -337,7 +342,7 @@ export interface PublicKeyHex extends String {
 }
 export const isPublicKeyHex = (x: any) : x is PublicKeyHex => {
     if (!isString(x)) return false;
-    return isHexadecimal(x);
+    return isHexadecimal(x, 64);
 }
 
 // PrivateKeyHex
@@ -346,7 +351,7 @@ export interface PrivateKeyHex extends String {
 }
 export const isPrivateKeyHex = (x: any) : x is PrivateKeyHex => {
     if (!isString(x)) return false;
-    return isHexadecimal(x);
+    return isHexadecimal(x, 64);
 }
 
 // Sha1Hash
@@ -378,15 +383,6 @@ export const isNodeId = (x: any): x is NodeId => {
 }
 
 
-// ChannelName
-export interface ChannelName extends String {
-    __channelName__: never // phantom type
-}
-export const isChannelName = (x: any): x is ChannelName => {
-    if (!isString(x)) return false;
-    return (/^[0-9a-zA-Z_\-\.]{4,160}?$/.test(x));
-}
-
 // FeedId
 export interface FeedId extends String {
     __feedId__: never // phantom type
@@ -403,6 +399,46 @@ export interface SubfeedHash extends String {
 export const isSubfeedHash = (x: any): x is SubfeedHash => {
     if (!isString(x)) return false;
     return (/^[0-9a-fA-F]{40}?$/.test(x));
+}
+// ErrorMessage
+export interface ErrorMessage extends String {
+    __errorMessage__: never; // phantom
+}
+export const isErrorMessage = (x: any): x is ErrorMessage => {
+    return (isString(x)) && (x.length < 1000) ;
+}
+export const errorMessage = (x: string): ErrorMessage => {
+    if (isErrorMessage(x)) return x;
+    else {
+        throw Error('Invalid error message: messages cannot exceed 1000 characters.');
+    }
+}
+
+
+export interface MulticastAnnounceMessageBody {
+    protocolVersion: ProtocolVersion,
+    fromNodeId: NodeId,
+    messageType: 'announce', // Should be actual type/enum?
+    requestData: AnnounceRequestData
+}
+export const isMulticastAnnounceMessageBody = (x: any): x is MulticastAnnounceMessageBody => {
+    return _validateObject(x, {
+        protocolVersion: isProtocolVersion,
+        fromNodeId: isNodeId,
+        messageType: isEqualTo('announce'),
+        requestData: isAnnounceRequestData
+    })
+}
+
+export interface MulticastAnnounceMessage {
+    body: MulticastAnnounceMessageBody,
+    signature: Signature
+}
+export const isMulticastAnnounceMessage = (x: any): x is MulticastAnnounceMessage => {
+    return _validateObject(x, {
+        body: isMulticastAnnounceMessageBody,
+        signature: isSignature
+    })
 }
 
 // FileKey
@@ -436,7 +472,6 @@ export const nodeIdToPublicKey = (nodeId: NodeId): PublicKey => {
 export const feedIdToPublicKeyHex = (feedId: FeedId): PublicKeyHex => {
     return feedId as any as PublicKeyHex;
 }
-// TODO: Note: PublicKeyHex has no length limit, but nodeId must be 64 characters--> NEED TO ADD 64-char restriction to publickeyhex,privatekeyhex
 export const publicKeyHexToNodeId = (x: PublicKeyHex) : NodeId => {
     return x as any as NodeId;
 }
@@ -453,7 +488,7 @@ export const isFindLiveFeedResult = (x: any): x is FindLiveFeedResult => {
     });
 }
 
-// FindFileResult
+// FindFileResults
 export interface FindFileResult {
     nodeId: NodeId,
     fileKey: FileKey,
@@ -463,7 +498,7 @@ export const isFindFileResult = (x: any): x is FindFileResult => {
     if (!_validateObject(x, {
         nodeId: isNodeId,
         fileKey: isFileKey,
-        fileSize: isBigInt
+        fileSize: isByteCount
     })) return false;
     return (x.fileSize >= 0);
 }
@@ -482,6 +517,17 @@ export const createRequestId = () => {
 }
 
 
+
+// ChannelName
+export interface ChannelName extends String {
+    __channelName__: never // phantom type
+}
+export const isChannelName = (x: any): x is ChannelName => {
+    if (!isString(x)) return false;
+    return (/^[0-9a-zA-Z_\-\.]{4,160}?$/.test(x));
+}
+
+// ChannelNodeInfo
 export interface ChannelNodeInfoBody {
     channelName: ChannelName,
     nodeId: NodeId,
@@ -491,6 +537,11 @@ export interface ChannelNodeInfoBody {
     proxyHttpAddresses: Address[],
     timestamp: Timestamp
 }
+export interface ChannelNodeInfo {
+    body: ChannelNodeInfoBody,
+    signature: Signature
+}
+
 export const isChannelNodeInfoBody = (x: any): x is ChannelNodeInfoBody => {
     return _validateObject(x, {
         channelName: isChannelName,
@@ -502,111 +553,47 @@ export const isChannelNodeInfoBody = (x: any): x is ChannelNodeInfoBody => {
         timestamp: isTimestamp
     })
 }
-
-// ChannelNodeInfo
-export interface ChannelNodeInfo {
-    body: ChannelNodeInfoBody,
-    signature: Signature
-}
-export const exampleAddress: Address = {
-    hostName: 'www.flatironinstitute.org' as any as HostName,
-    port: 15351 as any as Port,
-} as any as Address;
-export const exampleChannelNodeInfo: ChannelNodeInfo = {
-    body: {
-        channelName: 'exampleChannelName' as any as ChannelName,
-        nodeId: new Array(65).join('a') as any as NodeId,
-        httpAddress: exampleAddress,
-        webSocketAddress: null, // todo: should we prefer a non-null value here?
-        publicUdpSocketAddress: null,
-        proxyHttpAddresses: [exampleAddress],
-        timestamp: nowTimestamp()
-    },
-    signature: new Array(65).join('a') as any as Signature,
-}
 export const isChannelNodeInfo = (x: any): x is ChannelNodeInfo => {
     return _validateObject(x, {
         body: isChannelNodeInfoBody,
         signature: isSignature
     })
 }
-_tests.ChannelNodeInfo = () => { assert(isChannelNodeInfo('exampleChannelNodeInfo')) }
 
-
-// SubfeedMessage
-export interface SubfeedMessage extends JSONObject {
-    __subfeedMessage__: never;
-};
-export const exampleSubfeedMessage: SubfeedMessage = {key: 'value'} as any as SubfeedMessage;
-export const isSubfeedMessage = (x: any): x is SubfeedMessage => {
-    return isObject(x);
+// ChannelInfo
+export interface ChannelInfo {
+    nodes: ChannelNodeInfo[]
 }
-_tests.SubfeedMessage = () => { assert(isSubfeedMessage(exampleSubfeedMessage)) }
-
-
-// SubfeedMessageMetaData
-export type SubfeedMessageMetaData = Object;
-export const exampleSubfeedMessageMetaData: SubfeedMessageMetaData = {metaKey: 'metaValue'} as SubfeedMessageMetaData;
-export const isSubfeedMessageMetaData = (x: any): x is SubfeedMessageMetaData => {
-    return isObject(x);
+export const isChannelInfo = (x: any): x is ChannelInfo => {
+    return _validateObject(x, {
+        nodes: isArrayOf(isChannelNodeInfo)
+    })
 }
-_tests.SubfeedMessageMetaData = () => { assert(isSubfeedMessageMetaData(exampleSubfeedMessageMetaData)) }
 
 
-// SignedSubfeedMessage
-export interface SignedSubfeedMessage {
-    body: {
-        previousSignature?: Signature,
-        messageNumber: number,
-        message: SubfeedMessage,
-        timestamp: Timestamp,
-        metaData?: SubfeedMessageMetaData
-    },
-    signature: Signature
+// FeedName
+export interface FeedName extends String {
+    __feedName__: never; // phantom
 }
-export const exampleSignedSubfeedMessage: SignedSubfeedMessage = {
-    body: {
-        previousSignature: new Array(65).join('a') as any as Signature,
-        messageNumber: 5,
-        message: exampleSubfeedMessage,
-        timestamp: nowTimestamp(),
-        metaData: exampleSubfeedMessageMetaData
-    },
-    signature: new Array(65).join('a') as any as Signature,
+export const isFeedName = (x: any): x is FeedName => {
+    if (!isString(x)) return false;
+    return(x.length > 0);
 }
-export const isSignedSubfeedMessage = (x: any): x is SignedSubfeedMessage => {
-    if (! _validateObject(x, {
-        body: {
-            previousSignature: optional(isSignature),
-            messageNumber: isNumber,
-            message: isObject,
-            timestamp: isTimestamp,
-            metaData: optional(isSubfeedMessageMetaData)
-        },
-        signature: isSignature
-    })) return false;
 
-    // TODO: If this is to be trusted elsewhere (which it will be based on its name & its being a
-    // type guard) it's essential we check the signature actually matches the message.
-    return true;
+// FeedSubfeedId
+export interface FeedSubfeedId extends String {
+    __feedSubfeedId__: never; // phantom
 }
-// Test failing, not quite sure why--I think I did something wrong above
-_tests.SignedSubfeedMessage = () => { assert(isSignedSubfeedMessage(exampleSignedSubfeedMessage)) }
-
-
-// SubmittedSubfeedMessage
-export interface SubmittedSubfeedMessage extends JSONObject {
-    __submittedSubfeedMessage__: never;
-};
-export const exampleSubmittedSubfeedMessage: SubmittedSubfeedMessage = { msg: "I am a message "} as any as SubmittedSubfeedMessage;
-export const isSubmittedSubfeedMessage = (x: any): x is SubmittedSubfeedMessage => {
-    return ((isObject(x)) && (JSON.stringify(x).length < 10000));
+export const feedSubfeedId = (feedId: FeedId, subfeedHash: SubfeedHash): FeedSubfeedId => {
+    return (feedId.toString() + ':' + subfeedHash.toString()) as any as FeedSubfeedId; 
 }
-export const submittedSubfeedMessageToSubfeedMessage = (x: SubmittedSubfeedMessage) => {
-    return x as any as SubfeedMessage;
+export const isFeedSubfeedId = (x: any): x is FeedSubfeedId => {
+    if (!isString(x)) return false;
+    const parts = x.split(':');
+    return (parts.length === 2) &&
+           (isFeedId(parts[0])) &&
+           (isSubfeedHash(parts[1]));
 }
-_tests.SubmittedSubfeedMessage = () => { assert(isSubmittedSubfeedMessage(exampleSubmittedSubfeedMessage)) }
-
 
 // FeedsConfigFeed
 export interface FeedsConfigFeed {
@@ -615,70 +602,17 @@ export interface FeedsConfigFeed {
 }
 export const isFeedsConfigFeed = (x: any): x is FeedsConfigFeed => {
     return _validateObject(x, {
-        publicKey: isString,
-        privateKey: isString
+        publicKey: isPublicKeyHex,
+        privateKey: optional(isPrivateKeyHex)
     });
-    // TODO: Check those public/private key pairs!
-}
-export const exampleFeedsConfigFeed: FeedsConfigFeed = { publicKey: "aa" as any as PublicKeyHex, privateKey: "bb" as any as PrivateKeyHex }
-_tests.FeedsConfigFeed = () => { assert(isFeedsConfigFeed(exampleFeedsConfigFeed)) }
-
-
-// FeedName
-export interface FeedName extends String {
-    __feedName__: never; // phantom
-}
-export const isFeedName = (x: any): x is FeedName => {
-    return isString(x);
-}
-export const exampleFeedName: FeedName = "My feed name" as any as FeedName;
-_tests.FeedName = () => { assert(isFeedName(exampleFeedName)) }
-
-
-// ErrorMessage
-export interface ErrorMessage extends String {
-    __errorMessage__: never; // phantom
-}
-export const isErrorMessage = (x: any): x is ErrorMessage => {
-    return (isString(x)) && (x.length < 1000) ;
-}
-export const errorMessage = (x: string): ErrorMessage => {
-    if (isErrorMessage(x)) return x;
-    else {
-        throw Error('Invalid error message: messages cannot exceed 1000 characters.');
-    }
-}
-export const exampleErrorMessage = errorMessage("Nothing's wrong. Everything is fine.");
-_tests.ErrorMessage = () => {
-    assert(isErrorMessage(exampleErrorMessage));
-    try {
-        const overlongMessage = new Array(1001).join('#');
-        let x = errorMessage(overlongMessage);
-        assert(false); // does not occur as error is thrown
-    } catch(err) {
-        assert(err.message === 'Invalid error message: messages cannot exceed 1000 characters.')
-    }
+    // TODO: check pair matches if the private key is given?
 }
 
-// objectToMap and mapToObject
-export const objectToMap = <KeyType extends String, ValueType>(obj: {[key: string]: any}) => {
-    return new Map<KeyType, ValueType>(Object.keys(obj).map(k => {
-        return [k as any as KeyType, obj[k] as any as ValueType];
-    }));
-}
-export const mapToObject = <KeyType extends String, ValueType>(m: Map<KeyType, ValueType>) => {
-    const ret: {[key: string]: any} = {};
-    m.forEach((v, k) => {
-        ret[k.toString()] = v;
-    });
-    return ret;
-}
-
-// TODO: What is this?
 // FeedsConfig and FeedsConfigRAM
 export interface FeedsConfig {
     feeds: {[key: string]: FeedsConfigFeed},
     feedIdsByName: {[key: string]: FeedId}
+    // QUERY: do the feeds and feedIdsByName need to match in any way?
 }
 export interface FeedsConfigRAM {
     feeds: Map<FeedId, FeedsConfigFeed>,
@@ -704,6 +638,62 @@ export const isFeedsConfig = (x: any): x is FeedsConfig => {
 }
 
 
+
+// SubfeedMessage
+export interface SubfeedMessage extends JSONObject {
+    __subfeedMessage__: never;
+};
+export const isSubfeedMessage = (x: any): x is SubfeedMessage => {
+    return isObject(x);
+}
+
+
+// SubfeedMessageMetaData
+export type SubfeedMessageMetaData = Object;
+export const isSubfeedMessageMetaData = (x: any): x is SubfeedMessageMetaData => {
+    return isObject(x);
+}
+
+// SignedSubfeedMessage
+export interface SignedSubfeedMessage {
+    body: {
+        previousSignature?: Signature,
+        messageNumber: number,
+        message: SubfeedMessage,
+        timestamp: Timestamp,
+        metaData?: SubfeedMessageMetaData
+    },
+    signature: Signature
+}
+export const isSignedSubfeedMessage = (x: any): x is SignedSubfeedMessage => {
+    if (! _validateObject(x, {
+        body: {
+            previousSignature: optional(isSignature),
+            messageNumber: isNumber,
+            message: isObject,
+            timestamp: isTimestamp,
+            metaData: optional(isSubfeedMessageMetaData)
+        },
+        signature: isSignature
+    })) return false;
+
+    // TODO: If this is to be trusted elsewhere (which it will be based on its name & its being a
+    // type guard) it's essential we check the signature actually matches the message.
+    return true;
+}
+
+
+// SubmittedSubfeedMessage
+export interface SubmittedSubfeedMessage extends JSONObject {
+    __submittedSubfeedMessage__: never;
+};
+export const isSubmittedSubfeedMessage = (x: any): x is SubmittedSubfeedMessage => {
+    return ((isObject(x)) && (JSON.stringify(x).length < 10000));
+}
+export const submittedSubfeedMessageToSubfeedMessage = (x: SubmittedSubfeedMessage) => {
+    return x as any as SubfeedMessage;
+}
+
 // SubfeedAccessRule
 export interface SubfeedAccessRule {
     nodeId: NodeId,
@@ -715,12 +705,6 @@ export const isSubfeedAccessRule = (x: any): x is SubfeedAccessRule => {
         write: isBoolean
     })
 }
-export const exampleSubfeedAccessDeniedRule = { nodeId: new Array(65).join('a') as any as NodeId, write: false } as SubfeedAccessRule
-export const exampleSubfeedAccessAllowedRule = { nodeId: new Array(65).join('a') as any as NodeId, write: true } as SubfeedAccessRule
-_tests.SubfeedAccessRule = () => {
-    assert(isSubfeedAccessRule(exampleSubfeedAccessDeniedRule));
-    assert(isSubfeedAccessRule(exampleSubfeedAccessAllowedRule));
-}
 
 // SubfeedAccessRules
 export interface SubfeedAccessRules {
@@ -731,9 +715,6 @@ export const isSubfeedAccessRules = (x: any): x is SubfeedAccessRules => {
         rules: isArrayOf(isSubfeedAccessRule)
     })
 }
-_tests.SubfeedAccessRules = () => {
-    assert(isArrayOf(isSubfeedAccessRule)([exampleSubfeedAccessAllowedRule, exampleSubfeedAccessDeniedRule]))
-}
 
 
 // SubfeedWatchName
@@ -741,23 +722,16 @@ export interface SubfeedWatchName extends String {
     __subfeedWatchName__: never; // phantom
 }
 export const isSubfeedWatchName = (x: any) => {
-    return isString(x);
+    if (!isString(x)) return false;
+    return x.length > 0;
 }
-export const exampleSubfeedWatchName = "Example Subfeed Watch Name" as any as SubfeedWatchName;
-_tests.SubfeedWatchName = () => { assert(isSubfeedWatchName(exampleSubfeedWatchName)) }
-
 
 // SubfeedWatch
 export interface SubfeedWatch {
     feedId: FeedId,
     subfeedHash: SubfeedHash,
     position: number
-    // No name?
-}
-export const exampleSubfeedWatch: SubfeedWatch = { 
-    feedId: new Array(65).join('F') as any as FeedId,
-    subfeedHash: new Array(41).join('b') as any as SubfeedHash,
-    position: 4
+    // TODO: No name? Also, should we require position to be positive?
 }
 export const isSubfeedWatch = (x: any): x is SubfeedWatch => {
     return _validateObject(x, {
@@ -766,31 +740,7 @@ export const isSubfeedWatch = (x: any): x is SubfeedWatch => {
         position: isNumber
     });
 }
-_tests.SubfeedWatch = () => { assert(isSubfeedWatch(exampleSubfeedWatch)) }
 
-
-// FeedSubfeedId
-export interface FeedSubfeedId extends String {
-    __feedSubfeedId__: never; // phantom
-}
-export const feedSubfeedId = (feedId: FeedId, subfeedHash: SubfeedHash): FeedSubfeedId => {
-    return (feedId.toString() + ':' + subfeedHash.toString()) as any as FeedSubfeedId; 
-}
-export const isFeedSubfeedId = (x: any): x is FeedSubfeedId => {
-    if (!isString(x)) return false;
-    const parts = x.split(':');
-    return (parts.length === 2) &&
-           (isFeedId(parts[0])) &&
-           (isSubfeedHash(parts[1]));
-}
-export const exampleFeedSubfeedId: FeedSubfeedId = feedSubfeedId(new Array(65).join('F') as any as FeedId, new Array(41).join('b') as any as SubfeedHash);
-_tests.FeedSubfeedId = () => {
-    assert(isFeedSubfeedId(exampleFeedSubfeedId));
-}
-
-
-// TODO: Skipped this part--want to discuss
-// SubfeedWatches and SubfeedWatchesRAM
 export type SubfeedWatches = {[key: string]: SubfeedWatch};
 export const isSubfeedWatches = (x: any): x is SubfeedWatches => {
     return isObjectOf(isSubfeedWatchName, isSubfeedWatch)(x);
@@ -817,7 +767,7 @@ export interface LiveFeedSubscription {
     subscriptionName: LiveFeedSubscriptionName,
     feedId: FeedId,
     subfeedHash: SubfeedHash,
-    position: number
+    position: number // TODO: is a negative position valid?
 }
 export const isLiveFeedSubscription = (x: any): x is LiveFeedSubscription => {
     return _validateObject(x, {
@@ -827,14 +777,6 @@ export const isLiveFeedSubscription = (x: any): x is LiveFeedSubscription => {
         position: isNumber
     })
 }
-export const exampleLiveFeedSubscription: LiveFeedSubscription = {
-    subscriptionName: "This is my subscription" as any as LiveFeedSubscriptionName,
-    feedId: new Array(65).join('F') as any as FeedId,
-    subfeedHash: new Array(41).join('b') as any as SubfeedHash,
-    position: 12
-}
-_tests.LiveFeedSubscription = () => { assert(isLiveFeedSubscription(exampleLiveFeedSubscription)) }
-
 
 // LiveFeedSubscriptions
 export interface LiveFeedSubscriptions {
@@ -844,69 +786,4 @@ export const isLiveFeedSubscriptions = (x: any): x is LiveFeedSubscriptions => {
     return _validateObject(x, {
         subscriptions: isArrayOf(isLiveFeedSubscription)
     })
-}
-_tests.LiveFeedSubscriptions = () => { 
-    assert(isArrayOf(isLiveFeedSubscription)([exampleLiveFeedSubscription]));
- }
-
-
-// ChannelInfo
-export interface ChannelInfo {
-    nodes: ChannelNodeInfo[]
-}
-export const isChannelInfo = (x: any): x is ChannelInfo => {
-    return _validateObject(x, {
-        nodes: isArrayOf(isChannelNodeInfo)
-    })
-}
-export const exampleChannelInfo: ChannelInfo = { nodes: [exampleChannelNodeInfo] } as any as ChannelInfo
-_tests.ChannelInfo = () => { assert(isChannelInfo(exampleChannelInfo)) }
-
-
-export interface MulticastAnnounceMessageBody {
-    protocolVersion: ProtocolVersion,
-    fromNodeId: NodeId,
-    messageType: 'announce', // Should be actual type/enum?
-    requestData: AnnounceRequestData
-}
-export const isMulticastAnnounceMessageBody = (x: any): x is MulticastAnnounceMessageBody => {
-    return _validateObject(x, {
-        protocolVersion: isProtocolVersion,
-        fromNodeId: isNodeId,
-        messageType: isEqualTo('announce'),
-        requestData: isAnnounceRequestData
-    })
-}
-
-export interface MulticastAnnounceMessage {
-    body: MulticastAnnounceMessageBody,
-    signature: Signature
-}
-export const isMulticastAnnounceMessage = (x: any): x is MulticastAnnounceMessage => {
-    return _validateObject(x, {
-        body: isMulticastAnnounceMessageBody,
-        signature: isSignature
-    })
-}
-export const exampleMulticastAnnounceMessage: MulticastAnnounceMessage = {
-    body: {
-        protocolVersion: "valid example protocol" as any as ProtocolVersion,
-        fromNodeId: new Array(65).join('a') as any as NodeId,
-        messageType: 'announce',
-        requestData: {  // TODO: This should be standardized; and we are growing toward a weird cross-import situation.
-            requestType: 'announce',
-            channelNodeInfo: exampleChannelNodeInfo
-        }
-    },
-    signature: new Array(65).join('a') as any as Signature
-}
-_tests.MulticastAnnounceMessage = () => {
-    assert(isMulticastAnnounceMessage(exampleMulticastAnnounceMessage));
-}
-
-
-export const jsonObjectsMatch = (x1: any, x2: any): boolean => {
-    if (!isJSONObject(x1)) throw Error('x1 is not a json object in jsonObjectsMatch');
-    if (!isJSONObject(x2)) throw Error('x2 is not a json object in jsonObjectsMatch');
-    return (JSONStringifyDeterministic(x1) === JSONStringifyDeterministic(x2));
 }
