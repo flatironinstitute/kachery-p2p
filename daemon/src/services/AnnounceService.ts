@@ -61,7 +61,6 @@ export default class AnnounceService {
     }
     async _start() {
         await sleepMsec(2) // important for tests
-        console.log('------------------- announce service 1', this.#node.channelNames(), this.#node.isBootstrapNode())
         // Announce self other nodes in our channels and to bootstrap nodes
         let lastBootstrapAnnounceTimestamp: Timestamp = zeroTimestamp()
         while (true) {
@@ -69,14 +68,11 @@ export default class AnnounceService {
             // periodically announce to bootstrap nodes
             const elapsedSinceLastBootstrapAnnounce = elapsedSince(lastBootstrapAnnounceTimestamp)
             if (elapsedSinceLastBootstrapAnnounce > durationMsecToNumber(this.opts.announceBootstrapIntervalMsec)) {
-                console.log('------------------- announce service 2')
                 const bootstrapNodes: RemoteNodeInterface[] = this.#remoteNodeManager.getBootstrapRemoteNodes()
                 const channelNames = this.#node.channelNames();
                 for (let bootstrapNode of bootstrapNodes) {
-                    console.log('------------------- announce service 3')
                     for (let channelName of channelNames) {
 
-                        console.log('------------------- announce service 4')
                         /////////////////////////////////////////////////////////////////////////
                         await action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
                             await this._announceToNode(bootstrapNode.remoteNodeId(), channelName)
