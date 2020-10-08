@@ -5,7 +5,7 @@ import { ChannelName, ChannelNodeInfo, NodeId } from '../../src/interfaces/core'
 import { AnnounceResponseData, isAnnounceRequestData, NodeToNodeRequestData, NodeToNodeResponseData } from '../../src/interfaces/NodeToNodeRequest';
 import { SendRequestMethod } from '../../src/RemoteNode';
 import AnnounceService from '../../src/services/AnnounceService';
-import { DurationMsec, durationMsec } from '../../src/udp/UdpCongestionManager';
+import { durationMsec, DurationMsec } from '../../src/udp/UdpCongestionManager';
 import { validNodeInfoBody } from '../interfaces/interface-tests';
 
 const mockChannelName = 'mock-channel' as any as ChannelName
@@ -136,6 +136,7 @@ class MockKacheryP2PNode {
                     expect(n.mock_announcedChannelNodeInfo()).is.not.null
                 })
                 announceService.stop()
+                expect(true).to.be.false
                 done()
             })()
         })

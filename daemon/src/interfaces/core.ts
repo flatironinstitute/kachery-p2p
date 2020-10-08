@@ -147,24 +147,18 @@ export const isObjectOf = (keyTestFunction: (x: any) => boolean, valueTestFuncti
 
 export type ValidateObjectSpec = {[key: string]: ValidateObjectSpec | (Function & ((a: any) => any))}
 
-export const _validateObject = (x: any, spec: ValidateObjectSpec, opts: {verbose: boolean} = {verbose: false}): boolean => {
+export const _validateObject = (x: any, spec: ValidateObjectSpec, callback?: (x: string) => any): boolean => {
     if (!x) {
-        if (opts.verbose) {
-            console.warn(`Not an object *.`)
-        }
+        callback && callback('x is undefined/null.')
         return false;
     }
     if (!isObject(x)) {
-        if (opts.verbose) {
-            console.warn('Not an object.')
-        }
+        callback && callback('x is not an Object.')
         return false;
     }
     for (let k in x) {
         if (!(k in spec)) {
-            if (opts.verbose) {
-                console.warn(`Key not in spec: ${k}`)
-            }
+            callback && callback(`Key not in spec: ${k}`)
             return false;
         }
     }
@@ -172,23 +166,17 @@ export const _validateObject = (x: any, spec: ValidateObjectSpec, opts: {verbose
         const specK = spec[k];
         if (isFunction(specK)) {
             if (!specK(x[k])) {
-                if (opts.verbose) {
-                    console.warn(`Problem validating: ${k}`)
-                }
+                callback && callback(`Problem validating: ${k}`)
                 return false;
             }
         }
         else {
             if (!(k in x)) {
-                if (opts.verbose) {
-                    console.warn(`Key not in x: ${k}`)
-                }
+                callback && callback(`Key not in x: ${k}`)
                 return false;
             }
-            if (!_validateObject(x[k], specK as ValidateObjectSpec, opts)) {
-                if (opts.verbose) {
-                    console.warn(`Problem with: ${k}`)
-                }
+            if (!_validateObject(x[k], specK as ValidateObjectSpec, callback)) {
+                callback && callback(`Value of key > ${k} < itself failed validation.`)
                 return false;
             }
         }

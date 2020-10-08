@@ -4,7 +4,6 @@ import { hexToPublicKey } from '../../src/common/crypto_util'
 import * as ut from '../../src/interfaces/core'
 import { byteCount, ByteCount } from '../../src/udp/UdpCongestionManager'
 
-
 // Utility string manipulation
 const shorterByOne = (x: string): string => { return x.substring(1, x.length) }
 const extendByValidChar = (x: string): string => { return x + x.substring(0, 1) }
@@ -38,7 +37,7 @@ export const validNodeInfoBody = {
 }
 const validChannelNodeInfo = {
     body: validNodeInfoBody,
-    signature: new Array(65).join('3')
+    signature: new Array(129).join('3')
 }
 
  // need to explicitly use mocha prefix once or the dependency gets wrongly cleaned up
@@ -199,7 +198,6 @@ describe('Utility comparisons', () => {
         it('optional() spec checker returns false when passed null', () => {
             expect(optionalSpecChecker(null)).to.be.false
         })
-        // here is where you would want to mock _validateObject()
         it('optional() spec checker returns true when object matches spec', () => {
             expect(optionalSpecChecker({ mystring: 'foo' })).to.be.true
         })
@@ -246,28 +244,56 @@ describe('Utility comparisons', () => {
     describe('Object validation to spec', () => {
         const objectSpec: ut.ValidateObjectSpec = { myobj: { mystring: ut.isString }, mynum: ut.isNumber }
         const matchingObject = { myobj: { mystring: 'string' }, mynum: 5 }
-        it('_validateObject() returns false on non-object input', () => {
-            expect(ut._validateObject('foo', { x: ut.isBigInt }))
+        let cb_msg = ''
+        const cb = (x: string) => { cb_msg = x }
+        it('_validateObject() returns true on correctly formatted object', () => {
+            expect(ut._validateObject(matchingObject, objectSpec)).to.be.true
         })
         it('_validateObject() returns false on null input', () => {
             expect(ut._validateObject(null, { x: ut.isBigInt }))
         })
+        it('_validateObject() calls callback on null input', () => {
+            ut._validateObject(null, { x: ut.isBigInt }, cb)
+            expect(cb_msg).to.equal('x is undefined/null.')
+        })
+        it('_validateObject() returns false on non-object input', () => {
+            expect(ut._validateObject('foo', { x: ut.isBigInt }))
+        })
+        it('_validateObject() calls callback on non-object input', () => {
+            ut._validateObject('foo', { x: ut.isBigInt }, cb)
+            expect(cb_msg).to.equal('x is not an Object.')
+        })
         it('_validateObject() returns false on extra key', () => {
             expect(ut._validateObject({ ...matchingObject, newkey: 'bar' }, objectSpec)).to.be.false
         })
+        it('_validateObject() calls callback on extra key', () => {
+            ut._validateObject({ ...matchingObject, newkey: 'bar' }, objectSpec, cb)
+            expect(cb_msg).to.equal('Key not in spec: newkey')
+        })
         it('_validateObject() returns false on wrong-typed value', () => {
             expect(ut._validateObject({ ...matchingObject, mynum: 'five' }, objectSpec)).to.be.false
+        })
+        it('_validateObject() calls callback on wrong-typed value', () => {
+            ut._validateObject({ ...matchingObject, mynum: 'five' }, objectSpec, cb)
+            expect(cb_msg).to.equal('Problem validating: mynum')
         })
         it('_validateObject() returns false on missing key', () => {
             const objectMissingKey = { mynum: 5 }
             expect(ut._validateObject(objectMissingKey, objectSpec)).to.be.false
         })
+        it('_validateObject() calls callback on missing key', () => {
+            const objectMissingKey = { mynum: 5 }
+            ut._validateObject(objectMissingKey, objectSpec, cb)
+            expect(cb_msg).to.equal('Key not in x: myobj')
+        })
         it('_validateObject() returns false on sub-spec validation failure', () => {
             const subobjectHasBadType = { myobj: { mystring: 5 }, mynum: 5}
             expect(ut._validateObject(subobjectHasBadType, objectSpec)).to.be.false
         })
-        it('_validateObject() returns true on correctly formatted object', () => {
-            expect(ut._validateObject(matchingObject, objectSpec)).to.be.true
+        it('_validateObject() calls callback on sub-spec validation failure', () => {
+            const subobjectHasBadType = { myobj: { mystring: 5 }, mynum: 5}
+            ut._validateObject(subobjectHasBadType, objectSpec, cb)
+            expect(cb_msg).to.equal('Value of key > myobj < itself failed validation.')
         })
     })
     describe('Object-Map Translation', () => {
@@ -535,7 +561,7 @@ describe('Crypto types', () => {
         it('isSha1Hash() returns false on non-hexadecimal characters', () => {
             expect(ut.isSha1Hash('012345678901234567890123456789qwrty*%$+#')).to.be.false
         })
-        const validSignature: string = new Array(65).join('a')
+        const validSignature: string = new Array(129).join('a')
         it('isSignature() returns true on valid input', () => {
             expect(ut.isSignature(validSignature)).to.be.true
         })
@@ -645,6 +671,9 @@ describe('Kachery primitives', () => {
             messageType: 'announce',
             requestData: validAnnounceRequestData
         }
+        it('Confirm validChannelNodeInfo is actually valid', () => {
+            expect(ut.isChannelNodeInfo(validChannelNodeInfo)).to.be.true            
+        })
         it('isMulticastAnnounceMessageBody() returns true on valid input', () => {
             expect(ut.isMulticastAnnounceMessageBody(validMulticastMessageBody)).to.be.true
         })
@@ -655,11 +684,11 @@ describe('Kachery primitives', () => {
             })).to.be.false
         })
         it('isMulticastAnnounceMessage() returns true on valid input', () => {
-            expect(ut.isMulticastAnnounceMessage({ body: validMulticastMessageBody, signature: new Array(65).join('1') })).to.be.true
+            expect(ut.isMulticastAnnounceMessage({ body: validMulticastMessageBody, signature: new Array(129).join('1') })).to.be.true
         })
         it('isMulticastAnnounceMessage() returns false on missing body or signature', () => {
             expect(ut.isMulticastAnnounceMessage({ body: validMulticastMessageBody, signature: null })).to.be.false
-            expect(ut.isMulticastAnnounceMessage({ body: undefined, signature: new Array(65).join('2') })).to.be.false
+            expect(ut.isMulticastAnnounceMessage({ body: undefined, signature: new Array(129).join('2') })).to.be.false
         })
     })
     describe('FileKey', () => {
@@ -738,7 +767,7 @@ describe('Searches and Requests', () => {
 
 describe('Channels', () => {
     const validChannelName = 'this-is-my-channel'
-    const validNodeInfo = { body: validNodeInfoBody, signature: new Array(65).join('a') }
+    const validNodeInfo = { body: validNodeInfoBody, signature: new Array(129).join('a') }
     describe('ChannelName', () => {
         it('isChannelName() returns true on valid channel name', () => {
             expect(ut.isChannelName(validChannelName)).to.be.true
@@ -899,8 +928,8 @@ describe('Feeds Configuration', () => {
 describe('Subfeed Messages', () => {
     const validSubfeedMessage = { key: 'value' }
     const validSubfeedMsgMetaData = { metakey: 'metavalue' }
-    const sig1 = new Array(65).join('1')
-    const sig2 = new Array(65).join('2')
+    const sig1 = new Array(129).join('1')
+    const sig2 = new Array(129).join('2')
 
     describe('SubfeedMessage', () => {
         it('isSubfeedMessage() returns true for object input', () => {
