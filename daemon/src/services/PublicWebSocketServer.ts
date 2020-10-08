@@ -6,9 +6,14 @@ import { ProxyConnectionToClient } from '../proxyConnections/ProxyConnectionToCl
 
 class PublicWebSocketServer {
     #node: KacheryP2PNode
-    #webSocketServer: WebSocket.Server
+    #webSocketServer: WebSocket.Server | null = null
     constructor(kNode: KacheryP2PNode, {verbose}: {verbose: number}) {
         this.#node = kNode
+    }
+    stop() {
+        if (this.#webSocketServer) {
+            this.#webSocketServer.close()
+        }
     }
     async startListening(port: Port) {
         return new Promise((resolve, reject) => {

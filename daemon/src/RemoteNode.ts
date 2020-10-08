@@ -1,5 +1,5 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
-import { httpPostJson, urlPath } from "./common/httpPostJson";
+import { urlPath } from "./common/httpPostJson";
 import { Address, ChannelName, ChannelNodeInfo, createRequestId, FileKey, NodeId, nodeIdToPublicKey, nowTimestamp } from "./interfaces/core";
 import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
@@ -11,7 +11,7 @@ export type SendRequestMethod = 'default' | 'udp'
 class RemoteNode {
     #node: KacheryP2PNode
     #remoteNodeId: NodeId
-    #channelNodeInfoByChannel: Map<ChannelName, ChannelNodeInfo> = new Map<ChannelName, ChannelNodeInfo>()
+    #channelNodeInfoByChannel = new Map<ChannelName, ChannelNodeInfo>()
     #isBootstrap: boolean
     #bootstrapAddress: Address | null
     #bootstrapWebSocketAddress: Address | null
@@ -125,7 +125,7 @@ class RemoteNode {
         // todo: use udp when appropriate
         let response: NodeToNodeResponse
         if (opts.method === 'default') {
-            const R = await httpPostJson(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
+            const R = await this.#node.httpPostJsonFunction()(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
             if (!isNodeToNodeResponse(R)) {
                 // todo: in this situation, do we ban the node?
                 throw Error('Invalid response from node.');

@@ -1,4 +1,6 @@
 import express, { Express } from 'express';
+import http from 'http';
+import https from 'https';
 import JsonSocket from 'json-socket';
 import { Socket } from 'net';
 import { action } from '../common/action';
@@ -27,15 +29,14 @@ interface Res {
 
 export default class DaemonApiServer {
     #node: KacheryP2PNode
-    #stopperCallbacks: (() => void)[]
     #app: Express
+    #server: http.Server | https.Server | null = null
 
     // This is the API server for the local daemon
     // The local Python code communicates with the daemon
     // via this API
     constructor(node: KacheryP2PNode, opts: {verbose: number}) {
         this.#node = node; // The kachery-p2p daemon
-        this.#stopperCallbacks = [];
         this.#app = express(); // the express app
 
         this.#app.set('json spaces', 4); // when we respond with json, this is how it will be formatted
@@ -214,6 +215,11 @@ export default class DaemonApiServer {
             /////////////////////////////////////////////////////////////////////////
         });
     }
+    stop() {
+        if (this.#server) {
+            this.#server.close()
+        }
+    }
     // /probe - check whether the daemon is up and running and return info such as the node ID
     async _apiProbe(req: Req, res: Res) {
         const response: ApiProbeResponse = {
@@ -233,7 +239,7 @@ export default class DaemonApiServer {
         interface ApiHaltResponse {
             success: boolean
         };
-        this.#stopperCallbacks.forEach(cb => {cb();});
+        this.stop()
         const response: ApiHaltResponse = { success: true };
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         res.json(response);
@@ -693,12 +699,7 @@ export default class DaemonApiServer {
     }
     // Start listening via http/https
     async listen(port: Port) {
-        const stopper = {
-            onStop: (cb: (() => void)) => {
-                this.#stopperCallbacks.push(cb);
-            }
-        }
-        start_http_server(this.#app, port, stopper);
+        this.#server = start_http_server(this.#app, port)
     }
 }
 

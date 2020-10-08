@@ -3,14 +3,21 @@ import { action } from '../common/action';
 import { getSignature, verifySignature } from '../common/crypto_util';
 import GarbageMap from '../common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize } from '../common/util';
-import { Address, errorMessage, NodeId, nodeIdToPublicKey, nowTimestamp } from "../interfaces/core";
-import { isNodeToNodeRequest } from "../interfaces/NodeToNodeRequest";
-import KacheryP2PNode from '../KacheryP2PNode';
+import { Address, errorMessage, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp } from "../interfaces/core";
+import { isNodeToNodeRequest, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
+import { StreamFileDataOutput } from '../KacheryP2PNode';
 import { durationMsec, DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager';
 import { InitialMessageFromClient, InitialMessageFromClientBody, isBuffer, isInitialMessageFromServer, isMessageFromServer, isProxyStreamFileDataCancelRequest, isProxyStreamFileDataRequest, MessageFromClient, MessageFromServer, ProxyStreamFileDataCancelRequest, ProxyStreamFileDataRequest, ProxyStreamFileDataRequestId, ProxyStreamFileDataResponseDataMessage, ProxyStreamFileDataResponseErrorMessage, ProxyStreamFileDataResponseFinishedMessage, ProxyStreamFileDataResponseStartedMessage } from './ProxyConnectionToClient';
 
+interface KacheryP2PNodeInterface {
+    nodeId: () => NodeId
+    keyPair: () => KeyPair
+    handleNodeToNodeRequest: (request: NodeToNodeRequest) => Promise<NodeToNodeResponse>
+    streamFileData: (nodeId: NodeId, streamId: StreamId) => StreamFileDataOutput
+}
+
 export class ProxyConnectionToServer {
-    #node: KacheryP2PNode
+    #node: KacheryP2PNodeInterface
     #remoteNodeId: NodeId | null = null
     #ws: WebSocket
     #initialized = false
@@ -18,7 +25,7 @@ export class ProxyConnectionToServer {
     #onClosedCallbacks: ((reason: any) => void)[] = []
     #onInitializedCallbacks: (() => void)[] = []
     #proxyStreamFileDataCancelCallbacks = new GarbageMap<ProxyStreamFileDataRequestId, () => void>(durationMsec(30 * 60 * 1000))
-    constructor(node: KacheryP2PNode) {
+    constructor(node: KacheryP2PNodeInterface) {
         this.#node = node
     }
     async initialize(remoteNodeId: NodeId, address: Address, opts: {timeoutMsec: DurationMsec}) {

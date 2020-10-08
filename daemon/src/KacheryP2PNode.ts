@@ -1,13 +1,14 @@
 import fs from 'fs';
 import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util';
 import GarbageMap from './common/GarbageMap';
+import { UrlPath } from './common/httpPostJson';
 import { readJsonFile, sha1MatchesFileKey } from './common/util';
 import DownloaderCreator from './downloadOptimizer/DownloaderCreator';
 import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer';
 import DownloadOptimizerFile from './downloadOptimizer/DownloadOptimizerJob';
 import FeedManager from './feeds/FeedManager';
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager';
-import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, FeedId, FileKey, FindFileResult, FindLiveFeedResult, HostName, isAddress, isArrayOf, isKeyPair, isSha1Hash, JSONObject, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, PrivateKey, PublicKey, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, _validateObject } from './interfaces/core';
+import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, FeedId, FileKey, FindFileResult, FindLiveFeedResult, HostName, isAddress, isArrayOf, isKeyPair, isSha1Hash, JSONObject, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, _validateObject } from './interfaces/core';
 import { AnnounceRequestData, AnnounceResponseData, CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData, createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, GetChannelInfoRequestData, GetChannelInfoResponseData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isProbeRequestData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, ProbeRequestData, ProbeResponseData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest';
 import { concatenateFilesIntoTemporaryFile, moveFileIntoKacheryStorage } from './kacheryStorage/concatenateFiles';
 import { FindFileReturnValue, KacheryStorageManager, LocalFilePath } from './kacheryStorage/KacheryStorageManager';
@@ -20,6 +21,13 @@ import { ApiProbeResponse } from './services/PublicApiServer';
 import PublicUdpSocketServer from './services/PublicUdpSocketServer';
 import { byteCount, ByteCount, byteCountToNumber, durationMsec, DurationMsec, durationMsecToNumber, isByteCount } from './udp/UdpCongestionManager';
 
+export type StreamFileDataOutput = {
+    onStarted: (callback: (size: ByteCount) => void) => void,
+    onData: (callback: (data: Buffer) => void) => void,
+    onFinished: (callback: () => void) => void,
+    onError: (callback: (err: Error) => void) => void,
+    cancel: () => void
+}
 
 export interface LoadFileProgress {
     bytesLoaded: ByteCount,
@@ -53,11 +61,19 @@ const isFileManifest = (x: any): x is FileManifest => {
     })
 }
 
+interface DgramSocket {
+    bind: (port: number) => void,
+    on: (eventName: 'listening' | 'message', callback: (() => void) | ((message: JSONObject, rinfo: any) => void)) => void,
+    addMembership: (address: string) => void,
+    send: (message: string, offset: number, length: number, port: number, address: string) => void
+}
+
+export type DgramCreateSocketFunction = (args: {type: 'udp4', reuseAddr: boolean}) => DgramSocket
+
 class KacheryP2PNode {
     #keyPair: KeyPair
     #nodeId: NodeId
     #feedManager: FeedManager
-    #channelNames: ChannelName[]
     #remoteNodeManager: RemoteNodeManager
     #kacheryStorageManager: KacheryStorageManager
     #liveFeedSubscriptionManager: LiveFeedSubscriptionManager
@@ -69,7 +85,7 @@ class KacheryP2PNode {
     #publicUdpSocketServer: PublicUdpSocketServer | null = null
     #downloadOptimizer: DownloadOptimizer
     constructor(private p : {
-        configDir: string,
+        configDir: LocalFilePath,
         verbose: number,
         hostName: HostName | null,
         httpListenPort: Port | null,
@@ -78,9 +94,12 @@ class KacheryP2PNode {
         label: string,
         bootstrapAddresses: Address[] | null,
         channelNames: ChannelName[],
+        httpPostJsonFunction: ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>),
+        dgramCreateSocketFunction: DgramCreateSocketFunction,
         opts: {
             noBootstrap: boolean,
-            isBootstrapNode: boolean
+            isBootstrapNode: boolean,
+            mock: boolean
         }
     }) {
         const { publicKey, privateKey } = _loadKeypair(this.p.configDir); // The keypair for signing messages and the public key is used as the node id
@@ -123,10 +142,10 @@ class KacheryP2PNode {
         this.#downloadOptimizer = new DownloadOptimizer(downloaderCreator)
     }
     nodeId() {
-        return this.#nodeId;
+        return this.#nodeId
     }
     channelNames() {
-        return [...this.#channelNames];
+        return [...this.p.channelNames]
     }
     keyPair() {
         return this.#keyPair
@@ -149,7 +168,7 @@ class KacheryP2PNode {
             requestType: 'checkForFile',
             fileKey: args.fileKey
         };
-        const {onResponse, onFinished, cancel} = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, {timeoutMsec: args.timeoutMsec, channelNames: this.#channelNames});
+        const {onResponse, onFinished, cancel} = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, {timeoutMsec: args.timeoutMsec, channelNames: this.p.channelNames});
         const onFoundCallbacks: ((result: FindFileResult) => void)[] = [];
         const onFinishedCallbacks: (() => void)[] = [];
         onResponse((nodeId: NodeId, responseData: NodeToNodeResponseData) => {
@@ -183,6 +202,12 @@ class KacheryP2PNode {
                 cancel();
             }
         }
+    }
+    httpPostJsonFunction() {
+        return this.p.httpPostJsonFunction
+    }
+    dgramCreateSocketFunction() {
+        return this.p.dgramCreateSocketFunction
     }
     async _loadFileAsync(args: {fileKey: FileKey, opts: {fromNode: NodeId | undefined, fromChannel: ChannelName | undefined}}): Promise<FindFileReturnValue> {
         const r = await this.#kacheryStorageManager.findFile(args.fileKey)
@@ -401,20 +426,32 @@ class KacheryP2PNode {
         }
         return x;
     }
+    hostName() {
+        if (this.p.hostName) return this.p.hostName
+        if (this.p.opts.mock) {
+            return this.nodeId() as any as HostName
+        }
+        else {
+            return null
+        }
+    }
     httpAddress(): Address | null {
-        return (this.p.hostName !== null) && (this.p.httpListenPort !== null) ? {hostName: this.p.hostName, port: this.p.httpListenPort} : null
+        const h = this.hostName()
+        return (h !== null) && (this.p.httpListenPort !== null) ? {hostName: h, port: this.p.httpListenPort} : null
     }
     webSocketAddress(): Address | null {
-        return (this.p.hostName !== null) && (this.p.webSocketListenPort !== null) ? {hostName: this.p.hostName, port: this.p.webSocketListenPort} : null
+        const h = this.hostName()
+        return (h !== null) && (this.p.webSocketListenPort !== null) ? {hostName: h, port: this.p.webSocketListenPort} : null
     }
     publicUdpSocketAddress(): Address | null {
         if (this.#publicUdpSocketAddress !== null) {
             return this.#publicUdpSocketAddress
         }
         else {
-            if ((this.p.hostName !== null) && (this.p.udpListenPort !== null)) {
+            const h = this.hostName()
+            if ((h !== null) && (this.p.udpListenPort !== null)) {
                 return {
-                    hostName: this.p.hostName,
+                    hostName: h,
                     port: this.p.udpListenPort
                 }
             }
@@ -518,7 +555,7 @@ class KacheryP2PNode {
                 requestType: 'checkForLiveFeed',
                 feedId
             }
-            const {onResponse, onFinished, cancel} = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, {timeoutMsec, channelNames: this.#channelNames});
+            const {onResponse, onFinished, cancel} = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, {timeoutMsec, channelNames: this.p.channelNames});
             let found = false;
             onResponse((nodeId, responseData) => {
                 if (found) return;
@@ -596,13 +633,7 @@ class KacheryP2PNode {
             signature: getSignature(body, this.#keyPair)
         }
     }
-    streamFileData(nodeId: NodeId, streamId: StreamId): {
-        onStarted: (callback: (size: ByteCount) => void) => void,
-        onData: (callback: (data: Buffer) => void) => void,
-        onFinished: (callback: () => void) => void,
-        onError: (callback: (err: Error) => void) => void,
-        cancel: () => void
-    } {
+    streamFileData(nodeId: NodeId, streamId: StreamId): StreamFileDataOutput {
         if (nodeId !== this.#nodeId) {
             // redirect to a different node
             const p = this.#proxyConnectionsToClients.get(nodeId)
@@ -797,36 +828,39 @@ class KacheryP2PNode {
     }
 }
 
-const _loadKeypair = (configDir: string): {publicKey: PublicKey, privateKey: PrivateKey} => {
-    if (!fs.existsSync(configDir)) {
-        throw Error(`Config directory does not exist: ${configDir}`);
-    }
-    const publicKeyPath = `${configDir}/public.pem`;
-    const privateKeyPath = `${configDir}/private.pem`;
-    if (fs.existsSync(publicKeyPath)) {
-        if (!fs.existsSync(privateKeyPath)) {
-            throw Error(`Public key file exists, but secret key file does not.`);
-        }
+const _loadKeypair = (configDir: LocalFilePath): KeyPair => {
+    let keyPair
+    if (configDir.toString() === 'mock-config-dir') {
+        keyPair = createKeyPair()
     }
     else {
-        const {publicKey, privateKey} = createKeyPair();
-        fs.writeFileSync(publicKeyPath, str(publicKey), {encoding: 'utf-8'});
-        fs.writeFileSync(privateKeyPath, str(privateKey), {encoding: 'utf-8'});
-        fs.chmodSync(privateKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR);
-    }
-    
-    const keyPair = {
-        publicKey: fs.readFileSync(publicKeyPath, {encoding: 'utf-8'}),
-        privateKey: fs.readFileSync(privateKeyPath, {encoding: 'utf-8'}),
+        if (!fs.existsSync(configDir.toString())) {
+            throw Error(`Config directory does not exist: ${configDir}`);
+        }
+        const publicKeyPath = `${configDir.toString()}/public.pem`;
+        const privateKeyPath = `${configDir.toString()}/private.pem`;
+        if (fs.existsSync(publicKeyPath)) {
+            if (!fs.existsSync(privateKeyPath)) {
+                throw Error(`Public key file exists, but secret key file does not.`);
+            }
+        }
+        else {
+            const {publicKey, privateKey} = createKeyPair();
+            fs.writeFileSync(publicKeyPath, str(publicKey), {encoding: 'utf-8'});
+            fs.writeFileSync(privateKeyPath, str(privateKey), {encoding: 'utf-8'});
+            fs.chmodSync(privateKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR);
+        }
+        
+        keyPair = {
+            publicKey: fs.readFileSync(publicKeyPath, {encoding: 'utf-8'}),
+            privateKey: fs.readFileSync(privateKeyPath, {encoding: 'utf-8'}),
+        }
     }
     if (!isKeyPair(keyPair)) {
         throw Error('Invalid keyPair')
     }
     testKeyPair(keyPair);
-    return {
-        publicKey: (keyPair.publicKey as any as PublicKey),
-        privateKey: (keyPair.privateKey as any as PrivateKey)
-    }
+    return keyPair
 }
 
 const testKeyPair = (keyPair: KeyPair) => {

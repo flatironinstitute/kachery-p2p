@@ -4,7 +4,7 @@ import http from 'http';
 import https from 'https';
 import { Port, toNumber } from '../interfaces/core';
 
-const start_http_server = (app: Express, listen_port: Port, stopper: {onStop: (callback: () => void) => void}) => {
+const start_http_server = (app: Express, listen_port: Port): http.Server | https.Server => {
     // convenient for starting either as http or https depending on the port
     let protocol: 'http' | 'https';
     let server: http.Server | https.Server;
@@ -27,11 +27,9 @@ const start_http_server = (app: Express, listen_port: Port, stopper: {onStop: (c
         // Create the http server and start listening
         server = http.createServer(app);
     }
-    stopper.onStop(() => {
-        server.close();
-    });
     server.listen(listen_port);
     console.info('API server is running', {protocol, port: listen_port}, {print: true});
+    return server
 }
 
 export default start_http_server;

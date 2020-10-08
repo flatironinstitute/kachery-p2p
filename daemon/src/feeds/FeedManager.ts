@@ -215,7 +215,7 @@ class FeedManager {
 
             let finished = false;
 
-            const messages: Map<SubfeedWatchName, SubfeedMessage[]> = new Map<SubfeedWatchName, SubfeedMessage[]>();
+            const messages = new Map<SubfeedWatchName, SubfeedMessage[]>();
 
             let numMessages = 0;
             const doFinish = async () => {

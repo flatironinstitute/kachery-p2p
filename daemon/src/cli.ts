@@ -1,10 +1,13 @@
 #!/usr/bin/env ts-node
 
 import assert from 'assert';
+import dgram from 'dgram';
 import fs from 'fs';
 import os from 'os';
 import yargs from 'yargs';
+import { httpPostJson } from './common/httpPostJson';
 import { Address, isAddress, isChannelName, isHostName, isPort } from './interfaces/core';
+import { LocalFilePath } from './kacheryStorage/KacheryStorageManager';
 import startDaemon from './startDaemon';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
@@ -142,7 +145,7 @@ function main() {
 
         startDaemon({
           channelNames,
-          configDir,
+          configDir: configDir as any as LocalFilePath,
           verbose,
           hostName,
           daemonApiPort,
@@ -151,9 +154,12 @@ function main() {
           udpListenPort,
           label,
           bootstrapAddresses,
+          httpPostJsonFunction: httpPostJson,
+          dgramCreateSocketFunction: dgram.createSocket,
           opts: {
             noBootstrap,
-            isBootstrapNode
+            isBootstrapNode,
+            mock: false
           }
         });
       }

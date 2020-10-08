@@ -3,7 +3,7 @@ import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
 import { ApiProbeResponse, isApiProbeResponse } from '../services/PublicApiServer'
 import { ByteCount, DurationMsec, isDurationMsec } from '../udp/UdpCongestionManager'
-import { ChannelInfo, ChannelName, ChannelNodeInfo, ErrorMessage, FeedId, FileKey, isArrayOf, isBigInt, isBoolean, isChannelInfo, isChannelName, isChannelNodeInfo, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignedSubfeedMessage, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
+import { ChannelInfo, ChannelName, ChannelNodeInfo, ErrorMessage, FeedId, FileKey, isArrayOf, isBigInt, isBoolean, isChannelInfo, isChannelName, isChannelNodeInfo, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
 
@@ -32,7 +32,7 @@ export interface NodeToNodeRequest {
     },
     signature: Signature
 }
-export const isNodeToNodeRequest = (x: any): x is NodeToNodeRequest => {
+export const isNodeToNodeRequestBody = (x: any): boolean => {
     return _validateObject(x, {
         protocolVersion: isEqualTo(protocolVersion()),
         requestId: isRequestId,
@@ -42,6 +42,14 @@ export const isNodeToNodeRequest = (x: any): x is NodeToNodeRequest => {
         requestData: isNodeToNodeRequestData
     })
 }
+export const isNodeToNodeRequest = (x: any): x is NodeToNodeRequest => {
+    return _validateObject(x, {
+        body: isNodeToNodeRequestBody,
+        signature: isSignature
+    }, {verbose: true})
+}
+
+
 export interface NodeToNodeResponse {
     body: {
         protocolVersion: ProtocolVersion,
@@ -53,7 +61,7 @@ export interface NodeToNodeResponse {
     },
     signature: Signature
 }
-export const isNodeToNodeResponse = (x: any): x is NodeToNodeResponse => {
+export const isNodeToNodeResponseBody = (x: any): boolean => {
     return _validateObject(x, {
         protocolVersion: isEqualTo(protocolVersion()),
         requestId: isRequestId,
@@ -61,6 +69,12 @@ export const isNodeToNodeResponse = (x: any): x is NodeToNodeResponse => {
         toNodeId: isNodeId,
         timestamp: isTimestamp,
         responseData: isNodeToNodeResponseData
+    })
+}
+export const isNodeToNodeResponse = (x: any): x is NodeToNodeResponse => {
+    return _validateObject(x, {
+        body: isNodeToNodeResponseBody,
+        signature: isSignature
     })
 }
 

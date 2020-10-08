@@ -20,13 +20,14 @@ interface KacheryP2PNodeInterface {
     remoteNodeManager: () => RemoteNodeManagerInterface
     getChannelNodeInfo: (channelName: ChannelName) => ChannelNodeInfo
     channelNames: () => ChannelName[]
+    isBootstrapNode: () => boolean
 }
 
 export default class AnnounceService {
     #node: KacheryP2PNodeInterface
     #remoteNodeManager: RemoteNodeManagerInterface
     #halted = false
-    constructor(node: KacheryP2PNodeInterface, private opts: {announceBootstrapIntervalMsec: DurationMsec, announceToRandomNodeIntervalMsec: DurationMsec} = {announceBootstrapIntervalMsec: durationMsec(21000), announceToRandomNodeIntervalMsec: durationMsec(2000)}) {
+    constructor(node: KacheryP2PNodeInterface, private opts: {announceBootstrapIntervalMsec: DurationMsec, announceToRandomNodeIntervalMsec: DurationMsec}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
         // announce self when a new node-channel has been added
@@ -60,6 +61,7 @@ export default class AnnounceService {
     }
     async _start() {
         await sleepMsec(2) // important for tests
+        console.log('------------------- announce service 1', this.#node.channelNames(), this.#node.isBootstrapNode())
         // Announce self other nodes in our channels and to bootstrap nodes
         let lastBootstrapAnnounceTimestamp: Timestamp = zeroTimestamp()
         while (true) {
@@ -67,13 +69,16 @@ export default class AnnounceService {
             // periodically announce to bootstrap nodes
             const elapsedSinceLastBootstrapAnnounce = elapsedSince(lastBootstrapAnnounceTimestamp)
             if (elapsedSinceLastBootstrapAnnounce > durationMsecToNumber(this.opts.announceBootstrapIntervalMsec)) {
+                console.log('------------------- announce service 2')
                 const bootstrapNodes: RemoteNodeInterface[] = this.#remoteNodeManager.getBootstrapRemoteNodes()
                 const channelNames = this.#node.channelNames();
                 for (let bootstrapNode of bootstrapNodes) {
+                    console.log('------------------- announce service 3')
                     for (let channelName of channelNames) {
 
+                        console.log('------------------- announce service 4')
                         /////////////////////////////////////////////////////////////////////////
-                        action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
+                        await action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
                             await this._announceToNode(bootstrapNode.remoteNodeId(), channelName)
                         }, null);
                         /////////////////////////////////////////////////////////////////////////
@@ -91,14 +96,14 @@ export default class AnnounceService {
                     var randomNode = nodes[randomIndex(nodes.length)]
 
                     /////////////////////////////////////////////////////////////////////////
-                    action('announceToRandomNode', {context: 'AnnounceService', remoteNodeId: randomNode.remoteNodeId(), channelName}, async () => {
+                    await action('announceToRandomNode', {context: 'AnnounceService', remoteNodeId: randomNode.remoteNodeId(), channelName}, async () => {
                         await this._announceToNode(randomNode.remoteNodeId(), channelName)
                     }, null)
                     /////////////////////////////////////////////////////////////////////////
 
                 }
             }
-            await sleepMsec(durationMsecToNumber(this.opts.announceToRandomNodeIntervalMsec))
+            await sleepMsec(durationMsecToNumber(this.opts.announceToRandomNodeIntervalMsec), () => {return !this.#halted})
         }
     }
 }

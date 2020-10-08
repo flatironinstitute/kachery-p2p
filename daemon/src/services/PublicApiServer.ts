@@ -1,4 +1,6 @@
 import express, { Express } from 'express';
+import http from 'http';
+import https from 'https';
 import { Socket } from 'net';
 import { action } from '../common/action';
 import start_http_server from '../common/start_http_server';
@@ -47,8 +49,8 @@ export const isApiProbeResponse = (x: any): x is ApiProbeResponse => {
 export default class PublicApiServer {
     #node: KacheryP2PNode
     #verbose: number
-    #stopperCallbacks: (() => void)[]
     #app: Express
+    #server: http.Server | https.Server | null = null
     // This is the public API server for communication between nodes
     constructor(node: KacheryP2PNode, opts: {verbose: number}={verbose: 0}) {
         this.#node = node; // The kachery-p2p daemon
@@ -126,8 +128,27 @@ export default class PublicApiServer {
             req.params.streamId
         });
     }
-    // /probe - check whether the daemon is up and running and return info such as the node ID
-    async _apiProbe(req: Req, res: Res) {
+    stop() {
+        if (this.#server) {
+            this.#server.close()
+        }
+    }
+    async mockPostJson(path: string, data: JSONObject): Promise<JSONObject> {
+        if (path === '/probe') {
+            return await this._probe()
+        }
+        else if (path === '/NodeToNodeRequest') {
+            if (!isNodeToNodeRequest(data)) {
+                console.warn(JSON.stringify(data, null, 4))
+                throw Error('Invalid data for node to node request')
+            }
+            return await this._nodeToNodeRequest(data)
+        }
+        else {
+            throw Error(`mock unexpected path: ${path}`)
+        }
+    }
+    async _probe(): Promise<JSONObject> {
         const response: ApiProbeResponse = {
             success: true,
             protocolVersion: protocolVersion(),
@@ -138,12 +159,21 @@ export default class PublicApiServer {
             publicUdpSocketAddress: this.#node.publicUdpSocketAddress()
         };
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
+        return response
+    }
+    async _nodeToNodeRequest(reqBody: NodeToNodeRequest): Promise<JSONObject> {
+        const response: NodeToNodeResponse = await this.#node.handleNodeToNodeRequest(reqBody);
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
+        return response
+    }
+    // /probe - check whether the daemon is up and running and return info such as the node ID
+    async _apiProbe(req: Req, res: Res) {
+        const response = await this._probe()
         res.json(response);
     }
     // /nodeToNodeRequest
     async _apiNodeToNodeRequest(reqBody: NodeToNodeRequest, res: Res) {
-        const response: NodeToNodeResponse = await this.#node.handleNodeToNodeRequest(reqBody);
-        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
+        const response = await this._nodeToNodeRequest(reqBody)
         res.json(response);
     }
     // /download
@@ -197,11 +227,6 @@ export default class PublicApiServer {
     }
     // Start listening via http/https
     async listen(port: Port) {
-        const stopper = {
-            onStop: (cb: () => void) => {
-                this.#stopperCallbacks.push(cb);
-            }
-        }
-        start_http_server(this.#app, port, stopper);
+        this.#server = start_http_server(this.#app, port);
     }
 }

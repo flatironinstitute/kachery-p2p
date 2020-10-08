@@ -56,7 +56,7 @@ export default class UdpPublicEndpointService {
             for (let bootstrapNode of bootstrapNodes) {
                 const bootstrapNodeId = bootstrapNode.remoteNodeId()
                 /////////////////////////////////////////////////////////////////////////
-                action('getSelfPublicEndpointFromBootstrapNode', {context: 'UdpPublicEndpointService', bootstrapNodeId}, async () => {
+                await action('getSelfPublicEndpointFromBootstrapNode', {context: 'UdpPublicEndpointService', bootstrapNodeId}, async () => {
                     await this._getSelfPublicEndpointFromBootstrapNode(bootstrapNodeId)
                 }, null);
                 /////////////////////////////////////////////////////////////////////////

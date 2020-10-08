@@ -32,6 +32,11 @@ export default class PublicUdpSocketServer {
         this.#node = node
         this.#messagePartManager.onMessageComplete(this._handleCompleteMessage)
     }
+    stop() {
+        if (this.#socket) {
+            this.#socket.close()
+        }
+    }
     startListening(listenPort: Port) {
         return new Promise((resolve, reject) => {
             try {

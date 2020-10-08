@@ -15,6 +15,7 @@ export const action = async (
         await operation()
     }
     catch(err) {
+        console.warn(err)
         if (onError) {
             await onError(err);
         }

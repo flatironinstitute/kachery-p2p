@@ -7,9 +7,9 @@ import { DurationMsec, durationMsecToNumber } from './udp/UdpCongestionManager';
 
 class RemoteNodeManager {
     #node: KacheryP2PNode
-    #remoteNodes: Map<NodeId, RemoteNode> = new Map<NodeId, RemoteNode>()
+    #remoteNodes = new Map<NodeId, RemoteNode>()
     #onNodeChannelAddedCallbacks: ((remoteNodeId: NodeId, channelName: ChannelName) => void)[] = []
-    #onBootstrapNodeAddedCallbacks: ((bootstrapNodeId: NodeId) => void)[]
+    #onBootstrapNodeAddedCallbacks: ((bootstrapNodeId: NodeId) => void)[] = []
     constructor(node: KacheryP2PNode) {
         this.#node = node;
     }

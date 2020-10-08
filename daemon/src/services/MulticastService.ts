@@ -1,20 +1,11 @@
-import dgram from 'dgram'
 import { action } from "../common/action"
 import { getSignature, verifySignature } from "../common/crypto_util"
 import { sleepMsec } from "../common/util"
 import { ChannelName, ChannelNodeInfo, isMulticastAnnounceMessage, JSONObject, KeyPair, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, tryParseJsonObject } from "../interfaces/core"
 import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
+import { DgramCreateSocketFunction } from "../KacheryP2PNode"
 import { protocolVersion } from "../protocolVersion"
-import { durationMsec, DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager'
-
-interface DgramSocket {
-    bind: (port: number) => void,
-    on: (eventName: 'listening' | 'message', callback: (() => void) | ((message: JSONObject, rinfo: any) => void)) => void,
-    addMembership: (address: string) => void,
-    send: (message: string, offset: number, length: number, port: number, address: string) => void
-}
-
-type DgramCreateSocket = (args: {type: 'udp4', reuseAddr: boolean}) => DgramSocket
+import { DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager'
 
 interface KacheryP2PNodeInterface {
     nodeId: () => NodeId
@@ -22,12 +13,13 @@ interface KacheryP2PNodeInterface {
     channelNames: () => ChannelName[]
     getChannelNodeInfo: (channelName: ChannelName) => ChannelNodeInfo
     _handleAnnounceRequest: (args: { fromNodeId: NodeId, requestData: AnnounceRequestData }) => Promise<AnnounceResponseData>
+    dgramCreateSocketFunction: () => DgramCreateSocketFunction
 }
 
 export default class MulticastService {
     #node: KacheryP2PNodeInterface
     #halted = false
-    constructor(node: KacheryP2PNodeInterface, private opts: {intervalMsec: DurationMsec, dgramCreateSocket: DgramCreateSocket} = {intervalMsec: durationMsec(12000), dgramCreateSocket: dgram.createSocket}) {
+    constructor(node: KacheryP2PNodeInterface, private opts: {intervalMsec: DurationMsec}) {
         this.#node = node
         this._start()
     }
@@ -36,7 +28,7 @@ export default class MulticastService {
     }
     async _start() {
         // to find nodes on the local network
-        const multicastSocket = this.opts.dgramCreateSocket({ type: "udp4", reuseAddr: true })
+        const multicastSocket = this.#node.dgramCreateSocketFunction()({ type: "udp4", reuseAddr: true })
         // const multicastSocket = dgram.createSocket({ type: "udp4", reuseAddr: true })
         const multicastAddress = '237.0.0.0' // not sure how to choose this
         const multicastPort = 21010
@@ -80,7 +72,7 @@ export default class MulticastService {
                 }
                 const mJson: string = JSON.stringify(m)
                 /////////////////////////////////////////////////////////////////////////
-                action('sendMulticastAnnounceMessage', {}, async () => {
+                await action('sendMulticastAnnounceMessage', {}, async () => {
                     multicastSocket.send(
                         mJson,
                         0,
@@ -92,7 +84,7 @@ export default class MulticastService {
                 })
                 /////////////////////////////////////////////////////////////////////////
             }
-            await sleepMsec(durationMsecToNumber(this.opts.intervalMsec))
+            await sleepMsec(durationMsecToNumber(this.opts.intervalMsec), () => {return !this.#halted})
         }
     }
 }

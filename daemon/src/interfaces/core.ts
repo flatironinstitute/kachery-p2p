@@ -41,10 +41,12 @@ export const isJSONSerializable = (obj: any): boolean => {
         if (!isPlain(obj[property])) {
           return false;
         }
-        if (typeof obj[property] === "object") {
-          if (!isJSONSerializable(obj[property])) {
-            return false;
-          }
+        if (obj[property] !== null) {
+            if (typeof obj[property] === "object") {
+                if (!isJSONSerializable(obj[property])) {
+                    return false;
+                }
+            }
         }
       }
     }
@@ -299,7 +301,7 @@ export const isPrivateKey = (x: any) : x is PublicKey => {
 
 const checkKeyblockHeader = (key: string, type: 'PUBLIC' | 'PRIVATE') => {
     // note we need to double-escape the backslashes here.
-    console.log(`Checking >${key}< against pattern.`)
+    // console.log(`Checking >${key}< against pattern.`)
     const pattern = new RegExp(`-----BEGIN ${type} KEY-----[\\s\\S]*-----END ${type} KEY-----\n*$`);
     return (pattern.test(key));
 }
@@ -362,7 +364,7 @@ export interface Signature extends String {
 }
 export const isSignature = (x: any): x is Signature => {
     if (!isString(x)) return false;
-    return isHexadecimal(x, 64);
+    return isHexadecimal(x, 128);
 }
 
 
