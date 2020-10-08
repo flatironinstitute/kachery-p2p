@@ -36,6 +36,10 @@ export const validNodeInfoBody = {
         { hostName: 'www.science.gov', port: 80 }],
     timestamp: ut.nowTimestamp()
 }
+const validChannelNodeInfo = {
+    body: validNodeInfoBody,
+    signature: new Array(65).join('3')
+}
 
  // need to explicitly use mocha prefix once or the dependency gets wrongly cleaned up
 mocha.describe('Basic typeguards', () => {
@@ -288,6 +292,24 @@ describe('Utility comparisons', () => {
             expect(ret).to.deep.equal(myObj)
         })
         // it('mapToObject() returns JSON-parsable object', () => { })
+    })
+    describe('JSON Objects Match utility function', () => {
+        const obj1 = { a: 'value', b: 5 }
+        const obj2 = { a: 'value', b: '5' }
+        const obj3 = { wrongkey: 'value' }
+        it('jsonObjectsMatch() returns true for identity object', () => {
+            expect(ut.jsonObjectsMatch(obj1, obj1)).to.be.true
+        })
+        it('jsonObjectsMatch() returns false on non-matching objects', () => {
+            expect(ut.jsonObjectsMatch(obj1, obj2)).to.be.false
+            expect(ut.jsonObjectsMatch(obj1, obj3)).to.be.false
+        })
+        it('jsonObjectsMatch() throws if either object is non-JSON object', () => {
+            const badCall1 = () => { ut.jsonObjectsMatch(obj1, 5) }
+            const badCall2 = () => { ut.jsonObjectsMatch(null, obj1) }
+            expect(badCall1).to.throw()
+            expect(badCall2).to.throw()
+        })
     })
 })
 
@@ -615,6 +637,31 @@ describe('Kachery primitives', () => {
             expect(badFn).to.throw()
         })
     })
+    describe('Multicast Announce messages', () => {
+        const validAnnounceRequestData = { requestType: 'announce', channelNodeInfo: validChannelNodeInfo }
+        const validMulticastMessageBody = {
+            protocolVersion: 'protocol-version-12',
+            fromNodeId: new Array(65).join('0'),
+            messageType: 'announce',
+            requestData: validAnnounceRequestData
+        }
+        it('isMulticastAnnounceMessageBody() returns true on valid input', () => {
+            expect(ut.isMulticastAnnounceMessageBody(validMulticastMessageBody)).to.be.true
+        })
+        it('isMulticastAnnounceMessageBody() returns false on wrong messageType', () => {
+            expect(ut.isMulticastAnnounceMessageBody({
+                ...validMulticastMessageBody,
+                messageType: 'declaration'
+            })).to.be.false
+        })
+        it('isMulticastAnnounceMessage() returns true on valid input', () => {
+            expect(ut.isMulticastAnnounceMessage({ body: validMulticastMessageBody, signature: new Array(65).join('1') })).to.be.true
+        })
+        it('isMulticastAnnounceMessage() returns false on missing body or signature', () => {
+            expect(ut.isMulticastAnnounceMessage({ body: validMulticastMessageBody, signature: null })).to.be.false
+            expect(ut.isMulticastAnnounceMessage({ body: undefined, signature: new Array(65).join('2') })).to.be.false
+        })
+    })
     describe('FileKey', () => {
         it('isFileKey() returns true for valid file key object', () => {
             expect(ut.isFileKey(validFileKey)).to.be.true
@@ -769,11 +816,28 @@ describe('Feeds', () => {
             expect(c).to.equal(`${a}:${b}`)
         })
     })
-    describe('FeedsConfigFeed', () => {
-        const myPair = {
-            publicKey: new Array(65).join('a'),
-            privateKey: new Array(65).join('b')
+})
+
+describe('Feeds Configuration', () => {
+    const myPair = {
+        publicKey: new Array(65).join('a'),
+        privateKey: new Array(65).join('b')
+    }
+    // FeedsConfig: { feeds: { [string]: FeedsConfigFeed }, feedIdsByName: { [string]: FeedId }}
+    // where FeedId is 64-char hex and FeedName is any nonempty string
+    const feedId1 = new Array(65).join('1')
+    const feedId2 = new Array(65).join('2')
+    const validFeedsConfig = {
+        feeds: {
+            [feedId1]: myPair,
+            [feedId2]: { ...myPair, privateKey: undefined }
+        },
+        feedIdsByName: {
+            one: new Array(65).join('7'),
+            b: new Array(65).join('b')
         }
+    }
+    describe('FeedsConfigFeed', () => {
         it('isFeedsConfigFeed() returns true for pair of valid hexes', () => {
             expect(ut.isFeedsConfigFeed(myPair)).to.be.true
         })
@@ -785,6 +849,49 @@ describe('Feeds', () => {
         })
         it('isFeedsConfigFeed() returns false for invalid private key hex', () => {
             expect(ut.isFeedsConfigFeed({ ...myPair, privateKey: 'foo' })).to.be.false
+        })
+    })
+    describe('FeedsConfig', () => {
+        it('isFeedsConfig() returns true on valid feeds configuration', () => {
+            expect(ut.isFeedsConfig(validFeedsConfig)).to.be.true
+        })
+        it('isFeedsConfig() returns false on non-FeedId keys', () => {
+            expect(ut.isFeedsConfig({
+                ...validFeedsConfig,
+                feeds: {
+                    a: myPair
+                }
+            })).to.be.false
+        })
+    })
+    describe('Conversions', () => {
+        const ram = { feeds: new Map<ut.FeedId, ut.FeedsConfigFeed>(), feedIdsByName: new Map<ut.FeedName, ut.FeedId>() }
+        ram.feeds.set(feedId1 as any as ut.FeedId, myPair as any as ut.FeedsConfigFeed)
+        ram.feeds.set(feedId2 as any as ut.FeedId, { ...myPair, privateKey: undefined } as any as ut.FeedsConfigFeed)
+        ram.feedIdsByName.set('one' as any as ut.FeedName, new Array(65).join('7') as any as ut.FeedId)
+        ram.feedIdsByName.set('b' as any as ut.FeedName, new Array(65).join('b') as any as ut.FeedId)
+        const match = (obj: { feeds: {[key: string]: any }, feedIdsByName: {[key: string]: any} },
+                       maps: { feeds: Map<ut.FeedId, ut.FeedsConfigFeed>, feedIdsByName: Map<ut.FeedName, ut.FeedId> }): boolean =>
+                        {
+                            const oFeeds = obj.feeds
+                            const oByName = obj.feedIdsByName
+                            const mFeeds = maps.feeds
+                            const mByName = maps.feedIdsByName
+                            for (let k in oFeeds) if (oFeeds[k] !== mFeeds.get(k as any as ut.FeedId)) return false
+                            for (let k in oByName) if (oByName[k] !== mByName.get(k as any as ut.FeedName)) return false
+                            for (let k in mFeeds.keys()) if (mFeeds.get(k as any as ut.FeedId) !== oFeeds[k]) return false
+                            for (let k in mByName.keys()) if (mByName.get(k as any as ut.FeedName) !== oByName[k]) return false
+                            return true
+                        }
+        it('toFeedsConfig() is identity function', () => {
+            const res = ut.toFeedsConfig(ram)
+            expect(match(res, ram)).to.be.true
+            expect(res).to.deep.equal(validFeedsConfig)
+        })
+        it('toFeedsConfigRAM() is identity function', () => {
+            const res = ut.toFeedsConfigRAM(validFeedsConfig as any as ut.FeedsConfig)
+            expect(match(validFeedsConfig, res)).to.be.true
+            expect(res).to.deep.equal(ram)
         })
     })
 })
@@ -960,3 +1067,44 @@ describe('Subfeed subscriptions', () => {
     })
 })
 
+describe('Live Feed Subscriptions', () => {
+    const validLiveFeedSubscription = {
+        subscriptionName: "This is my subscription name",
+        feedId: new Array(65).join('F'),
+        subfeedHash: new Array(41).join('b'),
+        position: 12
+    }
+    describe('Live Feed Subscription Name', () => {
+        it('isLiveFeedSubscriptionName() returns true for valid name', () => {
+            expect(ut.isLiveFeedSubscriptionName('0123456789_abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ .')).to.be.true
+        })
+        it('isLiveFeedSubscriptionName() returns false for non-string input', () => {
+            expect(ut.isLiveFeedSubscriptionName(5)).to.be.false
+        })
+        it('isLiveFeedSubscriptionName() returns false for bad characters', () => {
+            expect(ut.isLiveFeedSubscriptionName('*****')).to.be.false
+        })
+        it('isLifeFeedSubscriptionName() returns false for bad-length name', () => {
+            expect(ut.isLiveFeedSubscriptionName(new Array(162).join('a'))).to.be.false
+            expect(ut.isLiveFeedSubscriptionName('abc')).to.be.false
+        })
+    })
+    describe('Live Feed Subscription', () => {
+        it('isLiveFeedSubscription() returns true for valid position', () => {
+            expect(ut.isLiveFeedSubscription(validLiveFeedSubscription)).to.be.true
+        })
+        it('isLiveFeedSubscription() returns false for missing position', () => {
+            expect(ut.isLiveFeedSubscription({ ...validLiveFeedSubscription, position: undefined })).to.be.false
+        })
+    })
+    describe('Live Feed Subscription sets', () => {
+        it('isLiveFeedSubscriptions() returns true for array with valid entries', () => {
+            const feeds = { subscriptions: [ validLiveFeedSubscription, { ...validLiveFeedSubscription, position: 2 }]}
+            expect(ut.isLiveFeedSubscriptions(feeds)).to.be.true
+        })
+        it('isLiveFeedSubscriptions() returns false for array with an invalid entry', () => {
+            const feeds = { subscriptions: [ validLiveFeedSubscription, { ...validLiveFeedSubscription, position: undefined }]}
+            expect(ut.isLiveFeedSubscriptions(feeds)).to.be.false
+        })
+    })
+})

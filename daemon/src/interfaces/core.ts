@@ -4,8 +4,6 @@ import { randomAlphaString } from "../common/util";
 import { ByteCount, isByteCount } from '../udp/UdpCongestionManager';
 import { AnnounceRequestData, isAnnounceRequestData } from "./NodeToNodeRequest";
 
-export const _tests: {[key: string]: Function} = {}
-
 export type JSONPrimitive = string | number | boolean | null;
 export type JSONValue = JSONPrimitive | JSONObject | JSONArray;
 export type JSONObject = { [member: string]: JSONValue };
@@ -212,6 +210,13 @@ export const mapToObject = <KeyType extends String, ValueType>(m: Map<KeyType, V
     return ret;
 }
 
+// jsonObjectsMatch
+export const jsonObjectsMatch = (x1: any, x2: any): boolean => {
+    if (!isJSONObject(x1)) throw Error('x1 is not a json object in jsonObjectsMatch');
+    if (!isJSONObject(x2)) throw Error('x2 is not a json object in jsonObjectsMatch');
+    return (JSONStringifyDeterministic(x1) === JSONStringifyDeterministic(x2));
+}
+
 
 // Versioning
 export interface ProtocolVersion extends String {
@@ -225,7 +230,6 @@ export const isProtocolVersion = (x: any): x is ProtocolVersion => {
 export interface DaemonVersion extends String {
     __daemonVersion__: never // phantom
 }
-export const exampleDaemonVersion: DaemonVersion = "example-daemon.Version" as any as DaemonVersion
 export const isDaemonVersion = (x: any): x is DaemonVersion => {
     if (!isString(x)) return false;
     return (/^[0-9a-zA-z\.\ \-]{4,40}?$/.test(x));
@@ -278,7 +282,6 @@ export const isAddress = (x: any): x is Address => {
 export interface Timestamp extends Number {
     __timestamp__: never
 }
-export const exampleTimestamp: Timestamp = Number(new Date(2020, 1, 1, 1, 1, 1, 0)) - 0 as any as Timestamp
 export const isTimestamp = (x: any) : x is Timestamp => {
     if (!isNumber(x)) return false;
     if (x < 0) return false;  // For our purposes, timestamps should never be negative
@@ -423,6 +426,33 @@ export const errorMessage = (x: string): ErrorMessage => {
     }
 }
 
+
+export interface MulticastAnnounceMessageBody {
+    protocolVersion: ProtocolVersion,
+    fromNodeId: NodeId,
+    messageType: 'announce', // Should be actual type/enum?
+    requestData: AnnounceRequestData
+}
+export const isMulticastAnnounceMessageBody = (x: any): x is MulticastAnnounceMessageBody => {
+    return _validateObject(x, {
+        protocolVersion: isProtocolVersion,
+        fromNodeId: isNodeId,
+        messageType: isEqualTo('announce'),
+        requestData: isAnnounceRequestData
+    })
+}
+
+export interface MulticastAnnounceMessage {
+    body: MulticastAnnounceMessageBody,
+    signature: Signature
+}
+export const isMulticastAnnounceMessage = (x: any): x is MulticastAnnounceMessage => {
+    return _validateObject(x, {
+        body: isMulticastAnnounceMessageBody,
+        signature: isSignature
+    })
+}
+
 // FileKey
 export interface FileKey {
     sha1: Sha1Hash,
@@ -454,7 +484,6 @@ export const nodeIdToPublicKey = (nodeId: NodeId): PublicKey => {
 export const feedIdToPublicKeyHex = (feedId: FeedId): PublicKeyHex => {
     return feedId as any as PublicKeyHex;
 }
-// TODO: Note: PublicKeyHex has no length limit, but nodeId must be 64 characters--> NEED TO ADD 64-char restriction to publickeyhex,privatekeyhex
 export const publicKeyHexToNodeId = (x: PublicKeyHex) : NodeId => {
     return x as any as NodeId;
 }
@@ -591,6 +620,36 @@ export const isFeedsConfigFeed = (x: any): x is FeedsConfigFeed => {
     // TODO: check pair matches if the private key is given?
 }
 
+// FeedsConfig and FeedsConfigRAM
+export interface FeedsConfig {
+    feeds: {[key: string]: FeedsConfigFeed},
+    feedIdsByName: {[key: string]: FeedId}
+    // QUERY: do the feeds and feedIdsByName need to match in any way?
+}
+export interface FeedsConfigRAM {
+    feeds: Map<FeedId, FeedsConfigFeed>,
+    feedIdsByName: Map<FeedName, FeedId>
+}
+export const toFeedsConfigRAM = (x: FeedsConfig): FeedsConfigRAM => {
+    return {
+        feeds: objectToMap<FeedId, FeedsConfigFeed>(x.feeds),
+        feedIdsByName: objectToMap<FeedName, FeedId>(x.feedIdsByName)
+    }
+}
+export const toFeedsConfig = (x: FeedsConfigRAM): FeedsConfig => {
+    return {
+        feeds: mapToObject<FeedId, FeedsConfigFeed>(x.feeds),
+        feedIdsByName: mapToObject<FeedName, FeedId>(x.feedIdsByName)
+    }
+}
+export const isFeedsConfig = (x: any): x is FeedsConfig => {
+    return _validateObject(x, {
+        feeds: isObjectOf(isFeedId, isFeedsConfigFeed),
+        feedIdsByName: isObjectOf(isFeedName, isFeedId)
+    })
+}
+
+
 
 // SubfeedMessage
 export interface SubfeedMessage extends JSONObject {
@@ -706,35 +765,6 @@ export const toSubfeedWatches = (x: SubfeedWatchesRAM) => {
     return mapToObject<SubfeedWatchName, SubfeedWatch>(x);
 }
 
-
-// FeedsConfig and FeedsConfigRAM
-export interface FeedsConfig {
-    feeds: {[key: string]: FeedsConfigFeed},
-    feedIdsByName: {[key: string]: FeedId}
-}
-export interface FeedsConfigRAM {
-    feeds: Map<FeedId, FeedsConfigFeed>,
-    feedIdsByName: Map<FeedName, FeedId>
-}
-export const toFeedsConfigRAM = (x: FeedsConfig): FeedsConfigRAM => {
-    return {
-        feeds: objectToMap<FeedId, FeedsConfigFeed>(x.feeds),
-        feedIdsByName: objectToMap<FeedName, FeedId>(x.feedIdsByName)
-    }
-}
-export const toFeedsConfig = (x: FeedsConfigRAM): FeedsConfig => {
-    return {
-        feeds: mapToObject<FeedId, FeedsConfigFeed>(x.feeds),
-        feedIdsByName: mapToObject<FeedName, FeedId>(x.feedIdsByName)
-    }
-}
-export const isFeedsConfig = (x: any): x is FeedsConfig => {
-    return _validateObject(x, {
-        feeds: isObjectOf(isFeedId, isFeedsConfigFeed),
-        feedIdsByName: isObjectOf(isFeedName, isFeedId)
-    })
-}
-
 // LiveFeedSbuscriptionName
 export interface LiveFeedSubscriptionName extends String {
     __liveFeedSubscriptionName__: never // phantom type
@@ -749,7 +779,7 @@ export interface LiveFeedSubscription {
     subscriptionName: LiveFeedSubscriptionName,
     feedId: FeedId,
     subfeedHash: SubfeedHash,
-    position: number
+    position: number // TODO: is a negative position valid?
 }
 export const isLiveFeedSubscription = (x: any): x is LiveFeedSubscription => {
     return _validateObject(x, {
@@ -759,14 +789,6 @@ export const isLiveFeedSubscription = (x: any): x is LiveFeedSubscription => {
         position: isNumber
     })
 }
-export const exampleLiveFeedSubscription: LiveFeedSubscription = {
-    subscriptionName: "This is my subscription" as any as LiveFeedSubscriptionName,
-    feedId: new Array(65).join('F') as any as FeedId,
-    subfeedHash: new Array(41).join('b') as any as SubfeedHash,
-    position: 12
-}
-_tests.LiveFeedSubscription = () => { assert(isLiveFeedSubscription(exampleLiveFeedSubscription)) }
-
 
 // LiveFeedSubscriptions
 export interface LiveFeedSubscriptions {
@@ -776,57 +798,4 @@ export const isLiveFeedSubscriptions = (x: any): x is LiveFeedSubscriptions => {
     return _validateObject(x, {
         subscriptions: isArrayOf(isLiveFeedSubscription)
     })
-}
-_tests.LiveFeedSubscriptions = () => { 
-    assert(isArrayOf(isLiveFeedSubscription)([exampleLiveFeedSubscription]));
- }
-
-
-
-export interface MulticastAnnounceMessageBody {
-    protocolVersion: ProtocolVersion,
-    fromNodeId: NodeId,
-    messageType: 'announce', // Should be actual type/enum?
-    requestData: AnnounceRequestData
-}
-export const isMulticastAnnounceMessageBody = (x: any): x is MulticastAnnounceMessageBody => {
-    return _validateObject(x, {
-        protocolVersion: isProtocolVersion,
-        fromNodeId: isNodeId,
-        messageType: isEqualTo('announce'),
-        requestData: isAnnounceRequestData
-    })
-}
-
-export interface MulticastAnnounceMessage {
-    body: MulticastAnnounceMessageBody,
-    signature: Signature
-}
-export const isMulticastAnnounceMessage = (x: any): x is MulticastAnnounceMessage => {
-    return _validateObject(x, {
-        body: isMulticastAnnounceMessageBody,
-        signature: isSignature
-    })
-}
-export const exampleMulticastAnnounceMessage: MulticastAnnounceMessage = {
-    body: {
-        protocolVersion: "valid example protocol" as any as ProtocolVersion,
-        fromNodeId: new Array(65).join('a') as any as NodeId,
-        messageType: 'announce',
-        requestData: {  // TODO: This should be standardized; and we are growing toward a weird cross-import situation.
-            requestType: 'announce',
-            channelNodeInfo: 'foo' as any as ChannelNodeInfo //exampleChannelNodeInfo
-        }
-    },
-    signature: new Array(65).join('a') as any as Signature
-}
-_tests.MulticastAnnounceMessage = () => {
-    assert(isMulticastAnnounceMessage(exampleMulticastAnnounceMessage));
-}
-
-
-export const jsonObjectsMatch = (x1: any, x2: any): boolean => {
-    if (!isJSONObject(x1)) throw Error('x1 is not a json object in jsonObjectsMatch');
-    if (!isJSONObject(x2)) throw Error('x2 is not a json object in jsonObjectsMatch');
-    return (JSONStringifyDeterministic(x1) === JSONStringifyDeterministic(x2));
 }
