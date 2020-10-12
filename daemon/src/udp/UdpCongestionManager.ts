@@ -1,11 +1,18 @@
 import { randomAlphaString } from "../common/util";
 import { elapsedSince, isNumber, isString, nowTimestamp } from "../interfaces/core";
+import { createPacketId, PacketId } from "./UdpPacketSender";
 
 const TARGET_PCT_LOST_BYTES = 2;
 
 export const _tests: {[key: string]: () => Promise<void>} = {}
 
 type Callbacks = (() => void)[]
+
+export class UdpTimeoutError extends Error {
+    constructor(errorString: string) {
+      super(errorString);
+    }
+}
 
 export interface ByteCount extends Number {
     __byteCount__: never
@@ -77,11 +84,16 @@ export const durationMsec = (n: number) => {
     return n as any as DurationMsec
 }
 
-type SendCallback = (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: DurationMsec}) => void
+// type SendCallback = (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: DurationMsec}) => void
+type SendCallback = (timeoutMsec: DurationMsec) => Promise<void>
+
 interface QueuedPacket {
     internalId: InternalId,
+    packetId: PacketId,
     packetSize: ByteCount,
-    send: SendCallback
+    send: SendCallback,
+    onFinished: () => void,
+    onError: (err: Error) => void
 }
 
 export interface InternalId extends String {
@@ -90,7 +102,7 @@ export interface InternalId extends String {
 const exampleInternalId: InternalId = "internalId" as any as InternalId
 export const isInternalId = (x: any): x is InternalId => {
     if (!isString(x)) return false;
-    return (/^[A-Fa-f]{10}?$/.test(x));
+    return (/^[A-Za-z]{10}$/.test(x));
 }
 export const createInternalId = () => {
     return randomAlphaString(10) as any as InternalId;
@@ -103,32 +115,52 @@ export default class UdpCongestionManager {
     #currentTrialData = new TrialData();
     #queuedPackets = new Queue<QueuedPacket>()
     constructor() {}
-     queuePacket(packetSize: ByteCount, send: SendCallback) {
-        this.#queuedPackets.enqueue({
-            internalId: createInternalId(),
-            packetSize,
-            send
+    async sendPacket(packetId: PacketId, packetSize: ByteCount, send: SendCallback): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.#queuedPackets.enqueue({
+                internalId: createInternalId(),
+                packetId,
+                packetSize,
+                send,
+                onFinished: () => {resolve()},
+                onError: (err: Error) => {
+                    reject(err)
+                }
+            })
+            this._handleNextPackets()
         })
-        this._handleNextPackets()
     }
     _sendPacket(p: QueuedPacket) {
         const timer = nowTimestamp()
         const _onConfirmed = () => {
             const elapsedMsec = durationMsec(elapsedSince(timer))
             this.#currentTrialData.reportConfirmed(p.internalId, p.packetSize, elapsedMsec)
+            p.onFinished()
             this._handleNextPackets()
         }
         const _onTimedOut = () => {
             this.#currentTrialData.reportTimedOut(p.internalId, p.packetSize)
             this._handleNextPackets()
+            // todo: retry udp send
+            p.onError(new UdpTimeoutError('Timeout while waiting for udp confirmation'))
         }
-        const _onError = () => {
+        const _onError = (err: Error) => {
             this.#currentTrialData.reportError(p.internalId, p.packetSize)
             this._handleNextPackets()
+            p.onError(err)
         }
-        p.send(_onConfirmed, _onTimedOut, _onError, {timeoutMsec: durationMsec(durationMsecToNumber(this.#estimatedRoundtripLatencyMsec) * 5)})
+        const timeoutMsec = durationMsec(durationMsecToNumber(this.#estimatedRoundtripLatencyMsec) * 5)
+        p.send(timeoutMsec).then(() => {
+            _onConfirmed()
+        }).catch((err: Error) => {
+            if (err instanceof UdpTimeoutError) {
+                _onTimedOut()
+            }
+            else {
+                _onError(err)
+            }
+        })
         this.#currentTrialData.reportSent(p.internalId, p.packetSize)
-        this._handleNextPackets()
     }
     _handleNextPackets() {
         if (this.#currentTrialData.elapsedMsec() > durationMsecToNumber(this.#trialDurationMsec)) {
@@ -322,13 +354,10 @@ _tests.UdpCongestionManager = async () => {
                 resolve()
             }
         }
-        const send = (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: DurationMsec}) => {
-            onConfirmed()
+        const send = async (timeoutMsec: DurationMsec) => {
             numSent ++
             _check()
         }
-        x.queuePacket(byteCount(100), send)
-        x.queuePacket(byteCount(100), send)
-        x.queuePacket(byteCount(100), send)
+        x.sendPacket(createPacketId(), byteCount(100), send)
     })
 }

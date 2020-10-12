@@ -11,7 +11,7 @@
     "dev": "ts-node ./src/cli.ts",
     "build": "tsc",
     "origtest": "ts-node ./src/test.ts",
-    "test": "mocha -r ts-node/register 'tests/**/*.ts'",
+    "test": "mocha -r ts-node/register 'tests/**/integration*.ts'",
     "coverage": "nyc --reporter=text --reporter=lcov yarn test",
     "publish-dry": "npm publish --dry-run",
     "publish-go": "npm publish"

@@ -13,7 +13,7 @@ class RemoteNodeManager {
     constructor(node: KacheryP2PNode) {
         this.#node = node;
     }
-    async handleAnnounceRequest({fromNodeId, requestData}: {fromNodeId: NodeId, requestData: AnnounceRequestData}): Promise<AnnounceResponseData> {
+    async handleAnnounceRequest({fromNodeId, requestData, localUdpAddress}: {fromNodeId: NodeId, requestData: AnnounceRequestData, localUdpAddress: Address | null}): Promise<AnnounceResponseData> {
         // only handle this if we belong to this channel or we are a bootstrap node
         if (!this.#node.isBootstrapNode()) {
             if (!this.#node.channelNames().includes(requestData.channelNodeInfo.body.channelName)) {
@@ -26,6 +26,12 @@ class RemoteNodeManager {
         }
         const { channelNodeInfo } = requestData;
         this.setChannelNodeInfo(channelNodeInfo);
+        if (localUdpAddress) {
+            const n = this.#remoteNodes.get(channelNodeInfo.body.nodeId)
+            if (n) {
+                n.setLocalUdpAddress(localUdpAddress)
+            }
+        }
         return {
             requestType: 'announce',
             success: true,
@@ -85,6 +91,13 @@ class RemoteNodeManager {
         return {
             nodes
         }
+    }
+    canSendRequestToNode(nodeId: NodeId, method: SendRequestMethod) {
+        const remoteNode = this.#remoteNodes.get(nodeId)
+        if (!remoteNode) {
+            return false
+        }
+        return remoteNode.canSendRequest(method)
     }
     async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}): Promise<NodeToNodeResponseData> {
         const remoteNode = this.#remoteNodes.get(nodeId)

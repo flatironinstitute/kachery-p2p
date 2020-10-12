@@ -29,7 +29,8 @@ const startDaemon = async (args: {
     opts: {
         noBootstrap: boolean,
         isBootstrapNode: boolean,
-        mock: boolean
+        mock: boolean,
+        useMulticastUdp: boolean
     }
 }) => {
     const {

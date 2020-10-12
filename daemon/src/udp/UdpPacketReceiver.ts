@@ -1,16 +1,17 @@
 import dgram from 'dgram';
 import { tryParseJsonObject } from '../interfaces/core';
+import { DgramSocket } from '../KacheryP2PNode';
 import { protocolVersion } from '../protocolVersion';
 import { isUdpPacketSenderHeader, PacketId, UdpPacketSenderHeader, UDP_PACKET_HEADER_SIZE } from './UdpPacketSender';
 
 export default class UdpPacketReceiver {
-    #socket: dgram.Socket
+    #socket: DgramSocket
     #onPacketCallbacks: ((buffer: Buffer, remoteInfo: dgram.RemoteInfo) => void)[] = []
     #onConfirmationCallbacks: ((packetId: PacketId) => void)[] = []
-    constructor(socket: dgram.Socket) {
+    constructor(socket: DgramSocket) {
         this.#socket = socket
 
-        this.#socket.on("message", (message, remoteInfo) => {
+        this.#socket.on('message', (message, remoteInfo) => {
             const headerTxt = message.slice(0, UDP_PACKET_HEADER_SIZE).toString().trimEnd()
             const dataBuffer = message.slice(UDP_PACKET_HEADER_SIZE);
             const header = tryParseJsonObject(headerTxt)
@@ -18,6 +19,7 @@ export default class UdpPacketReceiver {
                 return;
             }
             if (!isUdpPacketSenderHeader(header)) {
+                console.warn('Unexpected udp packet header')
                 return;
             }
             if (header.isConfirmation) {
@@ -30,7 +32,8 @@ export default class UdpPacketReceiver {
                 packetId: header.packetId,
                 isConfirmation: true
             }
-            this.#socket.send(Buffer.from(JSON.stringify(h).padEnd(UDP_PACKET_HEADER_SIZE)), remoteInfo.port, remoteInfo.address)
+            const buf = Buffer.from(JSON.stringify(h).padEnd(UDP_PACKET_HEADER_SIZE))
+            this.#socket.send(buf, 0, buf.length, remoteInfo.port, remoteInfo.address)
 
             this.#onPacketCallbacks.forEach(cb => {
                 cb(dataBuffer, remoteInfo)

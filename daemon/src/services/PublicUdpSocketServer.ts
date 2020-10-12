@@ -5,7 +5,7 @@ import GarbageMap from "../common/GarbageMap";
 import { Address, HostName, JSONObject, nodeIdToPublicKey, Port, RequestId, toNumber, tryParseJsonObject } from "../interfaces/core";
 import { isNodeToNodeRequest, isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeResponse } from "../interfaces/NodeToNodeRequest";
 import { createUdpMessageId, isUdpHeader, numParts, NumParts, partIndex, PartIndex, UdpHeader, UdpMessagePart, UdpMessageType, UDP_MESSAGE_HEADER_SIZE, UDP_PACKET_SIZE } from "../interfaces/UdpMessage";
-import KacheryP2PNode from "../KacheryP2PNode";
+import KacheryP2PNode, { DgramSocket } from "../KacheryP2PNode";
 import { protocolVersion } from "../protocolVersion";
 import { durationMsec, DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager';
 import UdpMessagePartManager from '../udp/UdpMessagePartManager';
@@ -24,13 +24,13 @@ interface DataListener {
 export default class PublicUdpSocketServer {
     #node: KacheryP2PNode
     #messagePartManager = new UdpMessagePartManager()
-    #socket: dgram.Socket | null = null
+    #socket: DgramSocket | null = null
     #udpPacketSender: UdpPacketSender | null = null
     #udpPacketReceiver: UdpPacketReceiver | null = null
     #responseListeners = new GarbageMap<RequestId, ResponseListener>(durationMsec(3 * 60 * 1000))
     constructor(node: KacheryP2PNode) {
         this.#node = node
-        this.#messagePartManager.onMessageComplete(this._handleCompleteMessage)
+        this.#messagePartManager.onMessageComplete((remoteAddress, header, buffer) => {this._handleCompleteMessage(remoteAddress, header, buffer)})
     }
     stop() {
         if (this.#socket) {
@@ -40,7 +40,7 @@ export default class PublicUdpSocketServer {
     startListening(listenPort: Port) {
         return new Promise((resolve, reject) => {
             try {
-                this.#socket = dgram.createSocket({ type: "udp4" });
+                this.#socket = this.#node.dgramCreateSocketFunction()({ type: "udp4", reuseAddr: false });
                 this.#socket.bind(toNumber(listenPort));
                 this.#socket.on("listening", () => {
                     if (this.#socket === null) {
@@ -49,6 +49,7 @@ export default class PublicUdpSocketServer {
                     this.#udpPacketSender = new UdpPacketSender(this.#socket)
                     this.#udpPacketReceiver = new UdpPacketReceiver(this.#socket)
                     this.#udpPacketReceiver.onPacket((packet: Buffer, remoteInfo: dgram.RemoteInfo) => {
+                        console.log('----------- on packet')
                         const headerTxt = packet.slice(0, UDP_MESSAGE_HEADER_SIZE).toString().trimEnd()
                         const dataBuffer = packet.slice(UDP_MESSAGE_HEADER_SIZE);
                         const header = tryParseJsonObject(headerTxt)
@@ -56,6 +57,8 @@ export default class PublicUdpSocketServer {
                             return;
                         }
                         if (!isUdpHeader(header)) {
+                            console.warn(header)
+                            console.warn('Problem with udp header')
                             return;
                         }
                         const fromAddress: Address = {
@@ -120,7 +123,9 @@ export default class PublicUdpSocketServer {
                 }
             })
             setTimeout(() => {
-                _handleError(Error('Timeout waiting for response'))
+                if (!complete) {
+                    _handleError(Error(`Timeout waiting for response for request: ${request.body.requestData.requestType}`))
+                }
             }, durationMsecToNumber(opts.timeoutMsec))
         })
     }
@@ -138,7 +143,7 @@ export default class PublicUdpSocketServer {
             payloadIsJson = true
             messageBuffer = Buffer.from(JSON.stringify(messageData))
         }
-        const parts: UdpMessagePart[] = this._createUdpMessageParts("NodeToNodeRequest", address, messageBuffer, {payloadIsJson, requestId: opts.requestId})
+        const parts: UdpMessagePart[] = this._createUdpMessageParts(messageType, address, messageBuffer, {payloadIsJson, requestId: opts.requestId})
         const packets: Buffer[] = []
         for (let part of parts) {
             const b = Buffer.concat([
@@ -147,23 +152,22 @@ export default class PublicUdpSocketServer {
             ])
             packets.push(b)
         }
+        console.log('---- send packets', packets.length)
         await this.#udpPacketSender.sendPackets(address, packets, {timeoutMsec: opts.timeoutMsec})
     }
     _handleMessagePart(fromAddress: Address, header: UdpHeader, dataBuffer: Buffer) {
+        console.log('---------------- handle message part')
         if (!verifySignature(header.body, header.signature, nodeIdToPublicKey(header.body.fromNodeId))) {
             throw Error('Error verifying signature in udp message')
         }
-        const id = {
-            udpMessageId: header.body.udpMessageId,
-            partIndex: header.body.partIndex,
-            numParts: header.body.numParts
-        }
-        this.#messagePartManager.addMessagePart(fromAddress, id, header, dataBuffer)
+        this.#messagePartManager.addMessagePart(fromAddress, header.body.udpMessageId, header.body.partIndex, header.body.numParts, header, dataBuffer)
     }
     _handleCompleteMessage(remoteAddress: Address, header: UdpHeader, dataBuffer: Buffer) {
+        console.log('---------------- handle complete message')
         const mt = header.body.udpMessageType
         if (mt === "NodeToNodeRequest") {
             const req = tryParseJsonObject(dataBuffer.toString())
+            console.log('---', req)
             if (!isNodeToNodeRequest(req)) {
                 // todo: what to do here? throw error? ban peer?
                 return

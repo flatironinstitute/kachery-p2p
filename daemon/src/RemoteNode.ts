@@ -6,7 +6,7 @@ import KacheryP2PNode from "./KacheryP2PNode";
 import { protocolVersion } from "./protocolVersion";
 import { ByteCount, DurationMsec } from "./udp/UdpCongestionManager";
 
-export type SendRequestMethod = 'default' | 'udp'
+export type SendRequestMethod = 'default' | 'http' | 'udp'
 
 class RemoteNode {
     #node: KacheryP2PNode
@@ -17,6 +17,7 @@ class RemoteNode {
     #bootstrapWebSocketAddress: Address | null
     #bootstrapUdpSocketAddress: Address | null
     #fileSizesByFileKey: ByteCount | null
+    #localUdpAddress: Address | null = null
     constructor(node: KacheryP2PNode, remoteNodeId: NodeId, opts: {
         isBootstrap: boolean,
         bootstrapAddress: Address | null,
@@ -75,6 +76,12 @@ class RemoteNode {
         return null
         // return this.#fileSizesByFileKey.get(fileKey) || null
     }
+    setLocalUdpAddress(address: Address | null) {
+        this.#localUdpAddress = address
+    }
+    getLocalUdpAddress() {
+        return this.#localUdpAddress
+    }
     _formRequestFromRequestData(requestData: NodeToNodeRequestData): NodeToNodeRequest {
         const requestId = createRequestId()
         const requestBody = {
@@ -115,16 +122,64 @@ class RemoteNode {
             }
         }
     }
-    async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
-        const address = this._getRemoteNodeHttpAddress();
-        if (!address) {
-            throw Error('Unable to send request... no http address found.')
+    _determineDefaultSendRequestMethod(): SendRequestMethod | null {
+        if (this._getRemoteNodeHttpAddress()) {
+            return 'http'
         }
+        else if ((this.#node.publicUdpSocketServer()) && ((this.#bootstrapUdpSocketAddress) || (this.getLocalUdpAddress()))) {
+            return 'udp'
+        }
+        else {
+            return null
+        }
+    }
+    canSendRequest(method: SendRequestMethod): boolean {
+        if (method === 'default') {
+            const m = this._determineDefaultSendRequestMethod()
+            if (!m) return false
+            method = m
+        }
+        if (method === 'http') {
+            const address = this._getRemoteNodeHttpAddress();
+            if (!address) {
+                return false
+            }
+            return true
+        }
+        else if (method === 'udp') {
+            const udpS = this.#node.publicUdpSocketServer()
+            const udpA = this.#localUdpAddress || this.#bootstrapUdpSocketAddress
+            if (!udpS) {
+                return false
+            }
+            if (!udpA) {
+                return false
+            }
+            return true
+        }
+        else {
+            return false
+        }
+    }
+    async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
         const request = this._formRequestFromRequestData(requestData);
         const requestId = request.body.requestId;
+
+        let method: SendRequestMethod | null = opts.method
+        if (method === 'default') {
+            method = this._determineDefaultSendRequestMethod()
+            if (!method) {
+                throw Error('No method available to send message')
+            }
+        }
+
         // todo: use udp when appropriate
         let response: NodeToNodeResponse
-        if (opts.method === 'default') {
+        if (method === 'http') {
+            const address = this._getRemoteNodeHttpAddress();
+            if (!address) {
+                throw Error('Unable to send request... no http address found.')
+            }
             const R = await this.#node.httpPostJsonFunction()(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
             if (!isNodeToNodeResponse(R)) {
                 // todo: in this situation, do we ban the node?
@@ -132,16 +187,18 @@ class RemoteNode {
             }
             response = R
         }
-        else if (opts.method === 'udp') {
+        else if (method === 'udp') {
             const udpS = this.#node.publicUdpSocketServer()
-            const udpA = this.#bootstrapUdpSocketAddress
+            const udpA = this.#localUdpAddress || this.#bootstrapUdpSocketAddress
             if (!udpS) {
                 throw Error('Cannot use udp method when there is no udp socket server')
             }
             if (!udpA) {
                 throw Error('Cannot use udp method when there is no udp address')
             }
+            console.log('------------------ sR 1')
             const R = await udpS.sendRequest(udpA, request, {timeoutMsec: opts.timeoutMsec})
+            console.log('------------------ sR 2')
             response = R.response
             const udpHeader = R.header
             if (this.#isBootstrap) {

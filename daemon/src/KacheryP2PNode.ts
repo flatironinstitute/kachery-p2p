@@ -21,6 +21,13 @@ import { ApiProbeResponse } from './services/PublicApiServer';
 import PublicUdpSocketServer from './services/PublicUdpSocketServer';
 import { byteCount, ByteCount, byteCountToNumber, durationMsec, DurationMsec, durationMsecToNumber, isByteCount } from './udp/UdpCongestionManager';
 
+export interface DgramRemoteInfo {
+    address: string
+    family: 'IPv4' | 'IPv6'
+    port: number
+    size: number
+}
+
 export type StreamFileDataOutput = {
     onStarted: (callback: (size: ByteCount) => void) => void,
     onData: (callback: (data: Buffer) => void) => void,
@@ -61,11 +68,12 @@ const isFileManifest = (x: any): x is FileManifest => {
     })
 }
 
-interface DgramSocket {
+export interface DgramSocket {
     bind: (port: number) => void,
-    on: (eventName: 'listening' | 'message', callback: (() => void) | ((message: JSONObject, rinfo: any) => void)) => void,
+    on: (eventName: 'listening' | 'message', callback: (() => void) | ((message: Buffer, rinfo: DgramRemoteInfo) => void)) => void,
     addMembership: (address: string) => void,
-    send: (message: string, offset: number, length: number, port: number, address: string) => void
+    send: (message: Buffer, offset: number, length: number, port: number, address: string, callback?: (err: Error | null, numBytesSent: number) => void) => void
+    close: () => void
 }
 
 export type DgramCreateSocketFunction = (args: {type: 'udp4', reuseAddr: boolean}) => DgramSocket
@@ -99,7 +107,8 @@ class KacheryP2PNode {
         opts: {
             noBootstrap: boolean,
             isBootstrapNode: boolean,
-            mock: boolean
+            mock: boolean,
+            useMulticastUdp: boolean
         }
     }) {
         const { publicKey, privateKey } = _loadKeypair(this.p.configDir); // The keypair for signing messages and the public key is used as the node id
@@ -157,7 +166,10 @@ class KacheryP2PNode {
         return [...this.#bootstrapAddresses]
     }
     isBootstrapNode() {
-        return this.p.opts.isBootstrapNode;
+        return this.p.opts.isBootstrapNode
+    }
+    useMulticastUdp() {
+        return this.p.opts.useMulticastUdp
     }
     findFile(args: {fileKey: FileKey, timeoutMsec: DurationMsec}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
@@ -443,6 +455,9 @@ class KacheryP2PNode {
         const h = this.hostName()
         return (h !== null) && (this.p.webSocketListenPort !== null) ? {hostName: h, port: this.p.webSocketListenPort} : null
     }
+    udpListenPort() {
+        return this.p.udpListenPort
+    }
     publicUdpSocketAddress(): Address | null {
         if (this.#publicUdpSocketAddress !== null) {
             return this.#publicUdpSocketAddress
@@ -599,7 +614,7 @@ class KacheryP2PNode {
             responseData = await this._handleGetChannelInfoRequest({fromNodeId, requestData})
         }
         else if (isAnnounceRequestData(requestData)) {
-            responseData = await this._handleAnnounceRequest({fromNodeId, requestData})
+            responseData = await this._handleAnnounceRequest({fromNodeId, requestData, localUdpAddress: null})
         }
         else if (isCheckForFileRequestData(requestData)) {
             responseData = await this._handleCheckForFileRequest({fromNodeId, requestData})
@@ -740,8 +755,8 @@ class KacheryP2PNode {
             channelInfo
         }
     }
-    async _handleAnnounceRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: AnnounceRequestData}): Promise<AnnounceResponseData> {
-        return await this.#remoteNodeManager.handleAnnounceRequest({fromNodeId, requestData});
+    async _handleAnnounceRequest({fromNodeId, requestData, localUdpAddress} : {fromNodeId: NodeId, requestData: AnnounceRequestData, localUdpAddress: Address | null}): Promise<AnnounceResponseData> {
+        return await this.#remoteNodeManager.handleAnnounceRequest({fromNodeId, requestData, localUdpAddress});
     }
     async _handleCheckForFileRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: CheckForFileRequestData}): Promise<CheckForFileResponseData> {
         const { fileKey } = requestData;

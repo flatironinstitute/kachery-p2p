@@ -1,25 +1,19 @@
 import GarbageMap from '../common/GarbageMap'
 import { Address } from '../interfaces/core'
-import { MessagePartData, numPartsToNumber, partIndex, UdpHeader, UdpMessagePartId } from '../interfaces/UdpMessage'
+import { MessagePartData, NumParts, numPartsToNumber, partIndex, PartIndex, UdpHeader, UdpMessageId, udpMessagePartId, UdpMessagePartId } from '../interfaces/UdpMessage'
 import { durationMsec } from './UdpCongestionManager'
 
 export default class UdpMessagePartManager {
     #messageParts = new GarbageMap<UdpMessagePartId, MessagePartData>(durationMsec(30 * 60 * 1000))
     #onMessageCompleteCallbacks: ((remoteAddress: Address, header: UdpHeader, data: Buffer) => void)[] = []
     constructor() {}
-    addMessagePart(remoteAddress: Address, udpMessagePartId: UdpMessagePartId, header: UdpHeader, buffer: Buffer) {
-        this.#messageParts.set(udpMessagePartId, {header, buffer})
+    addMessagePart(remoteAddress: Address, udpMessageId: UdpMessageId, partInd: PartIndex, numParts: NumParts, header: UdpHeader, buffer: Buffer) {
+        this.#messageParts.set(udpMessagePartId(udpMessageId, partInd, numParts), {header, buffer})
         let complete = true
-        const numParts = numPartsToNumber(udpMessagePartId.numParts)
         const buffers: Buffer[] = []
         const headers: UdpHeader[] = [] 
-        for (let i = 0; i < numParts; i++) {
-            const id = {
-                udpMessageId: udpMessagePartId.udpMessageId,
-                partIndex: partIndex(i),
-                numParts: udpMessagePartId.numParts
-            }
-            const d = this.#messageParts.get(id)
+        for (let i = 0; i < numPartsToNumber(numParts); i++) {
+            const d = this.#messageParts.get(udpMessagePartId(udpMessageId, partIndex(i), numParts))
             if (d) {
                 buffers.push(d.buffer)
                 headers.push(d.header)
@@ -30,13 +24,9 @@ export default class UdpMessagePartManager {
             }
         }
         if (complete) {
-            for (let i = 0; i < numParts; i++) {
-                const id = {
-                    udpMessageId: udpMessagePartId.udpMessageId,
-                    partIndex: partIndex(i),
-                    numParts: udpMessagePartId.numParts
-                }
-                this.#messageParts.delete(id)
+            console.log('------------ complete!')
+            for (let i = 0; i < numPartsToNumber(numParts); i++) {
+                this.#messageParts.delete(udpMessagePartId(udpMessageId, partIndex(i), numParts))
             }
             const fullBuffer = Buffer.concat(buffers)
             this.#onMessageCompleteCallbacks.forEach(cb => {

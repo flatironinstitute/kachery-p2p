@@ -419,14 +419,18 @@ export interface MulticastAnnounceMessageBody {
     protocolVersion: ProtocolVersion,
     fromNodeId: NodeId,
     messageType: 'announce', // Should be actual type/enum?
-    requestData: AnnounceRequestData
+    requestData: AnnounceRequestData,
+    udpListenPort: Port | null,
+    timestamp: Timestamp
 }
 export const isMulticastAnnounceMessageBody = (x: any): x is MulticastAnnounceMessageBody => {
     return _validateObject(x, {
         protocolVersion: isProtocolVersion,
         fromNodeId: isNodeId,
         messageType: isEqualTo('announce'),
-        requestData: isAnnounceRequestData
+        requestData: isAnnounceRequestData,
+        udpListenPort: isOneOf([isNull, isPort]),
+        timestamp: isTimestamp
     })
 }
 
@@ -753,7 +757,7 @@ export const toSubfeedWatches = (x: SubfeedWatchesRAM) => {
     return mapToObject<SubfeedWatchName, SubfeedWatch>(x);
 }
 
-// LiveFeedSbuscriptionName
+// LiveFeedSunscriptionName
 export interface LiveFeedSubscriptionName extends String {
     __liveFeedSubscriptionName__: never // phantom type
 }

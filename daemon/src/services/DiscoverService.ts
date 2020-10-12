@@ -10,6 +10,7 @@ interface RemoteNodeManagerInterface {
     setChannelNodeInfo: (channelNodeInfo: ChannelNodeInfo) => void
     getBootstrapRemoteNodes: () => RemoteNodeInterface[]
     getRemoteNodesInChannel: (channelName: ChannelName) => RemoteNodeInterface[]
+    canSendRequestToNode: (remoteNodeId: NodeId, method: SendRequestMethod) => boolean
 }
 
 interface RemoteNodeInterface {
@@ -34,11 +35,16 @@ export default class DiscoverService {
         this.#halted = true
     }
     async _getChannelInfoFromNode(remoteNodeId: NodeId, channelName: ChannelName) {
+        if (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
+            return
+        }
         const requestData: GetChannelInfoRequestData = {
             requestType: 'getChannelInfo',
             channelName
         }
+        console.log('--- test1')
         const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: durationMsec(3000), method: 'default'})
+        console.log('--- test2')
         if (!isGetChannelInfoResponseData(responseData)) {
             throw Error('Unexpected.');
         }

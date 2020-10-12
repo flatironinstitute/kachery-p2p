@@ -1,7 +1,7 @@
 import { action } from "../common/action"
 import { getSignature, verifySignature } from "../common/crypto_util"
 import { sleepMsec } from "../common/util"
-import { ChannelName, ChannelNodeInfo, isMulticastAnnounceMessage, JSONObject, KeyPair, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, tryParseJsonObject } from "../interfaces/core"
+import { Address, ChannelName, ChannelNodeInfo, HostName, isMulticastAnnounceMessage, JSONObject, KeyPair, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, tryParseJsonObject } from "../interfaces/core"
 import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
 import { DgramCreateSocketFunction } from "../KacheryP2PNode"
 import { protocolVersion } from "../protocolVersion"
@@ -9,11 +9,13 @@ import { DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager'
 
 interface KacheryP2PNodeInterface {
     nodeId: () => NodeId
+    udpListenPort: () => Port | null
     keyPair: () => KeyPair
     channelNames: () => ChannelName[]
     getChannelNodeInfo: (channelName: ChannelName) => ChannelNodeInfo
-    _handleAnnounceRequest: (args: { fromNodeId: NodeId, requestData: AnnounceRequestData }) => Promise<AnnounceResponseData>
+    _handleAnnounceRequest: (args: { fromNodeId: NodeId, requestData: AnnounceRequestData, localUdpAddress: Address | null }) => Promise<AnnounceResponseData>
     dgramCreateSocketFunction: () => DgramCreateSocketFunction
+    useMulticastUdp: () => boolean
 }
 
 export default class MulticastService {
@@ -27,24 +29,36 @@ export default class MulticastService {
         this.#halted = true
     }
     async _start() {
+        if (!this.#node.useMulticastUdp()) return
         // to find nodes on the local network
         const multicastSocket = this.#node.dgramCreateSocketFunction()({ type: "udp4", reuseAddr: true })
         // const multicastSocket = dgram.createSocket({ type: "udp4", reuseAddr: true })
         const multicastAddress = '237.0.0.0' // not sure how to choose this
         const multicastPort = 21010
         multicastSocket.bind(multicastPort)
-        multicastSocket.on("listening", function() {
+        multicastSocket.on('listening', function() {
             multicastSocket.addMembership(multicastAddress)
         })
-        multicastSocket.on("message", (message, rinfo) => {
+        multicastSocket.on('message', (message, rinfo) => {
             let msg: JSONObject | null = tryParseJsonObject(message.toString())
             if (isMulticastAnnounceMessage(msg)) {
                 const msg2: MulticastAnnounceMessage = msg
                 /////////////////////////////////////////////////////////////////////////
                 action('handleMulticastAnnounceMessage', {fromNodeId: msg.body.fromNodeId}, async () => {
                     if (verifySignature(msg2.body, msg2.signature, nodeIdToPublicKey(msg2.body.fromNodeId), {checkTimestamp: true})) {
-                        const response = this.#node._handleAnnounceRequest({ fromNodeId: msg2.body.fromNodeId, requestData: msg2.body.requestData })
+                        if (msg2.body.fromNodeId === this.#node.nodeId())
+                            return
+                        const localUdpAddress: Address | null = msg2.body.udpListenPort ? (
+                            {
+                                hostName: rinfo.address as any as HostName,
+                                port: msg2.body.udpListenPort
+                            }
+                        ): null
+                        const response = this.#node._handleAnnounceRequest({ fromNodeId: msg2.body.fromNodeId, requestData: msg2.body.requestData, localUdpAddress })
                         // don't do anything with response here
+                    }
+                    else {
+                        throw Error('Problem verifying signature for multicast announce message')
                     }
                 }, async (err: Error) => {
                     //
@@ -52,7 +66,7 @@ export default class MulticastService {
                 /////////////////////////////////////////////////////////////////////////
             }
         })
-        await sleepMsec(1000)
+        await sleepMsec(Math.min(1000, durationMsecToNumber(this.opts.intervalMsec)))
         while (true) {
             if (this.#halted) return
             for (let channelName of this.#node.channelNames()) {
@@ -64,7 +78,9 @@ export default class MulticastService {
                     protocolVersion: protocolVersion(),
                     fromNodeId: this.#node.nodeId(),
                     messageType: 'announce',
-                    requestData
+                    requestData,
+                    udpListenPort: this.#node.udpListenPort(),
+                    timestamp: nowTimestamp()
                 }
                 const m: MulticastAnnounceMessage = {
                     body,
@@ -74,7 +90,7 @@ export default class MulticastService {
                 /////////////////////////////////////////////////////////////////////////
                 await action('sendMulticastAnnounceMessage', {}, async () => {
                     multicastSocket.send(
-                        mJson,
+                        Buffer.from(mJson),
                         0,
                         mJson.length,
                         multicastPort,

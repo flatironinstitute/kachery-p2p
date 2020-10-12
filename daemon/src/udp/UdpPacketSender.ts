@@ -1,15 +1,9 @@
-import dgram from 'dgram';
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { Address, isBoolean, isProtocolVersion, isString, ProtocolVersion, toNumber, _validateObject } from '../interfaces/core';
+import { DgramSocket } from '../KacheryP2PNode';
 import { protocolVersion } from '../protocolVersion';
-import UdpCongestionManager, { byteCount, durationMsec, DurationMsec, durationMsecToNumber } from './UdpCongestionManager';
-
-class UdpTimeoutError extends Error {
-    constructor(errorString: string) {
-      super(errorString);
-    }
-}
+import UdpCongestionManager, { byteCount, durationMsec, DurationMsec, durationMsecToNumber, UdpTimeoutError } from './UdpCongestionManager';
 
 export const UDP_PACKET_HEADER_SIZE = 200
 
@@ -19,7 +13,7 @@ export interface PacketId extends String {
 const examplePacketId: PacketId = "packetId" as any as PacketId
 export const isPacketId = (x: any): x is PacketId => {
     if (!isString(x)) return false;
-    return (/^[A-Fa-f]{10}?$/.test(x));
+    return (/^[A-Za-z]{10}$/.test(x));
 }
 export const createPacketId = () => {
     return randomAlphaString(10) as any as PacketId;
@@ -35,30 +29,34 @@ export const isUdpPacketSenderHeader = (x: any): x is UdpPacketSenderHeader => {
         protocolVersion: isProtocolVersion,
         packetId: isPacketId,
         isConfirmation: isBoolean
+    }, (a) => {
+        console.warn(a)
     })
 }
 
 export default class UdpPacketSender {
-    #socket: dgram.Socket
+    #socket: DgramSocket
     #congestionManagers = new GarbageMap<Address, UdpCongestionManager>(durationMsec(5 * 60 * 1000))
-    #unconfirmedOutgoingPackets = new Map<PacketId, OutgoingPacket>()
-    constructor(socket: dgram.Socket) {
+    #unconfirmedOutgoingPackets = new GarbageMap<PacketId, OutgoingPacket>(durationMsec(5 * 60 * 1000))
+    constructor(socket: DgramSocket) {
         this.#socket = socket
     }
     socket() {
         return this.#socket
     }
     async sendPackets(address: Address, packets: Buffer[], opts: {timeoutMsec: DurationMsec}): Promise<void> {
-        const outgoingPackets = packets.map(p => (
-            new OutgoingPacket(this, address, p, opts.timeoutMsec)
-        ))
+        const outgoingPackets = packets.map(p => {
+            const pkt = new OutgoingPacket(this, address, p, opts.timeoutMsec)
+            this.#unconfirmedOutgoingPackets.set(pkt.packetId(), pkt)
+            return pkt
+        })
         try {
             await Promise.all(
-                outgoingPackets.map(p => p.send())
+                outgoingPackets.map(pkt => (pkt.send()))
             )
         }
         catch(err) {
-            outgoingPackets.forEach(p => {p.cancel()})
+            outgoingPackets.forEach(pkt => {pkt.cancel()})
             throw(err)
         }
     }
@@ -67,6 +65,9 @@ export default class UdpPacketSender {
         if (p) {
             p.confirm()
             this.#unconfirmedOutgoingPackets.delete(packetId)
+        }
+        else {
+            console.warn(`Unable to confirm packet with ID: ${packetId}`)
         }
     }
     congestionManagers(address: Address) {
@@ -94,26 +95,16 @@ class OutgoingPacket {
         this.#timeoutMsec = timeoutMsec
         this.#packetId = createPacketId()
     }
+    packetId() {
+        return this.#packetId
+    }
     confirm() {
         this.#onConfirmed && this.#onConfirmed()
     }
     async send() {
-        this.#manager.congestionManagers(this.#address).queuePacket(byteCount(this.#buffer.length), (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: DurationMsec}) => {
-            (async () => {
-                try {
-                    await this._trySend(opts.timeoutMsec)
-                }
-                catch(err) {
-                    if (err instanceof UdpTimeoutError) {
-                        onTimedOut()
-                    }
-                    else {
-                        onError()
-                    }
-                    return
-                }
-                onConfirmed();
-            })()
+        const cm = this.#manager.congestionManagers(this.#address)
+        await cm.sendPacket(this.#packetId, byteCount(this.#buffer.length), async (timeoutMsec) => {
+            await this._trySend(timeoutMsec)
         })
     }
     async _trySend(timeoutMsec: DurationMsec) {
@@ -148,7 +139,7 @@ class OutgoingPacket {
                 Buffer.from(JSON.stringify(h).padEnd(UDP_PACKET_HEADER_SIZE)),
                 b
             ])
-            socket.send(b2, toNumber(this.#address.port), this.#address.hostName.toString(), (err, numBytesSent) => {
+            socket.send(b2, 0, b2.length, toNumber(this.#address.port), this.#address.hostName.toString(), (err, numBytesSent) => {
                 if (err) {
                     if (completed) return;
                     completed = true;
@@ -159,13 +150,13 @@ class OutgoingPacket {
                     completed = true;
                     reject(Error(`Failed to send udp message to remote: unexpected numBytesSent`))
                 }
-                setTimeout(() => {
-                    if (!completed) {
-                        completed = true;
-                        reject(new UdpTimeoutError('Timed out'))
-                    }
-                }, durationMsecToNumber(timeoutMsec))
             })
+            setTimeout(() => {
+                if (!completed) {
+                    completed = true;
+                    reject(new UdpTimeoutError('Timed out'))
+                }
+            }, durationMsecToNumber(timeoutMsec))
         })
     }
     cancel() {

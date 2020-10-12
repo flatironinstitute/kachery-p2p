@@ -143,6 +143,10 @@ function main() {
           }
         }
 
+        const dgramCreateSocket = (args: {type: 'udp4', reuseAddr: boolean}) => {
+          return dgram.createSocket({type: args.type, reuseAddr: args.reuseAddr})
+        }
+
         startDaemon({
           channelNames,
           configDir: configDir as any as LocalFilePath,
@@ -155,11 +159,12 @@ function main() {
           label,
           bootstrapAddresses,
           httpPostJsonFunction: httpPostJson,
-          dgramCreateSocketFunction: dgram.createSocket,
+          dgramCreateSocketFunction: dgramCreateSocket,
           opts: {
             noBootstrap,
             isBootstrapNode,
-            mock: false
+            mock: false,
+            useMulticastUdp: true
           }
         });
       }

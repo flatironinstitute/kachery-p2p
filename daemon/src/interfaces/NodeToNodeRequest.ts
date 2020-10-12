@@ -187,7 +187,7 @@ export const isAnnounceResponseData = (x: any): x is AnnounceResponseData => {
     return _validateObject(x, {
         requestType: isEqualTo('announce'),
         success: isBoolean,
-        errorMessage: isErrorMessage
+        errorMessage: isOneOf([isNull, isErrorMessage])
     })
 }
 

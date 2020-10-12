@@ -23,7 +23,7 @@ export interface UdpMessageId extends String {
 const exampleUdpMessageId: UdpMessageId = "messageIdA" as any as UdpMessageId
 export const isUdpMessageId = (x: any): x is UdpMessageId => {
     if (!isString(x)) return false;
-    return (/^[A-Fa-f]{10}?$/.test(x));
+    return (/^[A-Za-z]{10}$/.test(x));
 }
 export const createUdpMessageId = () => {
     return randomAlphaString(10) as any as UdpMessageId;
@@ -66,22 +66,11 @@ export interface MessagePartData {
     buffer: Buffer
 }
 
-export interface UdpMessagePartId {
-    udpMessageId: UdpMessageId,
-    partIndex: PartIndex,
-    numParts: NumParts
+export interface UdpMessagePartId extends String {
+    __udpMessagePartId__: never
 }
-const exampleUdpMessagePartId: UdpMessagePartId = {
-    udpMessageId: exampleUdpMessageId,
-    partIndex: examplePartIndex,
-    numParts: exampleNumParts
-}
-export const isUdpMessagePartId = (x: any): x is UdpMessagePartId => {
-    return _validateObject(x, {
-        udpMessageId: isUdpMessageId,
-        partIndex: isPartIndex,
-        numParts: isNumParts
-    })
+export const udpMessagePartId = (udpMessageId: UdpMessageId, partIndex: PartIndex, numParts: NumParts) => {
+    return `${udpMessageId}:${partIndex}:${numParts}` as any as UdpMessagePartId
 }
 
 export interface UdpMessagePart {

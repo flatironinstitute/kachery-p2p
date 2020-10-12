@@ -10,6 +10,7 @@ interface RemoteNodeManagerInterface {
     sendRequestToNode: (remoteNodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}) => Promise<NodeToNodeResponseData>,
     getBootstrapRemoteNodes: () => RemoteNodeInterface[]
     getRemoteNodesInChannel: (channelName: ChannelName) => RemoteNodeInterface[]
+    canSendRequestToNode: (remoteNodeId: NodeId, method: SendRequestMethod) => boolean
 }
 
 interface RemoteNodeInterface {
@@ -33,6 +34,8 @@ export default class AnnounceService {
         // announce self when a new node-channel has been added
         this.#remoteNodeManager.onNodeChannelAdded((remoteNodeId: NodeId, channelName: ChannelName) => {
             
+            // todo: check if we can send message to node, if not maybe we need to delay a bit
+
             /////////////////////////////////////////////////////////////////////////
             action('announceToNewNode', {context: 'AnnounceService', remoteNodeId, channelName}, async () => {
                 await this._announceToNode(remoteNodeId, channelName)
@@ -40,12 +43,16 @@ export default class AnnounceService {
             /////////////////////////////////////////////////////////////////////////
 
         })
-        this._start()
+        // todo
+        // this._start()
     }
     stop() {
         this.#halted = true
     }
     async _announceToNode(remoteNodeId: NodeId, channelName: ChannelName) {
+        if (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
+            return
+        }
         const requestData: AnnounceRequestData = {
             requestType: 'announce',
             channelNodeInfo: this.#node.getChannelNodeInfo(channelName)
