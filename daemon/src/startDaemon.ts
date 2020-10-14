@@ -33,7 +33,7 @@ const startDaemon = async (args: {
         noBootstrap: boolean,
         isBootstrapNode: boolean,
         mock: boolean,
-        useMulticastUdp: boolean
+        multicastUdpAddress: string | null
     }
 }) => {
     const {
@@ -120,16 +120,20 @@ const startDaemon = async (args: {
     const proxyClientService = new ProxyClientService(kNode, {
         intervalMsec: durationMsec(3000 / speedupFactor)
     })
-    const multicastService = new MulticastService(kNode, {
-        intervalMsec: durationMsec(12000 / speedupFactor)
-    })
+    let multicastService: MulticastService | null = null
+    if (opts.multicastUdpAddress) {
+        multicastService = new MulticastService(kNode, {
+            intervalMsec: durationMsec(12000 / speedupFactor),
+            multicastAddress: opts.multicastUdpAddress
+        })
+    }
 
     const _stop = () => {
         announceService.stop()
         discoverService.stop()
         bootstrapService.stop()
         proxyClientService.stop()
-        multicastService.stop()
+        if (multicastService) multicastService.stop()
         // wait a bit after stopping services before cleaning up the rest (for clean exit of services)
         setTimeout(() => {
             daemonApiServer.stop()

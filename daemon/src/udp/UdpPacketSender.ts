@@ -146,10 +146,11 @@ class OutgoingPacket {
                     completed = true;
                     reject(Error(`Failed to send udp message to remote: ${err.message}`))
                 }
-                if (numBytesSent !== b.length) {
+                if (numBytesSent !== b2.length) {
                     if (completed) return;
                     completed = true;
-                    reject(Error(`Failed to send udp message to remote: unexpected numBytesSent`))
+                    console.warn(this.#address)
+                    reject(Error(`Failed to send udp message to remote: unexpected numBytesSent: ${numBytesSent} <> ${b.length}`))
                 }
             })
             setTimeout(() => {

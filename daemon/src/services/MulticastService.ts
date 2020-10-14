@@ -21,7 +21,7 @@ interface KacheryP2PNodeInterface {
 export default class MulticastService {
     #node: KacheryP2PNodeInterface
     #halted = false
-    constructor(node: KacheryP2PNodeInterface, private opts: {intervalMsec: DurationMsec}) {
+    constructor(node: KacheryP2PNodeInterface, private opts: {intervalMsec: DurationMsec, multicastAddress: string}) {
         this.#node = node
         this._start()
     }
@@ -33,7 +33,7 @@ export default class MulticastService {
         // to find nodes on the local network
         const multicastSocket = this.#node.dgramCreateSocket({ type: "udp4", reuseAddr: true })
         // const multicastSocket = dgram.createSocket({ type: "udp4", reuseAddr: true })
-        const multicastAddress = '237.0.0.0' // not sure how to choose this
+        const multicastAddress = this.opts.multicastAddress
         const multicastPort = 21010
         multicastSocket.bind(multicastPort)
         multicastSocket.on('listening', function() {

@@ -4,7 +4,7 @@ import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import { UrlPath } from '../../src/common/httpPostJson';
 import { randomAlphaString, sleepMsec } from '../../src/common/util';
 import { Address, ChannelName, elapsedSince, FileKey, FindFileResult, HostName, isNodeId, JSONObject, NodeId, nowTimestamp, Port, Sha1Hash } from '../../src/interfaces/core';
-import KacheryP2PNode, { DgramRemoteInfo } from '../../src/KacheryP2PNode';
+import KacheryP2PNode, { DgramCreateSocketFunction, DgramRemoteInfo } from '../../src/KacheryP2PNode';
 import { FindFileReturnValue, LocalFilePath } from '../../src/kacheryStorage/KacheryStorageManager';
 import DaemonApiServer, { ApiFindFileRequest } from '../../src/services/DaemonApiServer';
 import PublicApiServer from '../../src/services/PublicApiServer';
@@ -25,7 +25,7 @@ class MockNodeDaemonGroup {
         })
         // this.#daemons.clear()
     }
-    async createDaemon(opts: {bootstrapAddresses: Address[], isBootstrap: boolean, channelNames: ChannelName[], useMulticastUdp: boolean, udpListenPort: Port | null, webSocketListenPort: Port | null}) {
+    async createDaemon(opts: {bootstrapAddresses: Address[], isBootstrap: boolean, channelNames: ChannelName[], multicastUdpAddress: string | null, udpListenPort: Port | null, webSocketListenPort: Port | null}) {
         const daemon = new MockNodeDaemon(this, opts)
         await daemon.initialize()
         this.#daemons.set(daemon.nodeId(), daemon)
@@ -55,7 +55,6 @@ interface BoundSocket {
     id: string
     socket: MockDgramSocket
     port: Port
-    memberships: Set<string>
 }
 
 class MockDgramSocketManager {
@@ -66,8 +65,7 @@ class MockDgramSocketManager {
         this.#boundSockets.push({
             id,
             socket,
-            port,
-            memberships: new Set<string>()
+            port
         })
     }
     unbind(id: string) {
@@ -75,15 +73,8 @@ class MockDgramSocketManager {
     }
     socketsBelongingToAddress(address: string, port: Port) {
         return this.#boundSockets.filter(x => {
-            return ((x.memberships.has(address))  && (x.port === port))
+            return ((x.socket.hasMembership(address))  && (x.port === port))
         }).map(x => (x.socket))
-    }
-    addMembership(id: string, address: string) {
-        this.#boundSockets.forEach(x => {
-            if (x.id === id) {
-                x.memberships.add(address)
-            }
-        })
     }
 }
 const dgramSocketManager = new MockDgramSocketManager()
@@ -92,19 +83,25 @@ class MockDgramSocket {
     #id = randomAlphaString(10)
     #type: DgramSocketType
     #reuseAddr: boolean
+    #hostName: HostName
     #bound = false
     #port: Port = 0 as any as Port
     #onListeningCallbacks: (() => void)[] = []
     #onMessageCallbacks: ((message: Buffer, rinfo: DgramRemoteInfo) => void)[] = []
-    constructor(args: {type: DgramSocketType, reuseAddr: boolean}) {
+    #memberships = new Set<string>()
+    constructor(args: {type: DgramSocketType, reuseAddr: boolean, hostName: HostName}) {
         this.#type = args.type
         this.#reuseAddr = args.reuseAddr
+        this.#hostName = args.hostName
     }
     bind(port: number) {
         dgramSocketManager.bind(this.#id, port as any as Port, this)
         this.#bound = true
         this.#port = port as any as Port
         this.#onListeningCallbacks.forEach(cb => {cb()})
+    }
+    hasMembership(a: string) {
+        return this.#memberships.has(a)
     }
     close() {
         dgramSocketManager.unbind(this.#id)
@@ -121,13 +118,13 @@ class MockDgramSocket {
         }
     }
     addMembership(address: string) {
-        dgramSocketManager.addMembership(this.#id, address)
+        this.#memberships.add(address)
     }
     send(message: Buffer, offset: number, length: number, port: number, address: string, callback?: (err: Error | null, numBytesSent: number) => void) {
         const sockets = dgramSocketManager.socketsBelongingToAddress(address, port as any as Port)
         sockets.forEach(socket => {
             const rinfo: DgramRemoteInfo = {
-                address: address,
+                address: this.#hostName.toString(),
                 family: 'IPv4',
                 port: this.#port as any as number,
                 size: 0
@@ -143,8 +140,10 @@ class MockDgramSocket {
     }
 }
 
-const mockDgramCreateSocket = (args: {type: 'udp4', reuseAddr: boolean}) => {
-    return new MockDgramSocket(args)
+const mockDgramCreateSocket: DgramCreateSocketFunction = (args: {type: 'udp4', reuseAddr: boolean, nodeId: NodeId}) => {
+    const s = new MockDgramSocket({type: args.type, reuseAddr: args.reuseAddr, hostName: args.nodeId as any as HostName})
+    s.addMembership(args.nodeId.toString())
+    return s
 }
 
 
@@ -379,7 +378,7 @@ class MockNodeDaemon {
         bootstrapAddresses: Address[],
         isBootstrap: boolean,
         channelNames: ChannelName[],
-        useMulticastUdp: boolean,
+        multicastUdpAddress: string | null,
         udpListenPort: Port | null,
         webSocketListenPort: Port | null
     }) {
@@ -413,7 +412,7 @@ class MockNodeDaemon {
                 noBootstrap: (this.opts.bootstrapAddresses.length === 0),
                 isBootstrapNode: this.opts.isBootstrap,
                 mock: true,
-                useMulticastUdp: this.opts.useMulticastUdp
+                multicastUdpAddress: this.opts.multicastUdpAddress
             }    
         })
     }
@@ -485,8 +484,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
     describe('Test connect to bootstrap node', () => {
         it('Create this node and bootstrap node', (done) => {
             testContext(async (g, resolve, reject) => {
-                const bootstrapDaemon = await g.createDaemon({bootstrapAddresses: [], isBootstrap: true, channelNames: [], useMulticastUdp: false, udpListenPort: null, webSocketListenPort: null})
-                const daemon1 = await g.createDaemon({bootstrapAddresses: [bootstrapDaemon.address()], isBootstrap: false, channelNames: [mockChannelName], useMulticastUdp: false, udpListenPort: null, webSocketListenPort: null})
+                const bootstrapDaemon = await g.createDaemon({bootstrapAddresses: [], isBootstrap: true, channelNames: [], multicastUdpAddress: null, udpListenPort: null, webSocketListenPort: null})
+                const daemon1 = await g.createDaemon({bootstrapAddresses: [bootstrapDaemon.address()], isBootstrap: false, channelNames: [mockChannelName], multicastUdpAddress: null, udpListenPort: null, webSocketListenPort: null})
                 // we expect to have no bootstrap nodes (yet)
                 expect(daemon1.remoteNodeManager().getBootstrapRemoteNodes().length).equals(0)
 
@@ -511,8 +510,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
         })
         it('Find file on bootstrap node', (done) => {
             testContext(async (g, resolve, reject) => {
-                const bootstrapDaemon = await g.createDaemon({bootstrapAddresses: [], isBootstrap: true, channelNames: [mockChannelName], useMulticastUdp: false, udpListenPort: null, webSocketListenPort: null})
-                const daemon1 = await g.createDaemon({bootstrapAddresses: [bootstrapDaemon.address()], isBootstrap: false, channelNames: [mockChannelName], useMulticastUdp: false, udpListenPort: null, webSocketListenPort: null})
+                const bootstrapDaemon = await g.createDaemon({bootstrapAddresses: [], isBootstrap: true, channelNames: [mockChannelName], multicastUdpAddress: null, udpListenPort: null, webSocketListenPort: null})
+                const daemon1 = await g.createDaemon({bootstrapAddresses: [bootstrapDaemon.address()], isBootstrap: false, channelNames: [mockChannelName], multicastUdpAddress: null, udpListenPort: null, webSocketListenPort: null})
 
                 const f1Content = Buffer.from('123456')
                 const f1Key = bootstrapDaemon.mockKacheryStorageManager().addMockFile(f1Content)
@@ -539,8 +538,9 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
     describe('Test multicast udp discovery', () => {
         it('Create two nodes communicating through multicast sockets', (done) => {
             testContext(async (g, resolve, reject) => {
-                const daemon1 = await g.createDaemon({bootstrapAddresses: [], isBootstrap: false, channelNames: [mockChannelName], useMulticastUdp: true, udpListenPort: randomMockPort(), webSocketListenPort: null})
-                const daemon2 = await g.createDaemon({bootstrapAddresses: [], isBootstrap: false, channelNames: [mockChannelName], useMulticastUdp: true, udpListenPort: randomMockPort(), webSocketListenPort: null})
+                const multicastUdpAddress = 'mock-multicast-udp-address-1'
+                const daemon1 = await g.createDaemon({bootstrapAddresses: [], isBootstrap: false, channelNames: [mockChannelName], multicastUdpAddress, udpListenPort: randomMockPort(), webSocketListenPort: null})
+                const daemon2 = await g.createDaemon({bootstrapAddresses: [], isBootstrap: false, channelNames: [mockChannelName], multicastUdpAddress, udpListenPort: randomMockPort(), webSocketListenPort: null})
                 // // we expect to have no remote nodes yet
                 expect(daemon1.remoteNodeManager().getAllRemoteNodes().length).equals(0)
                 expect(daemon2.remoteNodeManager().getAllRemoteNodes().length).equals(0)
@@ -557,8 +557,9 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
         })
         it('Find file between two local nodes', (done) => {
             testContext(async (g, resolve, reject) => {
-                const daemon1 = await g.createDaemon({bootstrapAddresses: [], isBootstrap: false, channelNames: [mockChannelName], useMulticastUdp: true, udpListenPort: randomMockPort(), webSocketListenPort: null})
-                const daemon2 = await g.createDaemon({bootstrapAddresses: [], isBootstrap: false, channelNames: [mockChannelName], useMulticastUdp: true, udpListenPort: randomMockPort(), webSocketListenPort: null})
+                const multicastUdpAddress = 'mock-multicast-udp-address-1'
+                const daemon1 = await g.createDaemon({bootstrapAddresses: [], isBootstrap: false, channelNames: [mockChannelName], multicastUdpAddress, udpListenPort: randomMockPort(), webSocketListenPort: null})
+                const daemon2 = await g.createDaemon({bootstrapAddresses: [], isBootstrap: false, channelNames: [mockChannelName], multicastUdpAddress, udpListenPort: randomMockPort(), webSocketListenPort: null})
 
                 // // wait a bit
                 await sleepMsec(50)
@@ -572,9 +573,9 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
     describe('Test proxy connections', () => {
         it('Create two nodes communicating through proxy server', (done) => {
             testContext(async (g, resolve, reject) => {
-                const bootstrapDaemon = await g.createDaemon({bootstrapAddresses: [], isBootstrap: true, channelNames: [], useMulticastUdp: false, udpListenPort: null, webSocketListenPort: randomMockPort()})
-                const daemon1 = await g.createDaemon({bootstrapAddresses: [bootstrapDaemon.address()], isBootstrap: false, channelNames: [mockChannelName], useMulticastUdp: true, udpListenPort: null, webSocketListenPort: null})
-                const daemon2 = await g.createDaemon({bootstrapAddresses: [bootstrapDaemon.address()], isBootstrap: false, channelNames: [mockChannelName], useMulticastUdp: true, udpListenPort: null, webSocketListenPort: null})
+                const bootstrapDaemon = await g.createDaemon({bootstrapAddresses: [], isBootstrap: true, channelNames: [], multicastUdpAddress: null, udpListenPort: null, webSocketListenPort: randomMockPort()})
+                const daemon1 = await g.createDaemon({bootstrapAddresses: [bootstrapDaemon.address()], isBootstrap: false, channelNames: [mockChannelName], multicastUdpAddress: null, udpListenPort: null, webSocketListenPort: null})
+                const daemon2 = await g.createDaemon({bootstrapAddresses: [bootstrapDaemon.address()], isBootstrap: false, channelNames: [mockChannelName], multicastUdpAddress: null, udpListenPort: null, webSocketListenPort: null})
                 // // we expect to have no remote nodes yet
                 expect(daemon1.remoteNodeManager().getAllRemoteNodes().length).equals(0)
                 expect(daemon2.remoteNodeManager().getAllRemoteNodes().length).equals(0)

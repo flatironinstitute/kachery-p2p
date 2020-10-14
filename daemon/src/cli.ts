@@ -235,7 +235,7 @@ function main() {
             noBootstrap,
             isBootstrapNode,
             mock: false,
-            useMulticastUdp: true
+            multicastUdpAddress: '237.0.0.0' // how to choose this?
           }
         });
       }

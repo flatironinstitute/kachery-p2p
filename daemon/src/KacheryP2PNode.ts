@@ -120,7 +120,7 @@ class KacheryP2PNode {
             noBootstrap: boolean,
             isBootstrapNode: boolean,
             mock: boolean,
-            useMulticastUdp: boolean
+            multicastUdpAddress: string | null
         }
     }) {
         const { publicKey, privateKey } = _loadKeypair(this.p.configDir) // The keypair for signing messages and the public key is used as the node id
@@ -181,7 +181,7 @@ class KacheryP2PNode {
         return this.p.opts.isBootstrapNode
     }
     useMulticastUdp() {
-        return this.p.opts.useMulticastUdp
+        return (this.p.opts.multicastUdpAddress !== null)
     }
     findFile(args: {fileKey: FileKey, timeoutMsec: DurationMsec}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
