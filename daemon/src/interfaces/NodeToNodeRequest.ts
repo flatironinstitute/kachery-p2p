@@ -2,8 +2,8 @@ import assert from 'assert'
 import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
 import { ApiProbeResponse, isApiProbeResponse } from '../services/PublicApiServer'
-import { ByteCount, DurationMsec, isDurationMsec } from '../udp/UdpCongestionManager'
-import { ChannelInfo, ChannelName, ChannelNodeInfo, ErrorMessage, FeedId, FileKey, isArrayOf, isBigInt, isBoolean, isChannelInfo, isChannelName, isChannelNodeInfo, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
+import { ByteCount, DurationMsec, isByteCount, isDurationMsec } from '../udp/UdpCongestionManager'
+import { ChannelInfo, ChannelName, ChannelNodeInfo, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isChannelInfo, isChannelName, isChannelNodeInfo, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
 
@@ -211,7 +211,7 @@ export const isCheckForFileResponseData = (x: any): x is CheckForFileResponseDat
     return _validateObject(x, {
         requestType: isEqualTo('checkForFile'),
         found: isBoolean,
-        size: isOneOf([isNull, isBigInt])
+        size: isOneOf([isNull, isByteCount])
     })
 }
 
@@ -333,8 +333,8 @@ export const isDownloadFileDataRequestData = (x: any): x is DownloadFileDataRequ
     return _validateObject(x, {
         requestType: isEqualTo('downloadFileData'),
         fileKey: isFileKey,
-        startByte: isBigInt,
-        endByte: isOneOf([isNull, isBigInt])
+        startByte: isByteCount,
+        endByte: isOneOf([isNull, isByteCount])
     })
 }
 export interface DownloadFileDataResponseData {

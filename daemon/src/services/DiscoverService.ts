@@ -3,7 +3,7 @@ import { sleepMsec } from "../common/util";
 import { ChannelName, ChannelNodeInfo, elapsedSince, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core";
 import { GetChannelInfoRequestData, isGetChannelInfoResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from "../interfaces/NodeToNodeRequest";
 import { SendRequestMethod } from "../RemoteNode";
-import { DurationMsec, durationMsec, durationMsecToNumber } from "../udp/UdpCongestionManager";
+import { durationMsec, DurationMsec, durationMsecToNumber } from "../udp/UdpCongestionManager";
 
 interface RemoteNodeManagerInterface {
     sendRequestToNode: (remoteNodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}) => Promise<NodeToNodeResponseData>,
@@ -18,6 +18,7 @@ interface RemoteNodeInterface {
 }
 
 interface KacheryP2PNodeInterface {
+    nodeId: () => NodeId
     remoteNodeManager: () => RemoteNodeManagerInterface,
     channelNames: () => ChannelName[]
 }
@@ -42,15 +43,15 @@ export default class DiscoverService {
             requestType: 'getChannelInfo',
             channelName
         }
-        console.log('--- test1')
         const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: durationMsec(3000), method: 'default'})
-        console.log('--- test2')
         if (!isGetChannelInfoResponseData(responseData)) {
             throw Error('Unexpected.');
         }
         const { channelInfo } = responseData;
         channelInfo.nodes.forEach(channelNodeInfo => {
-            this.#remoteNodeManager.setChannelNodeInfo(channelNodeInfo)
+            if (channelNodeInfo.body.nodeId !== this.#node.nodeId()) {
+                this.#remoteNodeManager.setChannelNodeInfo(channelNodeInfo)
+            }
         })
     }
     async _start() {

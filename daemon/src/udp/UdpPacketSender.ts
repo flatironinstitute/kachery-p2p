@@ -38,6 +38,7 @@ export default class UdpPacketSender {
     #socket: DgramSocket
     #congestionManagers = new GarbageMap<Address, UdpCongestionManager>(durationMsec(5 * 60 * 1000))
     #unconfirmedOutgoingPackets = new GarbageMap<PacketId, OutgoingPacket>(durationMsec(5 * 60 * 1000))
+    #debugId = randomAlphaString(4)
     constructor(socket: DgramSocket) {
         this.#socket = socket
     }
@@ -67,7 +68,7 @@ export default class UdpPacketSender {
             this.#unconfirmedOutgoingPackets.delete(packetId)
         }
         else {
-            console.warn(`Unable to confirm packet with ID: ${packetId}`)
+            console.warn(`Unable to confirm packet with ID: ${packetId}`, this.#debugId)
         }
     }
     congestionManagers(address: Address) {
@@ -111,7 +112,6 @@ class OutgoingPacket {
         const socket = this.#manager.socket()
         const b = this.#buffer
         return new Promise((resolve, reject) => {
-            let completed = false
             if (this.#confirmed) {
                 resolve()
                 return
@@ -120,6 +120,7 @@ class OutgoingPacket {
                 reject(Error('Cancelled'))
                 return
             }
+            let completed = false
             this.#onConfirmed = () => {
                 if (completed) return;
                 completed = true;

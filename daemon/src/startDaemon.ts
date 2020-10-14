@@ -1,6 +1,6 @@
 import { UrlPath } from './common/httpPostJson';
 import { Address, ChannelName, HostName, JSONObject, Port } from './interfaces/core';
-import KacheryP2PNode, { DgramCreateSocketFunction } from './KacheryP2PNode';
+import KacheryP2PNode, { CreateWebSocketFunction, CreateWebSocketServerFunction, DgramCreateSocketFunction, KacheryStorageManagerInterface } from './KacheryP2PNode';
 import { LocalFilePath } from './kacheryStorage/KacheryStorageManager';
 import AnnounceService from './services/AnnounceService';
 import BootstrapService from './services/BootstrapService';
@@ -26,6 +26,9 @@ const startDaemon = async (args: {
     bootstrapAddresses: Address[] | null,
     httpPostJsonFunction: ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>),
     dgramCreateSocketFunction: DgramCreateSocketFunction,
+    createWebSocketServerFunction: CreateWebSocketServerFunction,
+    createWebSocketFunction: CreateWebSocketFunction,
+    kacheryStorageManager: KacheryStorageManagerInterface,
     opts: {
         noBootstrap: boolean,
         isBootstrapNode: boolean,
@@ -46,6 +49,9 @@ const startDaemon = async (args: {
         bootstrapAddresses,
         httpPostJsonFunction,
         dgramCreateSocketFunction,
+        createWebSocketServerFunction,
+        createWebSocketFunction,
+        kacheryStorageManager,
         opts
     } = args
     const kNode = new KacheryP2PNode({
@@ -60,6 +66,9 @@ const startDaemon = async (args: {
         channelNames,
         httpPostJsonFunction,
         dgramCreateSocketFunction,
+        createWebSocketServerFunction,
+        createWebSocketFunction,
+        kacheryStorageManager,
         opts
     })
 
@@ -116,19 +125,25 @@ const startDaemon = async (args: {
     })
 
     const _stop = () => {
-        daemonApiServer.stop()
-        publicApiServer.stop()
-        if (publicWebSocketServer) {
-            publicWebSocketServer.stop()
-        }
-        if (publicUdpSocketServer) {
-            publicUdpSocketServer.stop()
-        }
         announceService.stop()
         discoverService.stop()
         bootstrapService.stop()
         proxyClientService.stop()
         multicastService.stop()
+        // wait a bit after stopping services before cleaning up the rest (for clean exit of services)
+        setTimeout(() => {
+            daemonApiServer.stop()
+            publicApiServer.stop()
+            setTimeout(() => {
+                if (publicWebSocketServer) {
+                    publicWebSocketServer.stop()
+                }
+                if (publicUdpSocketServer) {
+                    publicUdpSocketServer.stop()
+                }
+                kNode.cleanup()
+            }, 20)
+        }, 20)
     }
 
     return {

@@ -1,11 +1,11 @@
-import WebSocket from 'ws';
 import { action } from '../common/action';
 import { getSignature, verifySignature } from '../common/crypto_util';
 import GarbageMap from '../common/GarbageMap';
-import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString } from '../common/util';
-import { ErrorMessage, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, Signature, Timestamp, _validateObject } from "../interfaces/core";
+import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString, sleepMsec } from '../common/util';
+import { elapsedSince, ErrorMessage, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, Signature, Timestamp, _validateObject } from "../interfaces/core";
 import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
+import { WebSocketInterface } from '../services/PublicWebSocketServer';
 import { ByteCount, DurationMsec, durationMsec, durationMsecToNumber, isByteCount } from '../udp/UdpCongestionManager';
 
 export interface InitialMessageFromClientBody {
@@ -28,7 +28,7 @@ export interface InitialMessageFromClient {
 }
 export const isInitialMessageFromClient = (x: any): x is InitialMessageFromClient => {
     return _validateObject(x, {
-        body: isInitialMessageFromClient,
+        body: isInitialMessageFromClientBody,
         signature: isSignature
     })
 }
@@ -181,7 +181,7 @@ const createProxyStreamFileDataRequestId = () => {
 export class ProxyConnectionToClient {
     #node: KacheryP2PNode
     #remoteNodeId: NodeId | null = null
-    #ws: WebSocket
+    #ws: WebSocketInterface
     #initialized = false
     #closed = false
     #onClosedCallbacks: ((reason: any) => void)[] = []
@@ -191,10 +191,10 @@ export class ProxyConnectionToClient {
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
-    async initialize(ws: WebSocket) {
+    async initialize(ws: WebSocketInterface) {
         return new Promise((resolve, reject) => {
             this.#ws = ws
-            this.#ws.on('close', (code, reason) => {
+            this.#ws.onClose((code, reason) => {
                 /////////////////////////////////////////////////////////////////////////
                 action('proxyConnectionToClientClosed', {context: "ProxyConnectionToClient", remoteNodeId: this.#remoteNodeId}, async () => {
                     this.#closed = true;
@@ -203,9 +203,10 @@ export class ProxyConnectionToClient {
                 /////////////////////////////////////////////////////////////////////////
             })
 
-            this.#ws.on('error', () => {
+            this.#ws.onError((err: Error) => {
                 // this is important so we don't throw an exception
                 // question: do we need to do something here? will 'close' be called also?
+                console.warn(err)
             });
             this.onInitialized(() => {
                 resolve();
@@ -215,15 +216,11 @@ export class ProxyConnectionToClient {
                     reject(reason);
                 }
             })
-            ws.on('message', messageBuffer => {
-                if (!(isBuffer(messageBuffer))) {
-                    console.warn('Incoming message is not a Buffer')
-                    this.#ws.close()
-                }
+            ws.onMessage(messageBuffer => {
                 if (this.#closed) return;
                 /////////////////////////////////////////////////////////////////////////
                 action('proxyConnectionToClientMessage', {context: "ProxyConnectionToClient", remoteNodeId: this.#remoteNodeId}, async () => {
-                    if (!(isBuffer(messageBuffer))) {
+                    if (!isBuffer(messageBuffer)) {
                         throw Error('Unexpected')
                     }
                     let messageParsed: Object;
@@ -421,13 +418,22 @@ export class ProxyConnectionToClient {
                     resolve(response);
                 }
             });
-            setTimeout(() => {
-                if (!completed) {
-                    completed = true;
-                    this.#responseListeners.delete(requestId);
-                    reject('Timeout while waiting for response.');
+            (async () => {
+                const timer = nowTimestamp()
+                while (true) {
+                    if (completed) return
+                    if (this.#closed) {
+                        reject(Error('Websocket closed while waiting for response'))
+                        return
+                    }
+                    const elapsed = elapsedSince(timer)
+                    if (elapsed >= durationMsecToNumber(timeoutMsec)) {
+                        reject(Error('Timeout while waiting for response.'))
+                        return
+                    }
+                    await sleepMsec(Math.min(800, durationMsecToNumber(timeoutMsec)))
                 }
-            }, durationMsecToNumber(timeoutMsec));
+            })()
         });
     }
 }

@@ -3,7 +3,7 @@ import { getSignature, verifySignature } from "../common/crypto_util"
 import { sleepMsec } from "../common/util"
 import { Address, ChannelName, ChannelNodeInfo, HostName, isMulticastAnnounceMessage, JSONObject, KeyPair, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, tryParseJsonObject } from "../interfaces/core"
 import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
-import { DgramCreateSocketFunction } from "../KacheryP2PNode"
+import { DgramSocket } from "../KacheryP2PNode"
 import { protocolVersion } from "../protocolVersion"
 import { DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager'
 
@@ -14,7 +14,7 @@ interface KacheryP2PNodeInterface {
     channelNames: () => ChannelName[]
     getChannelNodeInfo: (channelName: ChannelName) => ChannelNodeInfo
     _handleAnnounceRequest: (args: { fromNodeId: NodeId, requestData: AnnounceRequestData, localUdpAddress: Address | null }) => Promise<AnnounceResponseData>
-    dgramCreateSocketFunction: () => DgramCreateSocketFunction
+    dgramCreateSocket: (args: {type: 'udp4', reuseAddr: boolean}) => DgramSocket
     useMulticastUdp: () => boolean
 }
 
@@ -31,7 +31,7 @@ export default class MulticastService {
     async _start() {
         if (!this.#node.useMulticastUdp()) return
         // to find nodes on the local network
-        const multicastSocket = this.#node.dgramCreateSocketFunction()({ type: "udp4", reuseAddr: true })
+        const multicastSocket = this.#node.dgramCreateSocket({ type: "udp4", reuseAddr: true })
         // const multicastSocket = dgram.createSocket({ type: "udp4", reuseAddr: true })
         const multicastAddress = '237.0.0.0' // not sure how to choose this
         const multicastPort = 21010

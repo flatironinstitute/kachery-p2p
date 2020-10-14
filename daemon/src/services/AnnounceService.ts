@@ -18,6 +18,7 @@ interface RemoteNodeInterface {
 }
 
 interface KacheryP2PNodeInterface {
+    nodeId: () => NodeId
     remoteNodeManager: () => RemoteNodeManagerInterface
     getChannelNodeInfo: (channelName: ChannelName) => ChannelNodeInfo
     channelNames: () => ChannelName[]
@@ -34,17 +35,18 @@ export default class AnnounceService {
         // announce self when a new node-channel has been added
         this.#remoteNodeManager.onNodeChannelAdded((remoteNodeId: NodeId, channelName: ChannelName) => {
             
-            // todo: check if we can send message to node, if not maybe we need to delay a bit
+            if (this.#node.channelNames().includes(channelName)) { // only if we belong to this channel
+                // todo: check if we can send message to node, if not maybe we need to delay a bit
 
-            /////////////////////////////////////////////////////////////////////////
-            action('announceToNewNode', {context: 'AnnounceService', remoteNodeId, channelName}, async () => {
-                await this._announceToNode(remoteNodeId, channelName)
-            }, null)
-            /////////////////////////////////////////////////////////////////////////
+                /////////////////////////////////////////////////////////////////////////
+                action('announceToNewNode', {context: 'AnnounceService', remoteNodeId, channelName}, async () => {
+                    await this._announceToNode(remoteNodeId, channelName)
+                }, null)
+                /////////////////////////////////////////////////////////////////////////
+            }
 
         })
-        // todo
-        // this._start()
+        this._start()
     }
     stop() {
         this.#halted = true

@@ -24,7 +24,6 @@ export default class UdpMessagePartManager {
             }
         }
         if (complete) {
-            console.log('------------ complete!')
             for (let i = 0; i < numPartsToNumber(numParts); i++) {
                 this.#messageParts.delete(udpMessagePartId(udpMessageId, partIndex(i), numParts))
             }

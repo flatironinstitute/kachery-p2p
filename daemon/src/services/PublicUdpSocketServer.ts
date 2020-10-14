@@ -40,8 +40,8 @@ export default class PublicUdpSocketServer {
     startListening(listenPort: Port) {
         return new Promise((resolve, reject) => {
             try {
-                this.#socket = this.#node.dgramCreateSocketFunction()({ type: "udp4", reuseAddr: false });
-                this.#socket.bind(toNumber(listenPort));
+                this.#socket = this.#node.dgramCreateSocket({ type: "udp4", reuseAddr: false })
+                this.#socket.bind(toNumber(listenPort))
                 this.#socket.on("listening", () => {
                     if (this.#socket === null) {
                         throw Error('Unexpected')
@@ -49,7 +49,6 @@ export default class PublicUdpSocketServer {
                     this.#udpPacketSender = new UdpPacketSender(this.#socket)
                     this.#udpPacketReceiver = new UdpPacketReceiver(this.#socket)
                     this.#udpPacketReceiver.onPacket((packet: Buffer, remoteInfo: dgram.RemoteInfo) => {
-                        console.log('----------- on packet')
                         const headerTxt = packet.slice(0, UDP_MESSAGE_HEADER_SIZE).toString().trimEnd()
                         const dataBuffer = packet.slice(UDP_MESSAGE_HEADER_SIZE);
                         const header = tryParseJsonObject(headerTxt)
@@ -92,12 +91,6 @@ export default class PublicUdpSocketServer {
         });
     }
     async sendRequest(address: Address, request: NodeToNodeRequest, opts: {timeoutMsec: DurationMsec}): Promise<{response: NodeToNodeResponse, header: UdpHeader}> {
-        /////////////////////////////////////////////////////////////////////////
-        await action('/Udp/sendNodeToNodeRequest', {}, async () => {
-            await this._sendMessage(address, "NodeToNodeRequest", request as any as JSONObject, {timeoutMsec: opts.timeoutMsec, requestId: request.body.requestId})
-        }, async () => {
-        })
-        /////////////////////////////////////////////////////////////////////////
         return new Promise<{response: NodeToNodeResponse, header: UdpHeader}>((resolve, reject) => {
             let complete = false
             const _handleError = ((err: Error) => {
@@ -127,6 +120,12 @@ export default class PublicUdpSocketServer {
                     _handleError(Error(`Timeout waiting for response for request: ${request.body.requestData.requestType}`))
                 }
             }, durationMsecToNumber(opts.timeoutMsec))
+            /////////////////////////////////////////////////////////////////////////
+            action('/Udp/sendNodeToNodeRequest', {}, async () => {
+                await this._sendMessage(address, "NodeToNodeRequest", request as any as JSONObject, {timeoutMsec: opts.timeoutMsec, requestId: request.body.requestId})
+            }, async () => {
+            })
+            /////////////////////////////////////////////////////////////////////////
         })
     }
     async _sendMessage(address: Address, messageType: UdpMessageType, messageData: Buffer | JSONObject, opts: {timeoutMsec: DurationMsec, requestId: RequestId | null}): Promise<void> {
@@ -152,22 +151,18 @@ export default class PublicUdpSocketServer {
             ])
             packets.push(b)
         }
-        console.log('---- send packets', packets.length)
         await this.#udpPacketSender.sendPackets(address, packets, {timeoutMsec: opts.timeoutMsec})
     }
     _handleMessagePart(fromAddress: Address, header: UdpHeader, dataBuffer: Buffer) {
-        console.log('---------------- handle message part')
         if (!verifySignature(header.body, header.signature, nodeIdToPublicKey(header.body.fromNodeId))) {
             throw Error('Error verifying signature in udp message')
         }
         this.#messagePartManager.addMessagePart(fromAddress, header.body.udpMessageId, header.body.partIndex, header.body.numParts, header, dataBuffer)
     }
     _handleCompleteMessage(remoteAddress: Address, header: UdpHeader, dataBuffer: Buffer) {
-        console.log('---------------- handle complete message')
         const mt = header.body.udpMessageType
         if (mt === "NodeToNodeRequest") {
             const req = tryParseJsonObject(dataBuffer.toString())
-            console.log('---', req)
             if (!isNodeToNodeRequest(req)) {
                 // todo: what to do here? throw error? ban peer?
                 return
@@ -191,6 +186,9 @@ export default class PublicUdpSocketServer {
                 const responseListener = this.#responseListeners.get(res.body.requestId)
                 if (responseListener) {
                     responseListener.onResponse(res, header)
+                }
+                else {
+                    console.warn('No response listener found.')
                 }
             }, async () => {                
             })

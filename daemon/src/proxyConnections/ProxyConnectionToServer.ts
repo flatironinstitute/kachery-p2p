@@ -1,4 +1,3 @@
-import WebSocket from 'ws';
 import { action } from '../common/action';
 import { getSignature, verifySignature } from '../common/crypto_util';
 import GarbageMap from '../common/GarbageMap';
@@ -6,20 +5,22 @@ import { kacheryP2PDeserialize, kacheryP2PSerialize } from '../common/util';
 import { Address, errorMessage, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp } from "../interfaces/core";
 import { isNodeToNodeRequest, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
 import { StreamFileDataOutput } from '../KacheryP2PNode';
-import { durationMsec, DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager';
-import { InitialMessageFromClient, InitialMessageFromClientBody, isBuffer, isInitialMessageFromServer, isMessageFromServer, isProxyStreamFileDataCancelRequest, isProxyStreamFileDataRequest, MessageFromClient, MessageFromServer, ProxyStreamFileDataCancelRequest, ProxyStreamFileDataRequest, ProxyStreamFileDataRequestId, ProxyStreamFileDataResponseDataMessage, ProxyStreamFileDataResponseErrorMessage, ProxyStreamFileDataResponseFinishedMessage, ProxyStreamFileDataResponseStartedMessage } from './ProxyConnectionToClient';
+import { WebSocketInterface } from '../services/PublicWebSocketServer';
+import { durationMsec, DurationMsec } from '../udp/UdpCongestionManager';
+import { InitialMessageFromClient, InitialMessageFromClientBody, isInitialMessageFromServer, isMessageFromServer, isProxyStreamFileDataCancelRequest, isProxyStreamFileDataRequest, MessageFromClient, MessageFromServer, ProxyStreamFileDataCancelRequest, ProxyStreamFileDataRequest, ProxyStreamFileDataRequestId, ProxyStreamFileDataResponseDataMessage, ProxyStreamFileDataResponseErrorMessage, ProxyStreamFileDataResponseFinishedMessage, ProxyStreamFileDataResponseStartedMessage } from './ProxyConnectionToClient';
 
 interface KacheryP2PNodeInterface {
     nodeId: () => NodeId
     keyPair: () => KeyPair
     handleNodeToNodeRequest: (request: NodeToNodeRequest) => Promise<NodeToNodeResponse>
     streamFileData: (nodeId: NodeId, streamId: StreamId) => StreamFileDataOutput
+    createWebSocket: (url: string, opts: {timeoutMsec: DurationMsec}) => WebSocketInterface
 }
 
 export class ProxyConnectionToServer {
     #node: KacheryP2PNodeInterface
     #remoteNodeId: NodeId | null = null
-    #ws: WebSocket
+    #ws: WebSocketInterface
     #initialized = false
     #closed = false
     #onClosedCallbacks: ((reason: any) => void)[] = []
@@ -32,12 +33,13 @@ export class ProxyConnectionToServer {
         this.#remoteNodeId = remoteNodeId;
         return new Promise((resolve, reject) => {
             const url = `ws://${address.hostName}:${address.port}`;
-            this.#ws = new WebSocket(url, {timeout: durationMsecToNumber(opts.timeoutMsec)});
-            this.#ws.on('close', (code, reason) => {
+            this.#ws = this.#node.createWebSocket(url, {timeoutMsec: opts.timeoutMsec})
+            this.#ws.onClose((code, reason) => {
                 this.#closed = true;
                 this.#onClosedCallbacks.forEach(cb => cb(reason));
             })
-            this.#ws.on('error', () => {
+            this.#ws.onError(err => {
+                console.warn(err)
                 // this is important so we don't throw an exception
                 // question: do we need to do something here? will 'close' be called also?
             });
@@ -59,13 +61,10 @@ export class ProxyConnectionToServer {
                 body: msgBody,
                 signature: getSignature(msgBody, this.#node.keyPair())
             }
-            this.#ws.send(kacheryP2PSerialize(msg));
-            this.#ws.on('message', messageBuffer => {
-                if (!(isBuffer(messageBuffer))) {
-                    console.warn('Incoming message is not a Buffer')
-                    this.#ws.close()
-                    return
-                }
+            this.#ws.onOpen(() => {
+                this.#ws.send(kacheryP2PSerialize(msg));
+            })
+            this.#ws.onMessage(messageBuffer => {
                 if (this.#closed) return;
                 /////////////////////////////////////////////////////////////////////////
                 action('proxyConnectionToServerMessage', {context: "ProxyConnectionToServer", remoteNodeId: this.#remoteNodeId}, async () => {
@@ -88,7 +87,7 @@ export class ProxyConnectionToServer {
                             this.#ws.close();
                             return;
                         }
-                        if (messageParsed.body.fromNodeId === remoteNodeId) {
+                        if (messageParsed.body.fromNodeId === this.#node.nodeId()) {
                             console.warn(`Invalid initial websocket message from server (invalid fromNodeId). Closing.`);
                             this.#ws.close();
                             return;

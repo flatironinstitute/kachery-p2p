@@ -6,7 +6,7 @@ import { Socket } from 'net';
 import { action } from '../common/action';
 import start_http_server from '../common/start_http_server';
 import { sleepMsec } from '../common/util';
-import { ChannelName, FeedId, FeedName, FileKey, FindLiveFeedResult, isArrayOf, isChannelName, isFeedId, isFeedName, isFileKey, isJSONObject, isNodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
+import { ChannelName, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isFeedId, isFeedName, isFileKey, isJSONObject, isNodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
 import { DurationMsec, isDurationMsec } from '../udp/UdpCongestionManager';
@@ -25,6 +25,17 @@ interface Res {
     end: () => void,
     status: (s: number) => Res,
     send: (x: any) => Res
+}
+
+export interface ApiFindFileRequest {
+    fileKey: FileKey,
+    timeoutMsec: DurationMsec
+}
+const isApiFindFileRequest = (x: any): x is ApiFindFileRequest => {
+    return _validateObject(x, {
+        fileKey: isFileKey,
+        timeoutMsec: isDurationMsec
+    });
 }
 
 export default class DaemonApiServer {
@@ -220,8 +231,28 @@ export default class DaemonApiServer {
             this.#server.close()
         }
     }
+    async mockPostJson(path: string, data: JSONObject): Promise<JSONObject> {
+        if (path === '/probe') {
+            return await this._probe() as any as JSONObject
+        }
+        else {
+            throw Error(`mock unexpected path: ${path}`)
+        }
+    }
+    async mockPostFindFile(reqData: ApiFindFileRequest): Promise<{
+        onFound: (callback: (result: FindFileResult) => void) => void;
+        onFinished: (callback: () => void) => void;
+        cancel: () => void;
+    }> {
+        return await this._findFile(reqData)
+    }
     // /probe - check whether the daemon is up and running and return info such as the node ID
     async _apiProbe(req: Req, res: Res) {
+        const response = await this._probe()
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
+        res.json(response);
+    }
+    async _probe() {
         const response: ApiProbeResponse = {
             success: true,
             protocolVersion: protocolVersion(),
@@ -230,9 +261,8 @@ export default class DaemonApiServer {
             isBootstrapNode: this.#node.isBootstrapNode(),
             webSocketAddress: this.#node.webSocketAddress(),
             publicUdpSocketAddress: this.#node.publicUdpSocketAddress()
-        };
-        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
-        res.json(response);
+        }
+        return response
     }
     // /halt - halt the kachery-p2p daemon (stops the server process)
     async _apiHalt(req: Req, res: Res) {
@@ -246,21 +276,13 @@ export default class DaemonApiServer {
     }
     // /findFile - find a file (or feed) in the remote nodes. May return more than one.
     async _apiFindFile(req: Req, res: Res) {
-        interface ApiFindFileRequest {
-            fileKey: FileKey,
-            timeoutMsec: DurationMsec
-        }
-        const isApiFindFileRequest = (x: any): x is ApiFindFileRequest => {
-            return _validateObject(x, {
-                fileKey: isFileKey,
-                timeoutMsec: isDurationMsec
-            });
-        }
         const reqData = req.body;
         if (!isApiFindFileRequest(reqData)) throw Error('Invalid request in _apiFindFile');
-        const { fileKey, timeoutMsec } = reqData;
-        const x = this.#node.findFile({fileKey, timeoutMsec});
+        
+        const x = await this._findFile(reqData)
+
         const jsonSocket = new JsonSocket(res as any as Socket);
+
         let isDone = false;
         x.onFound(result => {
             if (isDone) return;
@@ -279,6 +301,10 @@ export default class DaemonApiServer {
             isDone = true;
             x.cancel();
         });
+    }
+    async _findFile(reqData: ApiFindFileRequest) {
+        const { fileKey, timeoutMsec } = reqData;
+        return this.#node.findFile({fileKey, timeoutMsec});
     }
     // /loadFile - load a file from remote kachery node(s) and store in kachery storage
     async _apiLoadFile(req: Req, res: Res) {

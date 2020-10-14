@@ -4,11 +4,15 @@ import assert from 'assert';
 import dgram from 'dgram';
 import fs from 'fs';
 import os from 'os';
+import WebSocket from 'ws';
 import yargs from 'yargs';
 import { httpPostJson } from './common/httpPostJson';
-import { Address, isAddress, isChannelName, isHostName, isPort } from './interfaces/core';
-import { LocalFilePath } from './kacheryStorage/KacheryStorageManager';
+import { Address, isAddress, isChannelName, isHostName, isPort, NodeId, Port } from './interfaces/core';
+import { KacheryStorageManager, LocalFilePath } from './kacheryStorage/KacheryStorageManager';
+import { isBuffer } from './proxyConnections/ProxyConnectionToClient';
+import { WebSocketInterface, WebSocketServerInterface } from './services/PublicWebSocketServer';
 import startDaemon from './startDaemon';
+import { DurationMsec, durationMsecToNumber } from './udp/UdpCongestionManager';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
 process.on('uncaughtException', function (err) {
@@ -34,6 +38,58 @@ process.on('uncaughtException', function (err) {
 class CLIError extends Error {
   constructor(errorString: string) {
     super(errorString);
+  }
+}
+
+const webSocketInterfaceFromWebSocket = (ws: WebSocket): WebSocketInterface => {
+  const onMessage = (cb: (buf: Buffer) => void) => {
+    ws.on('message', (buf) => {
+      if (!isBuffer(buf)) {
+        console.warn('Incoming message is not a Buffer')
+        ws.close()
+        return
+      }
+      cb(buf)
+    })
+  }
+  const onError = (cb: (err: Error) => void) => {
+    ws.on('error', (err) => {
+      cb(err)
+    })
+  }
+  const onClose = (cb: (code: number, reason: string) => void) => {
+    ws.on('close', (code, reason) => {
+      cb(code, reason)
+    })
+  }
+  const onOpen = (cb: () => void) => {
+    ws.on('open', () => {
+      cb()
+    })
+  }
+  return {
+    onOpen,
+    onMessage,
+    onError,
+    onClose,
+    close: () => {ws.close()},
+    send: (buf: Buffer) => {ws.send(buf)}
+  }
+}
+
+const webSocketServerInterfaceFromWebSocketServer = (S: WebSocket.Server): WebSocketServerInterface => {
+  const onConnection = (cb: (ws: WebSocketInterface) => void) => {
+    S.on('connection', (ws: WebSocket) => {
+      cb(webSocketInterfaceFromWebSocket(ws))
+    })
+  }
+  const onListening = (cb: () => void) => {
+
+  }
+  return {
+    onConnection,
+    onListening,
+    close: () => {S.close()}
   }
 }
 
@@ -147,6 +203,18 @@ function main() {
           return dgram.createSocket({type: args.type, reuseAddr: args.reuseAddr})
         }
 
+        const createWebSocketServer = (port: Port, nodeId: NodeId): WebSocketServerInterface => {
+          const S = new WebSocket.Server({port: port as any as number})
+          return webSocketServerInterfaceFromWebSocketServer(S)
+        }
+
+        const createWebSocket = (url: string, opts: {timeoutMsec: DurationMsec}): WebSocketInterface => {
+          const ws = new WebSocket(url, {timeout: durationMsecToNumber(opts.timeoutMsec)})
+          return webSocketInterfaceFromWebSocket(ws)
+        }
+
+        const kacheryStorageManager = new KacheryStorageManager()
+
         startDaemon({
           channelNames,
           configDir: configDir as any as LocalFilePath,
@@ -160,6 +228,9 @@ function main() {
           bootstrapAddresses,
           httpPostJsonFunction: httpPostJson,
           dgramCreateSocketFunction: dgramCreateSocket,
+          createWebSocketServerFunction: createWebSocketServer,
+          createWebSocketFunction: createWebSocket,
+          kacheryStorageManager,
           opts: {
             noBootstrap,
             isBootstrapNode,

@@ -118,13 +118,6 @@ mocha.describe('Basic typeguards', () => {
         })
         it('isNumber() returns false on non-numeric input', () => {
             expect(ut.isNumber('5')).to.be.false
-            expect(ut.isNumber(BigInt(5))).to.be.false
-        })
-        it('isBigInt() returns true on bigint input', () => {
-            expect(ut.isBigInt(BigInt(5))).to.be.true
-        })
-        it('isBigInt() returns false on non-bigint input', () => {
-            expect(ut.isBigInt(5)).to.be.false
         })
     })
     describe('Null handling', () => {
@@ -226,21 +219,6 @@ describe('Utility comparisons', () => {
             expect(areStrings(['These', 'are', 'not', 5, 'strings'])).to.be.false
         })
     })
-    describe('Object type checking', () => {
-        const hexKeyBigintValueChecker = ut.isObjectOf((x) => /^[0-9a-fA-F]*$/.test(x), ut.isBigInt)
-        it('isObjectOf() fn returns true on correct key and value types', () => {
-            expect(hexKeyBigintValueChecker({ '0123456789abcdefABCDEF': BigInt(5) })).to.be.true
-        })
-        it('isObjectOf() fn returns false on wrong-typed key', () => {
-            expect(hexKeyBigintValueChecker({ 'non-hex characters': BigInt(5) })).to.be.false
-        })
-        it('isObjectOf() fn returns false on wrong-typed value', () => {
-            expect(hexKeyBigintValueChecker({ '0987': 5 })).to.be.false
-        })
-        it('isObjectOf() fn returns false on non-object input', () => {
-            expect(hexKeyBigintValueChecker('string')).to.be.false
-        })
-    })
     describe('Object validation to spec', () => {
         const objectSpec: ut.ValidateObjectSpec = { myobj: { mystring: ut.isString }, mynum: ut.isNumber }
         const matchingObject = { myobj: { mystring: 'string' }, mynum: 5 }
@@ -248,20 +226,6 @@ describe('Utility comparisons', () => {
         const cb = (x: string) => { cb_msg = x }
         it('_validateObject() returns true on correctly formatted object', () => {
             expect(ut._validateObject(matchingObject, objectSpec)).to.be.true
-        })
-        it('_validateObject() returns false on null input', () => {
-            expect(ut._validateObject(null, { x: ut.isBigInt }))
-        })
-        it('_validateObject() calls callback on null input', () => {
-            ut._validateObject(null, { x: ut.isBigInt }, cb)
-            expect(cb_msg).to.equal('x is undefined/null.')
-        })
-        it('_validateObject() returns false on non-object input', () => {
-            expect(ut._validateObject('foo', { x: ut.isBigInt }))
-        })
-        it('_validateObject() calls callback on non-object input', () => {
-            ut._validateObject('foo', { x: ut.isBigInt }, cb)
-            expect(cb_msg).to.equal('x is not an Object.')
         })
         it('_validateObject() returns false on extra key', () => {
             expect(ut._validateObject({ ...matchingObject, newkey: 'bar' }, objectSpec)).to.be.false
@@ -736,9 +700,6 @@ describe('Searches and Requests', () => {
         })
         it('isFindFileResult() returns false for non-conforming object', () => {
             expect(ut.isFindFileResult({ ...validResult, fileKey: null })).to.be.false
-        })
-        it('isFindFileResult() returns false for negative file size', () => {
-            expect(ut.isFindFileResult({ ...validResult, fileSize: BigInt(-50) })).to.be.false
         })
     })
     describe('Request', () => {

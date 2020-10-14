@@ -173,7 +173,6 @@ class RemoteNode {
             }
         }
 
-        // todo: use udp when appropriate
         let response: NodeToNodeResponse
         if (method === 'http') {
             const address = this._getRemoteNodeHttpAddress();
@@ -196,9 +195,7 @@ class RemoteNode {
             if (!udpA) {
                 throw Error('Cannot use udp method when there is no udp address')
             }
-            console.log('------------------ sR 1')
             const R = await udpS.sendRequest(udpA, request, {timeoutMsec: opts.timeoutMsec})
-            console.log('------------------ sR 2')
             response = R.response
             const udpHeader = R.header
             if (this.#isBootstrap) {

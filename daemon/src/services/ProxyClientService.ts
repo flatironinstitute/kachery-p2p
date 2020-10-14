@@ -6,6 +6,7 @@ import { NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/N
 import { StreamFileDataOutput } from "../KacheryP2PNode";
 import { ProxyConnectionToServer } from "../proxyConnections/ProxyConnectionToServer";
 import { DurationMsec, durationMsec, durationMsecToNumber } from "../udp/UdpCongestionManager";
+import { WebSocketInterface } from "./PublicWebSocketServer";
 
 interface RemoteNodeManagerInterface {
     getAllRemoteNodes: () => RemoteNodeInterface[]
@@ -25,6 +26,7 @@ interface KacheryP2PNodeInterface {
     streamFileData: (nodeId: NodeId, streamId: StreamId) => StreamFileDataOutput
     getProxyConnectionToServer: (remoteNodeId: NodeId) => ProxyConnectionToServer | null
     setProxyConnectionToServer: (nodeId: NodeId, c: ProxyConnectionToServer) => void
+    createWebSocket: (url: string, opts: {timeoutMsec: DurationMsec}) => WebSocketInterface
 }
 
 export default class ProxyClientService {

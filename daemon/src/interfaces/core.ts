@@ -71,11 +71,6 @@ export const isNumber = (x: any): x is number => {
     return ((x !== null) && (typeof x === 'number'));
 }
 
-// bigint
-export const isBigInt = (x: any): x is bigint => {
-    return ((x !== null) && (typeof x === 'bigint'));
-}
-
 // null
 export const isNull = (x: any): x is null => {
     return x === null;
@@ -757,7 +752,7 @@ export const toSubfeedWatches = (x: SubfeedWatchesRAM) => {
     return mapToObject<SubfeedWatchName, SubfeedWatch>(x);
 }
 
-// LiveFeedSunscriptionName
+// LiveFeedSubscriptionName
 export interface LiveFeedSubscriptionName extends String {
     __liveFeedSubscriptionName__: never // phantom type
 }

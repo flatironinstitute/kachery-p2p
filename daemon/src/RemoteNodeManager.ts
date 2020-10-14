@@ -43,6 +43,9 @@ class RemoteNodeManager {
         if (!verifySignature(body, signature, nodeIdToPublicKey(channelNodeInfo.body.nodeId))) {
             throw Error('Invalid signature for channelNodeInfo.');
         }
+        if (body.nodeId === this.#node.nodeId()) {
+            throw Error('Cannot set channel node info for self')
+        }
         if (!this.#remoteNodes.has(body.nodeId)) {
             this.#remoteNodes.set(body.nodeId, new RemoteNode(this.#node, body.nodeId));
         }
@@ -88,6 +91,9 @@ class RemoteNodeManager {
                 nodes.push(cni)
             }
         })
+        if (this.#node.channelNames().includes(channelName)) {
+            nodes.push(this.#node.getChannelNodeInfo(channelName))
+        }
         return {
             nodes
         }
@@ -194,7 +200,9 @@ class RemoteNodeManager {
         }, durationMsecToNumber(opts.timeoutMsec))
         // the .map is required so that we wait until all are settled
         Promise.all(promises.map(p => p.catch(e => e))).finally(() => {
-            _finalize()
+            setTimeout(() => {
+                _finalize()
+            }, 0)
         })
         return {
             onResponse,
