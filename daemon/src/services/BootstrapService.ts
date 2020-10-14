@@ -34,7 +34,7 @@ export default class BootstrapService {
         this.#halted = true
     }
     async _probeBootstrapNode(address: Address) {
-        const response = await this.#node.httpPostJsonFunction()(address, urlPath('/probe'), {}, {timeoutMsec: durationMsec(2000)});
+        const response = await this.#node.httpPostJson(address, urlPath('/probe'), {}, {timeoutMsec: durationMsec(2000)});
         if (!isApiProbeResponse(response)) {
             throw Error('Invalid probe response from bootstrap node.')
         }

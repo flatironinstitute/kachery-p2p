@@ -4,7 +4,7 @@ import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import { UrlPath } from '../../src/common/httpPostJson';
 import { randomAlphaString, sleepMsec } from '../../src/common/util';
 import { Address, ChannelName, elapsedSince, FileKey, FindFileResult, HostName, isNodeId, JSONObject, NodeId, nowTimestamp, Port, Sha1Hash } from '../../src/interfaces/core';
-import KacheryP2PNode, { DgramCreateSocketFunction, DgramRemoteInfo } from '../../src/KacheryP2PNode';
+import KacheryP2PNode, { DgramCreateSocketFunction, DgramRemoteInfo, StreamFileDataOutput } from '../../src/KacheryP2PNode';
 import { FindFileReturnValue, LocalFilePath } from '../../src/kacheryStorage/KacheryStorageManager';
 import DaemonApiServer, { ApiFindFileRequest } from '../../src/services/DaemonApiServer';
 import PublicApiServer from '../../src/services/PublicApiServer';
@@ -46,6 +46,18 @@ class MockNodeDaemonGroup {
         }
         
         throw Error('mock - unable to process http post json')
+    }
+    async mockHttpGetDownload(address: Address, path: UrlPath): Promise<StreamFileDataOutput> {
+        const nodeId = address.hostName.toString()
+        if (isNodeId(nodeId)) {
+            const daemon = this.getDaemon(nodeId)
+            if (!daemon) {
+                throw Error(`No daemon: ${nodeId}`)
+            }
+            return await daemon.mockPublicApiGetDownload(path.toString())
+        }
+        
+        throw Error('mock - unable to process http get download')
     }
 }
 
@@ -404,6 +416,7 @@ class MockNodeDaemon {
             label: 'mock-daemon',
             bootstrapAddresses: this.opts.bootstrapAddresses,
             httpPostJsonFunction: (address: Address, path: UrlPath, data: JSONObject, opts: {timeoutMsec: DurationMsec}) => (this.#daemonGroup.mockHttpPostJson(address, path, data, opts)),
+            httpGetDownloadFunction: (address: Address, path: UrlPath) => (this.#daemonGroup.mockHttpGetDownload(address, path)),
             dgramCreateSocketFunction: mockDgramCreateSocket,
             createWebSocketServerFunction: mockCreateWebSocketServer,
             createWebSocketFunction: mockCreateWebSocket,
@@ -445,11 +458,23 @@ class MockNodeDaemon {
         }
         return await this.#d.publicApiServer.mockPostJson(path, data)
     }
+    async mockPublicApiGetDownload(path: string): Promise<StreamFileDataOutput> {
+        if (!this.#d) {
+            throw Error('mock daemon not yet initialized')
+        }
+        return await this.#d.publicApiServer.mockGetDownload(path)
+    }
     async mockDaemonApiPost(path: string, data: JSONObject): Promise<JSONObject> {
         if (!this.#d) {
             throw Error('mock daemon not yet initialized')
         }
         return await this.#d.daemonApiServer.mockPostJson(path, data)
+    }
+    mockDaemonApiServer() {
+        if (!this.#d) {
+            throw Error('mock daemon not yet initialized')
+        }
+        return this.#d.daemonApiServer
     }
     async mockDaemonPostFindFile(reqData: ApiFindFileRequest): Promise<{
         onFound: (callback: (result: FindFileResult) => void) => void;
@@ -522,7 +547,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 let numFound = 0
                 const a = await daemon1.mockDaemonPostFindFile({
                     fileKey: f1Key,
-                    timeoutMsec: durationMsec(100)
+                    timeoutMsec: durationMsec(100),
+                    fromChannel: null
                 })
                 a.onFinished(() => {
                     expect(numFound).equals(1)
@@ -588,6 +614,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 expect(daemon2.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
 
                 await testFindFile(daemon1, daemon2)
+                await testLoadFile(daemon1, daemon2)
 
                 resolve()
             }, done)
@@ -595,14 +622,15 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
     })
  })
 
- const testFindFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {
+const testFindFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {
     const f1Content = Buffer.from('123456')
     const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content)
 
     let numFound = 0
     const a = await daemon2.mockDaemonPostFindFile({
         fileKey: f1Key,
-        timeoutMsec: durationMsec(100)
+        timeoutMsec: durationMsec(100),
+        fromChannel: null
     })
     return new Promise((resolve, reject) => {
         a.onFinished(() => {
@@ -612,6 +640,25 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
         a.onFound((result) => {
             expect(result.fileKey.sha1).equals(f1Key.sha1)
             numFound ++
+        })
+    })
+}
+
+const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {
+    const f1Content = Buffer.from('123456')
+    const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content)
+
+    return new Promise((resolve, reject) => {
+        const reqData = {
+            fileKey: f1Key,
+            fromNode: daemon1.nodeId()
+        } as any as JSONObject
+        const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData)
+        x.onError(err => {
+            reject(err)
+        })
+        x.onFinished(() => {
+            resolve()
         })
     })
 }

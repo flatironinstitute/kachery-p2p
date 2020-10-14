@@ -1,5 +1,4 @@
 import bson from 'bson';
-import fs from 'fs';
 import { elapsedSince, FileKey, nowTimestamp, Sha1Hash } from '../interfaces/core';
 import { DurationMsec } from '../udp/UdpCongestionManager';
 
@@ -38,11 +37,6 @@ export const sha1MatchesFileKey = ({sha1, fileKey}: {sha1: Sha1Hash, fileKey: Fi
         return fileKey.sha1 === sha1
     }
     return false
-}
-
-export const readJsonFile = async (path: string) => {
-    const txt = await fs.promises.readFile(path, 'utf-8');
-    return JSON.parse(txt);
 }
 
 export const kacheryP2PSerialize = (x: Object) => {

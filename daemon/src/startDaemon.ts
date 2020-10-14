@@ -1,6 +1,6 @@
 import { UrlPath } from './common/httpPostJson';
 import { Address, ChannelName, HostName, JSONObject, Port } from './interfaces/core';
-import KacheryP2PNode, { CreateWebSocketFunction, CreateWebSocketServerFunction, DgramCreateSocketFunction, KacheryStorageManagerInterface } from './KacheryP2PNode';
+import KacheryP2PNode, { CreateWebSocketFunction, CreateWebSocketServerFunction, DgramCreateSocketFunction, KacheryStorageManagerInterface, StreamFileDataOutput } from './KacheryP2PNode';
 import { LocalFilePath } from './kacheryStorage/KacheryStorageManager';
 import AnnounceService from './services/AnnounceService';
 import BootstrapService from './services/BootstrapService';
@@ -25,6 +25,7 @@ const startDaemon = async (args: {
     label: string,
     bootstrapAddresses: Address[] | null,
     httpPostJsonFunction: ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>),
+    httpGetDownloadFunction: ((address: Address, path: UrlPath) => Promise<StreamFileDataOutput>),
     dgramCreateSocketFunction: DgramCreateSocketFunction,
     createWebSocketServerFunction: CreateWebSocketServerFunction,
     createWebSocketFunction: CreateWebSocketFunction,
@@ -48,6 +49,7 @@ const startDaemon = async (args: {
         label,
         bootstrapAddresses,
         httpPostJsonFunction,
+        httpGetDownloadFunction,
         dgramCreateSocketFunction,
         createWebSocketServerFunction,
         createWebSocketFunction,
@@ -65,6 +67,7 @@ const startDaemon = async (args: {
         bootstrapAddresses,
         channelNames,
         httpPostJsonFunction,
+        httpGetDownloadFunction,
         dgramCreateSocketFunction,
         createWebSocketServerFunction,
         createWebSocketFunction,

@@ -2,7 +2,8 @@ import axios from 'axios';
 import http from 'http';
 import { Readable } from 'stream';
 import { Address, HostName, JSONObject, Port } from '../interfaces/core';
-import { durationMsec, DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager';
+import { StreamFileDataOutput } from '../KacheryP2PNode';
+import { ByteCount, durationMsec, DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager';
 
 export const _tests: {[key: string]: () => Promise<void>} = {}
 
@@ -16,6 +17,53 @@ export const urlPath = (x: string) => {
 export const httpPostJson = async (address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}): Promise<JSONObject> => {
     const res = await axios.post('http://' + address.hostName + ':' + address.port + path, data, {timeout: durationMsecToNumber(opts.timeoutMsec), responseType: 'json'})
     return res.data
+}
+export const httpGetDownload = async (address: Address, path: UrlPath): Promise<StreamFileDataOutput> => {
+    const _onStartedCallbacks: ((size: ByteCount) => void)[] = []
+    const _onDataCallbacks: ((data: Buffer) => void)[] = []
+    const _onFinishedCallbacks: (() => void)[] = []
+    const _onErrorCallbacks: ((err: Error) => void)[] = []
+    let started = false
+    const res = await axios.get('http://' + address.hostName + ':' + address.port + path, {responseType: 'stream'})
+    const size: ByteCount = res.headers['Content-Length']
+    res.data.on('data', (data: Buffer) => {
+        if (!started) {
+            started = true
+            _onStartedCallbacks.forEach(cb => {
+                cb(size)
+            })
+        }
+        _onDataCallbacks.forEach(cb => {
+            cb(data)
+        })
+    })
+    res.data.on('error', (err: Error) => {
+        _onErrorCallbacks.forEach(cb => {
+            cb(err)
+        })
+    })
+    res.data.on('end', () => {
+        _onFinishedCallbacks.forEach(cb => {
+            cb()
+        })
+    })
+    return {
+        onStarted: (callback: (size: ByteCount) => void) => {
+            _onStartedCallbacks.push(callback)
+        },
+        onData: (callback: (data: Buffer) => void) => {
+            _onDataCallbacks.push(callback)
+        },
+        onFinished: (callback: () => void) => {
+            _onFinishedCallbacks.push(callback)
+        },
+        onError: (callback: (err: Error) => void) => {
+            _onErrorCallbacks.push(callback)
+        },
+        cancel: () => {
+            // todo
+        }
+    }
 }
 _tests.httpPostJson = async () => {
     return new Promise((resolve, reject) => {

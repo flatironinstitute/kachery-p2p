@@ -2,7 +2,7 @@ import fs from 'fs'
 import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util'
 import GarbageMap from './common/GarbageMap'
 import { UrlPath } from './common/httpPostJson'
-import { readJsonFile, sha1MatchesFileKey } from './common/util'
+import { sha1MatchesFileKey } from './common/util'
 import DownloaderCreator from './downloadOptimizer/DownloaderCreator'
 import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import DownloadOptimizerFile from './downloadOptimizer/DownloadOptimizerJob'
@@ -112,6 +112,7 @@ class KacheryP2PNode {
         bootstrapAddresses: Address[] | null,
         channelNames: ChannelName[],
         httpPostJsonFunction: ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>),
+        httpGetDownloadFunction: ((address: Address, path: UrlPath) => Promise<StreamFileDataOutput>),
         dgramCreateSocketFunction: DgramCreateSocketFunction,
         createWebSocketServerFunction: CreateWebSocketServerFunction,
         createWebSocketFunction: CreateWebSocketFunction,
@@ -183,7 +184,7 @@ class KacheryP2PNode {
     useMulticastUdp() {
         return (this.p.opts.multicastUdpAddress !== null)
     }
-    findFile(args: {fileKey: FileKey, timeoutMsec: DurationMsec}): {
+    findFile(args: {fileKey: FileKey, timeoutMsec: DurationMsec, fromChannel: ChannelName | null}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
         onFinished: (callback: () => void) => void,
         cancel: () => void
@@ -192,7 +193,8 @@ class KacheryP2PNode {
             requestType: 'checkForFile',
             fileKey: args.fileKey
         }
-        const {onResponse, onFinished, cancel} = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, {timeoutMsec: args.timeoutMsec, channelNames: this.p.channelNames})
+        const channelNames = args.fromChannel ? [args.fromChannel] : this.p.channelNames
+        const {onResponse, onFinished, cancel} = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, {timeoutMsec: args.timeoutMsec, channelNames})
         const onFoundCallbacks: ((result: FindFileResult) => void)[] = []
         const onFinishedCallbacks: (() => void)[] = []
         onResponse((nodeId: NodeId, responseData: NodeToNodeResponseData) => {
@@ -238,8 +240,11 @@ class KacheryP2PNode {
         })
         this.#proxyConnectionsToServers.clear()
     }
-    httpPostJsonFunction() {
-        return this.p.httpPostJsonFunction
+    async httpPostJson(address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) {
+        return await this.p.httpPostJsonFunction(address, path, data, opts)
+    }
+    async httpGetDownload(address: Address, path: UrlPath) {
+        return await this.p.httpGetDownloadFunction(address, path)
     }
     dgramCreateSocket(args: {type: 'udp4', reuseAddr: boolean}) {
         return this.p.dgramCreateSocketFunction({type: args.type, reuseAddr: args.reuseAddr, nodeId: this.nodeId()})
@@ -250,7 +255,7 @@ class KacheryP2PNode {
     createWebSocketServer(port: Port) {
         return this.p.createWebSocketServerFunction(port, this.nodeId())
     }
-    async _loadFileAsync(args: {fileKey: FileKey, opts: {fromNode: NodeId | undefined, fromChannel: ChannelName | undefined}}): Promise<FindFileReturnValue> {
+    async _loadFileAsync(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): Promise<FindFileReturnValue> {
         const r = await this.#kacheryStorageManager.findFile(args.fileKey)
         if (r.found) {
             return r
@@ -273,12 +278,13 @@ class KacheryP2PNode {
             })
         })
     }
-    loadFile(args: {fileKey: FileKey, opts: {fromNode: NodeId | undefined, fromChannel: ChannelName | undefined}}): {
+    loadFile(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): {
         onFinished: (callback: () => void) => void,
         onProgress: (callback: (progress: LoadFileProgress) => void) => void,
         onError: (callback: (err: Error) => void) => void,
         cancel: () => void
     } {
+        console.log('------------------------------------ loadFile 1')
         const { fileKey, opts } = args
         const { fromNode, fromChannel } = opts
         const inProgressFiles: DownloadOptimizerFile[] = []
@@ -286,7 +292,9 @@ class KacheryP2PNode {
         const _onErrorCallbacks: ((err: Error) => void)[] = []
         const _onProgressCallbacks: ((progress: LoadFileProgress) => void)[] = []
         let complete = false
+        console.log('------------------------------------ loadFile 2')
         const _handleError = (err: Error) => {
+            console.log('------------------------------------ loadFile 3')
             if (complete) return
             complete = true
             inProgressFiles.forEach(f => {
@@ -295,19 +303,23 @@ class KacheryP2PNode {
             _onErrorCallbacks.forEach(cb => {cb(err)})
         }
         const _handleFinished = () => {
+            console.log('------------------------------------ loadFile 4')
             if (complete) return
             complete = true
             _onFinishedCallbacks.forEach(cb => {cb()})
         }
         const _handleProgress = (progress: LoadFileProgress) => {
+            console.log('------------------------------------ loadFile 5')
             if (complete) return
             _onProgressCallbacks.forEach(cb => {cb(progress)})
         }
         const _cancel = () => {
+            console.log('------------------------------------ loadFile 6')
             _handleError(Error('Cancelled'))
         }
         (async () => {
             try {
+                console.log('------------------------------------ loadFile 7')
                 if (fileKey.manifestSha1) {
                     const manifestFileKey = {sha1: fileKey.manifestSha1}
                     const manifestR = await this._loadFileAsync({fileKey: manifestFileKey, opts: {fromNode, fromChannel}})
@@ -391,7 +403,9 @@ class KacheryP2PNode {
                     }
                 }
                 else {
+                    console.log('------------------------------------ loadFile 8')
                     let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null
+                    console.log('------------ adding file', fileKey, fileSize)
                     const f = this.#downloadOptimizer.addFile(fileKey, fileSize)
                     f.incrementNumPointers()
                     inProgressFiles.push(f)
@@ -404,6 +418,23 @@ class KacheryP2PNode {
                     f.onFinished(() => {
                         _handleFinished()
                     })
+                    if (opts.fromNode) {
+                        console.log('------------- setting provider node', opts.fromNode.slice(0, 6))
+                        this.#downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: opts.fromNode})
+                    }
+                    else {
+                        const ff = this.findFile({fileKey, timeoutMsec: durationMsec(3000), fromChannel: opts.fromChannel})
+                        let atLeastOneProviderFound = false
+                        ff.onFound(result => {
+                            this.#downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: result.nodeId})
+                            atLeastOneProviderFound = true
+                        })
+                        ff.onFinished(() => {
+                            if (!atLeastOneProviderFound) {
+                                _handleError(Error('File not found'))
+                            }
+                        })
+                    }
                 }
             }
             catch(err) {
@@ -678,11 +709,12 @@ class KacheryP2PNode {
         }
     }
     streamFileData(nodeId: NodeId, streamId: StreamId): StreamFileDataOutput {
+        console.log('-------------- stream file data', nodeId.slice(0, 6), this.#nodeId.slice(0, 6))
         if (nodeId !== this.#nodeId) {
             // redirect to a different node
             const p = this.#proxyConnectionsToClients.get(nodeId)
             if (!p) {
-                throw Error('No proxy connection to node.')
+                throw Error(`No proxy connection to node: ${nodeId.slice(0, 6)} <> ${this.#nodeId.slice(0, 6)}`)
             }
             return p.streamFileData(streamId)
         }
@@ -722,7 +754,11 @@ class KacheryP2PNode {
         }
         const s = this.#downloadStreamInfos.get(streamId)
         if (!s) {
-            throw Error('Unable to find download info for stream.')
+            throw Error(`Unable to find download info for stream: ${streamId}: (node: ${this.#nodeId.slice(0, 6)})`)
+        }
+        const {startByte, endByte} = s
+        if (endByte === null) {
+            throw Error('Unexpected')
         }
         (async () => {
             if (complete) return
@@ -731,7 +767,7 @@ class KacheryP2PNode {
                 try {
                     if (complete) return
                     const readStream = fs.createReadStream(localPath.toString(), {encoding: 'binary', start: Number(byteOffset) + Number(s.startByte), end: Number(byteOffset) + Number(s.endByte)})
-                    _handleStarted(byteCount(byteCountToNumber(s.endByte) - byteCountToNumber(s.startByte)))
+                    _handleStarted(byteCount(byteCountToNumber(endByte) - byteCountToNumber(startByte)))
                     _onCancel(() => {
                         readStream.close()
                     })
@@ -832,10 +868,13 @@ class KacheryP2PNode {
         }
     }
     async _handleDownloadFileDataRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: DownloadFileDataRequestData}): Promise<DownloadFileDataResponseData> {
-        const { fileKey, startByte, endByte } = requestData
+        let { fileKey, startByte, endByte } = requestData
         if ((byteCountToNumber(startByte) < 0) || ((endByte !== null) && (byteCountToNumber(startByte) >= byteCountToNumber(endByte)))) {
             return {
                 requestType: 'downloadFileData',
+                fileKey,
+                startByte,
+                endByte: endByte === null ? byteCount(0): endByte,
                 success: false,
                 streamId: null,
                 errorMessage: errorMessage('Invalid start/end bytes')
@@ -845,6 +884,9 @@ class KacheryP2PNode {
         if (!found) {
             return {
                 requestType: 'downloadFileData',
+                fileKey,
+                startByte,
+                endByte: endByte === null ? byteCount(0): endByte,
                 success: false,
                 streamId: null,
                 errorMessage: errorMessage('Unable to find file')
@@ -853,18 +895,30 @@ class KacheryP2PNode {
         if (size === null) {
             throw Error('Unexpected')
         }
+        if (endByte === null) {
+            endByte = size
+        }
         if (endByte > size) {
             return {
                 requestType: 'downloadFileData',
+                fileKey,
+                startByte,
+                endByte: endByte === null ? byteCount(0): endByte,
                 success: false,
                 streamId: null,
                 errorMessage: errorMessage('Start/end bytes out of range')
             }
         }
         const streamId = createStreamId()
-        this.#downloadStreamInfos.set(streamId, requestData)
+        this.#downloadStreamInfos.set(streamId, {
+            ...requestData,
+            endByte
+        })
         return {
             requestType: 'downloadFileData',
+            fileKey,
+            startByte,
+            endByte,
             success: true,
             streamId,
             errorMessage: null
@@ -920,6 +974,11 @@ const testKeyPair = (keyPair: KeyPair) => {
     if (hexToPrivateKey(privateKeyToHex(keyPair.privateKey)) !== keyPair.privateKey) {
         throw new Error('Problem testing public/private keys. Error converting private key to/from hex.')
     }
+}
+
+export const readJsonFile = async (path: string) => {
+    const txt = await fs.promises.readFile(path, 'utf-8');
+    return JSON.parse(txt);
 }
 
 function str(x: any): string {return x as string}

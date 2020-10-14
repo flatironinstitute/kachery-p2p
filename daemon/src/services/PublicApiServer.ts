@@ -7,7 +7,7 @@ import start_http_server from '../common/start_http_server';
 import { sleepMsec } from '../common/util';
 import { Address, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, _validateObject } from '../interfaces/core';
 import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
-import KacheryP2PNode from '../KacheryP2PNode';
+import KacheryP2PNode, { StreamFileDataOutput } from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
 import { ByteCount } from '../udp/UdpCongestionManager';
 
@@ -146,6 +146,24 @@ export default class PublicApiServer {
         }
         else {
             throw Error(`mock unexpected path: ${path}`)
+        }
+    }
+    async mockGetDownload(path: string): Promise<StreamFileDataOutput> {
+        if (path.startsWith('/download/')) {
+            const vals = path.split('/')
+            const nodeId = vals[2]
+            const streamId = vals[3]
+            console.log('------------------- test', nodeId.slice(0, 6), streamId)
+            if (!isNodeId(nodeId)) {
+                throw Error('Invalid node id in mock /download')
+            }
+            if (!isStreamId(streamId)) {
+                throw Error('Invalid stream id in mock /download')
+            }
+            return this.#node.streamFileData(nodeId, streamId)
+        }
+        else {
+            throw Error(`mock get download unexpected path: ${path}`)
         }
     }
     async _probe(): Promise<JSONObject> {

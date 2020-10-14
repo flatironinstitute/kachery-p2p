@@ -6,8 +6,8 @@ import { Socket } from 'net';
 import { action } from '../common/action';
 import start_http_server from '../common/start_http_server';
 import { sleepMsec } from '../common/util';
-import { ChannelName, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isFeedId, isFeedName, isFileKey, isJSONObject, isNodeId, isNumber, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
-import KacheryP2PNode from '../KacheryP2PNode';
+import { ChannelName, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isFeedId, isFeedName, isFileKey, isJSONObject, isNodeId, isNull, isNumber, isOneOf, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
+import KacheryP2PNode, { LoadFileProgress } from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
 import { DurationMsec, isDurationMsec } from '../udp/UdpCongestionManager';
 import { ApiProbeResponse } from './PublicApiServer';
@@ -29,12 +29,14 @@ interface Res {
 
 export interface ApiFindFileRequest {
     fileKey: FileKey,
-    timeoutMsec: DurationMsec
+    timeoutMsec: DurationMsec,
+    fromChannel: ChannelName | null
 }
 const isApiFindFileRequest = (x: any): x is ApiFindFileRequest => {
     return _validateObject(x, {
         fileKey: isFileKey,
-        timeoutMsec: isDurationMsec
+        timeoutMsec: isDurationMsec,
+        fromChannel: isOneOf([isNull, isChannelName])
     });
 }
 
@@ -239,6 +241,14 @@ export default class DaemonApiServer {
             throw Error(`mock unexpected path: ${path}`)
         }
     }
+    mockPostLoadFile(data: JSONObject): {
+        onFinished: (callback: () => void) => void,
+        onProgress: (callback: (progress: LoadFileProgress) => void) => void,
+        onError: (callback: (err: Error) => void) => void,
+        cancel: () => void
+    } {
+        return this._loadFile(data)
+    }
     async mockPostFindFile(reqData: ApiFindFileRequest): Promise<{
         onFound: (callback: (result: FindFileResult) => void) => void;
         onFinished: (callback: () => void) => void;
@@ -303,31 +313,12 @@ export default class DaemonApiServer {
         });
     }
     async _findFile(reqData: ApiFindFileRequest) {
-        const { fileKey, timeoutMsec } = reqData;
-        return this.#node.findFile({fileKey, timeoutMsec});
+        const { fileKey, timeoutMsec, fromChannel } = reqData;
+        return this.#node.findFile({fileKey, timeoutMsec, fromChannel});
     }
     // /loadFile - load a file from remote kachery node(s) and store in kachery storage
     async _apiLoadFile(req: Req, res: Res) {
-        interface ApiLoadFileRequest {
-            fileKey: FileKey,
-            fromNode?: NodeId,
-            fromChannel?: ChannelName
-        }
-        const isApiLoadFileRequest = (x: any): x is ApiLoadFileRequest => {
-            return _validateObject(x, {
-                fileKey: isFileKey,
-                fromNode: optional(isNodeId),
-                fromChannel: optional(isChannelName)
-            });
-        }
-        const reqData = req.body;
-        if (!isApiLoadFileRequest(reqData)) throw Error('Invalid request in _apiLoadFile');
-
-        const { fileKey, fromNode, fromChannel } = reqData;
-        const x = this.#node.loadFile({
-            fileKey: fileKey,
-            opts: {fromNode, fromChannel}
-        });
+        const x = this._loadFile(req.body)
         const jsonSocket = new JsonSocket(res as any as Socket)
         let isDone = false;
         // todo: track progress
@@ -357,6 +348,28 @@ export default class DaemonApiServer {
             isDone = true;
             x.cancel();
         });
+    }
+    _loadFile(reqData: JSONObject) {
+        interface ApiLoadFileRequest {
+            fileKey: FileKey,
+            fromNode: NodeId | null,
+            fromChannel: ChannelName | null
+        }
+        const isApiLoadFileRequest = (x: any): x is ApiLoadFileRequest => {
+            return _validateObject(x, {
+                fileKey: isFileKey,
+                fromNode: optional(isNodeId),
+                fromChannel: optional(isChannelName)
+            });
+        }
+        if (!isApiLoadFileRequest(reqData)) throw Error('Invalid request in _apiLoadFile');
+
+        const { fileKey, fromNode, fromChannel } = reqData;
+        const x = this.#node.loadFile({
+            fileKey: fileKey,
+            opts: {fromNode, fromChannel}
+        });
+        return x
     }
     // /feed/createFeed - create a new writeable feed on this node
     async _feedApiCreateFeed(req: Req, res: Res) {

@@ -1,8 +1,8 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
 import { urlPath } from "./common/httpPostJson";
 import { Address, ChannelName, ChannelNodeInfo, createRequestId, FileKey, NodeId, nodeIdToPublicKey, nowTimestamp } from "./interfaces/core";
-import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData } from "./interfaces/NodeToNodeRequest";
-import KacheryP2PNode from "./KacheryP2PNode";
+import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StreamId } from "./interfaces/NodeToNodeRequest";
+import KacheryP2PNode, { StreamFileDataOutput } from "./KacheryP2PNode";
 import { protocolVersion } from "./protocolVersion";
 import { ByteCount, DurationMsec } from "./udp/UdpCongestionManager";
 
@@ -133,6 +133,17 @@ class RemoteNode {
             return null
         }
     }
+    _determineDefaultDownloadFileDataMethod(): SendRequestMethod | null {
+        if (this._getRemoteNodeHttpAddress()) {
+            return 'http'
+        }
+        else if ((this.#node.publicUdpSocketServer()) && ((this.#bootstrapUdpSocketAddress) || (this.getLocalUdpAddress()))) {
+            return 'udp'
+        }
+        else {
+            return null
+        }
+    }
     canSendRequest(method: SendRequestMethod): boolean {
         if (method === 'default') {
             const m = this._determineDefaultSendRequestMethod()
@@ -161,6 +172,28 @@ class RemoteNode {
             return false
         }
     }
+    async downloadFileData(streamId: StreamId, opts: {method: SendRequestMethod}): Promise<StreamFileDataOutput> {
+        let method: SendRequestMethod | null = opts.method
+        if (method === 'default') {
+            method = this._determineDefaultDownloadFileDataMethod()
+            if (!method) {
+                throw Error('No method available to download stream')
+            }
+        }
+        if (method === 'http') {
+            const address = this._getRemoteNodeHttpAddress();
+            if (!address) {
+                throw Error('Unable to download file data... no http address found.')
+            }
+            return await this.#node.httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${streamId}`))
+        }
+        else if (method === 'udp') {
+            throw Error('not yet implemented')
+        }
+        else {
+            throw Error ('Unexpected')
+        }
+    }
     async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
         const request = this._formRequestFromRequestData(requestData);
         const requestId = request.body.requestId;
@@ -179,7 +212,7 @@ class RemoteNode {
             if (!address) {
                 throw Error('Unable to send request... no http address found.')
             }
-            const R = await this.#node.httpPostJsonFunction()(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
+            const R = await this.#node.httpPostJson(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
             if (!isNodeToNodeResponse(R)) {
                 // todo: in this situation, do we ban the node?
                 throw Error('Invalid response from node.');

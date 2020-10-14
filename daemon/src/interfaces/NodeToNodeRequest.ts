@@ -327,7 +327,7 @@ export interface DownloadFileDataRequestData {
     requestType: 'downloadFileData',
     fileKey: FileKey,
     startByte: ByteCount,
-    endByte: ByteCount
+    endByte: ByteCount | null
 }
 export const isDownloadFileDataRequestData = (x: any): x is DownloadFileDataRequestData => {
     return _validateObject(x, {
@@ -339,6 +339,9 @@ export const isDownloadFileDataRequestData = (x: any): x is DownloadFileDataRequ
 }
 export interface DownloadFileDataResponseData {
     requestType: 'downloadFileData',
+    fileKey: FileKey,
+    startByte: ByteCount,
+    endByte: ByteCount,
     success: boolean,
     streamId: StreamId | null,
     errorMessage: ErrorMessage | null
@@ -346,6 +349,9 @@ export interface DownloadFileDataResponseData {
 export const isDownloadFileDataResponseData = (x: any): x is DownloadFileDataResponseData => {
     return _validateObject(x, {
         requestType: isEqualTo('downloadFileData'),
+        fileKey: isFileKey,
+        startByte: isByteCount,
+        endByte: isByteCount,
         success: isBoolean,
         streamId: isOneOf([isNull, isStreamId]),
         errorMessage: isOneOf([isNull, isErrorMessage])

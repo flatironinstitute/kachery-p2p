@@ -6,7 +6,7 @@ import fs from 'fs';
 import os from 'os';
 import WebSocket from 'ws';
 import yargs from 'yargs';
-import { httpPostJson } from './common/httpPostJson';
+import { httpGetDownload, httpPostJson } from './common/httpPostJson';
 import { Address, isAddress, isChannelName, isHostName, isPort, NodeId, Port } from './interfaces/core';
 import { KacheryStorageManager, LocalFilePath } from './kacheryStorage/KacheryStorageManager';
 import { isBuffer } from './proxyConnections/ProxyConnectionToClient';
@@ -227,6 +227,7 @@ function main() {
           label,
           bootstrapAddresses,
           httpPostJsonFunction: httpPostJson,
+          httpGetDownloadFunction: httpGetDownload,
           dgramCreateSocketFunction: dgramCreateSocket,
           createWebSocketServerFunction: createWebSocketServer,
           createWebSocketFunction: createWebSocket,
