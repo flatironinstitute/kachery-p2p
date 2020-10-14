@@ -1,10 +1,10 @@
 import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
+import { DataStreamyProgress } from '../../src/common/DataStreamy';
 import { sleepMsec } from '../../src/common/util';
 import DownloadOptimizer from '../../src/downloadOptimizer/DownloadOptimizer';
 import DownloadOptimizerJob from '../../src/downloadOptimizer/DownloadOptimizerJob';
 import { FileKey, NodeId, Sha1Hash } from '../../src/interfaces/core';
-import { LoadFileProgress } from '../../src/KacheryP2PNode';
 import { byteCount } from '../../src/udp/UdpCongestionManager';
 
 const exampleFileKey: FileKey = {
@@ -21,12 +21,12 @@ const exampleNodeId2: NodeId = 'example-node-id-2' as any as NodeId
 
 class MockDownloaderCreator {
     createDownloader(args: {fileKey: FileKey, nodeId: NodeId}) {
-        const _onProgressCallbacks: ((progress: LoadFileProgress) => void)[] = []
+        const _onProgressCallbacks: ((progress: DataStreamyProgress) => void)[] = []
         const _onFinishedCallbacks: (() => void)[] = []
         const _onErrorCallbacks: ((err: Error) => void)[] = []
         const _cancel = () => {}
         const downloader = {
-            onProgress: (callback: (progress: LoadFileProgress) => void) => {_onProgressCallbacks.push(callback)},
+            onProgress: (callback: (progress: DataStreamyProgress) => void) => {_onProgressCallbacks.push(callback)},
             onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
             onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
             cancel: _cancel
@@ -42,10 +42,9 @@ class MockDownloaderCreator {
             }
             else {
                 _onProgressCallbacks.forEach(cb => {
-                    const progress: LoadFileProgress = {
+                    const progress: DataStreamyProgress = {
                         bytesLoaded: byteCount(100),
-                        bytesTotal: byteCount(100),
-                        nodeId: args.nodeId
+                        bytesTotal: byteCount(100)
                     }
                     cb(progress)
                 })

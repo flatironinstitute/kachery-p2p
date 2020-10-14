@@ -1,12 +1,11 @@
+import DataStreamy, { DataStreamyProgress } from "../common/DataStreamy";
 import { FileKey } from "../interfaces/core";
-import { LoadFileProgress } from '../KacheryP2PNode';
 import { ByteCount, byteCount } from "../udp/UdpCongestionManager";
-import { Downloader } from "./DownloaderCreator";
 
 export default class DownloadOptimizerJob {
     #fileKey: FileKey
-    #currentDownloader: Downloader | null = null
-    #onProgressCallbacks: ((progress: LoadFileProgress) => void)[] = []
+    #currentDownloader: DataStreamy | null = null
+    #onProgressCallbacks: ((progress: DataStreamyProgress) => void)[] = []
     #onErrorCallbacks: ((err: Error) => void)[] = []
     #onFinishedCallbacks: (() => void)[] = []
     #numPointers = 0
@@ -42,7 +41,7 @@ export default class DownloadOptimizerJob {
     bytesLoaded() {
         return this.#bytesLoaded
     }
-    onProgress(cb: (progress: LoadFileProgress) => void) {
+    onProgress(cb: (progress: DataStreamyProgress) => void) {
         this.#onProgressCallbacks.push(cb)
     }
     onError(cb: (err: Error) => void) {
@@ -51,13 +50,13 @@ export default class DownloadOptimizerJob {
     onFinished(cb: () => void) {
         this.#onFinishedCallbacks.push(cb);
     }
-    setDownloader(downloader: Downloader) {
+    setDownloader(downloader: DataStreamy) {
         if (this.#currentDownloader !== null) {
             /* istanbul ignore next */
             throw Error('Unexpected: job already has a downloader')
         }
         this.#currentDownloader = downloader
-        downloader.onProgress((progress: LoadFileProgress) => {
+        downloader.onProgress((progress: DataStreamyProgress) => {
             this.#bytesLoaded = progress.bytesLoaded
             this.#onProgressCallbacks.forEach(cb => cb(progress));
         });

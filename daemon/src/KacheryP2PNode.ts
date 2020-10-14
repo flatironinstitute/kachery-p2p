@@ -1,5 +1,5 @@
-import fs from 'fs'
-import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util'
+import { getSignature, publicKeyToHex, verifySignature } from './common/crypto_util'
+import DataStreamy, { DataStreamyProgress } from './common/DataStreamy'
 import GarbageMap from './common/GarbageMap'
 import { UrlPath } from './common/httpPostJson'
 import { sha1MatchesFileKey } from './common/util'
@@ -8,10 +8,9 @@ import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import DownloadOptimizerFile from './downloadOptimizer/DownloadOptimizerJob'
 import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
-import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, FeedId, FileKey, FindFileResult, FindLiveFeedResult, HostName, isAddress, isArrayOf, isKeyPair, isSha1Hash, JSONObject, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, _validateObject } from './interfaces/core'
+import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, FeedId, FileKey, FindFileResult, FindLiveFeedResult, HostName, isAddress, isArrayOf, isSha1Hash, JSONObject, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, _validateObject } from './interfaces/core'
 import { AnnounceRequestData, AnnounceResponseData, CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData, createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, GetChannelInfoRequestData, GetChannelInfoResponseData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isProbeRequestData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, ProbeRequestData, ProbeResponseData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
-import { concatenateFilesIntoTemporaryFile, moveFileIntoKacheryStorage } from './kacheryStorage/concatenateFiles'
-import { FindFileReturnValue, LocalFilePath } from './kacheryStorage/KacheryStorageManager'
+import { FindFileReturnValue } from './kacheryStorage/KacheryStorageManager'
 import { daemonVersion, protocolVersion } from './protocolVersion'
 import { ProxyConnectionToClient } from './proxyConnections/ProxyConnectionToClient'
 import { ProxyConnectionToServer } from './proxyConnections/ProxyConnectionToServer'
@@ -27,20 +26,6 @@ export interface DgramRemoteInfo {
     family: 'IPv4' | 'IPv6'
     port: number
     size: number
-}
-
-export type StreamFileDataOutput = {
-    onStarted: (callback: (size: ByteCount) => void) => void,
-    onData: (callback: (data: Buffer) => void) => void,
-    onFinished: (callback: () => void) => void,
-    onError: (callback: (err: Error) => void) => void,
-    cancel: () => void
-}
-
-export interface LoadFileProgress {
-    bytesLoaded: ByteCount,
-    bytesTotal: ByteCount,
-    nodeId: NodeId | null
 }
 
 interface FileManifestChunk {
@@ -80,7 +65,7 @@ export interface DgramSocket {
 export type DgramCreateSocketFunction = (args: {type: 'udp4', reuseAddr: boolean, nodeId: NodeId}) => DgramSocket
 
 export interface KacheryStorageManagerInterface {
-    findFile: (fileKey: FileKey) => Promise<FindFileReturnValue>
+    findFile: (fileKey: FileKey, returnDataStream: boolean) => Promise<FindFileReturnValue>
 }
 
 export type CreateWebSocketServerFunction = (port: Port, nodeId: NodeId) => WebSocketServerInterface
@@ -102,7 +87,7 @@ class KacheryP2PNode {
     #publicUdpSocketServer: PublicUdpSocketServer | null = null
     #downloadOptimizer: DownloadOptimizer
     constructor(private p : {
-        configDir: LocalFilePath,
+        keyPair: KeyPair,
         verbose: number,
         hostName: HostName | null,
         httpListenPort: Port | null,
@@ -112,7 +97,7 @@ class KacheryP2PNode {
         bootstrapAddresses: Address[] | null,
         channelNames: ChannelName[],
         httpPostJsonFunction: ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>),
-        httpGetDownloadFunction: ((address: Address, path: UrlPath) => Promise<StreamFileDataOutput>),
+        httpGetDownloadFunction: ((address: Address, path: UrlPath) => Promise<DataStreamy>),
         dgramCreateSocketFunction: DgramCreateSocketFunction,
         createWebSocketServerFunction: CreateWebSocketServerFunction,
         createWebSocketFunction: CreateWebSocketFunction,
@@ -124,8 +109,7 @@ class KacheryP2PNode {
             multicastUdpAddress: string | null
         }
     }) {
-        const { publicKey, privateKey } = _loadKeypair(this.p.configDir) // The keypair for signing messages and the public key is used as the node id
-        this.#keyPair = {publicKey, privateKey} // the keypair
+        this.#keyPair = p.keyPair // the keypair
         this.#nodeId = publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey)) // get the node id from the public key
         this.#kacheryStorageManager = p.kacheryStorageManager
         this.#liveFeedSubscriptionManager = new LiveFeedSubscriptionManager()
@@ -256,7 +240,7 @@ class KacheryP2PNode {
         return this.p.createWebSocketServerFunction(port, this.nodeId())
     }
     async _loadFileAsync(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): Promise<FindFileReturnValue> {
-        const r = await this.#kacheryStorageManager.findFile(args.fileKey)
+        const r = await this.#kacheryStorageManager.findFile(args.fileKey, false)
         if (r.found) {
             return r
         }
@@ -267,7 +251,7 @@ class KacheryP2PNode {
             })
             onFinished(() => {
                 (async () => {
-                    const r = await this.#kacheryStorageManager.findFile(args.fileKey)
+                    const r = await this.#kacheryStorageManager.findFile(args.fileKey, false)
                     if (r.found) {
                         resolve(r)
                     }
@@ -278,45 +262,18 @@ class KacheryP2PNode {
             })
         })
     }
-    loadFile(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): {
-        onFinished: (callback: () => void) => void,
-        onProgress: (callback: (progress: LoadFileProgress) => void) => void,
-        onError: (callback: (err: Error) => void) => void,
-        cancel: () => void
-    } {
+    loadFile(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): DataStreamy {
         console.log('------------------------------------ loadFile 1')
         const { fileKey, opts } = args
         const { fromNode, fromChannel } = opts
         const inProgressFiles: DownloadOptimizerFile[] = []
-        const _onFinishedCallbacks: (() => void)[] = []
-        const _onErrorCallbacks: ((err: Error) => void)[] = []
-        const _onProgressCallbacks: ((progress: LoadFileProgress) => void)[] = []
-        let complete = false
         console.log('------------------------------------ loadFile 2')
-        const _handleError = (err: Error) => {
-            console.log('------------------------------------ loadFile 3')
-            if (complete) return
-            complete = true
+        const ret = new DataStreamy()
+        ret.onComplete(() => {
             inProgressFiles.forEach(f => {
                 f.decrementNumPointers()
             })
-            _onErrorCallbacks.forEach(cb => {cb(err)})
-        }
-        const _handleFinished = () => {
-            console.log('------------------------------------ loadFile 4')
-            if (complete) return
-            complete = true
-            _onFinishedCallbacks.forEach(cb => {cb()})
-        }
-        const _handleProgress = (progress: LoadFileProgress) => {
-            console.log('------------------------------------ loadFile 5')
-            if (complete) return
-            _onProgressCallbacks.forEach(cb => {cb(progress)})
-        }
-        const _cancel = () => {
-            console.log('------------------------------------ loadFile 6')
-            _handleError(Error('Cancelled'))
-        }
+        });
         (async () => {
             try {
                 console.log('------------------------------------ loadFile 7')
@@ -326,17 +283,19 @@ class KacheryP2PNode {
                     if (!manifestR.found) {
                         throw Error('Unexpected... loadFileAsync should have thrown an error if not found')
                     }
-                    const { localPath: manifestPath } = manifestR
-                    if (manifestPath === null) {
+                    const { dataStream } = manifestR
+                    if (dataStream === null) {
                         throw Error('unexpected')
                     }
-                    const manifest = await readJsonFile(manifestPath.toString())
+                    const manifestBuf = await dataStream.allData().toString()
+                    const manifest = JSON.stringify(manifestBuf)
                     if (!isFileManifest(manifest)) {
                         throw new Error('Invalid manifest file')
                     }
                     if (!sha1MatchesFileKey({sha1: manifest.sha1, fileKey})) {
                         throw new Error(`Manifest sha1 does not match file key: ${manifest.sha1}`)
                     }
+                    ret._start(manifest.size)
                     let numComplete = 0
                     manifest.chunks.forEach((chunk: FileManifestChunk) => {
                         const chunkFileKey: FileKey = {
@@ -353,18 +312,18 @@ class KacheryP2PNode {
                         f.incrementNumPointers()
                         inProgressFiles.push(f)
                         f.onError(err => {
-                            _handleError(err)
+                            ret._error(err)
                         })
-                        f.onProgress((progress: LoadFileProgress) => {
+                        f.onProgress((progress: DataStreamyProgress) => {
                             _updateProgressForManifestLoad()
                         })
                         f.onFinished(() => {
                             numComplete ++
                             if (numComplete === manifest.chunks.length) {
                                 _concatenateChunks().then(() => {
-                                    _handleFinished()
+                                    ret._end()
                                 }).catch((err: Error) => {
-                                    _handleError(err)
+                                    ret._error(err)
                                 })
                             }
                         })
@@ -375,31 +334,28 @@ class KacheryP2PNode {
                         inProgressFiles.forEach(f => {
                             bytesLoaded += byteCountToNumber(f.bytesLoaded())
                         })
-                        _handleProgress({
-                            bytesLoaded: byteCount(bytesLoaded),
-                            bytesTotal: manifest.size,
-                            nodeId: fromNode || null
-                        })
+                        ret._reportBytesLoaded(byteCount(bytesLoaded))
                     }
                     const _concatenateChunks = async () => {
-                        const chunkPaths: LocalFilePath[] = []
-                        for (let chunk of manifest.chunks) {
-                            const r = await this.#kacheryStorageManager.findFile({sha1: chunk.sha1})
-                            if (!r.found) {
-                                throw Error('Unexpected. Unable to find chunk in kachery storage after loading')
-                            }
-                            if (!r.localPath) {
-                                throw Error('Unexpected')
-                            }
-                            chunkPaths.push(r.localPath)
-                        }
-                        const {sha1, path: concatPath} = await concatenateFilesIntoTemporaryFile(chunkPaths)
-                        if (sha1 !== manifest.sha1) {
-                            fs.unlinkSync(concatPath.toString())
-                            throw Error('Unexpected SHA-1 of concatenated file.')
-                        }
-                        moveFileIntoKacheryStorage({path: concatPath, sha1: manifest.sha1})
-                        _handleFinished()
+                        // todo
+                        // const chunkPaths: LocalFilePath[] = []
+                        // for (let chunk of manifest.chunks) {
+                        //     const r = await this.#kacheryStorageManager.findFile({sha1: chunk.sha1}, false)
+                        //     if (!r.found) {
+                        //         throw Error('Unexpected. Unable to find chunk in kachery storage after loading')
+                        //     }
+                        //     if (!r.dataStream) {
+                        //         throw Error('Unexpected')
+                        //     }
+                        //     chunkPaths.push(r.localPath)
+                        // }
+                        // const {sha1, path: concatPath} = await concatenateFilesIntoTemporaryFile(chunkPaths)
+                        // if (sha1 !== manifest.sha1) {
+                        //     fs.unlinkSync(concatPath.toString())
+                        //     throw Error('Unexpected SHA-1 of concatenated file.')
+                        // }
+                        // moveFileIntoKacheryStorage({path: concatPath, sha1: manifest.sha1})
+                        // ret._end()
                     }
                 }
                 else {
@@ -410,13 +366,13 @@ class KacheryP2PNode {
                     f.incrementNumPointers()
                     inProgressFiles.push(f)
                     f.onError(err => {
-                        _handleError(err)
+                        ret._error(err)
                     })
-                    f.onProgress((progress: LoadFileProgress) => {
-                        _handleProgress(progress)
+                    f.onProgress((progress: DataStreamyProgress) => {
+                        ret._reportBytesLoaded(progress.bytesLoaded)
                     })
                     f.onFinished(() => {
-                        _handleFinished()
+                        ret._end()
                     })
                     if (opts.fromNode) {
                         console.log('------------- setting provider node', opts.fromNode.slice(0, 6))
@@ -431,22 +387,18 @@ class KacheryP2PNode {
                         })
                         ff.onFinished(() => {
                             if (!atLeastOneProviderFound) {
-                                _handleError(Error('File not found'))
+                                ret._error(Error('File not found'))
                             }
                         })
                     }
                 }
             }
             catch(err) {
-                _handleError(err)
+                ret._error(err)
             }
         })()
-        return {
-            onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
-            onProgress: (callback: (progress: LoadFileProgress) => void) => {_onProgressCallbacks.push(callback)},
-            onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
-            cancel: _cancel
-        }
+        // todo: handle ret.onCancel ??
+        return ret
     }
     feedManager() {
         return this.#feedManager
@@ -708,7 +660,7 @@ class KacheryP2PNode {
             signature: getSignature(body, this.#keyPair)
         }
     }
-    streamFileData(nodeId: NodeId, streamId: StreamId): StreamFileDataOutput {
+    streamFileData(nodeId: NodeId, streamId: StreamId): DataStreamy {
         console.log('-------------- stream file data', nodeId.slice(0, 6), this.#nodeId.slice(0, 6))
         if (nodeId !== this.#nodeId) {
             // redirect to a different node
@@ -718,40 +670,7 @@ class KacheryP2PNode {
             }
             return p.streamFileData(streamId)
         }
-        const _onStartedCallbacks: ((size: ByteCount) => void)[] = []
-        const _onDataCallbacks: ((data: Buffer) => void)[] = []
-        const _onFinishedCallbacks: (() => void)[] = []
-        const _onErrorCallbacks: ((err: Error) => void)[] = []
-        const _onCancelCallbacks: (() => void)[] = []
-        let complete = false
-        let cancelled = false
-        const _cancel = () => {
-            if (cancelled) return
-            cancelled = true
-            _onCancelCallbacks.forEach(cb => {cb()})
-            _handleError(Error('Cancelled'))
-        }
-        const _onCancel = (callback: () => void) => {_onCancelCallbacks.push(callback)}
-        const _handleStarted = (size: ByteCount) => {
-            if (complete) return
-            _onStartedCallbacks.forEach(cb => {cb(size)})
-        }
-        const _handleError = (err: Error) => {
-            if (complete) return
-            complete = true
-            this.#downloadStreamInfos.delete(streamId)
-            _onErrorCallbacks.forEach(cb => {cb(err)})
-        }
-        const _handleFinished = () => {
-            if (complete) return
-            complete = true
-            this.#downloadStreamInfos.delete(streamId)
-            _onFinishedCallbacks.forEach(cb => {cb()})
-        }
-        const _handleData = (data: Buffer) => {
-            if (complete) return
-            _onDataCallbacks.forEach(cb => {cb(data)})
-        }
+
         const s = this.#downloadStreamInfos.get(streamId)
         if (!s) {
             throw Error(`Unable to find download info for stream: ${streamId}: (node: ${this.#nodeId.slice(0, 6)})`)
@@ -760,42 +679,30 @@ class KacheryP2PNode {
         if (endByte === null) {
             throw Error('Unexpected')
         }
+        const ret = new DataStreamy();
         (async () => {
-            if (complete) return
-            const {found, size, localPath, byteOffset} = await this.#kacheryStorageManager.findFile(s.fileKey)
-            if ((found) && (size !== null) && (localPath !== null) && (byteOffset !== null)) {
+            if (ret.isComplete()) return
+            const {found, size, dataStream} = await this.#kacheryStorageManager.findFile(s.fileKey, true)
+            if ((found) && (size !== null) && (dataStream !== null)) {
                 try {
-                    if (complete) return
-                    const readStream = fs.createReadStream(localPath.toString(), {encoding: 'binary', start: Number(byteOffset) + Number(s.startByte), end: Number(byteOffset) + Number(s.endByte)})
-                    _handleStarted(byteCount(byteCountToNumber(endByte) - byteCountToNumber(startByte)))
-                    _onCancel(() => {
-                        readStream.close()
+                    if (ret.isComplete()) return
+                    dataStream.onStarted(size => {ret._start(size)})
+                    ret._onCancel(() => {
+                        dataStream.cancel()
                     })
-                    readStream.on('data', (chunk: Buffer) => {
-                        _handleData(chunk)
-                    })
-                    readStream.on('end', () => {
-                        _handleFinished()
-                    })
-                    readStream.on('error', (err: Error) => {
-                        _handleError(err)
-                    })
+                    dataStream.onData(b => {ret._data(b)})
+                    dataStream.onFinished(() => {ret._end()})
+                    dataStream.onError(err => {ret._error(err)})
                 }
                 catch(err) {
-                    _handleError(err)
+                    ret._error(err)
                 }
             }
             else {
-                _handleError(Error('file not found'))
+                ret._error(Error('File not found'))
             }
         })()
-        return {
-            onStarted: (callback: (size: ByteCount) => void) => {_onStartedCallbacks.push(callback)},
-            onData: (callback: (data: Buffer) => void) => {_onDataCallbacks.push(callback)},
-            onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
-            onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
-            cancel: _cancel
-        }
+        return ret
     }
     async _handleProbeRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: ProbeRequestData}): Promise<ProbeResponseData> {
         const probeResponse: ApiProbeResponse = {
@@ -825,7 +732,7 @@ class KacheryP2PNode {
     }
     async _handleCheckForFileRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: CheckForFileRequestData}): Promise<CheckForFileResponseData> {
         const { fileKey } = requestData
-        const {found, size, localPath, byteOffset} = await this.#kacheryStorageManager.findFile(fileKey)
+        const {found, size} = await this.#kacheryStorageManager.findFile(fileKey, false)
         return {
             requestType: 'checkForFile',
             found,
@@ -880,7 +787,7 @@ class KacheryP2PNode {
                 errorMessage: errorMessage('Invalid start/end bytes')
             }
         }
-        const {found, size, localPath, byteOffset} = await this.#kacheryStorageManager.findFile(fileKey)
+        const {found, size} = await this.#kacheryStorageManager.findFile(fileKey, false)
         if (!found) {
             return {
                 requestType: 'downloadFileData',
@@ -924,61 +831,6 @@ class KacheryP2PNode {
             errorMessage: null
         }
     }
-}
-
-const _loadKeypair = (configDir: LocalFilePath): KeyPair => {
-    let keyPair
-    if (configDir.toString() === 'mock-config-dir') {
-        keyPair = createKeyPair()
-    }
-    else {
-        if (!fs.existsSync(configDir.toString())) {
-            throw Error(`Config directory does not exist: ${configDir}`)
-        }
-        const publicKeyPath = `${configDir.toString()}/public.pem`
-        const privateKeyPath = `${configDir.toString()}/private.pem`
-        if (fs.existsSync(publicKeyPath)) {
-            if (!fs.existsSync(privateKeyPath)) {
-                throw Error(`Public key file exists, but secret key file does not.`)
-            }
-        }
-        else {
-            const {publicKey, privateKey} = createKeyPair()
-            fs.writeFileSync(publicKeyPath, str(publicKey), {encoding: 'utf-8'})
-            fs.writeFileSync(privateKeyPath, str(privateKey), {encoding: 'utf-8'})
-            fs.chmodSync(privateKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
-        }
-        
-        keyPair = {
-            publicKey: fs.readFileSync(publicKeyPath, {encoding: 'utf-8'}),
-            privateKey: fs.readFileSync(privateKeyPath, {encoding: 'utf-8'}),
-        }
-    }
-    if (!isKeyPair(keyPair)) {
-        throw Error('Invalid keyPair')
-    }
-    testKeyPair(keyPair)
-    return keyPair
-}
-
-const testKeyPair = (keyPair: KeyPair) => {
-    const signature = getSignature({test: 1}, keyPair)
-    if (!verifySignature({test: 1} as JSONObject, signature, keyPair.publicKey)) {
-        throw new Error('Problem testing public/private keys. Error verifying signature.')
-    }
-    if (hexToPublicKey(publicKeyToHex(keyPair.publicKey)) !== keyPair.publicKey) {
-        console.warn(hexToPublicKey(publicKeyToHex(keyPair.publicKey)))
-        console.warn(keyPair.publicKey)
-        throw new Error('Problem testing public/private keys. Error converting public key to/from hex.')
-    }
-    if (hexToPrivateKey(privateKeyToHex(keyPair.privateKey)) !== keyPair.privateKey) {
-        throw new Error('Problem testing public/private keys. Error converting private key to/from hex.')
-    }
-}
-
-export const readJsonFile = async (path: string) => {
-    const txt = await fs.promises.readFile(path, 'utf-8');
-    return JSON.parse(txt);
 }
 
 function str(x: any): string {return x as string}

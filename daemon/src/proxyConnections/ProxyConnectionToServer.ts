@@ -1,10 +1,10 @@
 import { action } from '../common/action';
 import { getSignature, verifySignature } from '../common/crypto_util';
+import DataStreamy from '../common/DataStreamy';
 import GarbageMap from '../common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize } from '../common/util';
 import { Address, errorMessage, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp } from "../interfaces/core";
 import { isNodeToNodeRequest, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
-import { StreamFileDataOutput } from '../KacheryP2PNode';
 import { WebSocketInterface } from '../services/PublicWebSocketServer';
 import { durationMsec, DurationMsec } from '../udp/UdpCongestionManager';
 import { InitialMessageFromClient, InitialMessageFromClientBody, isInitialMessageFromServer, isMessageFromServer, isProxyStreamFileDataCancelRequest, isProxyStreamFileDataRequest, MessageFromClient, MessageFromServer, ProxyStreamFileDataCancelRequest, ProxyStreamFileDataRequest, ProxyStreamFileDataRequestId, ProxyStreamFileDataResponseDataMessage, ProxyStreamFileDataResponseErrorMessage, ProxyStreamFileDataResponseFinishedMessage, ProxyStreamFileDataResponseStartedMessage } from './ProxyConnectionToClient';
@@ -13,7 +13,7 @@ interface KacheryP2PNodeInterface {
     nodeId: () => NodeId
     keyPair: () => KeyPair
     handleNodeToNodeRequest: (request: NodeToNodeRequest) => Promise<NodeToNodeResponse>
-    streamFileData: (nodeId: NodeId, streamId: StreamId) => StreamFileDataOutput
+    streamFileData: (nodeId: NodeId, streamId: StreamId) => DataStreamy
     createWebSocket: (url: string, opts: {timeoutMsec: DurationMsec}) => WebSocketInterface
 }
 
@@ -149,8 +149,11 @@ export class ProxyConnectionToServer {
     }
     _handleProxyStreamFileDataRequest(request: ProxyStreamFileDataRequest) {
         const streamId = request.streamId
-        const {onStarted, onData, onFinished, onError, cancel} = this.#node.streamFileData(this.#node.nodeId(), streamId)
-        onStarted(size => {
+        const s = this.#node.streamFileData(this.#node.nodeId(), streamId)
+        s.onStarted(size => {
+            if (size === null) {
+                throw Error('unexpected.')
+            }
             const response: ProxyStreamFileDataResponseStartedMessage = {
                 messageType: 'started',
                 proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId,
@@ -158,7 +161,7 @@ export class ProxyConnectionToServer {
             }
             this._sendMessageToServer(response)
         })
-        onData(data => {
+        s.onData(data => {
             const response: ProxyStreamFileDataResponseDataMessage = {
                 messageType: 'data',
                 proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId,
@@ -166,14 +169,14 @@ export class ProxyConnectionToServer {
             }
             this._sendMessageToServer(response)
         })
-        onFinished(() => {
+        s.onFinished(() => {
             const response: ProxyStreamFileDataResponseFinishedMessage = {
                 messageType: 'finished',
                 proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId
             }
             this._sendMessageToServer(response)
         })
-        onError((err: Error) => {
+        s.onError((err: Error) => {
             const response: ProxyStreamFileDataResponseErrorMessage = {
                 messageType: 'error',
                 proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId,
@@ -181,7 +184,7 @@ export class ProxyConnectionToServer {
             }
             this._sendMessageToServer(response)
         })
-        this.#proxyStreamFileDataCancelCallbacks.set(request.proxyStreamFileDataRequestId, cancel)
+        this.#proxyStreamFileDataCancelCallbacks.set(request.proxyStreamFileDataRequestId, () => {s.cancel()})
     }
     _handleProxyStreamFileDataCancelRequest(request: ProxyStreamFileDataCancelRequest) {
         const cb = this.#proxyStreamFileDataCancelCallbacks.get(request.proxyStreamFileDataRequestId)

@@ -1,3 +1,5 @@
+import fs from 'fs';
+import DataStreamy from "../common/DataStreamy";
 import { FileKey } from "../interfaces/core";
 import { ByteCount, byteCount, byteCountToNumber } from "../udp/UdpCongestionManager";
 import { getLocalFileInfo } from "./kachery";
@@ -12,27 +14,46 @@ export const localFilePath = (p: string) => {
 export interface FindFileReturnValue {
     found: boolean,
     size: ByteCount | null,
-    localPath: LocalFilePath | null,
-    byteOffset: ByteCount | null
+    dataStream: DataStreamy | null
+}
+
+const createDataStreamForFile = (path: LocalFilePath, offset: ByteCount, size: ByteCount) => {
+    const readStream = fs.createReadStream(path.toString(), {encoding: 'binary', start: byteCountToNumber(offset), end: byteCountToNumber(offset) + byteCountToNumber(size)})
+    const ret = new DataStreamy()
+    ret._start(size)
+    readStream.on('data', (chunk: Buffer) => {
+        ret._data(chunk)
+    })
+    readStream.on('end', () => {
+        ret._end()
+    })
+    readStream.on('error', (err: Error) => {
+        ret._error(err)
+    })
+    return ret
 }
 
 export class KacheryStorageManager {
     constructor() {
         
     }
-    async findFile(fileKey: FileKey): Promise<FindFileReturnValue> {
+    async findFile(fileKey: FileKey, returnStream: boolean): Promise<FindFileReturnValue> {
         if (fileKey.sha1) {
             const {path: filePath, size: fileSize} = await getLocalFileInfo(fileKey.sha1);
-            if (filePath) {
-                return {found: true, size: fileSize, localPath: localFilePath(filePath), byteOffset: byteCount(0)};
+            if ((filePath) && (fileSize !== null)) {
+                const dataStream = returnStream ? createDataStreamForFile(localFilePath(filePath), byteCount(0), fileSize) : null
+                return {found: true, size: fileSize, dataStream}
             }
         }
         if (fileKey.chunkOf) {
-            const {found, size, localPath, byteOffset: offset1} = await this.findFile(fileKey.chunkOf.fileKey);
-            if ((found) && (localPath !== null) && (offset1 !== null))  {
-                return {found: true, size: byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)), localPath, byteOffset: byteCount(byteCountToNumber(offset1) + byteCountToNumber(fileKey.chunkOf.startByte))}
+            const {path: filePath, size: fileSize} = await getLocalFileInfo(fileKey.chunkOf.fileKey.sha1)
+            if (filePath)  {
+                const offset = fileKey.chunkOf.startByte
+                const size = byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte))
+                const dataStream = returnStream ? createDataStreamForFile(localFilePath(filePath), offset, size) : null
+                return {found: true, size, dataStream }
             }
         }
-        return {found: false, size: null, localPath: null, byteOffset: null}
+        return {found: false, size: null, dataStream: null}
     }
 }

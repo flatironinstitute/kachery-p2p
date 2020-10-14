@@ -4,10 +4,11 @@ import https from 'https';
 import JsonSocket from 'json-socket';
 import { Socket } from 'net';
 import { action } from '../common/action';
+import { DataStreamyProgress } from '../common/DataStreamy';
 import start_http_server from '../common/start_http_server';
 import { sleepMsec } from '../common/util';
 import { ChannelName, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isFeedId, isFeedName, isFileKey, isJSONObject, isNodeId, isNull, isNumber, isOneOf, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
-import KacheryP2PNode, { LoadFileProgress } from '../KacheryP2PNode';
+import KacheryP2PNode from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
 import { DurationMsec, isDurationMsec } from '../udp/UdpCongestionManager';
 import { ApiProbeResponse } from './PublicApiServer';
@@ -243,7 +244,7 @@ export default class DaemonApiServer {
     }
     mockPostLoadFile(data: JSONObject): {
         onFinished: (callback: () => void) => void,
-        onProgress: (callback: (progress: LoadFileProgress) => void) => void,
+        onProgress: (callback: (progress: DataStreamyProgress) => void) => void,
         onError: (callback: (err: Error) => void) => void,
         cancel: () => void
     } {
@@ -339,8 +340,7 @@ export default class DaemonApiServer {
             jsonSocket.sendMessage({
                 type: 'progress',
                 bytesLoaded: prog.bytesLoaded,
-                bytesTotal: prog.bytesTotal,
-                nodeId: prog.nodeId || ''
+                bytesTotal: prog.bytesTotal
             }, () => {});
         });
         req.on('close', () => {

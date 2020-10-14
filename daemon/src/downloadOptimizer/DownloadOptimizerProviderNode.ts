@@ -1,12 +1,11 @@
+import DataStreamy, { DataStreamyProgress } from "../common/DataStreamy";
 import { NodeId } from "../interfaces/core";
-import { LoadFileProgress } from "../KacheryP2PNode";
 import { byteCount, ByteCount, byteCountToNumber } from "../udp/UdpCongestionManager";
-import { Downloader } from "./DownloaderCreator";
 import RateEstimator from "./RateEstimator";
 
 class DownloadOptimizerProviderNode {
     #nodeId: NodeId
-    #currentDownloader: Downloader | null = null
+    #currentDownloader: DataStreamy | null = null
     #numBytesDownloadedInCurrentDownloader: ByteCount = byteCount(0)
     #rateEstimator = new RateEstimator();
     constructor(nodeId: NodeId) {
@@ -21,7 +20,7 @@ class DownloadOptimizerProviderNode {
     isDownloading() {
         return this.#currentDownloader ? true : false;
     }
-    setDownloader(j: Downloader) {
+    setDownloader(j: DataStreamy) {
         if (this.#currentDownloader !== null) {
             /* istanbul ignore next */
             throw Error('Unexpected: provider node already has a file downloader')
@@ -29,7 +28,7 @@ class DownloadOptimizerProviderNode {
         this.#currentDownloader = j
         this.#numBytesDownloadedInCurrentDownloader = byteCount(0)
         this.#rateEstimator.reportStart();
-        j.onProgress((progress: LoadFileProgress) => {
+        j.onProgress((progress: DataStreamyProgress) => {
             const deltaBytes = byteCount(byteCountToNumber(progress.bytesLoaded) - byteCountToNumber(this.#numBytesDownloadedInCurrentDownloader))
             this.#numBytesDownloadedInCurrentDownloader = progress.bytesLoaded
             this.#rateEstimator.reportBytes(deltaBytes)

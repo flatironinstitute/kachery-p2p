@@ -1,9 +1,9 @@
 import { action } from "../common/action";
+import DataStreamy from "../common/DataStreamy";
 import GarbageMap from '../common/GarbageMap';
 import { sleepMsec } from "../common/util";
 import { Address, elapsedSince, KeyPair, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core";
 import { NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
-import { StreamFileDataOutput } from "../KacheryP2PNode";
 import { ProxyConnectionToServer } from "../proxyConnections/ProxyConnectionToServer";
 import { DurationMsec, durationMsec, durationMsecToNumber } from "../udp/UdpCongestionManager";
 import { WebSocketInterface } from "./PublicWebSocketServer";
@@ -23,7 +23,7 @@ interface KacheryP2PNodeInterface {
     nodeId: () => NodeId
     keyPair: () => KeyPair
     handleNodeToNodeRequest: (request: NodeToNodeRequest) => Promise<NodeToNodeResponse>
-    streamFileData: (nodeId: NodeId, streamId: StreamId) => StreamFileDataOutput
+    streamFileData: (nodeId: NodeId, streamId: StreamId) => DataStreamy
     getProxyConnectionToServer: (remoteNodeId: NodeId) => ProxyConnectionToServer | null
     setProxyConnectionToServer: (nodeId: NodeId, c: ProxyConnectionToServer) => void
     createWebSocket: (url: string, opts: {timeoutMsec: DurationMsec}) => WebSocketInterface

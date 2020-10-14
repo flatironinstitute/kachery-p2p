@@ -3,11 +3,12 @@ import http from 'http';
 import https from 'https';
 import { Socket } from 'net';
 import { action } from '../common/action';
+import DataStreamy from '../common/DataStreamy';
 import start_http_server from '../common/start_http_server';
 import { sleepMsec } from '../common/util';
 import { Address, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, _validateObject } from '../interfaces/core';
 import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
-import KacheryP2PNode, { StreamFileDataOutput } from '../KacheryP2PNode';
+import KacheryP2PNode from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
 import { ByteCount } from '../udp/UdpCongestionManager';
 
@@ -148,7 +149,7 @@ export default class PublicApiServer {
             throw Error(`mock unexpected path: ${path}`)
         }
     }
-    async mockGetDownload(path: string): Promise<StreamFileDataOutput> {
+    async mockGetDownload(path: string): Promise<DataStreamy> {
         if (path.startsWith('/download/')) {
             const vals = path.split('/')
             const nodeId = vals[2]

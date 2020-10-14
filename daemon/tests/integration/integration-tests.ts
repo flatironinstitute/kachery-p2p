@@ -1,10 +1,12 @@
 import { expect } from 'chai';
 import crypto from 'crypto';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
+import { createKeyPair } from '../../src/common/crypto_util';
+import DataStreamy from '../../src/common/DataStreamy';
 import { UrlPath } from '../../src/common/httpPostJson';
 import { randomAlphaString, sleepMsec } from '../../src/common/util';
 import { Address, ChannelName, elapsedSince, FileKey, FindFileResult, HostName, isNodeId, JSONObject, NodeId, nowTimestamp, Port, Sha1Hash } from '../../src/interfaces/core';
-import KacheryP2PNode, { DgramCreateSocketFunction, DgramRemoteInfo, StreamFileDataOutput } from '../../src/KacheryP2PNode';
+import KacheryP2PNode, { DgramCreateSocketFunction, DgramRemoteInfo } from '../../src/KacheryP2PNode';
 import { FindFileReturnValue, LocalFilePath } from '../../src/kacheryStorage/KacheryStorageManager';
 import DaemonApiServer, { ApiFindFileRequest } from '../../src/services/DaemonApiServer';
 import PublicApiServer from '../../src/services/PublicApiServer';
@@ -47,7 +49,7 @@ class MockNodeDaemonGroup {
         
         throw Error('mock - unable to process http post json')
     }
-    async mockHttpGetDownload(address: Address, path: UrlPath): Promise<StreamFileDataOutput> {
+    async mockHttpGetDownload(address: Address, path: UrlPath): Promise<DataStreamy> {
         const nodeId = address.hostName.toString()
         if (isNodeId(nodeId)) {
             const daemon = this.getDaemon(nodeId)
@@ -379,6 +381,7 @@ const mockCreateWebSocket = (url: string, opts: {timeoutMsec: DurationMsec}): We
 
 class MockNodeDaemon {
     #daemonGroup: MockNodeDaemonGroup
+    #keyPair = createKeyPair()
     #d: {
         publicApiServer: PublicApiServer,
         daemonApiServer: DaemonApiServer,
@@ -406,7 +409,7 @@ class MockNodeDaemon {
     async initialize() {
         this.#d = await startDaemon({
             channelNames: this.opts.channelNames,
-            configDir: 'mock-config-dir' as any as LocalFilePath,
+            keyPair: this.#keyPair,
             verbose: 0,
             hostName: null,
             daemonApiPort: null,
@@ -458,7 +461,7 @@ class MockNodeDaemon {
         }
         return await this.#d.publicApiServer.mockPostJson(path, data)
     }
-    async mockPublicApiGetDownload(path: string): Promise<StreamFileDataOutput> {
+    async mockPublicApiGetDownload(path: string): Promise<DataStreamy> {
         if (!this.#d) {
             throw Error('mock daemon not yet initialized')
         }

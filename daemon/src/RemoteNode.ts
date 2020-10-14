@@ -1,8 +1,9 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
+import DataStreamy from "./common/DataStreamy";
 import { urlPath } from "./common/httpPostJson";
 import { Address, ChannelName, ChannelNodeInfo, createRequestId, FileKey, NodeId, nodeIdToPublicKey, nowTimestamp } from "./interfaces/core";
 import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StreamId } from "./interfaces/NodeToNodeRequest";
-import KacheryP2PNode, { StreamFileDataOutput } from "./KacheryP2PNode";
+import KacheryP2PNode from "./KacheryP2PNode";
 import { protocolVersion } from "./protocolVersion";
 import { ByteCount, DurationMsec } from "./udp/UdpCongestionManager";
 
@@ -172,7 +173,7 @@ class RemoteNode {
             return false
         }
     }
-    async downloadFileData(streamId: StreamId, opts: {method: SendRequestMethod}): Promise<StreamFileDataOutput> {
+    async downloadFileData(streamId: StreamId, opts: {method: SendRequestMethod}): Promise<DataStreamy> {
         let method: SendRequestMethod | null = opts.method
         if (method === 'default') {
             method = this._determineDefaultDownloadFileDataMethod()

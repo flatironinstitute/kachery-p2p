@@ -1,11 +1,11 @@
+import DataStreamy from "../common/DataStreamy";
 import { FileKey, NodeId } from "../interfaces/core";
 import { ByteCount } from "../udp/UdpCongestionManager";
-import { Downloader } from "./DownloaderCreator";
 import DownloadOptimizerJob from "./DownloadOptimizerJob";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
 
 interface DownloaderCreatorInterface {
-    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId}) => Downloader
+    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId}) => DataStreamy
 }
 
 export default class DownloadOptimizer {

@@ -1,7 +1,7 @@
+import DataStreamy from './common/DataStreamy';
 import { UrlPath } from './common/httpPostJson';
-import { Address, ChannelName, HostName, JSONObject, Port } from './interfaces/core';
-import KacheryP2PNode, { CreateWebSocketFunction, CreateWebSocketServerFunction, DgramCreateSocketFunction, KacheryStorageManagerInterface, StreamFileDataOutput } from './KacheryP2PNode';
-import { LocalFilePath } from './kacheryStorage/KacheryStorageManager';
+import { Address, ChannelName, HostName, JSONObject, KeyPair, Port } from './interfaces/core';
+import KacheryP2PNode, { CreateWebSocketFunction, CreateWebSocketServerFunction, DgramCreateSocketFunction, KacheryStorageManagerInterface } from './KacheryP2PNode';
 import AnnounceService from './services/AnnounceService';
 import BootstrapService from './services/BootstrapService';
 import DaemonApiServer from './services/DaemonApiServer';
@@ -15,7 +15,7 @@ import { durationMsec, DurationMsec } from './udp/UdpCongestionManager';
 
 const startDaemon = async (args: {
     channelNames: ChannelName[],
-    configDir: LocalFilePath,
+    keyPair: KeyPair,
     verbose: number,
     hostName: HostName | null,
     daemonApiPort: Port | null,
@@ -25,7 +25,7 @@ const startDaemon = async (args: {
     label: string,
     bootstrapAddresses: Address[] | null,
     httpPostJsonFunction: ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>),
-    httpGetDownloadFunction: ((address: Address, path: UrlPath) => Promise<StreamFileDataOutput>),
+    httpGetDownloadFunction: ((address: Address, path: UrlPath) => Promise<DataStreamy>),
     dgramCreateSocketFunction: DgramCreateSocketFunction,
     createWebSocketServerFunction: CreateWebSocketServerFunction,
     createWebSocketFunction: CreateWebSocketFunction,
@@ -39,7 +39,7 @@ const startDaemon = async (args: {
 }) => {
     const {
         channelNames,
-        configDir,
+        keyPair,
         verbose,
         hostName,
         daemonApiPort,
@@ -57,7 +57,7 @@ const startDaemon = async (args: {
         opts
     } = args
     const kNode = new KacheryP2PNode({
-        configDir,
+        keyPair,
         verbose,
         hostName,
         httpListenPort,

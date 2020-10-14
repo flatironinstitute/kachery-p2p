@@ -1,5 +1,6 @@
 import { action } from '../common/action';
 import { getSignature, verifySignature } from '../common/crypto_util';
+import DataStreamy from '../common/DataStreamy';
 import GarbageMap from '../common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString, sleepMsec } from '../common/util';
 import { elapsedSince, ErrorMessage, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, Signature, Timestamp, _validateObject } from "../interfaces/core";
@@ -158,13 +159,13 @@ export const isInitialMessageFromServer = (x: any): x is InitialMessageFromServe
     })
 }
 
-export type MessageFromClient = NodeToNodeResponse | ProxyStreamFileDataResponseMessage // | others...
+export type MessageFromClient = NodeToNodeResponse | ProxyStreamFileDataResponseMessage
 export const isMessageFromClient = (x: any): x is MessageFromClient => {
     return isNodeToNodeResponse(x) || isProxyStreamFileDataResponseMessage(x)
 }
-export type MessageFromServer = NodeToNodeRequest | ProxyStreamFileDataRequest
+export type MessageFromServer = NodeToNodeRequest | ProxyStreamFileDataRequest | ProxyStreamFileDataCancelRequest // | others...
 export const isMessageFromServer = (x: any): x is MessageFromServer => {
-    return isNodeToNodeRequest(x) || isProxyStreamFileDataRequest(x)
+    return isNodeToNodeRequest(x) || isProxyStreamFileDataRequest(x) || isProxyStreamFileDataCancelRequest(x)
 }
 
 export interface ProxyStreamFileDataRequestId extends String {
@@ -285,58 +286,23 @@ export class ProxyConnectionToClient {
         this._sendMessageToClient(request);
         return await this._waitForResponse(request.body.requestId, {timeoutMsec: durationMsec(10000)});
     }
-    streamFileData(streamId: StreamId): {
-        onStarted: (callback: (size: ByteCount) => void) => void,
-        onData: (callback: (data: Buffer) => void) => void,
-        onFinished: (callback: () => void) => void,
-        onError: (callback: (err: Error) => void) => void,
-        cancel: () => void
-    } {
+    streamFileData(streamId: StreamId): DataStreamy {
         // note: much of this code is duplicated from KacheryP2PNode.streamFileData
-        const _onStartedCallbacks: ((size: ByteCount) => void)[] = []
-        const _onDataCallbacks: ((data: Buffer) => void)[] = []
-        const _onFinishedCallbacks: (() => void)[] = []
-        const _onErrorCallbacks: ((err: Error) => void)[] = []
-        const _onCancelCallbacks: (() => void)[] = []
-        let complete = false
-        let cancelled = false
-        const _cancel = () => {
-            if (cancelled) return
-            cancelled = true
-            _onCancelCallbacks.forEach(cb => {cb()})
-            _handleError(Error('Cancelled'))
-        }
-        const _onCancel = (callback: () => void) => {_onCancelCallbacks.push(callback)}
-        const _handleStarted = (size: ByteCount) => {
-            if (complete) return
-            _onStartedCallbacks.forEach(cb => {cb(size)})
-        }
-        const _handleError = (err: Error) => {
-            if (complete) return
-            complete = true
-            _onErrorCallbacks.forEach(cb => {cb(err)})
-        }
-        const _handleFinished = () => {
-            if (complete) return
-            complete = true
-            _onFinishedCallbacks.forEach(cb => {cb()})
-        }
-        const _handleData = (data: Buffer) => {
-            if (complete) return
-            _onDataCallbacks.forEach(cb => {cb(data)})
-        }
+
+        const ret = new DataStreamy()
+
         const _handleResponseMessageFromServer = (msg: ProxyStreamFileDataResponseMessage) => {
             if (isProxyStreamFileDataResponseStartedMessage(msg)) {
-                _handleStarted(msg.size)
+                ret._start(msg.size)
             }
             else if (isProxyStreamFileDataResponseDataMessage(msg)) {
-                _handleData(msg.data)
+                ret._data(msg.data)
             }
             else if (isProxyStreamFileDataResponseFinishedMessage(msg)) {
-                _handleFinished()
+                ret._end()
             }
             else if (isProxyStreamFileDataResponseErrorMessage(msg)) {
-                _handleError(Error(msg.errorMessage.toString()))
+                ret._error(Error(msg.errorMessage.toString()))
             }
             else {
                 throw Error('Unexpected')
@@ -352,19 +318,14 @@ export class ProxyConnectionToClient {
             _handleResponseMessageFromServer(msg)
         })
         this._sendMessageToClient(request)
-        _onCancel(() => {
+        ret._onCancel(() => {
             const cancelRequest: ProxyStreamFileDataCancelRequest = {
                 messageType: 'proxyStreamFileDataCancelRequest',
                 proxyStreamFileDataRequestId
             }
+            this._sendMessageToClient(cancelRequest)
         })
-        return {
-            onStarted: (callback: (size: ByteCount) => void) => {_onStartedCallbacks.push(callback)},
-            onData: (callback: (data: Buffer) => void) => {_onDataCallbacks.push(callback)},
-            onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
-            onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
-            cancel: _cancel
-        }
+        return ret
     }
     onInitialized(callback: () => void) {
         this.#onInitializedCallbacks.push(callback);

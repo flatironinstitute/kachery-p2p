@@ -6,8 +6,9 @@ import fs from 'fs';
 import os from 'os';
 import WebSocket from 'ws';
 import yargs from 'yargs';
+import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util';
 import { httpGetDownload, httpPostJson } from './common/httpPostJson';
-import { Address, isAddress, isChannelName, isHostName, isPort, NodeId, Port } from './interfaces/core';
+import { Address, isAddress, isChannelName, isHostName, isKeyPair, isPort, JSONObject, KeyPair, NodeId, Port } from './interfaces/core';
 import { KacheryStorageManager, LocalFilePath } from './kacheryStorage/KacheryStorageManager';
 import { isBuffer } from './proxyConnections/ProxyConnectionToClient';
 import { WebSocketInterface, WebSocketServerInterface } from './services/PublicWebSocketServer';
@@ -215,9 +216,11 @@ function main() {
 
         const kacheryStorageManager = new KacheryStorageManager()
 
+        const keyPair = _loadKeypair(configDir as any as LocalFilePath)
+
         startDaemon({
           channelNames,
-          configDir: configDir as any as LocalFilePath,
+          keyPair,
           verbose,
           hostName,
           daemonApiPort,
@@ -259,6 +262,55 @@ function parseBootstrapInfo(x: string): Address {
     throw new StringParseError('Improper bootstrap info.');
   }
   return b;
+}
+
+const _loadKeypair = (configDir: LocalFilePath): KeyPair => {
+  if (!fs.existsSync(configDir.toString())) {
+      throw Error(`Config directory does not exist: ${configDir}`)
+  }
+  const publicKeyPath = `${configDir.toString()}/public.pem`
+  const privateKeyPath = `${configDir.toString()}/private.pem`
+  if (fs.existsSync(publicKeyPath)) {
+      if (!fs.existsSync(privateKeyPath)) {
+          throw Error(`Public key file exists, but secret key file does not.`)
+      }
+  }
+  else {
+      const {publicKey, privateKey} = createKeyPair()
+      fs.writeFileSync(publicKeyPath, publicKey.toString(), {encoding: 'utf-8'})
+      fs.writeFileSync(privateKeyPath, privateKey.toString(), {encoding: 'utf-8'})
+      fs.chmodSync(privateKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
+  }
+
+  const keyPair = {
+      publicKey: fs.readFileSync(publicKeyPath, {encoding: 'utf-8'}),
+      privateKey: fs.readFileSync(privateKeyPath, {encoding: 'utf-8'}),
+  }
+  if (!isKeyPair(keyPair)) {
+      throw Error('Invalid keyPair')
+  }
+  testKeyPair(keyPair)
+  return keyPair
+}
+
+const testKeyPair = (keyPair: KeyPair) => {
+  const signature = getSignature({test: 1}, keyPair)
+  if (!verifySignature({test: 1} as JSONObject, signature, keyPair.publicKey)) {
+      throw new Error('Problem testing public/private keys. Error verifying signature.')
+  }
+  if (hexToPublicKey(publicKeyToHex(keyPair.publicKey)) !== keyPair.publicKey) {
+      console.warn(hexToPublicKey(publicKeyToHex(keyPair.publicKey)))
+      console.warn(keyPair.publicKey)
+      throw new Error('Problem testing public/private keys. Error converting public key to/from hex.')
+  }
+  if (hexToPrivateKey(privateKeyToHex(keyPair.privateKey)) !== keyPair.privateKey) {
+      throw new Error('Problem testing public/private keys. Error converting private key to/from hex.')
+  }
+}
+
+export const readJsonFile = async (path: string) => {
+  const txt = await fs.promises.readFile(path, 'utf-8');
+  return JSON.parse(txt);
 }
 
 main();
