@@ -8,10 +8,10 @@ import WebSocket from 'ws';
 import yargs from 'yargs';
 import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util';
 import { httpGetDownload, httpPostJson } from './common/httpPostJson';
+import { WebSocketInterface, WebSocketServerInterface } from './external/ExternalInterface';
 import { Address, isAddress, isChannelName, isHostName, isKeyPair, isPort, JSONObject, KeyPair, NodeId, Port } from './interfaces/core';
 import { KacheryStorageManager, LocalFilePath } from './kacheryStorage/KacheryStorageManager';
 import { isBuffer } from './proxyConnections/ProxyConnectionToClient';
-import { WebSocketInterface, WebSocketServerInterface } from './services/PublicWebSocketServer';
 import startDaemon from './startDaemon';
 import { DurationMsec, durationMsecToNumber } from './udp/UdpCongestionManager';
 
@@ -218,6 +218,15 @@ function main() {
 
         const keyPair = _loadKeypair(configDir as any as LocalFilePath)
 
+        const externalInterface = {
+          httpPostJsonFunction: httpPostJson,
+          httpGetDownloadFunction: httpGetDownload,
+          dgramCreateSocketFunction: dgramCreateSocket,
+          createWebSocketServerFunction: createWebSocketServer,
+          createWebSocketFunction: createWebSocket,
+          kacheryStorageManager
+        }
+
         startDaemon({
           channelNames,
           keyPair,
@@ -229,12 +238,7 @@ function main() {
           udpListenPort,
           label,
           bootstrapAddresses,
-          httpPostJsonFunction: httpPostJson,
-          httpGetDownloadFunction: httpGetDownload,
-          dgramCreateSocketFunction: dgramCreateSocket,
-          createWebSocketServerFunction: createWebSocketServer,
-          createWebSocketFunction: createWebSocket,
-          kacheryStorageManager,
+          externalInterface,
           opts: {
             noBootstrap,
             isBootstrapNode,

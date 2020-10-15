@@ -1,6 +1,6 @@
 import dgram from 'dgram';
+import { DgramSocket } from '../external/ExternalInterface';
 import { tryParseJsonObject } from '../interfaces/core';
-import { DgramSocket } from '../KacheryP2PNode';
 import { protocolVersion } from '../protocolVersion';
 import { isUdpPacketSenderHeader, PacketId, UdpPacketSenderHeader, UDP_PACKET_HEADER_SIZE } from './UdpPacketSender';
 

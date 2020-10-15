@@ -3,10 +3,10 @@ import { getSignature, verifySignature } from '../common/crypto_util';
 import DataStreamy from '../common/DataStreamy';
 import GarbageMap from '../common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString, sleepMsec } from '../common/util';
+import { WebSocketInterface } from '../external/ExternalInterface';
 import { elapsedSince, ErrorMessage, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, Signature, Timestamp, _validateObject } from "../interfaces/core";
 import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
-import { WebSocketInterface } from '../services/PublicWebSocketServer';
 import { ByteCount, DurationMsec, durationMsec, durationMsecToNumber, isByteCount } from '../udp/UdpCongestionManager';
 
 export interface InitialMessageFromClientBody {

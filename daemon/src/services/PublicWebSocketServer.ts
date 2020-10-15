@@ -1,22 +1,8 @@
 import { action } from '../common/action';
+import { WebSocketInterface, WebSocketServerInterface } from '../external/ExternalInterface';
 import { Port } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { ProxyConnectionToClient } from '../proxyConnections/ProxyConnectionToClient';
-
-export interface WebSocketInterface {
-    onOpen: (callback: () => void) => void
-    onClose: (callback: (code: number, reason: string) => void) => void
-    onError: (callback: (err: Error | null) => void) => void
-    onMessage: (callback: (buf: Buffer) => void) => void
-    close: () => void
-    send: (buf: Buffer) => void
-}
-
-export interface WebSocketServerInterface {
-    onListening: (callback: () => void) => void
-    onConnection: (callback: (ws: WebSocketInterface) => void) => void
-    close: () => void
-}
 
 class PublicWebSocketServer {
     #node: KacheryP2PNode

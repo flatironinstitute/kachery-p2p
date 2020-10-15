@@ -1,7 +1,6 @@
-import DataStreamy from './common/DataStreamy';
-import { UrlPath } from './common/httpPostJson';
-import { Address, ChannelName, HostName, JSONObject, KeyPair, Port } from './interfaces/core';
-import KacheryP2PNode, { CreateWebSocketFunction, CreateWebSocketServerFunction, DgramCreateSocketFunction, KacheryStorageManagerInterface } from './KacheryP2PNode';
+import ExternalInterface from './external/ExternalInterface';
+import { Address, ChannelName, HostName, KeyPair, Port } from './interfaces/core';
+import KacheryP2PNode from './KacheryP2PNode';
 import AnnounceService from './services/AnnounceService';
 import BootstrapService from './services/BootstrapService';
 import DaemonApiServer from './services/DaemonApiServer';
@@ -11,7 +10,7 @@ import ProxyClientService from './services/ProxyClientService';
 import PublicApiServer from './services/PublicApiServer';
 import PublicUdpSocketServer from './services/PublicUdpSocketServer';
 import PublicWebSocketServer from './services/PublicWebSocketServer';
-import { durationMsec, DurationMsec } from './udp/UdpCongestionManager';
+import { durationMsec } from './udp/UdpCongestionManager';
 
 const startDaemon = async (args: {
     channelNames: ChannelName[],
@@ -24,12 +23,7 @@ const startDaemon = async (args: {
     udpListenPort: Port | null,
     label: string,
     bootstrapAddresses: Address[] | null,
-    httpPostJsonFunction: ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>),
-    httpGetDownloadFunction: ((address: Address, path: UrlPath) => Promise<DataStreamy>),
-    dgramCreateSocketFunction: DgramCreateSocketFunction,
-    createWebSocketServerFunction: CreateWebSocketServerFunction,
-    createWebSocketFunction: CreateWebSocketFunction,
-    kacheryStorageManager: KacheryStorageManagerInterface,
+    externalInterface: ExternalInterface,
     opts: {
         noBootstrap: boolean,
         isBootstrapNode: boolean,
@@ -48,12 +42,7 @@ const startDaemon = async (args: {
         udpListenPort,
         label,
         bootstrapAddresses,
-        httpPostJsonFunction,
-        httpGetDownloadFunction,
-        dgramCreateSocketFunction,
-        createWebSocketServerFunction,
-        createWebSocketFunction,
-        kacheryStorageManager,
+        externalInterface,
         opts
     } = args
     const kNode = new KacheryP2PNode({
@@ -66,12 +55,7 @@ const startDaemon = async (args: {
         label,
         bootstrapAddresses,
         channelNames,
-        httpPostJsonFunction,
-        httpGetDownloadFunction,
-        dgramCreateSocketFunction,
-        createWebSocketServerFunction,
-        createWebSocketFunction,
-        kacheryStorageManager,
+        externalInterface,
         opts
     })
 

@@ -6,11 +6,11 @@ import { sha1MatchesFileKey } from './common/util'
 import DownloaderCreator from './downloadOptimizer/DownloaderCreator'
 import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import DownloadOptimizerFile from './downloadOptimizer/DownloadOptimizerJob'
+import ExternalInterface, { KacheryStorageManagerInterface } from './external/ExternalInterface'
 import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
-import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, FeedId, FileKey, FindFileResult, FindLiveFeedResult, HostName, isAddress, isArrayOf, isSha1Hash, JSONObject, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, _validateObject } from './interfaces/core'
+import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, FeedId, FileKey, FindFileResult, FindLiveFeedResult, HostName, isAddress, isArrayOf, isSha1Hash, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, _validateObject } from './interfaces/core'
 import { AnnounceRequestData, AnnounceResponseData, CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData, createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, GetChannelInfoRequestData, GetChannelInfoResponseData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isProbeRequestData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, ProbeRequestData, ProbeResponseData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
-import { FindFileReturnValue } from './kacheryStorage/KacheryStorageManager'
 import { daemonVersion, protocolVersion } from './protocolVersion'
 import { ProxyConnectionToClient } from './proxyConnections/ProxyConnectionToClient'
 import { ProxyConnectionToServer } from './proxyConnections/ProxyConnectionToServer'
@@ -18,15 +18,7 @@ import RemoteNode from './RemoteNode'
 import RemoteNodeManager from './RemoteNodeManager'
 import { ApiProbeResponse } from './services/PublicApiServer'
 import PublicUdpSocketServer from './services/PublicUdpSocketServer'
-import { WebSocketInterface, WebSocketServerInterface } from './services/PublicWebSocketServer'
 import { byteCount, ByteCount, byteCountToNumber, durationMsec, DurationMsec, durationMsecToNumber, isByteCount } from './udp/UdpCongestionManager'
-
-export interface DgramRemoteInfo {
-    address: string
-    family: 'IPv4' | 'IPv6'
-    port: number
-    size: number
-}
 
 interface FileManifestChunk {
     start: ByteCount,
@@ -54,24 +46,6 @@ const isFileManifest = (x: any): x is FileManifest => {
     })
 }
 
-export interface DgramSocket {
-    bind: (port: number) => void,
-    on: (eventName: 'listening' | 'message', callback: (() => void) | ((message: Buffer, rinfo: DgramRemoteInfo) => void)) => void,
-    addMembership: (address: string) => void,
-    send: (message: Buffer, offset: number, length: number, port: number, address: string, callback?: (err: Error | null, numBytesSent: number) => void) => void
-    close: () => void
-}
-
-export type DgramCreateSocketFunction = (args: {type: 'udp4', reuseAddr: boolean, nodeId: NodeId}) => DgramSocket
-
-export interface KacheryStorageManagerInterface {
-    findFile: (fileKey: FileKey, returnDataStream: boolean) => Promise<FindFileReturnValue>
-}
-
-export type CreateWebSocketServerFunction = (port: Port, nodeId: NodeId) => WebSocketServerInterface
-
-export type CreateWebSocketFunction = (url: string, opts: {timeoutMsec: DurationMsec}) => WebSocketInterface
-
 class KacheryP2PNode {
     #keyPair: KeyPair
     #nodeId: NodeId
@@ -96,12 +70,7 @@ class KacheryP2PNode {
         label: string,
         bootstrapAddresses: Address[] | null,
         channelNames: ChannelName[],
-        httpPostJsonFunction: ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>),
-        httpGetDownloadFunction: ((address: Address, path: UrlPath) => Promise<DataStreamy>),
-        dgramCreateSocketFunction: DgramCreateSocketFunction,
-        createWebSocketServerFunction: CreateWebSocketServerFunction,
-        createWebSocketFunction: CreateWebSocketFunction,
-        kacheryStorageManager: KacheryStorageManagerInterface,
+        externalInterface: ExternalInterface,
         opts: {
             noBootstrap: boolean,
             isBootstrapNode: boolean,
@@ -111,7 +80,7 @@ class KacheryP2PNode {
     }) {
         this.#keyPair = p.keyPair // the keypair
         this.#nodeId = publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey)) // get the node id from the public key
-        this.#kacheryStorageManager = p.kacheryStorageManager
+        this.#kacheryStorageManager = p.externalInterface.kacheryStorageManager
         this.#liveFeedSubscriptionManager = new LiveFeedSubscriptionManager()
 
         // The feed manager -- each feed is a collection of append-only logs
@@ -225,33 +194,33 @@ class KacheryP2PNode {
         this.#proxyConnectionsToServers.clear()
     }
     async httpPostJson(address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) {
-        return await this.p.httpPostJsonFunction(address, path, data, opts)
+        return await this.p.externalInterface.httpPostJsonFunction(address, path, data, opts)
     }
     async httpGetDownload(address: Address, path: UrlPath) {
-        return await this.p.httpGetDownloadFunction(address, path)
+        return await this.p.externalInterface.httpGetDownloadFunction(address, path)
     }
     dgramCreateSocket(args: {type: 'udp4', reuseAddr: boolean}) {
-        return this.p.dgramCreateSocketFunction({type: args.type, reuseAddr: args.reuseAddr, nodeId: this.nodeId()})
+        return this.p.externalInterface.dgramCreateSocketFunction({type: args.type, reuseAddr: args.reuseAddr, nodeId: this.nodeId()})
     }
     createWebSocket(url: string, opts: {timeoutMsec: DurationMsec}) {
-        return this.p.createWebSocketFunction(url, opts)
+        return this.p.externalInterface.createWebSocketFunction(url, opts)
     }
     createWebSocketServer(port: Port) {
-        return this.p.createWebSocketServerFunction(port, this.nodeId())
+        return this.p.externalInterface.createWebSocketServerFunction(port, this.nodeId())
     }
-    async _loadFileAsync(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): Promise<FindFileReturnValue> {
-        const r = await this.#kacheryStorageManager.findFile(args.fileKey, false)
+    async _loadFileAsync(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): Promise<{found: boolean, size: ByteCount}> {
+        const r = await this.#kacheryStorageManager.findFile(args.fileKey)
         if (r.found) {
             return r
         }
-        return new Promise<FindFileReturnValue>((resolve, reject) => {
+        return new Promise<{found: boolean, size: ByteCount}>((resolve, reject) => {
             const {onFinished, onProgress, onError, cancel} = this.loadFile({fileKey: args.fileKey, opts: args.opts})
             onError(err => {
                 reject(err)
             })
             onFinished(() => {
                 (async () => {
-                    const r = await this.#kacheryStorageManager.findFile(args.fileKey, false)
+                    const r = await this.#kacheryStorageManager.findFile(args.fileKey)
                     if (r.found) {
                         resolve(r)
                     }
@@ -283,11 +252,8 @@ class KacheryP2PNode {
                     if (!manifestR.found) {
                         throw Error('Unexpected... loadFileAsync should have thrown an error if not found')
                     }
-                    const { dataStream } = manifestR
-                    if (dataStream === null) {
-                        throw Error('unexpected')
-                    }
-                    const manifestBuf = await dataStream.allData().toString()
+                    const manifestDataStream = await this.p.externalInterface.kacheryStorageManager.getFileReadStream(fileKey)
+                    const manifestBuf = (await manifestDataStream.allData()).toString()
                     const manifest = JSON.stringify(manifestBuf)
                     if (!isFileManifest(manifest)) {
                         throw new Error('Invalid manifest file')
@@ -682,24 +648,19 @@ class KacheryP2PNode {
         const ret = new DataStreamy();
         (async () => {
             if (ret.isComplete()) return
-            const {found, size, dataStream} = await this.#kacheryStorageManager.findFile(s.fileKey, true)
-            if ((found) && (size !== null) && (dataStream !== null)) {
-                try {
-                    if (ret.isComplete()) return
-                    dataStream.onStarted(size => {ret._start(size)})
-                    ret._onCancel(() => {
-                        dataStream.cancel()
-                    })
-                    dataStream.onData(b => {ret._data(b)})
-                    dataStream.onFinished(() => {ret._end()})
-                    dataStream.onError(err => {ret._error(err)})
-                }
-                catch(err) {
-                    ret._error(err)
-                }
+            const dataStream = await this.#kacheryStorageManager.getFileReadStream(s.fileKey)
+            try {
+                if (ret.isComplete()) return
+                dataStream.onStarted(size => {ret._start(size)})
+                ret._onCancel(() => {
+                    dataStream.cancel()
+                })
+                dataStream.onData(b => {ret._data(b)})
+                dataStream.onFinished(() => {ret._end()})
+                dataStream.onError(err => {ret._error(err)})
             }
-            else {
-                ret._error(Error('File not found'))
+            catch(err) {
+                ret._error(err)
             }
         })()
         return ret
@@ -732,7 +693,7 @@ class KacheryP2PNode {
     }
     async _handleCheckForFileRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: CheckForFileRequestData}): Promise<CheckForFileResponseData> {
         const { fileKey } = requestData
-        const {found, size} = await this.#kacheryStorageManager.findFile(fileKey, false)
+        const {found, size} = await this.#kacheryStorageManager.findFile(fileKey)
         return {
             requestType: 'checkForFile',
             found,
@@ -787,7 +748,7 @@ class KacheryP2PNode {
                 errorMessage: errorMessage('Invalid start/end bytes')
             }
         }
-        const {found, size} = await this.#kacheryStorageManager.findFile(fileKey, false)
+        const {found, size} = await this.#kacheryStorageManager.findFile(fileKey)
         if (!found) {
             return {
                 requestType: 'downloadFileData',

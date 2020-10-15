@@ -1,9 +1,9 @@
 import { action } from "../common/action"
 import { getSignature, verifySignature } from "../common/crypto_util"
 import { sleepMsec } from "../common/util"
+import { DgramSocket } from "../external/ExternalInterface"
 import { Address, ChannelName, ChannelNodeInfo, HostName, isMulticastAnnounceMessage, JSONObject, KeyPair, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, tryParseJsonObject } from "../interfaces/core"
 import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
-import { DgramSocket } from "../KacheryP2PNode"
 import { protocolVersion } from "../protocolVersion"
 import { DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager'
 

@@ -1,7 +1,7 @@
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
+import { DgramSocket } from '../external/ExternalInterface';
 import { Address, isBoolean, isProtocolVersion, isString, ProtocolVersion, toNumber, _validateObject } from '../interfaces/core';
-import { DgramSocket } from '../KacheryP2PNode';
 import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { byteCount, durationMsec, DurationMsec, durationMsecToNumber, UdpTimeoutError } from './UdpCongestionManager';
 

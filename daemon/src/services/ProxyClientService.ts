@@ -2,11 +2,11 @@ import { action } from "../common/action";
 import DataStreamy from "../common/DataStreamy";
 import GarbageMap from '../common/GarbageMap';
 import { sleepMsec } from "../common/util";
+import { WebSocketInterface } from "../external/ExternalInterface";
 import { Address, elapsedSince, KeyPair, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core";
 import { NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
 import { ProxyConnectionToServer } from "../proxyConnections/ProxyConnectionToServer";
 import { DurationMsec, durationMsec, durationMsecToNumber } from "../udp/UdpCongestionManager";
-import { WebSocketInterface } from "./PublicWebSocketServer";
 
 interface RemoteNodeManagerInterface {
     getAllRemoteNodes: () => RemoteNodeInterface[]

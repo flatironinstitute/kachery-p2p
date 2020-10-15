@@ -5,14 +5,13 @@ import { createKeyPair } from '../../src/common/crypto_util';
 import DataStreamy from '../../src/common/DataStreamy';
 import { UrlPath } from '../../src/common/httpPostJson';
 import { randomAlphaString, sleepMsec } from '../../src/common/util';
+import { DgramCreateSocketFunction, DgramRemoteInfo, WebSocketInterface, WebSocketServerInterface } from '../../src/external/ExternalInterface';
 import { Address, ChannelName, elapsedSince, FileKey, FindFileResult, HostName, isNodeId, JSONObject, NodeId, nowTimestamp, Port, Sha1Hash } from '../../src/interfaces/core';
-import KacheryP2PNode, { DgramCreateSocketFunction, DgramRemoteInfo } from '../../src/KacheryP2PNode';
-import { FindFileReturnValue, LocalFilePath } from '../../src/kacheryStorage/KacheryStorageManager';
+import KacheryP2PNode from '../../src/KacheryP2PNode';
 import DaemonApiServer, { ApiFindFileRequest } from '../../src/services/DaemonApiServer';
 import PublicApiServer from '../../src/services/PublicApiServer';
-import { WebSocketInterface, WebSocketServerInterface } from '../../src/services/PublicWebSocketServer';
 import startDaemon from '../../src/startDaemon';
-import { byteCount, durationMsec, DurationMsec, durationMsecToNumber } from '../../src/udp/UdpCongestionManager';
+import { ByteCount, byteCount, durationMsec, DurationMsec, durationMsecToNumber } from '../../src/udp/UdpCongestionManager';
 
 const mockChannelName = 'mock-channel' as any as ChannelName
 
@@ -163,23 +162,34 @@ const mockDgramCreateSocket: DgramCreateSocketFunction = (args: {type: 'udp4', r
 
 class MockKacheryStorageManager {
     #mockFiles = new Map<Sha1Hash, Buffer>() 
-    async findFile(fileKey: FileKey):  Promise<FindFileReturnValue> {
+    async findFile(fileKey: FileKey):  Promise<{found: boolean, size: ByteCount}> {
         const content = this.#mockFiles.get(fileKey.sha1)
         if (content) {
             return {
                 found: true,
-                size: byteCount(content.length),
-                localPath: fileKey.sha1 as any as LocalFilePath,
-                byteOffset: byteCount(0)
+                size: byteCount(content.length)
             }
         }
         else {
             return {
                 found: false,
-                size: null,
-                localPath: null,
-                byteOffset: null
+                size: byteCount(0)
             }
+        }
+    }
+    async getFileReadStream(fileKey: FileKey): Promise<DataStreamy> {
+        const content = this.#mockFiles.get(fileKey.sha1)
+        if (content) {
+            const ret = new DataStreamy()
+            setTimeout(() => {
+                ret._start(byteCount(content.length))
+                ret._data(content)
+                ret._end()
+            }, 2)
+            return ret
+        }
+        else {
+            throw Error('File not found')
         }
     }
     addMockFile(content: Buffer): FileKey {
@@ -407,6 +417,14 @@ class MockNodeDaemon {
     }
 
     async initialize() {
+        const externalInterface = {
+            httpPostJsonFunction: (address: Address, path: UrlPath, data: JSONObject, opts: {timeoutMsec: DurationMsec}) => (this.#daemonGroup.mockHttpPostJson(address, path, data, opts)),
+            httpGetDownloadFunction: (address: Address, path: UrlPath) => (this.#daemonGroup.mockHttpGetDownload(address, path)),
+            dgramCreateSocketFunction: mockDgramCreateSocket,
+            createWebSocketServerFunction: mockCreateWebSocketServer,
+            createWebSocketFunction: mockCreateWebSocket,
+            kacheryStorageManager: this.#mockKacheryStorageManager,
+        }
         this.#d = await startDaemon({
             channelNames: this.opts.channelNames,
             keyPair: this.#keyPair,
@@ -418,12 +436,7 @@ class MockNodeDaemon {
             udpListenPort: this.opts.udpListenPort,
             label: 'mock-daemon',
             bootstrapAddresses: this.opts.bootstrapAddresses,
-            httpPostJsonFunction: (address: Address, path: UrlPath, data: JSONObject, opts: {timeoutMsec: DurationMsec}) => (this.#daemonGroup.mockHttpPostJson(address, path, data, opts)),
-            httpGetDownloadFunction: (address: Address, path: UrlPath) => (this.#daemonGroup.mockHttpGetDownload(address, path)),
-            dgramCreateSocketFunction: mockDgramCreateSocket,
-            createWebSocketServerFunction: mockCreateWebSocketServer,
-            createWebSocketFunction: mockCreateWebSocket,
-            kacheryStorageManager: this.#mockKacheryStorageManager,
+            externalInterface,
             opts: {
                 noBootstrap: (this.opts.bootstrapAddresses.length === 0),
                 isBootstrapNode: this.opts.isBootstrap,
