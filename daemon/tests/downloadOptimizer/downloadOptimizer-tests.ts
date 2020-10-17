@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
-import { DataStreamyProgress } from '../../src/common/DataStreamy';
+import DataStreamy from '../../src/common/DataStreamy';
 import { sleepMsec } from '../../src/common/util';
 import DownloadOptimizer from '../../src/downloadOptimizer/DownloadOptimizer';
 import DownloadOptimizerJob from '../../src/downloadOptimizer/DownloadOptimizerJob';
@@ -20,35 +20,22 @@ const exampleNodeId1: NodeId = 'example-node-id-1' as any as NodeId
 const exampleNodeId2: NodeId = 'example-node-id-2' as any as NodeId
 
 class MockDownloaderCreator {
-    createDownloader(args: {fileKey: FileKey, nodeId: NodeId}) {
-        const _onProgressCallbacks: ((progress: DataStreamyProgress) => void)[] = []
-        const _onFinishedCallbacks: (() => void)[] = []
-        const _onErrorCallbacks: ((err: Error) => void)[] = []
-        const _cancel = () => {}
-        const downloader = {
-            onProgress: (callback: (progress: DataStreamyProgress) => void) => {_onProgressCallbacks.push(callback)},
-            onError: (callback: (err: Error) => void) => {_onErrorCallbacks.push(callback)},
-            onFinished: (callback: () => void) => {_onFinishedCallbacks.push(callback)},
-            cancel: _cancel
-        }
+    createDownloader(args: {fileKey: FileKey, nodeId: NodeId}): DataStreamy {
+        const downloader = new DataStreamy()
         setTimeout(() => {
+            downloader._start(byteCount(100))
             if (args.fileKey.sha1 === exampleErrorFileKey.sha1) {
-                _onErrorCallbacks.forEach(cb => {cb(Error('MockError'))})
+                downloader._error(Error('MockError'))
             }
             else if (args.fileKey.sha1 === exampleLongDurationFileKey.sha1) {
                 setTimeout(() => {
-                    _onFinishedCallbacks.forEach(cb => {cb()})
+                    downloader._reportBytesLoaded(byteCount(100))
+                    downloader._end()
                 }, 2000)
             }
             else {
-                _onProgressCallbacks.forEach(cb => {
-                    const progress: DataStreamyProgress = {
-                        bytesLoaded: byteCount(100),
-                        bytesTotal: byteCount(100)
-                    }
-                    cb(progress)
-                })
-                _onFinishedCallbacks.forEach(cb => {cb()})
+                downloader._reportBytesLoaded(byteCount(100))
+                downloader._end()
             }
         }, 2)
         return downloader
@@ -57,13 +44,13 @@ class MockDownloaderCreator {
 
  // need to explicitly use mocha prefix once or the dependency gets wrongly cleaned up
  mocha.describe('downloadOptimizer', () => {
-    describe('Add file', () => {
+    describe('Add file ahvr', () => {
         it('Add file', (done) => {
             (async () => {
                 const fileKey = exampleFileKey
                 const downloaderCreator = new MockDownloaderCreator()
                 const downloadOptimizer = new DownloadOptimizer(downloaderCreator)
-                const f: DownloadOptimizerJob = downloadOptimizer.addFile(fileKey, null)
+                const f: DownloadOptimizerJob = downloadOptimizer.addFile(fileKey, byteCount(100))
                 let gotProgress = false
                 f.incrementNumPointers()
                 f.onProgress((progress) => {

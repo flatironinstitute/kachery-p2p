@@ -154,7 +154,6 @@ export default class PublicApiServer {
             const vals = path.split('/')
             const nodeId = vals[2]
             const streamId = vals[3]
-            console.log('------------------- test', nodeId.slice(0, 6), streamId)
             if (!isNodeId(nodeId)) {
                 throw Error('Invalid node id in mock /download')
             }

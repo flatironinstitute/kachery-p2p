@@ -63,7 +63,6 @@ export default class DownloadOptimizer {
                         const providerNodeCandidates: DownloadOptimizerProviderNode[] = []
                         let providerNodeIds = this.#providerNodesForFiles.get(fileKey)
                         if (providerNodeIds) {
-                            console.log('----------------- found provider')
                             providerNodeIds.forEach(providerNodeId => {
                                 const providerNode = this.#providerNodes.get(providerNodeId)
                                 if ((providerNode) && (!providerNode.isDownloading())) {
@@ -73,7 +72,6 @@ export default class DownloadOptimizer {
                         }
                         const providerNode = chooseFastestProviderNode(providerNodeCandidates);
                         if (providerNode) {
-                            console.log('---------- creating downloader')
                             const downloader = this.#downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId() });
                             job.setDownloader(downloader)
                             providerNode.setDownloader(downloader)

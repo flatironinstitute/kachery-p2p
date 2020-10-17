@@ -232,11 +232,9 @@ class KacheryP2PNode {
         })
     }
     loadFile(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): DataStreamy {
-        console.log('------------------------------------ loadFile 1')
         const { fileKey, opts } = args
         const { fromNode, fromChannel } = opts
         const inProgressFiles: DownloadOptimizerFile[] = []
-        console.log('------------------------------------ loadFile 2')
         const ret = new DataStreamy()
         ret.onComplete(() => {
             inProgressFiles.forEach(f => {
@@ -245,7 +243,6 @@ class KacheryP2PNode {
         });
         (async () => {
             try {
-                console.log('------------------------------------ loadFile 7')
                 if (fileKey.manifestSha1) {
                     const manifestFileKey = {sha1: fileKey.manifestSha1}
                     const manifestR = await this._loadFileAsync({fileKey: manifestFileKey, opts: {fromNode, fromChannel}})
@@ -325,9 +322,7 @@ class KacheryP2PNode {
                     }
                 }
                 else {
-                    console.log('------------------------------------ loadFile 8')
                     let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null
-                    console.log('------------ adding file', fileKey, fileSize)
                     const f = this.#downloadOptimizer.addFile(fileKey, fileSize)
                     f.incrementNumPointers()
                     inProgressFiles.push(f)
@@ -341,7 +336,6 @@ class KacheryP2PNode {
                         ret._end()
                     })
                     if (opts.fromNode) {
-                        console.log('------------- setting provider node', opts.fromNode.slice(0, 6))
                         this.#downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: opts.fromNode})
                     }
                     else {
@@ -627,7 +621,6 @@ class KacheryP2PNode {
         }
     }
     streamFileData(nodeId: NodeId, streamId: StreamId): DataStreamy {
-        console.log('-------------- stream file data', nodeId.slice(0, 6), this.#nodeId.slice(0, 6))
         if (nodeId !== this.#nodeId) {
             // redirect to a different node
             const p = this.#proxyConnectionsToClients.get(nodeId)

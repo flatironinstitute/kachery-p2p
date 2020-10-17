@@ -37,7 +37,6 @@ export default class DownloaderCreator {
                 ret._error(Error('Unexpected: no stream ID'))
                 return
             }
-            console.log(`-------------- download file data ${responseData.streamId} from: ${n.remoteNodeId().slice(0, 6)}`)
             const o: DataStreamy = await n.downloadFileData(responseData.streamId, {method: 'default'})
             o.onError(err => {
                 ret._error(err)
@@ -53,7 +52,6 @@ export default class DownloaderCreator {
             o.onData((buf: Buffer) => {
                 ret._data(buf)
             })
-            console.log('-------------- downloadFileData response', responseData)
         })()
 
         return ret

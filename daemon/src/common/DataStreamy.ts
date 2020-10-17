@@ -58,6 +58,9 @@ export default class DataStreamy {
         this.#onCompleteCallbacks.push(callback)
     }
     onProgress(callback: (progress: DataStreamyProgress) => void) {
+        if ((byteCountToNumber(this.#bytesLoaded) > 0) && (this.#size)) {
+            callback({bytesLoaded: this.#bytesLoaded, bytesTotal: this.#size})
+        }
         this.#onProgressCallbacks.push(callback)
     }
     cancel() {
@@ -82,6 +85,7 @@ export default class DataStreamy {
         if (this.#completed) return
         if (this.#started) return
         this.#started = true
+        this.#size = size
         this.#onStartedCallbacks.forEach(cb => {
             cb(size)
         })

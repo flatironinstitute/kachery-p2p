@@ -607,6 +607,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 await sleepMsec(50)
 
                 await testFindFile(daemon1, daemon2)
+                // await testLoadFile(daemon1, daemon2)
 
                 resolve()
             }, done)

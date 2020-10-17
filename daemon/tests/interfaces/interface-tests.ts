@@ -2,6 +2,7 @@ import { expect } from 'chai' // test library
 import * as mocha from 'mocha' // import types for mocha e.g. describe
 import { hexToPublicKey } from '../../src/common/crypto_util'
 import * as ut from '../../src/interfaces/core'
+import { AnnounceRequestData } from '../../src/interfaces/NodeToNodeRequest'
 import { byteCount, ByteCount } from '../../src/udp/UdpCongestionManager'
 
 // Utility string manipulation
@@ -628,12 +629,17 @@ describe('Kachery primitives', () => {
         })
     })
     describe('Multicast Announce messages', () => {
-        const validAnnounceRequestData = { requestType: 'announce', channelNodeInfo: validChannelNodeInfo }
-        const validMulticastMessageBody = {
-            protocolVersion: 'protocol-version-12',
-            fromNodeId: new Array(65).join('0'),
+        const validAnnounceRequestData: AnnounceRequestData = {
+            requestType: 'announce',
+            channelNodeInfo: validChannelNodeInfo as any as ut.ChannelNodeInfo
+        }
+        const validMulticastMessageBody: ut.MulticastAnnounceMessageBody = {
+            protocolVersion: 'protocol-version-12' as any as ut.ProtocolVersion,
+            fromNodeId: (new Array(65).join('0')) as any as ut.NodeId,
             messageType: 'announce',
-            requestData: validAnnounceRequestData
+            requestData: validAnnounceRequestData,
+            udpListenPort: null,
+            timestamp: ut.nowTimestamp()
         }
         it('Confirm validChannelNodeInfo is actually valid', () => {
             expect(ut.isChannelNodeInfo(validChannelNodeInfo)).to.be.true            
