@@ -63,6 +63,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 // wait a bit
                 await sleepMsec(100)
 
+                expect(daemon1.remoteNodeManager().getBootstrapRemoteNodes().length).equals(1)
+
                 let numFound = 0
                 const a = await daemon1.mockDaemonPostFindFile({
                     fileKey: f1Key,

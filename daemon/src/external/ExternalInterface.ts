@@ -45,11 +45,13 @@ export interface KacheryStorageManagerInterface {
     getFileReadStream: (fileKey: FileKey) => Promise<DataStreamy>
 }
 
+export type CreateKacheryStorageManagerFunction = () => KacheryStorageManagerInterface
+
 export default interface ExternalInterface {
     httpPostJsonFunction: HttpPostJsonFunction,
     httpGetDownloadFunction: HttpGetDownloadFunction,
     dgramCreateSocketFunction: DgramCreateSocketFunction,
     createWebSocketServerFunction: CreateWebSocketServerFunction,
     createWebSocketFunction: CreateWebSocketFunction,
-    kacheryStorageManager: KacheryStorageManagerInterface,
+    createKacheryStorageManager: CreateKacheryStorageManagerFunction
 }

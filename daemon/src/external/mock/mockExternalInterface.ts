@@ -20,7 +20,7 @@ const mockExternalInterface = (daemonGroup: MockNodeDaemonGroup): ExternalInterf
         dgramCreateSocketFunction: mockDgramCreateSocket,
         createWebSocketServerFunction: mockCreateWebSocketServer,
         createWebSocketFunction: mockCreateWebSocket,
-        kacheryStorageManager: new MockKacheryStorageManager(),
+        createKacheryStorageManager: () => (new MockKacheryStorageManager())
     }
 }
 

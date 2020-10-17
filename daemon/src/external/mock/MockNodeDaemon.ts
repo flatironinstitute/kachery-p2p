@@ -6,7 +6,7 @@ import DaemonApiServer, { ApiFindFileRequest } from "../../services/DaemonApiSer
 import PublicApiServer from "../../services/PublicApiServer"
 import startDaemon from "../../startDaemon"
 import mockExternalInterface from "./mockExternalInterface"
-import MockKacheryStorageManager from "./MockKacheryStorageManager"
+import MockKacheryStorageManager from './MockKacheryStorageManager'
 
 export default class MockNodeDaemon {
     #daemonGroup: MockNodeDaemonGroup
@@ -17,7 +17,6 @@ export default class MockNodeDaemon {
         stop: Function,
         node: KacheryP2PNode
     } | null = null
-    #mockKacheryStorageManager = new MockKacheryStorageManager()
     constructor(daemonGroup: MockNodeDaemonGroup, private opts: {
         bootstrapAddresses: Address[],
         isBootstrap: boolean,
@@ -78,7 +77,7 @@ export default class MockNodeDaemon {
         return this.node().keyPair()
     }
     mockKacheryStorageManager() {
-        return this.#mockKacheryStorageManager
+        return this.node().kacheryStorageManager() as MockKacheryStorageManager
     }
     async mockPublicApiPost(path: string, data: JSONObject): Promise<JSONObject> {
         if (!this.#d) {

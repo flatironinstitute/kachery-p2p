@@ -81,7 +81,7 @@ const realExternalInterface = (): ExternalInterface => {
         dgramCreateSocketFunction: dgramCreateSocket,
         createWebSocketServerFunction: createWebSocketServer,
         createWebSocketFunction: createWebSocket,
-        kacheryStorageManager: new KacheryStorageManager()
+        createKacheryStorageManager: () => (new KacheryStorageManager())
     }
 }
 

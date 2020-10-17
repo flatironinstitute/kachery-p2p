@@ -78,7 +78,7 @@ class KacheryP2PNode {
     }) {
         this.#keyPair = p.keyPair // the keypair
         this.#nodeId = publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey)) // get the node id from the public key
-        this.#kacheryStorageManager = p.externalInterface.kacheryStorageManager
+        this.#kacheryStorageManager = p.externalInterface.createKacheryStorageManager()
         this.#liveFeedSubscriptionManager = new LiveFeedSubscriptionManager()
 
         // The feed manager -- each feed is a collection of append-only logs
@@ -134,6 +134,9 @@ class KacheryP2PNode {
     }
     useMulticastUdp() {
         return (this.p.opts.multicastUdpAddress !== null)
+    }
+    kacheryStorageManager() {
+        return this.#kacheryStorageManager
     }
     findFile(args: {fileKey: FileKey, timeoutMsec: DurationMsec, fromChannel: ChannelName | null}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
@@ -247,7 +250,7 @@ class KacheryP2PNode {
                     if (!manifestR.found) {
                         throw Error('Unexpected... loadFileAsync should have thrown an error if not found')
                     }
-                    const manifestDataStream = await this.p.externalInterface.kacheryStorageManager.getFileReadStream(fileKey)
+                    const manifestDataStream = await this.#kacheryStorageManager.getFileReadStream(fileKey)
                     const manifestBuf = (await manifestDataStream.allData()).toString()
                     const manifest = JSON.stringify(manifestBuf)
                     if (!isFileManifest(manifest)) {
