@@ -4,8 +4,7 @@ import DataStreamy from '../../src/common/DataStreamy';
 import { sleepMsec } from '../../src/common/util';
 import DownloadOptimizer from '../../src/downloadOptimizer/DownloadOptimizer';
 import DownloadOptimizerJob from '../../src/downloadOptimizer/DownloadOptimizerJob';
-import { FileKey, NodeId, Sha1Hash } from '../../src/interfaces/core';
-import { byteCount } from '../../src/udp/UdpCongestionManager';
+import { byteCount, FileKey, NodeId, Sha1Hash } from '../../src/interfaces/core';
 
 const exampleFileKey: FileKey = {
     sha1: '782c1e65b839d37d9d69768d226a2f66ce135c02' as any as Sha1Hash
@@ -44,7 +43,7 @@ class MockDownloaderCreator {
 
  // need to explicitly use mocha prefix once or the dependency gets wrongly cleaned up
  mocha.describe('downloadOptimizer', () => {
-    describe('Add file ahvr', () => {
+    describe('Add file', () => {
         it('Add file', (done) => {
             (async () => {
                 const fileKey = exampleFileKey

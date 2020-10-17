@@ -1,7 +1,6 @@
 import assert from 'assert';
 import { hexToPublicKey, JSONStringifyDeterministic } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
-import { ByteCount, isByteCount } from '../udp/UdpCongestionManager';
 import { AnnounceRequestData, isAnnounceRequestData } from "./NodeToNodeRequest";
 
 export type JSONPrimitive = string | number | boolean | null;
@@ -785,4 +784,50 @@ export const isLiveFeedSubscriptions = (x: any): x is LiveFeedSubscriptions => {
     return _validateObject(x, {
         subscriptions: isArrayOf(isLiveFeedSubscription)
     })
+}
+
+export interface UrlPath extends String {
+    __urlPath__: never
+}
+export const urlPath = (x: string) => {
+    return x as any as UrlPath
+}
+
+export const isBuffer = (x: any): x is Buffer => {
+    return ((x !== null) && (x instanceof Buffer));
+}
+
+export interface DurationMsec extends Number {
+    __durationMsec__: never
+}
+export const exampleDurationMsec = 3000 as any as DurationMsec
+export const isDurationMsec = (x: any) : x is DurationMsec => {
+    if (!isNumber(x)) return false;
+    if (x < 0) return false;
+    return true;
+}
+export const durationMsecToNumber = (x: DurationMsec): number => {
+    return x as any as number;
+}
+export const durationMsec = (n: number) => {
+    return n as any as DurationMsec
+}
+
+export interface ByteCount extends Number {
+    __byteCount__: never
+}
+export const exampleByteCount = 4000 as any as ByteCount
+export const isByteCount = (x: any) : x is ByteCount => {
+    if (!isNumber(x)) return false;
+    if (x < 0) return false;
+    return true;
+}
+export const byteCountToNumber = (x: ByteCount): number => {
+    return x as any as number;
+}
+export const byteCount = (n: number) => {
+    return n as any as ByteCount
+}
+export const addByteCount = (n1: ByteCount, n2: ByteCount) => {
+    return byteCount(byteCountToNumber(n1) + byteCountToNumber(n2))
 }

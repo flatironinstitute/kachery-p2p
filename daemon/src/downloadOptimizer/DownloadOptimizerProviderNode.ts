@@ -1,6 +1,5 @@
 import DataStreamy, { DataStreamyProgress } from "../common/DataStreamy";
-import { NodeId } from "../interfaces/core";
-import { byteCount, ByteCount, byteCountToNumber } from "../udp/UdpCongestionManager";
+import { byteCount, ByteCount, byteCountToNumber, NodeId } from "../interfaces/core";
 import RateEstimator from "./RateEstimator";
 
 class DownloadOptimizerProviderNode {

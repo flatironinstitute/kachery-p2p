@@ -1,6 +1,5 @@
 import bson from 'bson';
-import { elapsedSince, FileKey, nowTimestamp, Sha1Hash } from '../interfaces/core';
-import { DurationMsec } from '../udp/UdpCongestionManager';
+import { DurationMsec, elapsedSince, FileKey, nowTimestamp, Sha1Hash } from '../interfaces/core';
 
 export const randomString = (num_chars: number) => {
     var text = "";

@@ -1,4 +1,4 @@
-import { byteCount, ByteCount, byteCountToNumber } from "../udp/UdpCongestionManager"
+import { byteCount, ByteCount, byteCountToNumber } from "../interfaces/core"
 
 export interface DataStreamyProgress {
     bytesLoaded: ByteCount,

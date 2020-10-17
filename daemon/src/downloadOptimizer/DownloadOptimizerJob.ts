@@ -1,6 +1,5 @@
 import DataStreamy, { DataStreamyProgress } from "../common/DataStreamy";
-import { FileKey } from "../interfaces/core";
-import { ByteCount, byteCount } from "../udp/UdpCongestionManager";
+import { ByteCount, byteCount, FileKey } from "../interfaces/core";
 
 export default class DownloadOptimizerJob {
     #fileKey: FileKey

@@ -1,5 +1,5 @@
 import ExternalInterface from './external/ExternalInterface';
-import { Address, ChannelName, HostName, KeyPair, Port } from './interfaces/core';
+import { Address, ChannelName, durationMsec, HostName, KeyPair, Port } from './interfaces/core';
 import KacheryP2PNode from './KacheryP2PNode';
 import AnnounceService from './services/AnnounceService';
 import BootstrapService from './services/BootstrapService';
@@ -10,7 +10,6 @@ import ProxyClientService from './services/ProxyClientService';
 import PublicApiServer from './services/PublicApiServer';
 import PublicUdpSocketServer from './services/PublicUdpSocketServer';
 import PublicWebSocketServer from './services/PublicWebSocketServer';
-import { durationMsec } from './udp/UdpCongestionManager';
 
 const startDaemon = async (args: {
     channelNames: ChannelName[],

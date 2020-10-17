@@ -6,11 +6,10 @@ import { action } from '../common/action';
 import DataStreamy from '../common/DataStreamy';
 import start_http_server from '../common/start_http_server';
 import { sleepMsec } from '../common/util';
-import { Address, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, _validateObject } from '../interfaces/core';
+import { Address, ByteCount, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, _validateObject } from '../interfaces/core';
 import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
-import { ByteCount } from '../udp/UdpCongestionManager';
 
 interface Req {
     body: any,

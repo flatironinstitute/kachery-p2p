@@ -1,9 +1,8 @@
 import { action } from "../common/action"
 import { sleepMsec } from "../common/util"
-import { ChannelName, ChannelNodeInfo, elapsedSince, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core"
+import { ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core"
 import { AnnounceRequestData, isAnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from "../interfaces/NodeToNodeRequest"
 import { SendRequestMethod } from "../RemoteNode"
-import { durationMsec, DurationMsec, durationMsecToNumber } from "../udp/UdpCongestionManager"
 
 interface RemoteNodeManagerInterface {
     onNodeChannelAdded: (callback: (remoteNodeId: NodeId, channelName: ChannelName) => void) => void,

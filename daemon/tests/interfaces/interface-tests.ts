@@ -3,7 +3,6 @@ import * as mocha from 'mocha' // import types for mocha e.g. describe
 import { hexToPublicKey } from '../../src/common/crypto_util'
 import * as ut from '../../src/interfaces/core'
 import { AnnounceRequestData } from '../../src/interfaces/NodeToNodeRequest'
-import { byteCount, ByteCount } from '../../src/udp/UdpCongestionManager'
 
 // Utility string manipulation
 const shorterByOne = (x: string): string => { return x.substring(1, x.length) }
@@ -15,34 +14,37 @@ const validChannelName: ut.ChannelName = 'example.Channel-Name' as any as ut.Cha
 const validNodeId: ut.NodeId = new Array(65).join('a') as any as ut.NodeId
 const validFeedId: ut.FeedId = new Array(65).join('F') as any as ut.FeedId
 const validSubfeedHash: ut.SubfeedHash = new Array(41).join('b') as any as ut.SubfeedHash
-const validFileKey = {
-    sha1: new Array(41).join('5'),
+const validSha1Hash: ut.Sha1Hash = new Array(41).join('5') as any as ut.Sha1Hash
+const validHostName: ut.HostName = 'www.flatironinstitute.org' as any as ut.HostName
+const validSignature: ut.Signature = new Array(129).join('1') as any as ut.Signature
+const validFileKey: ut.FileKey = {
+    sha1: validSha1Hash,
     chunkOf: {
-        fileKey: { sha1: new Array(41).join('6') },
-        startByte: 0 as any as ByteCount,
-        endByte: 100 as any as ByteCount
+        fileKey: { sha1: validSha1Hash },
+        startByte: 0 as any as ut.ByteCount,
+        endByte: 100 as any as ut.ByteCount
     }
 }
 // yeah, exporting this is not a great idea... TODO
-export const validNodeInfoBody = {
-    channelName: 'valid-channel-name',
+export const validNodeInfoBody: ut.ChannelNodeInfoBody = {
+    channelName: validChannelName,
     nodeId: validNodeId,
-    httpAddress: { hostName: 'www.flatironinstitute.org', port: 80 },
-    webSocketAddress: { hostName: '192.168.1.1', port: 212 },
-    publicUdpSocketAddress: { hostName: '1.1.1.1', port: 443 },
+    httpAddress: { hostName: validHostName, port: 80 as any as ut.Port },
+    webSocketAddress: { hostName: validHostName, port: 212 as any as ut.Port },
+    publicUdpSocketAddress: { hostName: validHostName, port: 443 as any as ut.Port },
     proxyHttpAddresses: [
-        { hostName: '2.2.2.2', port: 80 },
-        { hostName: '8.8.8.8', port: 80 }, 
-        { hostName: 'www.science.gov', port: 80 }],
+        { hostName: validHostName, port: 80 as any as ut.Port },
+        { hostName: validHostName, port: 80 as any as ut.Port }, 
+        { hostName: validHostName, port: 80 as any as ut.Port }],
     timestamp: ut.nowTimestamp()
 }
-const validChannelNodeInfo = {
+const validChannelNodeInfo: ut.ChannelNodeInfo = {
     body: validNodeInfoBody,
-    signature: new Array(129).join('3')
+    signature: validSignature
 }
 
  // need to explicitly use mocha prefix once or the dependency gets wrongly cleaned up
-mocha.describe('Basic typeguards', () => {
+mocha.describe('Basic type guards', () => {
     describe('JSON Handling', () => {
         // Test fixture for JSON object handling
         const exampleJSONObject = {example: ['json', {object: 1}, '---']}
@@ -70,7 +72,7 @@ mocha.describe('Basic typeguards', () => {
             expect(ut.isJSONSerializable( { map: new Map() } )).to.be.false
         })
         it('isJSONSerializable() returns false on non-serializable property', () => {
-            expect(ut.isJSONSerializable( { outerkey: { key: new Date() }} )).to.be.false
+            expect(ut.isJSONSerializable( { outerKey: { key: new Date() }} )).to.be.false
         })
         it('TryParse returns null without throwing on parse failure', () => {
             expect(ut.tryParseJsonObject('This is not json')).to.be.null
@@ -184,7 +186,7 @@ describe('Utility comparisons', () => {
         })
     })
     describe('Optional: ValidateObjectSpec arguments', () => {
-        const objectSpec: ut.ValidateObjectSpec = { mystring: ut.isString }
+        const objectSpec: ut.ValidateObjectSpec = { myString: ut.isString }
         const optionalSpecChecker = ut.optional(objectSpec)
         it('optional() spec checker returns true when passed undefined', () => {
             expect(optionalSpecChecker(undefined)).to.be.true
@@ -193,7 +195,7 @@ describe('Utility comparisons', () => {
             expect(optionalSpecChecker(null)).to.be.false
         })
         it('optional() spec checker returns true when object matches spec', () => {
-            expect(optionalSpecChecker({ mystring: 'foo' })).to.be.true
+            expect(optionalSpecChecker({ myString: 'foo' })).to.be.true
         })
         it('optional() spec checker returns false when object does not match spec', () => {
             expect(optionalSpecChecker({ notMyString: 'foo' })).to.be.false
@@ -221,44 +223,44 @@ describe('Utility comparisons', () => {
         })
     })
     describe('Object validation to spec', () => {
-        const objectSpec: ut.ValidateObjectSpec = { myobj: { mystring: ut.isString }, mynum: ut.isNumber }
-        const matchingObject = { myobj: { mystring: 'string' }, mynum: 5 }
+        const objectSpec: ut.ValidateObjectSpec = { myObj: { myString: ut.isString }, myNum: ut.isNumber }
+        const matchingObject = { myObj: { myString: 'string' }, myNum: 5 }
         let cb_msg = ''
         const cb = (x: string) => { cb_msg = x }
         it('_validateObject() returns true on correctly formatted object', () => {
             expect(ut._validateObject(matchingObject, objectSpec)).to.be.true
         })
         it('_validateObject() returns false on extra key', () => {
-            expect(ut._validateObject({ ...matchingObject, newkey: 'bar' }, objectSpec)).to.be.false
+            expect(ut._validateObject({ ...matchingObject, newKey: 'bar' }, objectSpec)).to.be.false
         })
         it('_validateObject() calls callback on extra key', () => {
-            ut._validateObject({ ...matchingObject, newkey: 'bar' }, objectSpec, cb)
-            expect(cb_msg).to.equal('Key not in spec: newkey')
+            ut._validateObject({ ...matchingObject, newKey: 'bar' }, objectSpec, cb)
+            expect(cb_msg).to.equal('Key not in spec: newKey')
         })
         it('_validateObject() returns false on wrong-typed value', () => {
-            expect(ut._validateObject({ ...matchingObject, mynum: 'five' }, objectSpec)).to.be.false
+            expect(ut._validateObject({ ...matchingObject, myNum: 'five' }, objectSpec)).to.be.false
         })
         it('_validateObject() calls callback on wrong-typed value', () => {
-            ut._validateObject({ ...matchingObject, mynum: 'five' }, objectSpec, cb)
-            expect(cb_msg).to.equal('Problem validating: mynum')
+            ut._validateObject({ ...matchingObject, myNum: 'five' }, objectSpec, cb)
+            expect(cb_msg).to.equal('Problem validating: myNum')
         })
         it('_validateObject() returns false on missing key', () => {
-            const objectMissingKey = { mynum: 5 }
+            const objectMissingKey = { myNum: 5 }
             expect(ut._validateObject(objectMissingKey, objectSpec)).to.be.false
         })
         it('_validateObject() calls callback on missing key', () => {
-            const objectMissingKey = { mynum: 5 }
+            const objectMissingKey = { myNum: 5 }
             ut._validateObject(objectMissingKey, objectSpec, cb)
-            expect(cb_msg).to.equal('Key not in x: myobj')
+            expect(cb_msg).to.equal('Key not in x: myObj')
         })
         it('_validateObject() returns false on sub-spec validation failure', () => {
-            const subobjectHasBadType = { myobj: { mystring: 5 }, mynum: 5}
-            expect(ut._validateObject(subobjectHasBadType, objectSpec)).to.be.false
+            const subObjectHasBadType = { myObj: { myString: 5 }, myNum: 5}
+            expect(ut._validateObject(subObjectHasBadType, objectSpec)).to.be.false
         })
         it('_validateObject() calls callback on sub-spec validation failure', () => {
-            const subobjectHasBadType = { myobj: { mystring: 5 }, mynum: 5}
-            ut._validateObject(subobjectHasBadType, objectSpec, cb)
-            expect(cb_msg).to.equal('Value of key > myobj < itself failed validation.')
+            const subObjectHasBadType = { myObj: { myString: 5 }, myNum: 5}
+            ut._validateObject(subObjectHasBadType, objectSpec, cb)
+            expect(cb_msg).to.equal('Value of key > myObj < itself failed validation.')
         })
     })
     describe('Object-Map Translation', () => {
@@ -287,7 +289,7 @@ describe('Utility comparisons', () => {
     describe('JSON Objects Match utility function', () => {
         const obj1 = { a: 'value', b: 5 }
         const obj2 = { a: 'value', b: '5' }
-        const obj3 = { wrongkey: 'value' }
+        const obj3 = { wrongKey: 'value' }
         it('jsonObjectsMatch() returns true for identity object', () => {
             expect(ut.jsonObjectsMatch(obj1, obj1)).to.be.true
         })
@@ -357,8 +359,8 @@ describe('Networking primitives', () => {
             expect(ut.isPort(15351)).to.be.true
         })
         it('toNumber() returns expected value', () => {
-            const myport: ut.Port = 22 as any as ut.Port
-            expect(ut.toNumber(myport)).to.equal(22)
+            const myPort: ut.Port = 22 as any as ut.Port
+            expect(ut.toNumber(myPort)).to.equal(22)
         })
     })
     describe('Hostname', () => {
@@ -426,7 +428,7 @@ describe('Time', () => {
         it('zeroTimestamp() returns value equal to 0', () => {
             expect(ut.zeroTimestamp()).to.equal(0)
         })
-        it('nowTimestamp() matches current datetime', () => {
+        it('nowTimestamp() matches current dateTime', () => {
             const now = Number(new Date())
             expect((ut.nowTimestamp() as any as number) - now).to.equal(0)
         })
@@ -681,7 +683,7 @@ describe('Kachery primitives', () => {
             const ret = ut.feedIdToPublicKeyHex(value as any as ut.FeedId)
             expect(ut.isPublicKeyHex(ret)).to.be.true
         })
-        it('publicKeyHexToNodeId() returnsvalid NodeId', () => {
+        it('publicKeyHexToNodeId() returnsValid NodeId', () => {
             const ret = ut.publicKeyHexToNodeId(value as any as ut.PublicKeyHex)
             expect(ut.isNodeId(ret)).to.be.true
         })
@@ -699,7 +701,7 @@ describe('Searches and Requests', () => {
         const validResult = {
             nodeId: validNodeId,
             fileKey: validFileKey,
-            fileSize: byteCount(16)
+            fileSize: ut.byteCount(16)
         }
         it('isFindFileResult() returns true for valid input', () => {
             expect(ut.isFindFileResult(validResult)).to.be.true
@@ -733,8 +735,8 @@ describe('Searches and Requests', () => {
 })
 
 describe('Channels', () => {
-    const validChannelName = 'this-is-my-channel'
-    const validNodeInfo = { body: validNodeInfoBody, signature: new Array(129).join('a') }
+    const validChannelName: ut.ChannelName = 'this-is-my-channel' as any as ut.ChannelName
+    const validNodeInfo: ut.ChannelNodeInfo = { body: validNodeInfoBody, signature: new Array(129).join('a') as any as ut.Signature }
     describe('ChannelName', () => {
         it('isChannelName() returns true on valid channel name', () => {
             expect(ut.isChannelName(validChannelName)).to.be.true
@@ -803,7 +805,7 @@ describe('Feeds', () => {
             expect(ut.isFeedSubfeedId(`:${hash}`)).to.be.false
         })
         it('isFeedSubfeedId() returns false for invalid subfeed hash', () => {
-            expect(ut.isFeedSubfeedId(`${feedId}:badhash`)).to.be.false
+            expect(ut.isFeedSubfeedId(`${feedId}:badHash`)).to.be.false
         })
         it('feedSubfeedId() returns inputs joined by colon', () => {
             let a = feedId as any as ut.FeedId
@@ -815,36 +817,36 @@ describe('Feeds', () => {
 })
 
 describe('Feeds Configuration', () => {
-    const myPair = {
-        publicKey: new Array(65).join('a'),
-        privateKey: new Array(65).join('b')
+    const myFeedsConfigFeed: ut.FeedsConfigFeed = {
+        publicKey: new Array(65).join('a') as any as ut.PublicKeyHex,
+        privateKey: new Array(65).join('b') as any as ut.PrivateKeyHex
     }
     // FeedsConfig: { feeds: { [string]: FeedsConfigFeed }, feedIdsByName: { [string]: FeedId }}
     // where FeedId is 64-char hex and FeedName is any nonempty string
-    const feedId1 = new Array(65).join('1')
-    const feedId2 = new Array(65).join('2')
-    const validFeedsConfig = {
+    const feedId1: ut.FeedId = new Array(65).join('1') as any as ut.FeedId
+    const feedId2: ut.FeedId = new Array(65).join('2') as any as ut.FeedId
+    const validFeedsConfig: ut.FeedsConfig = {
         feeds: {
-            [feedId1]: myPair,
-            [feedId2]: { ...myPair, privateKey: undefined }
+            [feedId1.toString()]: myFeedsConfigFeed,
+            [feedId2.toString()]: { ...myFeedsConfigFeed, privateKey: undefined }
         },
         feedIdsByName: {
-            one: new Array(65).join('7'),
-            b: new Array(65).join('b')
+            one: new Array(65).join('7') as any as ut.FeedId,
+            b: new Array(65).join('b') as any as ut.FeedId
         }
     }
     describe('FeedsConfigFeed', () => {
         it('isFeedsConfigFeed() returns true for pair of valid hexes', () => {
-            expect(ut.isFeedsConfigFeed(myPair)).to.be.true
+            expect(ut.isFeedsConfigFeed(myFeedsConfigFeed)).to.be.true
         })
         it('isFeedsConfigFeed() returns true for public key hex only', () => {
             expect(ut.isFeedsConfigFeed({ publicKey: new Array(65).join('2') })).to.be.true
         })
         it('isFeedsConfigFeed() returns false for invalid public key hex', () => {
-            expect(ut.isFeedsConfigFeed({ ...myPair, publicKey: 'foo' })).to.be.false
+            expect(ut.isFeedsConfigFeed({ ...myFeedsConfigFeed, publicKey: 'foo' })).to.be.false
         })
         it('isFeedsConfigFeed() returns false for invalid private key hex', () => {
-            expect(ut.isFeedsConfigFeed({ ...myPair, privateKey: 'foo' })).to.be.false
+            expect(ut.isFeedsConfigFeed({ ...myFeedsConfigFeed, privateKey: 'foo' })).to.be.false
         })
     })
     describe('FeedsConfig', () => {
@@ -855,15 +857,15 @@ describe('Feeds Configuration', () => {
             expect(ut.isFeedsConfig({
                 ...validFeedsConfig,
                 feeds: {
-                    a: myPair
+                    a: myFeedsConfigFeed
                 }
             })).to.be.false
         })
     })
     describe('Conversions', () => {
         const ram = { feeds: new Map<ut.FeedId, ut.FeedsConfigFeed>(), feedIdsByName: new Map<ut.FeedName, ut.FeedId>() }
-        ram.feeds.set(feedId1 as any as ut.FeedId, myPair as any as ut.FeedsConfigFeed)
-        ram.feeds.set(feedId2 as any as ut.FeedId, { ...myPair, privateKey: undefined } as any as ut.FeedsConfigFeed)
+        ram.feeds.set(feedId1 as any as ut.FeedId, myFeedsConfigFeed as any as ut.FeedsConfigFeed)
+        ram.feeds.set(feedId2 as any as ut.FeedId, { ...myFeedsConfigFeed, privateKey: undefined } as any as ut.FeedsConfigFeed)
         ram.feedIdsByName.set('one' as any as ut.FeedName, new Array(65).join('7') as any as ut.FeedId)
         ram.feedIdsByName.set('b' as any as ut.FeedName, new Array(65).join('b') as any as ut.FeedId)
         const match = (obj: { feeds: {[key: string]: any }, feedIdsByName: {[key: string]: any} },
@@ -893,10 +895,10 @@ describe('Feeds Configuration', () => {
 })
 
 describe('Subfeed Messages', () => {
-    const validSubfeedMessage = { key: 'value' }
-    const validSubfeedMsgMetaData = { metakey: 'metavalue' }
-    const sig1 = new Array(129).join('1')
-    const sig2 = new Array(129).join('2')
+    const validSubfeedMessage: ut.SubfeedMessage = { key: 'value' } as any as ut.SubfeedMessage
+    const validSubfeedMsgMetaData: ut.SubfeedMessageMetaData = { metakey: 'metavalue' }
+    const sig1: ut.SignedSubfeedMessage = new Array(129).join('1') as any as ut.SignedSubfeedMessage
+    const sig2: ut.SignedSubfeedMessage = new Array(129).join('2') as any as ut.SignedSubfeedMessage
 
     describe('SubfeedMessage', () => {
         it('isSubfeedMessage() returns true for object input', () => {
@@ -915,15 +917,15 @@ describe('Subfeed Messages', () => {
         })
     })
     describe('SignedSubfeedMessage', () => {
-        const msg = {
+        const msg: ut.SignedSubfeedMessage = {
             body: {
-                previousSignature: sig1,
+                previousSignature: sig1 as any as ut.Signature,
                 messageNumber: 2,
                 message: validSubfeedMessage,
                 timestamp: ut.nowTimestamp(),
                 metaData: validSubfeedMsgMetaData
             },
-            signature: sig2
+            signature: sig2 as any as ut.Signature
         }
         it('isSignedSubfeedMessage() returns true on valid input', () => {
             expect(ut.isSignedSubfeedMessage(msg)).to.be.true
@@ -958,9 +960,9 @@ describe('Subfeed Messages', () => {
         })
     })
     describe('SubmittedSubfeedMessage', () => {
-        const mymsg = { 'key': new Array(9990).join('!') } // stringifies to 9999 characters
+        const myMsg: ut.SubmittedSubfeedMessage = { 'key': new Array(9990).join('!') } as any as ut.SubmittedSubfeedMessage // stringifies to 9999 characters
         it('isSubmittedSubfeedMessage() returns true for valid object', () => {
-            expect(ut.isSubmittedSubfeedMessage(mymsg)).to.be.true
+            expect(ut.isSubmittedSubfeedMessage(myMsg)).to.be.true
         })
         it('isSubmittedSubfeedMessage() returns false for non-object input', () => {
             expect(ut.isSubmittedSubfeedMessage(6)).to.be.false
@@ -969,15 +971,15 @@ describe('Subfeed Messages', () => {
             expect(ut.isSubmittedSubfeedMessage( { 'key': new Array(9991).join('!') })).to.be.false
         })
         it('submittedSubfeedMessageToSubfeedMessage() acts as identity function', () => {
-            const newmsg = ut.submittedSubfeedMessageToSubfeedMessage(mymsg as any as ut.SubmittedSubfeedMessage)
-            expect(newmsg).to.deep.equal(mymsg)
+            const newMsg = ut.submittedSubfeedMessageToSubfeedMessage(myMsg as any as ut.SubmittedSubfeedMessage)
+            expect(newMsg).to.deep.equal(myMsg)
         })
     })
 })
 
 describe('Subfeed Access', () => {
-    const accessWriteAllowedRule = { nodeId: validNodeId, write: true }
-    const accessWriteDeniedRule = { nodeId: validNodeId, write: false }
+    const accessWriteAllowedRule: ut.SubfeedAccessRule = { nodeId: validNodeId, write: true }
+    const accessWriteDeniedRule: ut.SubfeedAccessRule = { nodeId: validNodeId, write: false }
     describe('SubfeedAccessRule', () => {
         it('isSubfeedAccessRule() returns true for valid node id and write value', () => {
             expect(ut.isSubfeedAccessRule(accessWriteAllowedRule)).to.be.true
@@ -1003,8 +1005,8 @@ describe('Subfeed Access', () => {
 })
 
 describe('Subfeed subscriptions', () => {
-    const myWatchName = 'Hortense the Subfeed Watch'
-    const mySubfeedWatch = { feedId: validFeedId, subfeedHash: validSubfeedHash, position: 12 }
+    const myWatchName: ut.SubfeedWatchName = 'Hortense the Subfeed Watch' as any as ut.SubfeedWatchName
+    const mySubfeedWatch: ut.SubfeedWatch = { feedId: validFeedId, subfeedHash: validSubfeedHash, position: 12 }
     describe('Subfeed Watch Name', () => {
         it('isSubfeedWatchName() returns true for string input', () => {
             expect(ut.isSubfeedWatchName(myWatchName))
@@ -1028,11 +1030,11 @@ describe('Subfeed subscriptions', () => {
     })
     describe('Subfeed Watches (mapping SubfeedName to SubfeedWatch)', () => {
         it('isSubfeedWatches() returns true for valid mapping of name to watch', () => {
-            expect(ut.isSubfeedWatches({ [myWatchName]: mySubfeedWatch })).to.be.true
+            expect(ut.isSubfeedWatches({ [myWatchName.toString()]: mySubfeedWatch })).to.be.true
         })
         it('isSubfeedWatches() returns false for invalid watch', () => {
             expect(ut.isSubfeedWatches({
-                [myWatchName]: mySubfeedWatch,
+                [myWatchName.toString()]: mySubfeedWatch,
                 'invalid watch': { feedId: 12 }
             })).to.be.false
         })
@@ -1041,7 +1043,7 @@ describe('Subfeed subscriptions', () => {
         })
     })
     describe('Subfeed Watch object-memory conversions', () => {
-        const obj = { [myWatchName]: mySubfeedWatch }
+        const obj = { [myWatchName.toString()]: mySubfeedWatch }
         const map = new Map<ut.SubfeedWatchName, ut.SubfeedWatch>()
         map.set(myWatchName as any as ut.SubfeedWatchName, mySubfeedWatch as any as ut.SubfeedWatch)
         // probably should've found a way to not repeat this from the objectToMap() stuff 700 lines above
@@ -1064,10 +1066,10 @@ describe('Subfeed subscriptions', () => {
 })
 
 describe('Live Feed Subscriptions', () => {
-    const validLiveFeedSubscription = {
-        subscriptionName: "This is my subscription name",
-        feedId: new Array(65).join('F'),
-        subfeedHash: new Array(41).join('b'),
+    const validLiveFeedSubscription: ut.LiveFeedSubscription = {
+        subscriptionName: "This is my subscription name" as any as ut.LiveFeedSubscriptionName,
+        feedId: new Array(65).join('F') as any as ut.FeedId,
+        subfeedHash: new Array(41).join('b') as any as ut.SubfeedHash,
         position: 12
     }
     describe('Live Feed Subscription Name', () => {

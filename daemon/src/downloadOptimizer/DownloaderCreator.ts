@@ -1,8 +1,7 @@
 import DataStreamy from "../common/DataStreamy"
-import { FileKey, NodeId } from "../interfaces/core"
+import { ByteCount, byteCount, durationMsec, FileKey, NodeId } from "../interfaces/core"
 import { DownloadFileDataRequestData, isDownloadFileDataResponseData } from "../interfaces/NodeToNodeRequest"
 import KacheryP2PNode from "../KacheryP2PNode"
-import { ByteCount, byteCount, durationMsec } from "../udp/UdpCongestionManager"
 
 export default class DownloaderCreator {
     #node: KacheryP2PNode

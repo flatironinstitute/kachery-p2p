@@ -1,5 +1,5 @@
 import { randomAlphaString } from "../common/util";
-import { elapsedSince, isNumber, isString, nowTimestamp } from "../interfaces/core";
+import { addByteCount, byteCount, ByteCount, byteCountToNumber, durationMsec, DurationMsec, durationMsecToNumber, elapsedSince, isNumber, isString, nowTimestamp } from "../interfaces/core";
 import { createPacketId, PacketId } from "./UdpPacketSender";
 
 const TARGET_PCT_LOST_BYTES = 2;
@@ -12,25 +12,6 @@ export class UdpTimeoutError extends Error {
     constructor(errorString: string) {
       super(errorString);
     }
-}
-
-export interface ByteCount extends Number {
-    __byteCount__: never
-}
-export const exampleByteCount = 4000 as any as ByteCount
-export const isByteCount = (x: any) : x is ByteCount => {
-    if (!isNumber(x)) return false;
-    if (x < 0) return false;
-    return true;
-}
-export const byteCountToNumber = (x: ByteCount): number => {
-    return x as any as number;
-}
-export const byteCount = (n: number) => {
-    return n as any as ByteCount
-}
-const addByteCount = (n1: ByteCount, n2: ByteCount) => {
-    return byteCount(byteCountToNumber(n1) + byteCountToNumber(n2))
 }
 
 export interface ByteCountPerSec extends Number {
@@ -66,22 +47,6 @@ export const packetCount = (n: number) => {
 }
 const addPacketCount = (n1: PacketCount, n2: PacketCount) => {
     return packetCount(packetCountToNumber(n1) + packetCountToNumber(n2))
-}
-
-export interface DurationMsec extends Number {
-    __durationMsec__: never
-}
-export const exampleDurationMsec = 3000 as any as DurationMsec
-export const isDurationMsec = (x: any) : x is DurationMsec => {
-    if (!isNumber(x)) return false;
-    if (x < 0) return false;
-    return true;
-}
-export const durationMsecToNumber = (x: DurationMsec): number => {
-    return x as any as number;
-}
-export const durationMsec = (n: number) => {
-    return n as any as DurationMsec
 }
 
 // type SendCallback = (onConfirmed: () => void, onTimedOut: () => void, onError: () => void, opts: {timeoutMsec: DurationMsec}) => void

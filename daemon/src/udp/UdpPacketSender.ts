@@ -1,9 +1,9 @@
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { DgramSocket } from '../external/ExternalInterface';
-import { Address, isBoolean, isProtocolVersion, isString, ProtocolVersion, toNumber, _validateObject } from '../interfaces/core';
+import { Address, byteCount, durationMsec, DurationMsec, durationMsecToNumber, isBoolean, isProtocolVersion, isString, ProtocolVersion, toNumber, _validateObject } from '../interfaces/core';
 import { protocolVersion } from '../protocolVersion';
-import UdpCongestionManager, { byteCount, durationMsec, DurationMsec, durationMsecToNumber, UdpTimeoutError } from './UdpCongestionManager';
+import UdpCongestionManager, { UdpTimeoutError } from './UdpCongestionManager';
 
 export const UDP_PACKET_HEADER_SIZE = 200
 

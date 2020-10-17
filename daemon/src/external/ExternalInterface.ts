@@ -1,10 +1,8 @@
 import DataStreamy from "../common/DataStreamy"
-import { UrlPath } from "../common/httpPostJson"
-import { Address, FileKey, JSONObject, NodeId, Port } from "../interfaces/core"
-import { ByteCount, DurationMsec } from "../udp/UdpCongestionManager"
+import { Address, ByteCount, DurationMsec, FileKey, JSONObject, NodeId, Port, UrlPath } from "../interfaces/core"
 
-type HttpPostJsonFunction = ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>)
-type HttpGetDownloadFunction = ((address: Address, path: UrlPath) => Promise<DataStreamy>)
+export type HttpPostJsonFunction = ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>)
+export type HttpGetDownloadFunction = ((address: Address, path: UrlPath) => Promise<DataStreamy>)
 
 export interface DgramSocket {
     bind: (port: number) => void,

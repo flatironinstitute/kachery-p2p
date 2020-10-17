@@ -1,5 +1,4 @@
-import { elapsedSince, nowTimestamp, Timestamp } from '../interfaces/core'
-import { DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager'
+import { DurationMsec, durationMsecToNumber, elapsedSince, nowTimestamp, Timestamp } from '../interfaces/core'
 
 export default class GarbageMap<Key, Value> {
     #map = new Map<Key, {value: Value, timestamp: Timestamp}>()

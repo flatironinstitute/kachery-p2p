@@ -1,18 +1,10 @@
 import axios from 'axios';
 import http from 'http';
 import { Readable } from 'stream';
-import { Address, HostName, JSONObject, Port } from '../interfaces/core';
-import { ByteCount, durationMsec, DurationMsec, durationMsecToNumber } from '../udp/UdpCongestionManager';
-import DataStreamy from './DataStreamy';
+import DataStreamy from '../../common/DataStreamy';
+import { Address, ByteCount, durationMsec, DurationMsec, durationMsecToNumber, HostName, JSONObject, Port, urlPath, UrlPath } from '../../interfaces/core';
 
 export const _tests: {[key: string]: () => Promise<void>} = {}
-
-export interface UrlPath extends String {
-    __urlPath__: never
-}
-export const urlPath = (x: string) => {
-    return x as any as UrlPath
-}
 
 export const httpPostJson = async (address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}): Promise<JSONObject> => {
     const res = await axios.post('http://' + address.hostName + ':' + address.port + path, data, {timeout: durationMsecToNumber(opts.timeoutMsec), responseType: 'json'})

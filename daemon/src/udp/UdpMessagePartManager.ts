@@ -1,7 +1,6 @@
 import GarbageMap from '../common/GarbageMap'
-import { Address } from '../interfaces/core'
+import { Address, durationMsec } from '../interfaces/core'
 import { MessagePartData, NumParts, numPartsToNumber, partIndex, PartIndex, UdpHeader, UdpMessageId, udpMessagePartId, UdpMessagePartId } from '../interfaces/UdpMessage'
-import { durationMsec } from './UdpCongestionManager'
 
 export default class UdpMessagePartManager {
     #messageParts = new GarbageMap<UdpMessagePartId, MessagePartData>(durationMsec(30 * 60 * 1000))

@@ -1,9 +1,8 @@
 import { verifySignature } from './common/crypto_util';
-import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey } from './interfaces/core';
+import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey } from './interfaces/core';
 import { AnnounceRequestData, AnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest';
 import KacheryP2PNode from './KacheryP2PNode';
 import RemoteNode, { SendRequestMethod } from './RemoteNode';
-import { DurationMsec, durationMsecToNumber } from './udp/UdpCongestionManager';
 
 class RemoteNodeManager {
     #node: KacheryP2PNode

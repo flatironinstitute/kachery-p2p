@@ -1,6 +1,5 @@
 import DataStreamy from "../common/DataStreamy";
-import { FileKey, NodeId } from "../interfaces/core";
-import { ByteCount } from "../udp/UdpCongestionManager";
+import { ByteCount, FileKey, NodeId } from "../interfaces/core";
 import DownloadOptimizerJob from "./DownloadOptimizerJob";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
 

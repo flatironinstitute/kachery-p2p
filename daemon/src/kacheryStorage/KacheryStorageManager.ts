@@ -1,7 +1,6 @@
 import fs from 'fs';
 import DataStreamy from "../common/DataStreamy";
-import { FileKey } from "../interfaces/core";
-import { ByteCount, byteCount, byteCountToNumber } from "../udp/UdpCongestionManager";
+import { ByteCount, byteCount, byteCountToNumber, FileKey } from "../interfaces/core";
 import { getLocalFileInfo } from "./kachery";
 
 export interface LocalFilePath extends String {

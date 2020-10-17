@@ -1,5 +1,5 @@
-import { elapsedSince, nowTimestamp, Timestamp } from "../interfaces/core";
-import { ByteCount, byteCount, byteCountPerSec, ByteCountPerSec, byteCountPerSecToNumber, byteCountToNumber } from "../udp/UdpCongestionManager";
+import { ByteCount, byteCount, byteCountToNumber, elapsedSince, nowTimestamp, Timestamp } from "../interfaces/core";
+import { byteCountPerSec, ByteCountPerSec, byteCountPerSecToNumber } from "../udp/UdpCongestionManager";
 
 const FILTER_TIME_CONSTANT_SEC = 10;
 

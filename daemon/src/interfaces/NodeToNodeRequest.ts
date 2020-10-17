@@ -2,8 +2,7 @@ import assert from 'assert'
 import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
 import { ApiProbeResponse, isApiProbeResponse } from '../services/PublicApiServer'
-import { ByteCount, DurationMsec, isByteCount, isDurationMsec } from '../udp/UdpCongestionManager'
-import { ChannelInfo, ChannelName, ChannelNodeInfo, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isChannelInfo, isChannelName, isChannelNodeInfo, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
+import { ByteCount, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isByteCount, isChannelInfo, isChannelName, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
 

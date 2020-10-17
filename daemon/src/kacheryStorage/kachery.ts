@@ -1,7 +1,6 @@
 import { exec } from 'child_process';
 import fs from 'fs';
-import { Sha1Hash } from '../interfaces/core';
-import { byteCount, ByteCount } from '../udp/UdpCongestionManager';
+import { byteCount, ByteCount, Sha1Hash } from '../interfaces/core';
 
 export const kacheryStorageDir = () => {
     const ret = process.env['KACHERY_STORAGE_DIR'];

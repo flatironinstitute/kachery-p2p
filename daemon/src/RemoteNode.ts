@@ -1,11 +1,9 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
 import DataStreamy from "./common/DataStreamy";
-import { urlPath } from "./common/httpPostJson";
-import { Address, ChannelName, ChannelNodeInfo, createRequestId, FileKey, NodeId, nodeIdToPublicKey, nowTimestamp } from "./interfaces/core";
+import { Address, ByteCount, ChannelName, ChannelNodeInfo, createRequestId, DurationMsec, FileKey, NodeId, nodeIdToPublicKey, nowTimestamp, urlPath } from "./interfaces/core";
 import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import { protocolVersion } from "./protocolVersion";
-import { ByteCount, DurationMsec } from "./udp/UdpCongestionManager";
 
 export type SendRequestMethod = 'default' | 'http' | 'udp'
 

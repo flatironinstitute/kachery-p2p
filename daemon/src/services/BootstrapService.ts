@@ -1,10 +1,8 @@
 import { action } from "../common/action";
-import { UrlPath, urlPath } from "../common/httpPostJson";
 import { sleepMsec } from "../common/util";
-import { Address, JSONObject, NodeId } from "../interfaces/core";
+import { Address, DurationMsec, durationMsec, durationMsecToNumber, JSONObject, NodeId, urlPath, UrlPath } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import { isApiProbeResponse } from "../services/PublicApiServer";
-import { DurationMsec, durationMsec, durationMsecToNumber } from "../udp/UdpCongestionManager";
 
 interface RemoteNodeManagerInterface {
     setBootstrapNode: (remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, publicUdpSocketAddress: Address | null) => void
