@@ -1,5 +1,5 @@
 import DataStreamy from "../common/DataStreamy"
-import { Address, ByteCount, DurationMsec, FileKey, JSONObject, NodeId, Port, UrlPath } from "../interfaces/core"
+import { Address, ByteCount, DurationMsec, FileKey, JSONObject, NodeId, Port, Sha1Hash, UrlPath } from "../interfaces/core"
 
 export type HttpPostJsonFunction = ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>)
 export type HttpGetDownloadFunction = ((address: Address, path: UrlPath) => Promise<DataStreamy>)
@@ -42,7 +42,8 @@ export type CreateWebSocketFunction = (url: string, opts: {timeoutMsec: Duration
 
 export interface KacheryStorageManagerInterface {
     findFile: (fileKey: FileKey) => Promise<{found: boolean, size: ByteCount}>,
-    getFileReadStream: (fileKey: FileKey) => Promise<DataStreamy>
+    getFileReadStream: (fileKey: FileKey) => Promise<DataStreamy>,
+    storeFile: (sha1: Sha1Hash, data: Buffer) => Promise<void>
 }
 
 export type CreateKacheryStorageManagerFunction = () => KacheryStorageManagerInterface

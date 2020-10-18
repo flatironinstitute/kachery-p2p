@@ -41,14 +41,20 @@ export default class DownloaderCreator {
                 ret._error(err)
             })
             o.onFinished(() => {
-                // todo: where to put the data?
-                ret._end()
+                const data = Buffer.concat(_data)
+                this.#node.kacheryStorageManager().storeFile(args.fileKey.sha1, data).then(() => {
+                    ret._end()
+                }).catch((err: Error) => {
+                    ret._error(err)
+                })
+                
             })
             o.onStarted((size: ByteCount) => {
                 ret._start(size)
             })
             // o.cancel // todo
             o.onData((buf: Buffer) => {
+                _data.push(buf)
                 ret._data(buf)
             })
         })()

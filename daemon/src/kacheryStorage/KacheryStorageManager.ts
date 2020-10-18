@@ -1,6 +1,6 @@
 import fs from 'fs';
 import DataStreamy from "../common/DataStreamy";
-import { ByteCount, byteCount, byteCountToNumber, FileKey } from "../interfaces/core";
+import { ByteCount, byteCount, byteCountToNumber, FileKey, Sha1Hash } from "../interfaces/core";
 import { getLocalFileInfo } from "./kachery";
 
 export interface LocalFilePath extends String {
@@ -27,7 +27,7 @@ const createDataStreamForFile = (path: LocalFilePath, offset: ByteCount, size: B
 }
 
 export class KacheryStorageManager {
-    constructor() {        
+    constructor() {
     }
     async findFile(fileKey: FileKey): Promise<{found: boolean, size: ByteCount}> {
         if (fileKey.sha1) {
@@ -45,6 +45,9 @@ export class KacheryStorageManager {
             }
         }
         return {found: false, size: byteCount(0)}
+    }
+    async storeFile(sha1: Sha1Hash, data: Buffer) {
+        // todo
     }
     async getFileReadStream(fileKey: FileKey): Promise<DataStreamy> {
         if (fileKey.sha1) {

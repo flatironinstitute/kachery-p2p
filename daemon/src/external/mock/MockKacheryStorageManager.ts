@@ -34,6 +34,12 @@ export default class MockKacheryStorageManager {
             throw Error('File not found')
         }
     }
+    async storeFile(sha1: Sha1Hash, data: Buffer) {
+        const fileKey = this.addMockFile(data)
+        if (fileKey.sha1 !== sha1) {
+            throw Error(`Unexpected hash for storing file: ${fileKey.sha1} <> ${sha1}`)
+        }
+    }
     addMockFile(content: Buffer): FileKey {
         const shasum = crypto.createHash('sha1')
         shasum.update(content)

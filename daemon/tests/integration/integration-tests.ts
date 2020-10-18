@@ -170,7 +170,7 @@ const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) =>
     const f1Content = Buffer.from('123456')
     const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content)
 
-    return new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
         const reqData = {
             fileKey: f1Key,
             fromNode: daemon1.nodeId()
@@ -183,6 +183,8 @@ const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) =>
             resolve()
         })
     })
+    const f = await daemon2.mockKacheryStorageManager().findFile(f1Key)
+    expect(f.found).is.true
 }
 
 let lastMockPort = 0
