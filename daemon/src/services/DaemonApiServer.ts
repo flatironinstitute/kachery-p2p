@@ -361,7 +361,6 @@ export default class DaemonApiServer {
         });
     }
     _loadFile(reqData: ApiLoadFileRequest) {
-        console.warn(reqData)
         if (!isApiLoadFileRequest(reqData)) throw Error('Invalid request in _apiLoadFile');
 
         const { fileKey, fromNode, fromChannel } = reqData;

@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import { sleepMsec } from '../../src/common/util';
 import MockNodeDaemon, { MockNodeDaemonGroup } from '../../src/external/mock/MockNodeDaemon';
-import { byteCount, ChannelName, durationMsec, Port } from '../../src/interfaces/core';
+import { byteCount, ByteCount, byteCountToNumber, ChannelName, durationMsec, Port } from '../../src/interfaces/core';
 import { ApiLoadFileRequest } from '../../src/services/DaemonApiServer';
 
 const mockChannelName = 'mock-channel' as any as ChannelName
@@ -137,7 +137,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 expect(daemon2.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
 
                 await testFindFile(daemon1, daemon2)
-                await testLoadFile(daemon1, daemon2)
+                await testLoadFile(daemon1, daemon2, byteCount(30000), byteCount(2010))
 
                 resolve()
             }, done)
@@ -167,9 +167,9 @@ const testFindFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) =>
     })
 }
 
-const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {
-    const f1Content = Buffer.from('0123456789-----------------------------')
-    const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize: byteCount(10)})
+const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fileSize: ByteCount, chunkSize: ByteCount) => {
+    const f1Content = Buffer.alloc(byteCountToNumber(fileSize), 'a')
+    const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize})
 
     await new Promise((resolve, reject) => {
         const reqData: ApiLoadFileRequest = {

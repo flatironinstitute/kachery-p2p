@@ -56,7 +56,7 @@ export default class DownloadOptimizer {
         }, 1);
     }
     _update() {
-        let numActiveFileDownloads = Array.from(this.#jobs.values()).filter(file => file.isDownloading).length;
+        let numActiveFileDownloads = Array.from(this.#jobs.values()).filter(file => (file.isDownloading())).length;
         if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
             this.#jobs.forEach((job, fileKey) => {
                 if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
