@@ -1,12 +1,10 @@
 import express, { Express } from 'express';
-import http from 'http';
-import https from 'https';
 import JsonSocket from 'json-socket';
 import { Socket } from 'net';
 import { action } from '../common/action';
 import { DataStreamyProgress } from '../common/DataStreamy';
-import start_http_server from '../common/start_http_server';
 import { sleepMsec } from '../common/util';
+import { HttpServerInterface } from '../external/ExternalInterface';
 import { ChannelName, DurationMsec, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isNodeId, isNull, isNumber, isOneOf, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -40,10 +38,24 @@ const isApiFindFileRequest = (x: any): x is ApiFindFileRequest => {
     });
 }
 
+export interface ApiLoadFileRequest {
+    fileKey: FileKey,
+    fromNode: NodeId | null,
+    fromChannel: ChannelName | null
+}
+const isApiLoadFileRequest = (x: any): x is ApiLoadFileRequest => {
+    return _validateObject(x, {
+        fileKey: isFileKey,
+        fromNode: isOneOf([isNull, isNodeId]),
+        fromChannel: isOneOf([isNull, isChannelName])
+    });
+}
+
 export default class DaemonApiServer {
     #node: KacheryP2PNode
     #app: Express
-    #server: http.Server | https.Server | null = null
+    // #server: http.Server | https.Server | null = null
+    #server: HttpServerInterface | null = null
 
     // This is the API server for the local daemon
     // The local Python code communicates with the daemon
@@ -84,9 +96,9 @@ export default class DaemonApiServer {
                 process.exit(0);
             }, async (err: Error) => {
                 await this._errorResponse(req, res, 500, err.message);
-            });
+            })
             /////////////////////////////////////////////////////////////////////////
-        });
+        })
         // /findFile - find a file (or feed) in the remote nodes. May return more than one.
         this.#app.post('/findFile', async (req, res) => {
             /////////////////////////////////////////////////////////////////////////
@@ -241,7 +253,7 @@ export default class DaemonApiServer {
             throw Error(`mock unexpected path: ${path}`)
         }
     }
-    mockPostLoadFile(data: JSONObject): {
+    mockPostLoadFile(data: ApiLoadFileRequest): {
         onFinished: (callback: () => void) => void,
         onProgress: (callback: (progress: DataStreamyProgress) => void) => void,
         onError: (callback: (err: Error) => void) => void,
@@ -348,19 +360,8 @@ export default class DaemonApiServer {
             x.cancel();
         });
     }
-    _loadFile(reqData: JSONObject) {
-        interface ApiLoadFileRequest {
-            fileKey: FileKey,
-            fromNode: NodeId | null,
-            fromChannel: ChannelName | null
-        }
-        const isApiLoadFileRequest = (x: any): x is ApiLoadFileRequest => {
-            return _validateObject(x, {
-                fileKey: isFileKey,
-                fromNode: optional(isNodeId),
-                fromChannel: optional(isChannelName)
-            });
-        }
+    _loadFile(reqData: ApiLoadFileRequest) {
+        console.warn(reqData)
         if (!isApiLoadFileRequest(reqData)) throw Error('Invalid request in _apiLoadFile');
 
         const { fileKey, fromNode, fromChannel } = reqData;
@@ -737,7 +738,7 @@ export default class DaemonApiServer {
     }
     // Start listening via http/https
     async listen(port: Port) {
-        this.#server = start_http_server(this.#app, port)
+        this.#server = this.#node.startHttpServer(this.#app, port)
     }
 }
 

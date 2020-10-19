@@ -2,7 +2,8 @@ import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import { sleepMsec } from '../../src/common/util';
 import MockNodeDaemon, { MockNodeDaemonGroup } from '../../src/external/mock/MockNodeDaemon';
-import { ChannelName, durationMsec, JSONObject, Port } from '../../src/interfaces/core';
+import { byteCount, ChannelName, durationMsec, Port } from '../../src/interfaces/core';
+import { ApiLoadFileRequest } from '../../src/services/DaemonApiServer';
 
 const mockChannelName = 'mock-channel' as any as ChannelName
 
@@ -58,7 +59,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const daemon1 = await g.createDaemon({bootstrapAddresses: [bootstrapDaemon.address()], isBootstrap: false, channelNames: [mockChannelName], multicastUdpAddress: null, udpListenPort: null, webSocketListenPort: null})
 
                 const f1Content = Buffer.from('123456')
-                const f1Key = bootstrapDaemon.mockKacheryStorageManager().addMockFile(f1Content)
+                const f1Key = bootstrapDaemon.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize: byteCount(1000)})
 
                 // wait a bit
                 await sleepMsec(100)
@@ -146,7 +147,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
 
 const testFindFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {
     const f1Content = Buffer.from('123456')
-    const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content)
+    const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize: byteCount(1000)})
 
     let numFound = 0
     const a = await daemon2.mockDaemonPostFindFile({
@@ -167,14 +168,15 @@ const testFindFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) =>
 }
 
 const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {
-    const f1Content = Buffer.from('123456')
-    const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content)
+    const f1Content = Buffer.from('0123456789-----------------------------')
+    const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize: byteCount(10)})
 
     await new Promise((resolve, reject) => {
-        const reqData = {
+        const reqData: ApiLoadFileRequest = {
             fileKey: f1Key,
-            fromNode: daemon1.nodeId()
-        } as any as JSONObject
+            fromChannel: null,
+            fromNode: null
+        }
         const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData)
         x.onError(err => {
             reject(err)

@@ -157,7 +157,8 @@ export class MockNodeDaemonGroup {
             }
             return await daemon.mockPublicApiGetDownload(path.toString())
         }
-        
-        throw Error('mock - unable to process http get download')
+        else {
+            throw Error('mock - unable to process http get download')
+        }
     }
 }

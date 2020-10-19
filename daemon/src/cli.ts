@@ -6,8 +6,7 @@ import os from 'os';
 import yargs from 'yargs';
 import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util';
 import realExternalInterface from './external/real/realExternalInterface';
-import { Address, isAddress, isChannelName, isHostName, isKeyPair, isPort, JSONObject, KeyPair } from './interfaces/core';
-import { LocalFilePath } from './kacheryStorage/KacheryStorageManager';
+import { Address, isAddress, isChannelName, isHostName, isKeyPair, isPort, JSONObject, KeyPair, LocalFilePath } from './interfaces/core';
 import startDaemon from './startDaemon';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error

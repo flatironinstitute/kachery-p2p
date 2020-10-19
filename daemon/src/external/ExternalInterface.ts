@@ -41,18 +41,31 @@ export type CreateWebSocketServerFunction = (port: Port, nodeId: NodeId) => WebS
 export type CreateWebSocketFunction = (url: string, opts: {timeoutMsec: DurationMsec}) => WebSocketInterface
 
 export interface KacheryStorageManagerInterface {
-    findFile: (fileKey: FileKey) => Promise<{found: boolean, size: ByteCount}>,
-    getFileReadStream: (fileKey: FileKey) => Promise<DataStreamy>,
+    findFile: (fileKey: FileKey) => Promise<{found: boolean, size: ByteCount}>
+    getFileReadStream: (fileKey: FileKey) => Promise<DataStreamy>
     storeFile: (sha1: Sha1Hash, data: Buffer) => Promise<void>
+    concatenateChunks: (sha1: Sha1Hash, chunkSha1s: Sha1Hash[]) => Promise<void>
 }
 
 export type CreateKacheryStorageManagerFunction = () => KacheryStorageManagerInterface
 
+export interface HttpServerInterface {
+    listen: (port: number) => void
+    close: () => void
+}
+
+export interface ExpressInterface {
+    
+}
+
+export type StartHttpServerFunction = (app: ExpressInterface, port: Port) => HttpServerInterface
+
 export default interface ExternalInterface {
-    httpPostJsonFunction: HttpPostJsonFunction,
-    httpGetDownloadFunction: HttpGetDownloadFunction,
-    dgramCreateSocketFunction: DgramCreateSocketFunction,
-    createWebSocketServerFunction: CreateWebSocketServerFunction,
-    createWebSocketFunction: CreateWebSocketFunction,
-    createKacheryStorageManager: CreateKacheryStorageManagerFunction
+    httpPostJson: HttpPostJsonFunction,
+    httpGetDownload: HttpGetDownloadFunction,
+    dgramCreateSocket: DgramCreateSocketFunction,
+    createWebSocketServer: CreateWebSocketServerFunction,
+    createWebSocket: CreateWebSocketFunction,
+    createKacheryStorageManager: CreateKacheryStorageManagerFunction,
+    startHttpServer: StartHttpServerFunction
 }

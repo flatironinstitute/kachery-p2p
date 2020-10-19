@@ -1,7 +1,7 @@
 import { byteCount, ByteCount, byteCountToNumber } from "../interfaces/core"
 
 export interface DataStreamyProgress {
-    bytesLoaded: ByteCount,
+    bytesLoaded: ByteCount
     bytesTotal: ByteCount
 }
 
@@ -62,6 +62,9 @@ export default class DataStreamy {
             callback({bytesLoaded: this.#bytesLoaded, bytesTotal: this.#size})
         }
         this.#onProgressCallbacks.push(callback)
+    }
+    bytesLoaded(): ByteCount {
+        return this.#bytesLoaded
     }
     cancel() {
         if (this.#cancelled) return

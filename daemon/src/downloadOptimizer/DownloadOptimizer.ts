@@ -25,9 +25,11 @@ export default class DownloadOptimizer {
         }
         j.onError(() => {
             this.#jobs.delete(fileKey)
+            this._scheduleUpdate()
         });
         j.onFinished(() => {
             this.#jobs.delete(fileKey)
+            this._scheduleUpdate()
         });
         this._scheduleUpdate()
         return j

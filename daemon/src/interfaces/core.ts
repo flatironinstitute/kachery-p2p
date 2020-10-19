@@ -831,3 +831,36 @@ export const byteCount = (n: number) => {
 export const addByteCount = (n1: ByteCount, n2: ByteCount) => {
     return byteCount(byteCountToNumber(n1) + byteCountToNumber(n2))
 }
+
+export interface LocalFilePath extends String {
+    __localFilePath__: never // phantom
+}
+export const localFilePath = (p: string) => {
+    return p as any as LocalFilePath
+}
+
+export interface FileManifestChunk {
+    start: ByteCount,
+    end: ByteCount,
+    sha1: Sha1Hash
+}
+export const isFileManifestChunk = (x: any): x is FileManifestChunk => {
+    return _validateObject(x, {
+        start: isByteCount,
+        end: isByteCount,
+        sha1: isSha1Hash
+    })
+}
+
+export interface FileManifest {
+    size: ByteCount,
+    sha1: Sha1Hash,
+    chunks: FileManifestChunk[]
+}
+export const isFileManifest = (x: any): x is FileManifest => {
+    return _validateObject(x, {
+        size: isByteCount,
+        sha1: isSha1Hash,
+        chunks: isArrayOf(isFileManifestChunk)
+    })
+}

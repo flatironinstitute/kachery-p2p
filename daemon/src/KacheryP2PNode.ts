@@ -4,11 +4,10 @@ import GarbageMap from './common/GarbageMap'
 import { sha1MatchesFileKey } from './common/util'
 import DownloaderCreator from './downloadOptimizer/DownloaderCreator'
 import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
-import DownloadOptimizerFile from './downloadOptimizer/DownloadOptimizerJob'
-import ExternalInterface, { KacheryStorageManagerInterface } from './external/ExternalInterface'
+import ExternalInterface, { ExpressInterface, HttpServerInterface, KacheryStorageManagerInterface } from './external/ExternalInterface'
 import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
-import { Address, byteCount, ByteCount, byteCountToNumber, ChannelInfo, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, errorMessage, FeedId, FileKey, FindFileResult, FindLiveFeedResult, HostName, isAddress, isArrayOf, isByteCount, isSha1Hash, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, UrlPath, _validateObject } from './interfaces/core'
+import { Address, byteCount, ByteCount, byteCountToNumber, ChannelInfo, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, errorMessage, FeedId, FileKey, FileManifestChunk, FindFileResult, FindLiveFeedResult, HostName, isAddress, isFileManifest, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, UrlPath } from './interfaces/core'
 import { AnnounceRequestData, AnnounceResponseData, CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData, createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, GetChannelInfoRequestData, GetChannelInfoResponseData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isProbeRequestData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, ProbeRequestData, ProbeResponseData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import { daemonVersion, protocolVersion } from './protocolVersion'
 import { ProxyConnectionToClient } from './proxyConnections/ProxyConnectionToClient'
@@ -17,32 +16,6 @@ import RemoteNode from './RemoteNode'
 import RemoteNodeManager from './RemoteNodeManager'
 import { ApiProbeResponse } from './services/PublicApiServer'
 import PublicUdpSocketServer from './services/PublicUdpSocketServer'
-
-interface FileManifestChunk {
-    start: ByteCount,
-    end: ByteCount,
-    sha1: Sha1Hash
-}
-const isFileManifestChunk = (x: any): x is FileManifestChunk => {
-    return _validateObject(x, {
-        start: isByteCount,
-        end: isByteCount,
-        sha1: isSha1Hash
-    })
-}
-
-interface FileManifest {
-    size: ByteCount,
-    sha1: Sha1Hash,
-    chunks: FileManifestChunk[]
-}
-const isFileManifest = (x: any): x is FileManifest => {
-    return _validateObject(x, {
-        size: isByteCount,
-        sha1: isSha1Hash,
-        chunks: isArrayOf(isFileManifestChunk)
-    })
-}
 
 class KacheryP2PNode {
     #keyPair: KeyPair
@@ -195,169 +168,151 @@ class KacheryP2PNode {
         this.#proxyConnectionsToServers.clear()
     }
     async httpPostJson(address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) {
-        return await this.p.externalInterface.httpPostJsonFunction(address, path, data, opts)
+        return await this.p.externalInterface.httpPostJson(address, path, data, opts)
     }
     async httpGetDownload(address: Address, path: UrlPath) {
-        return await this.p.externalInterface.httpGetDownloadFunction(address, path)
+        return await this.p.externalInterface.httpGetDownload(address, path)
     }
     dgramCreateSocket(args: {type: 'udp4', reuseAddr: boolean}) {
-        return this.p.externalInterface.dgramCreateSocketFunction({type: args.type, reuseAddr: args.reuseAddr, nodeId: this.nodeId()})
+        return this.p.externalInterface.dgramCreateSocket({type: args.type, reuseAddr: args.reuseAddr, nodeId: this.nodeId()})
     }
     createWebSocket(url: string, opts: {timeoutMsec: DurationMsec}) {
-        return this.p.externalInterface.createWebSocketFunction(url, opts)
+        return this.p.externalInterface.createWebSocket(url, opts)
     }
     createWebSocketServer(port: Port) {
-        return this.p.externalInterface.createWebSocketServerFunction(port, this.nodeId())
+        return this.p.externalInterface.createWebSocketServer(port, this.nodeId())
+    }
+    startHttpServer(app: ExpressInterface, port: Port): HttpServerInterface {
+        return this.p.externalInterface.startHttpServer(app, port)
     }
     async _loadFileAsync(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): Promise<{found: boolean, size: ByteCount}> {
         const r = await this.#kacheryStorageManager.findFile(args.fileKey)
         if (r.found) {
             return r
         }
-        return new Promise<{found: boolean, size: ByteCount}>((resolve, reject) => {
-            const {onFinished, onProgress, onError, cancel} = this.loadFile({fileKey: args.fileKey, opts: args.opts})
-            onError(err => {
+        return await new Promise<{found: boolean, size: ByteCount}>((resolve, reject) => {
+            const ds = this.loadFile({fileKey: args.fileKey, opts: args.opts})
+            ds.onError(err => {
                 reject(err)
             })
-            onFinished(() => {
-                (async () => {
-                    const r = await this.#kacheryStorageManager.findFile(args.fileKey)
+            ds.onFinished(() => {
+                this.#kacheryStorageManager.findFile(args.fileKey).then((r) => {
                     if (r.found) {
                         resolve(r)
                     }
                     else {
                         reject(Error('Unexpected - unable to findFile after loadFile reported finished.'))
                     }
-                })()
+                }, (err: Error) => {
+                    reject(err)
+                })
             })
         })
     }
     loadFile(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): DataStreamy {
         const { fileKey, opts } = args
         const { fromNode, fromChannel } = opts
-        const inProgressFiles: DownloadOptimizerFile[] = []
         const ret = new DataStreamy()
-        ret.onComplete(() => {
-            inProgressFiles.forEach(f => {
-                f.decrementNumPointers()
-            })
-        });
-        (async () => {
-            try {
-                if (fileKey.manifestSha1) {
-                    const manifestFileKey = {sha1: fileKey.manifestSha1}
-                    const manifestR = await this._loadFileAsync({fileKey: manifestFileKey, opts: {fromNode, fromChannel}})
-                    if (!manifestR.found) {
-                        throw Error('Unexpected... loadFileAsync should have thrown an error if not found')
-                    }
-                    const manifestDataStream = await this.#kacheryStorageManager.getFileReadStream(fileKey)
-                    const manifestBuf = (await manifestDataStream.allData()).toString()
-                    const manifest = JSON.stringify(manifestBuf)
-                    if (!isFileManifest(manifest)) {
-                        throw new Error('Invalid manifest file')
-                    }
-                    if (!sha1MatchesFileKey({sha1: manifest.sha1, fileKey})) {
-                        throw new Error(`Manifest sha1 does not match file key: ${manifest.sha1}`)
-                    }
-                    ret._start(manifest.size)
-                    let numComplete = 0
-                    manifest.chunks.forEach((chunk: FileManifestChunk) => {
-                        const chunkFileKey: FileKey = {
-                            sha1: chunk.sha1,
-                            chunkOf: {
-                                fileKey: {
-                                    sha1: manifest.sha1
-                                },
-                                startByte: chunk.start,
-                                endByte: chunk.end
-                            }
-                        }
-                        const f = this.#downloadOptimizer.addFile(chunkFileKey, byteCount(byteCountToNumber(chunk.end) - byteCountToNumber(chunk.start)))
-                        f.incrementNumPointers()
-                        inProgressFiles.push(f)
-                        f.onError(err => {
-                            ret._error(err)
-                        })
-                        f.onProgress((progress: DataStreamyProgress) => {
-                            _updateProgressForManifestLoad()
-                        })
-                        f.onFinished(() => {
-                            numComplete ++
-                            if (numComplete === manifest.chunks.length) {
-                                _concatenateChunks().then(() => {
-                                    ret._end()
-                                }).catch((err: Error) => {
-                                    ret._error(err)
-                                })
-                            }
-                        })
-                    })
-                    const _updateProgressForManifestLoad = () => {
-                        // todo: make this more efficient - don't need to loop through all in-progress files every time
-                        let bytesLoaded = 0
-                        inProgressFiles.forEach(f => {
-                            bytesLoaded += byteCountToNumber(f.bytesLoaded())
-                        })
-                        ret._reportBytesLoaded(byteCount(bytesLoaded))
-                    }
-                    const _concatenateChunks = async () => {
-                        // todo
-                        // const chunkPaths: LocalFilePath[] = []
-                        // for (let chunk of manifest.chunks) {
-                        //     const r = await this.#kacheryStorageManager.findFile({sha1: chunk.sha1}, false)
-                        //     if (!r.found) {
-                        //         throw Error('Unexpected. Unable to find chunk in kachery storage after loading')
-                        //     }
-                        //     if (!r.dataStream) {
-                        //         throw Error('Unexpected')
-                        //     }
-                        //     chunkPaths.push(r.localPath)
-                        // }
-                        // const {sha1, path: concatPath} = await concatenateFilesIntoTemporaryFile(chunkPaths)
-                        // if (sha1 !== manifest.sha1) {
-                        //     fs.unlinkSync(concatPath.toString())
-                        //     throw Error('Unexpected SHA-1 of concatenated file.')
-                        // }
-                        // moveFileIntoKacheryStorage({path: concatPath, sha1: manifest.sha1})
-                        // ret._end()
-                    }
+        const manifestSha1 = fileKey.manifestSha1
+        if (manifestSha1) {
+            (async () => {
+                const manifestFileKey = {sha1: manifestSha1}
+                const manifestR = await this._loadFileAsync({fileKey: manifestFileKey, opts: {fromNode, fromChannel}})
+                if (!manifestR.found) {
+                    throw Error('Unexpected... loadFileAsync should have thrown an error if not found')
                 }
-                else {
-                    let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null
-                    const f = this.#downloadOptimizer.addFile(fileKey, fileSize)
-                    f.incrementNumPointers()
-                    inProgressFiles.push(f)
-                    f.onError(err => {
+                const manifestDataStream = await this.#kacheryStorageManager.getFileReadStream(manifestFileKey)
+                const manifestJson = (await manifestDataStream.allData()).toString()
+                const manifest = JSON.parse(manifestJson)
+                if (!isFileManifest(manifest)) {
+                    console.warn(manifest)
+                    throw new Error('Invalid manifest file')
+                }
+                if (!sha1MatchesFileKey({sha1: manifest.sha1, fileKey})) {
+                    throw new Error(`Manifest sha1 does not match file key: ${manifest.sha1}`)
+                }
+                ret._start(manifest.size)
+                let numComplete = 0
+                const chunkDataStreams: DataStreamy[] = []
+                manifest.chunks.forEach((chunk: FileManifestChunk) => {
+                    const chunkFileKey: FileKey = {
+                        sha1: chunk.sha1,
+                        chunkOf: {
+                            fileKey: {
+                                sha1: manifest.sha1
+                            },
+                            startByte: chunk.start,
+                            endByte: chunk.end
+                        }
+                    }
+                    const ds = this.loadFile({fileKey: chunkFileKey, opts: {fromNode: opts.fromNode, fromChannel: opts.fromChannel}})
+                    ds.onError(err => {
                         ret._error(err)
                     })
-                    f.onProgress((progress: DataStreamyProgress) => {
-                        ret._reportBytesLoaded(progress.bytesLoaded)
+                    ds.onProgress((progress: DataStreamyProgress) => {
+                        _updateProgressForManifestLoad()
                     })
-                    f.onFinished(() => {
-                        ret._end()
+                    ds.onFinished(() => {
+                        numComplete ++
+                        if (numComplete === manifest.chunks.length) {
+                            _concatenateChunks().then(() => {
+                                ret._end()
+                            }).catch((err: Error) => {
+                                ret._error(err)
+                            })
+                        }
                     })
-                    if (opts.fromNode) {
-                        this.#downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: opts.fromNode})
-                    }
-                    else {
-                        const ff = this.findFile({fileKey, timeoutMsec: durationMsec(3000), fromChannel: opts.fromChannel})
-                        let atLeastOneProviderFound = false
-                        ff.onFound(result => {
-                            this.#downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: result.nodeId})
-                            atLeastOneProviderFound = true
-                        })
-                        ff.onFinished(() => {
-                            if (!atLeastOneProviderFound) {
-                                ret._error(Error('File not found'))
-                            }
-                        })
-                    }
+                })
+                const _updateProgressForManifestLoad = () => {
+                    // this can be made more efficient - don't need to loop through all in-progress files every time
+                    let bytesLoaded = 0
+                    chunkDataStreams.forEach(ds => {
+                        bytesLoaded += byteCountToNumber(ds.bytesLoaded())
+                    })
+                    ret._reportBytesLoaded(byteCount(bytesLoaded))
                 }
-            }
-            catch(err) {
+                const _concatenateChunks = async () => {
+                    const chunkSha1s: Sha1Hash[] = manifest.chunks.map(c => c.sha1)
+                    await this.#kacheryStorageManager.concatenateChunks(manifest.sha1, chunkSha1s)
+                    ret._end()
+                }
+            })().catch((err: Error) => {
+                console.warn(err)
                 ret._error(err)
+            })
+        }
+        else {
+            let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null
+            const f = this.#downloadOptimizer.addFile(fileKey, fileSize)
+            f.incrementNumPointers()
+            f.onError(err => {
+                f.decrementNumPointers()
+                ret._error(err)
+            })
+            f.onProgress((progress: DataStreamyProgress) => {
+                ret._reportBytesLoaded(progress.bytesLoaded)
+            })
+            f.onFinished(() => {
+                f.decrementNumPointers()
+                ret._end()
+            })
+            if (opts.fromNode) {
+                this.#downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: opts.fromNode})
             }
-        })()
+            else {
+                const ff = this.findFile({fileKey, timeoutMsec: durationMsec(3000), fromChannel: opts.fromChannel})
+                let atLeastOneProviderFound = false
+                ff.onFound(result => {
+                    this.#downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: result.nodeId})
+                    atLeastOneProviderFound = true
+                })
+                ff.onFinished(() => {
+                    if (!atLeastOneProviderFound) {
+                        ret._error(Error('File not found'))
+                    }
+                })
+            }
+        }
         // todo: handle ret.onCancel ??
         return ret
     }

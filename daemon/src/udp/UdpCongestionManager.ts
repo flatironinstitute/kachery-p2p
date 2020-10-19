@@ -1,5 +1,5 @@
 import { randomAlphaString } from "../common/util";
-import { addByteCount, byteCount, ByteCount, byteCountToNumber, durationMsec, DurationMsec, durationMsecToNumber, elapsedSince, isNumber, isString, nowTimestamp } from "../interfaces/core";
+import { addByteCount, byteCount, ByteCount, byteCountToNumber, durationMsec, DurationMsec, durationMsecToNumber, elapsedSince, isNumber, nowTimestamp } from "../interfaces/core";
 import { createPacketId, PacketId } from "./UdpPacketSender";
 
 const TARGET_PCT_LOST_BYTES = 2;
@@ -63,11 +63,6 @@ interface QueuedPacket {
 
 export interface InternalId extends String {
     __internalId__: never // phantom type
-}
-const exampleInternalId: InternalId = "internalId" as any as InternalId
-export const isInternalId = (x: any): x is InternalId => {
-    if (!isString(x)) return false;
-    return (/^[A-Za-z]{10}$/.test(x));
 }
 export const createInternalId = () => {
     return randomAlphaString(10) as any as InternalId;

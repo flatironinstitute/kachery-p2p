@@ -282,8 +282,6 @@ export class ProxyConnectionToClient {
         return await this._waitForResponse(request.body.requestId, {timeoutMsec: durationMsec(10000)});
     }
     streamFileData(streamId: StreamId): DataStreamy {
-        // note: much of this code is duplicated from KacheryP2PNode.streamFileData
-
         const ret = new DataStreamy()
 
         const _handleResponseMessageFromServer = (msg: ProxyStreamFileDataResponseMessage) => {

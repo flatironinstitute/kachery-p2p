@@ -227,7 +227,8 @@ export const isCheckForLiveFeedRequestData = (x: any): x is CheckForLiveFeedRequ
 }
 export interface CheckForLiveFeedResponseData {
     requestType: 'checkForLiveFeed',
-    found: boolean
+    found: boolean,
+    numMessages?: number // todo: is this used?
 }
 export const isCheckForLiveFeedResponseData = (x: any): x is CheckForLiveFeedResponseData => {
     return _validateObject(x, {

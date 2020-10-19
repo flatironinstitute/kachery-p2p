@@ -1,9 +1,13 @@
-import dgram from 'dgram'
-import WebSocket from 'ws'
-import { DurationMsec, durationMsecToNumber, isBuffer, NodeId, Port } from '../../interfaces/core'
-import { KacheryStorageManager } from "../../kacheryStorage/KacheryStorageManager"
-import ExternalInterface, { WebSocketInterface, WebSocketServerInterface } from '../ExternalInterface'
-import { httpGetDownload, httpPostJson } from "./httpPostJson"
+import dgram from 'dgram';
+import fs from 'fs';
+import http from 'http';
+import https from 'https';
+import WebSocket from 'ws';
+import { DurationMsec, durationMsecToNumber, isBuffer, NodeId, Port, toNumber } from '../../interfaces/core';
+import ExternalInterface, { ExpressInterface, HttpServerInterface, WebSocketInterface, WebSocketServerInterface } from '../ExternalInterface';
+import { httpGetDownload, httpPostJson } from "./httpPostJson";
+import { KacheryStorageManager } from './kacheryStorage/KacheryStorageManager';
+
 
 const webSocketInterfaceFromWebSocket = (ws: WebSocket): WebSocketInterface => {
     const onMessage = (cb: (buf: Buffer) => void) => {
@@ -57,6 +61,34 @@ const webSocketServerInterfaceFromWebSocketServer = (S: WebSocket.Server): WebSo
     }
 }
 
+const startHttpServer = (app: ExpressInterface, listenPort: Port): HttpServerInterface => {
+    // convenient for starting either as http or https depending on the port
+    let protocol: 'http' | 'https'
+    let server: HttpServerInterface
+    if (process.env.SSL != null ? process.env.SSL : toNumber(listenPort) % 1000 == 443) {
+        // The port number ends with 443, so we are using https
+        // app.USING_HTTPS = true;
+        protocol = 'https';
+        // Look for the credentials inside the encryption directory
+        // You can generate these for free using the tools of letsencrypt.org
+        const options = {
+            key: fs.readFileSync(__dirname + '/encryption/privkey.pem'),
+            cert: fs.readFileSync(__dirname + '/encryption/fullchain.pem'),
+            ca: fs.readFileSync(__dirname + '/encryption/chain.pem')
+        };
+
+        // Create the https server
+        server = https.createServer(options, app as http.RequestListener);
+    } else {
+        protocol = 'http';
+        // Create the http server and start listening
+        server = http.createServer(app as http.RequestListener);
+    }
+    server.listen(toNumber(listenPort));
+    console.info('API server is running', {protocol, port: listenPort}, {print: true});
+    return server
+}
+
 
 const realExternalInterface = (): ExternalInterface => {
     const dgramCreateSocket = (args: { type: 'udp4', reuseAddr: boolean }) => {
@@ -73,15 +105,18 @@ const realExternalInterface = (): ExternalInterface => {
         return webSocketInterfaceFromWebSocket(ws)
     }
 
-    const kacheryStorageManager = new KacheryStorageManager()
+    const createKacheryStorageManager = () => {
+        return new KacheryStorageManager()
+    }
 
     return {
-        httpPostJsonFunction: httpPostJson,
-        httpGetDownloadFunction: httpGetDownload,
-        dgramCreateSocketFunction: dgramCreateSocket,
-        createWebSocketServerFunction: createWebSocketServer,
-        createWebSocketFunction: createWebSocket,
-        createKacheryStorageManager: () => (new KacheryStorageManager())
+        httpPostJson: httpPostJson,
+        httpGetDownload: httpGetDownload,
+        dgramCreateSocket: dgramCreateSocket,
+        createWebSocketServer: createWebSocketServer,
+        createWebSocket: createWebSocket,
+        createKacheryStorageManager: createKacheryStorageManager,
+        startHttpServer: startHttpServer
     }
 }
 

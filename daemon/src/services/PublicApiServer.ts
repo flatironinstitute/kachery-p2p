@@ -1,11 +1,9 @@
 import express, { Express } from 'express';
-import http from 'http';
-import https from 'https';
 import { Socket } from 'net';
 import { action } from '../common/action';
 import DataStreamy from '../common/DataStreamy';
-import start_http_server from '../common/start_http_server';
 import { sleepMsec } from '../common/util';
+import { HttpServerInterface } from '../external/ExternalInterface';
 import { Address, ByteCount, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, _validateObject } from '../interfaces/core';
 import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
@@ -50,7 +48,8 @@ export default class PublicApiServer {
     #node: KacheryP2PNode
     #verbose: number
     #app: Express
-    #server: http.Server | https.Server | null = null
+    // #server: http.Server | https.Server | null = null
+    #server: HttpServerInterface | null = null
     // This is the public API server for communication between nodes
     constructor(node: KacheryP2PNode, opts: {verbose: number}={verbose: 0}) {
         this.#node = node; // The kachery-p2p daemon
@@ -195,9 +194,9 @@ export default class PublicApiServer {
     }
     // /download
     _apiDownload(nodeId: NodeId, streamId: StreamId, req: Req, res: Res) {
-        const {onData, onStarted, onFinished, onError, cancel} = this.#node.streamFileData(nodeId, streamId)
+        const ds = this.#node.streamFileData(nodeId, streamId)
         let started = false
-        onStarted((size: ByteCount) => {
+        ds.onStarted((size: ByteCount) => {
             started = true
             res.writeHead(200, {
                 'Content-Type': 'application/octet-stream',
@@ -205,13 +204,13 @@ export default class PublicApiServer {
             });
         })
         
-        onData((data: Buffer) => {
+        ds.onData((data: Buffer) => {
             res.send(data)
         })
-        onFinished(() => {
+        ds.onFinished(() => {
             res.end()
         })
-        onError((err: Error) => {
+        ds.onError((err: Error) => {
             if (started) {
                 console.warn(err)
                 console.warn('Error in streaming file data')
@@ -222,7 +221,7 @@ export default class PublicApiServer {
             }
         })
         req.on('close', () => {
-            cancel()
+            ds.cancel()
         });
     }
     // Helper function for returning http request with an error response
@@ -244,6 +243,6 @@ export default class PublicApiServer {
     }
     // Start listening via http/https
     async listen(port: Port) {
-        this.#server = start_http_server(this.#app, port);
+        this.#server = this.#node.startHttpServer(this.#app, port);
     }
 }
