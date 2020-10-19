@@ -4,9 +4,10 @@ import http from 'http';
 import https from 'https';
 import WebSocket from 'ws';
 import { DurationMsec, durationMsecToNumber, isBuffer, NodeId, Port, toNumber } from '../../interfaces/core';
-import ExternalInterface, { ExpressInterface, HttpServerInterface, WebSocketInterface, WebSocketServerInterface } from '../ExternalInterface';
+import ExternalInterface, { ExpressInterface, HttpServerInterface, LocalFeedManagerInterface, WebSocketInterface, WebSocketServerInterface } from '../ExternalInterface';
 import { httpGetDownload, httpPostJson } from "./httpPostJson";
 import { KacheryStorageManager } from './kacheryStorage/KacheryStorageManager';
+import LocalFeedManager from './LocalFeedManager';
 
 
 const webSocketInterfaceFromWebSocket = (ws: WebSocket): WebSocketInterface => {
@@ -109,13 +110,18 @@ const realExternalInterface = (): ExternalInterface => {
         return new KacheryStorageManager()
     }
 
+    const createLocalFeedManager = (): LocalFeedManagerInterface => {
+        return new LocalFeedManager()
+    }
+
     return {
-        httpPostJson: httpPostJson,
-        httpGetDownload: httpGetDownload,
-        dgramCreateSocket: dgramCreateSocket,
-        createWebSocketServer: createWebSocketServer,
-        createWebSocket: createWebSocket,
-        createKacheryStorageManager: createKacheryStorageManager,
+        httpPostJson,
+        httpGetDownload,
+        dgramCreateSocket,
+        createWebSocketServer,
+        createWebSocket,
+        createKacheryStorageManager,
+        createLocalFeedManager,
         startHttpServer: startHttpServer
     }
 }

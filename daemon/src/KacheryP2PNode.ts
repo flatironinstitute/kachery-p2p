@@ -55,7 +55,8 @@ class KacheryP2PNode {
         this.#liveFeedSubscriptionManager = new LiveFeedSubscriptionManager()
 
         // The feed manager -- each feed is a collection of append-only logs
-        this.#feedManager = new FeedManager(this)
+        const localFeedManager = this.p.externalInterface.createLocalFeedManager()
+        this.#feedManager = new FeedManager(this, localFeedManager)
 
         this.#remoteNodeManager = new RemoteNodeManager(this)
 

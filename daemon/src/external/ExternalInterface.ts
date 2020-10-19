@@ -1,5 +1,5 @@
 import DataStreamy from "../common/DataStreamy"
-import { Address, ByteCount, DurationMsec, FileKey, JSONObject, NodeId, Port, Sha1Hash, UrlPath } from "../interfaces/core"
+import { Address, ByteCount, DurationMsec, FeedId, FeedName, FileKey, JSONObject, NodeId, Port, PrivateKeyHex, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, UrlPath } from "../interfaces/core"
 
 export type HttpPostJsonFunction = ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>)
 export type HttpGetDownloadFunction = ((address: Address, path: UrlPath) => Promise<DataStreamy>)
@@ -49,6 +49,21 @@ export interface KacheryStorageManagerInterface {
 
 export type CreateKacheryStorageManagerFunction = () => KacheryStorageManagerInterface
 
+export interface LocalFeedManagerInterface {
+    createFeed: (feedName: FeedName | null) => Promise<FeedId>
+    deleteFeed: (feedId: FeedId) => Promise<void>
+    getFeedId: (feedName: FeedName) => Promise<FeedId | null>
+    hasWriteableFeed: (feedId: FeedId) => Promise<boolean>
+    getPrivateKeyForFeed: (feedId: FeedId) => Promise<PrivateKeyHex | null>
+    feedExistsLocally: (feedId: FeedId) => boolean
+    readSignedSubfeedMessages: (feedId: FeedId, subfeedHash: SubfeedHash) => Promise<SignedSubfeedMessage[]>
+    readSubfeedAccessRules: (feedId: FeedId, subfeedHash: SubfeedHash) => Promise<SubfeedAccessRules>
+    appendSignedMessagesToSubfeed: (feedId: FeedId, subfeedHash: SubfeedHash, messages: SignedSubfeedMessage[]) => void // synchronous!
+    setSubfeedAccessRules: (feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules) => Promise<void>
+}
+
+export type CreateLocalFeedManagerFunction = () => LocalFeedManagerInterface
+
 export interface HttpServerInterface {
     listen: (port: number) => void
     close: () => void
@@ -67,5 +82,6 @@ export default interface ExternalInterface {
     createWebSocketServer: CreateWebSocketServerFunction,
     createWebSocket: CreateWebSocketFunction,
     createKacheryStorageManager: CreateKacheryStorageManagerFunction,
+    createLocalFeedManager: CreateLocalFeedManagerFunction,
     startHttpServer: StartHttpServerFunction
 }

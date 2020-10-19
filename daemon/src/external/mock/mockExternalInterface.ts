@@ -1,7 +1,8 @@
 import { Address, DurationMsec, JSONObject, Port, UrlPath } from '../../interfaces/core'
-import ExternalInterface, { ExpressInterface, HttpServerInterface } from '../ExternalInterface'
+import ExternalInterface, { ExpressInterface, HttpServerInterface, LocalFeedManagerInterface } from '../ExternalInterface'
 import mockDgramCreateSocket from './mockDgramCreateSocket'
 import MockKacheryStorageManager from './MockKacheryStorageManager'
+import MockLocalFeedManager from './MockLocalFeedManager'
 import { MockNodeDaemonGroup } from './MockNodeDaemon'
 import { mockCreateWebSocket, mockCreateWebSocketServer } from './MockWebSocket'
 
@@ -17,13 +18,23 @@ const mockExternalInterface = (daemonGroup: MockNodeDaemonGroup): ExternalInterf
     const httpGetDownload = (address: Address, path: UrlPath) => {
         return daemonGroup.mockHttpGetDownload(address, path)
     }
+
+    const createLocalFeedManager = (): LocalFeedManagerInterface => {
+        return new MockLocalFeedManager()
+    }
+
+    const createKacheryStorageManager = () => {
+        return new MockKacheryStorageManager()
+    }
+
     return {
         httpPostJson,
         httpGetDownload,
         dgramCreateSocket: mockDgramCreateSocket,
         createWebSocketServer: mockCreateWebSocketServer,
         createWebSocket: mockCreateWebSocket,
-        createKacheryStorageManager: () => (new MockKacheryStorageManager()),
+        createKacheryStorageManager,
+        createLocalFeedManager,
         startHttpServer: mockStartHttpServer
     }
 }
