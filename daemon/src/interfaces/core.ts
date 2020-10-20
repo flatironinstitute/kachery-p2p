@@ -763,7 +763,6 @@ export interface SubfeedWatch {
     feedId: FeedId,
     subfeedHash: SubfeedHash,
     position: SubfeedPosition
-    // TODO: No name? Also, should we require position to be positive?
 }
 export const isSubfeedWatch = (x: any): x is SubfeedWatch => {
     return _validateObject(x, {

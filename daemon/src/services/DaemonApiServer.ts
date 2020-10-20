@@ -298,66 +298,65 @@ export default class DaemonApiServer {
     }
     // /findFile - find a file (or feed) in the remote nodes. May return more than one.
     async _apiFindFile(req: Req, res: Res) {
-        const reqData = req.body;
-        if (!isApiFindFileRequest(reqData)) throw Error('Invalid request in _apiFindFile');
+        const reqData = req.body
+        if (!isApiFindFileRequest(reqData)) throw Error('Invalid request in _apiFindFile')
         
         const x = await this._findFile(reqData)
 
-        const jsonSocket = new JsonSocket(res as any as Socket);
+        const jsonSocket = new JsonSocket(res as any as Socket)
 
-        let isDone = false;
+        let isDone = false
         x.onFound(result => {
-            if (isDone) return;
+            if (isDone) return
             // may return more than one result
             // we send them one-by-one
-            jsonSocket.sendMessage(result, () => {});
+            jsonSocket.sendMessage(result, () => {})
         });
         x.onFinished(() => {
-            if (isDone) return;
+            if (isDone) return
             // we are done
-            isDone = true;
-            res.end();
+            isDone = true
+            res.end()
         })
         req.on('close', () => {
             // if the request socket is closed, we cancel the find request
-            isDone = true;
-            x.cancel();
+            isDone = true
+            x.cancel()
         });
     }
     async _findFile(reqData: ApiFindFileRequest) {
-        const { fileKey, timeoutMsec, fromChannel } = reqData;
-        return this.#node.findFile({fileKey, timeoutMsec, fromChannel});
+        const { fileKey, timeoutMsec, fromChannel } = reqData
+        return this.#node.findFile({fileKey, timeoutMsec, fromChannel})
     }
     // /loadFile - load a file from remote kachery node(s) and store in kachery storage
     async _apiLoadFile(req: Req, res: Res) {
         const x = this._loadFile(req.body)
         const jsonSocket = new JsonSocket(res as any as Socket)
-        let isDone = false;
-        // todo: track progress
+        let isDone = false
         x.onFinished(() => {
-            if (isDone) return;
+            if (isDone) return
             // we are done
-            isDone = true;
-            jsonSocket.sendMessage({type: 'finished'}, () => {});
-            res.end();
+            isDone = true
+            jsonSocket.sendMessage({type: 'finished'}, () => {})
+            res.end()
         });
         x.onError((err) => {
-            if (isDone) return;
-            isDone = true;
-            jsonSocket.sendMessage({type: 'error', error: err.message}, () => {});
-            res.end();
+            if (isDone) return
+            isDone = true
+            jsonSocket.sendMessage({type: 'error', error: err.message}, () => {})
+            res.end()
         });
         x.onProgress((prog) => {
             jsonSocket.sendMessage({
                 type: 'progress',
                 bytesLoaded: prog.bytesLoaded,
                 bytesTotal: prog.bytesTotal
-            }, () => {});
+            }, () => {})
         });
         req.on('close', () => {
             // if the request socket is closed, we cancel the load request
-            isDone = true;
-            x.cancel();
+            isDone = true
+            x.cancel()
         });
     }
     _loadFile(reqData: ApiLoadFileRequest) {

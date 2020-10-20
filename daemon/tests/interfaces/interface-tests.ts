@@ -692,7 +692,6 @@ describe('Kachery primitives', () => {
 
 describe('Searches and Requests', () => {
     describe('FindLiveFeedResult', () => {
-        // todo: better as confirming call to a stubbed validateObject
         it('isFindLiveFeedResult() returns true for object with valid node ID', () => {
             expect(ut.isFindLiveFeedResult({ nodeId: validNodeId })).to.be.true
         })

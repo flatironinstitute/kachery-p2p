@@ -164,7 +164,7 @@ export default class PublicUdpSocketServer {
         if (mt === "NodeToNodeRequest") {
             const req = tryParseJsonObject(dataBuffer.toString())
             if (!isNodeToNodeRequest(req)) {
-                // todo: what to do here? throw error? ban peer?
+                // throw error? ban peer?
                 return
             }
             /////////////////////////////////////////////////////////////////////////
@@ -178,7 +178,7 @@ export default class PublicUdpSocketServer {
         else if (mt === "NodeToNodeResponse") {
             const res = tryParseJsonObject(dataBuffer.toString())
             if (!isNodeToNodeResponse(res)) {
-                // todo: what to do here? throw error? ban peer?
+                // throw error? ban peer?
                 return
             }
             /////////////////////////////////////////////////////////////////////////
