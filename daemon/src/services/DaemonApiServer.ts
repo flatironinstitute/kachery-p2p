@@ -683,7 +683,7 @@ export default class DaemonApiServer {
 
         const { feedId, subfeedHash, accessRules } = reqData;
 
-        await this.#node.feedManager().setAccessRules({feedId, subfeedHash, accessRules});
+        await this.#node.feedManager().setAccessRules({feedId, subfeedHash, accessRules})
 
         const response: FeedApiSetAccessRulesResponse = {success: true}
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
@@ -737,7 +737,7 @@ export default class DaemonApiServer {
     }
     // Start listening via http/https
     async listen(port: Port) {
-        this.#server = this.#node.startHttpServer(this.#app, port)
+        this.#server = await this.#node.startHttpServer(this.#app, port)
     }
 }
 

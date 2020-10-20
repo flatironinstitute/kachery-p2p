@@ -1,10 +1,9 @@
 import { assert } from 'console';
-import { getSignatureJson, hexToPrivateKey, hexToPublicKey, verifySignatureJson } from '../common/crypto_util';
+import { getSignatureJson, hexToPublicKey, verifySignatureJson } from '../common/crypto_util';
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString, sleepMsec } from '../common/util';
 import { LocalFeedManagerInterface } from '../external/ExternalInterface';
-import { kacheryStorageDir } from '../external/real/kacheryStorage/kachery';
-import { durationMsec, DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, isSubfeedAccessRules, JSONObject, NodeId, nowTimestamp, PrivateKeyHex, PublicKey, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
+import { durationMsec, DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, JSONObject, NodeId, nowTimestamp, PrivateKey, PublicKey, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 
 // todo fix feeds config on disk (too many in one .json file)
@@ -13,13 +12,11 @@ class FeedManager {
     // Manages the local feeds and access to the remote feeds in the p2p network
     _node: KacheryP2PNode // The kachery-p2p daemon
     #localFeedManager: LocalFeedManagerInterface
-    _storageDir: string // Where we store the feed data (subdirector of the kachery storage dir)
     _subfeeds = new GarbageMap<FeedSubfeedId, Subfeed>(durationMsec(8 * 60 * 1000)) // The subfeed instances (Subfeed()) that have been loaded into memory
     _remoteFeedManager: RemoteFeedManager // Manages the interaction with feeds on remote nodes
     constructor(node: KacheryP2PNode, localFeedManager: LocalFeedManagerInterface) {
         this._node = node
         this.#localFeedManager = localFeedManager
-        this._storageDir = kacheryStorageDir() + '/feeds';
         this._remoteFeedManager = new RemoteFeedManager(this._node);
     }
     async createFeed({ feedName } : {feedName: FeedName | null }) {
@@ -148,7 +145,7 @@ class FeedManager {
         if (!subfeed.isWriteable) {
             throw Error('Cannot set access rules for subfeed that is not writeable')
         }
-        await subfeed.setAccessRules(accessRules);
+        subfeed.setAccessRules(accessRules)
     }
     async watchForNewMessages({
         subfeedWatches,
@@ -198,6 +195,9 @@ class FeedManager {
             }, durationMsecToNumber(waitMsec));
         });
     }
+    localFeedManager() {
+        return this.#localFeedManager
+    }
     async _submitMessageToLiveFeedFromRemoteNode({fromNodeId, feedId, subfeedHash, message}: {fromNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage}) {
         // Some messages have been submitted from a remote node
         // Determine whether they can been written, and if so, append them
@@ -239,13 +239,13 @@ class FeedManager {
 
             // Load private key if this is writeable (otherwise, privateKey will be null)
             // important to do this after setting this._subfeeds(k), because we need to await it
-            const privateKey = await this.#localFeedManager.getPrivateKeyForFeed(feedId);
+            const privateKey = await this.#localFeedManager.getPrivateKeyForFeed(feedId)
 
             try {
-                await sf.initialize(privateKey);
+                await sf.initialize(privateKey)
             }
             catch(err) {
-                this._subfeeds.delete(k);
+                this._subfeeds.delete(k)
                 throw err;
             }
         }
@@ -269,22 +269,14 @@ class RemoteFeedManager {
 
         // Search and find the info for the feed (channel and node id)
         // If not found, return null
-        let liveFeedInfo;
+        let liveFeedInfo
         while (true) {
             try {
-                liveFeedInfo = await this.findLiveFeedInfo({feedId, timeoutMsec: durationMsec(0)});
-                break;
+                liveFeedInfo = await this.findLiveFeedInfo({feedId, timeoutMsec: waitMsec})
+                break
             }
             catch(err) {
-                if (w >= 1000) {
-                    // Let's wait a second and try again
-                    await sleepMsec(1000);
-                    w -= 1000
-                }
-                else {
-                    console.info('Unable to get signed messages (cannot find live feed info)', {feedId});
-                    return null;
-                }
+                return null
             }
         }
 
@@ -385,7 +377,7 @@ class Subfeed {
     _node : KacheryP2PNode // The kachery-p2p daemon
     _feedId: FeedId // The ID of the feed
     _publicKey: PublicKey // The public key of the feed (which is determined by the feed ID)
-    _privateKey: PrivateKeyHex | null // The private key (or null if this is not writeable on the local node) -- set below
+    _privateKey: PrivateKey | null // The private key (or null if this is not writeable on the local node) -- set below
     _subfeedHash: SubfeedHash // The hash of the subfeed
     _feedDir: string // The directory of the feed data
     _subfeedDir: string // The directory of the subfeed data
@@ -410,7 +402,7 @@ class Subfeed {
         this.#localFeedManager = params.localFeedManager
         this._remoteFeedManager = params.remoteFeedManager // The remote feed manager, allowing us to retrieve data from remote nodes
     }
-    async initialize(privateKey: PrivateKeyHex | null) {
+    async initialize(privateKey: PrivateKey | null) {
         this._privateKey = privateKey
         if (this.#initialized) return
         if (this.#initializing) {
@@ -422,7 +414,7 @@ class Subfeed {
             // Check whether we have the feed locally (may or may not be locally writeable)
             const existsLocally = this.#localFeedManager.feedExistsLocally(this._feedId)
             if (existsLocally) {
-                const messages = await this.#localFeedManager.readSignedSubfeedMessages(this._feedId, this._subfeedHash)
+                const messages = await this.#localFeedManager.getSignedSubfeedMessages(this._feedId, this._subfeedHash)
 
                 // Verify the integrity of the messages
                 // The first message has a previousSignature of null
@@ -448,12 +440,12 @@ class Subfeed {
                 // If this is a writeable feed, we also load the access rules into memory
                 this.#isWriteable = await this.#localFeedManager.hasWriteableFeed(this._feedId)
                 if (this.#isWriteable) {
-                    const accessRules = await this.#localFeedManager.readSubfeedAccessRules(this._feedId, this._subfeedHash)
-                    if (isSubfeedAccessRules(accessRules)) {
+                    const accessRules = await this.#localFeedManager.getSubfeedAccessRules(this._feedId, this._subfeedHash)
+                    if (accessRules) {
                         this.#accessRules = accessRules
                     }
                     else {
-                        throw Error(`Invalid access rules in file: ${this._subfeedDir}/access`)
+                        this.#accessRules = null
                     }
                 }
             }
@@ -461,7 +453,7 @@ class Subfeed {
                 this.#isWriteable = false
 
                 // Otherwise, we don't have it locally -- so let's just initialize things
-                const messages = await this.#localFeedManager.readSignedSubfeedMessages(this._feedId, this._subfeedHash)
+                const messages = await this.#localFeedManager.getSignedSubfeedMessages(this._feedId, this._subfeedHash)
                 assert(messages.length === 0)
 
                 this.#signedMessages = messages
@@ -637,8 +629,11 @@ class Subfeed {
             };
             const signedMessage: SignedSubfeedMessage = {
                 body,
-                signature: getSignatureJson(body, {publicKey: this._publicKey, privateKey: hexToPrivateKey(this._privateKey)})
+                signature: getSignatureJson(body as any as JSONObject, {publicKey: this._publicKey, privateKey: this._privateKey})
             };
+            if (!verifySignatureJson(body as any as JSONObject, getSignatureJson(body as any as JSONObject, {publicKey: this._publicKey, privateKey: this._privateKey}), this._publicKey)) {
+                throw Error('test')
+            }
             signedMessages.push(signedMessage);
             previousSignature = signedMessage.signature;
             messageNumber ++;
@@ -684,11 +679,11 @@ class Subfeed {
     async getAccessRules(): Promise<SubfeedAccessRules | null> {
         return this.#accessRules
     }
-    async setAccessRules(accessRules: SubfeedAccessRules) {
+    setAccessRules(accessRules: SubfeedAccessRules): void {
         if (!this.isWriteable()) {
             throw Error(`Cannot set access rules for not writeable subfeed.`);
         }
-        await this.#localFeedManager.setSubfeedAccessRules(this._feedId, this._subfeedHash, accessRules)
+        this.#localFeedManager.setSubfeedAccessRules(this._feedId, this._subfeedHash, accessRules)
         this.#accessRules = accessRules
     }
 }

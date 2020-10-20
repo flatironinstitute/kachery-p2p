@@ -1,7 +1,7 @@
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { DgramSocket } from '../external/ExternalInterface';
-import { Address, byteCount, durationMsec, DurationMsec, durationMsecToNumber, isBoolean, isProtocolVersion, isString, ProtocolVersion, toNumber, _validateObject } from '../interfaces/core';
+import { Address, byteCount, durationMsec, DurationMsec, durationMsecToNumber, isBoolean, isProtocolVersion, isString, portToNumber, ProtocolVersion, _validateObject } from '../interfaces/core';
 import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { UdpTimeoutError } from './UdpCongestionManager';
 
@@ -140,7 +140,7 @@ class OutgoingPacket {
                 Buffer.from(JSON.stringify(h).padEnd(UDP_PACKET_HEADER_SIZE)),
                 b
             ])
-            socket.send(b2, 0, b2.length, toNumber(this.#address.port), this.#address.hostName.toString(), (err, numBytesSent) => {
+            socket.send(b2, 0, b2.length, portToNumber(this.#address.port), this.#address.hostName.toString(), (err, numBytesSent) => {
                 if (err) {
                     if (completed) return;
                     completed = true;

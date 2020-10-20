@@ -226,8 +226,12 @@ export const isPort = (x: any) : x is Port => {
     if (!isNumber(x)) return false;
     return x > 0 && x < 65536; // port numbers must be in 16-bit positive range
 }
-export const toNumber = (x: Port): number => {
+export const portToNumber = (x: Port): number => {
     return x as any as number;
+}
+export const toPort = (x: number): Port => {
+    if (!isPort(x)) throw Error('Not a valid port')
+    return x
 }
 
 // HostName
@@ -246,6 +250,10 @@ export const isHostName = (x: any): x is HostName => {
     // Doing so returns false *from that function*, then ignores the result (since nothing is checking
     // the result of the anonymous function) and moves on to check the next chunk.
     return result;
+}
+export const hostName = (x: string): HostName => {
+    if (!isHostName(x)) throw Error('Not a valid host name')
+    return x
 }
 
 // Address
@@ -816,7 +824,6 @@ export const durationMsec = (n: number) => {
 export interface ByteCount extends Number {
     __byteCount__: never
 }
-export const exampleByteCount = 4000 as any as ByteCount
 export const isByteCount = (x: any) : x is ByteCount => {
     if (!isNumber(x)) return false;
     if (x < 0) return false;
@@ -831,6 +838,7 @@ export const byteCount = (n: number) => {
 export const addByteCount = (n1: ByteCount, n2: ByteCount) => {
     return byteCount(byteCountToNumber(n1) + byteCountToNumber(n2))
 }
+export const exampleByteCount = byteCount(4000)
 
 export interface LocalFilePath extends String {
     __localFilePath__: never // phantom

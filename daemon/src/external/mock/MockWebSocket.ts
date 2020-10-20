@@ -180,7 +180,7 @@ class MockWebSocketManager {
 const mockWebSocketManager = new MockWebSocketManager()
 
 
-export const mockCreateWebSocketServer = (port: Port, nodeId: NodeId): WebSocketServerInterface => {
+export const mockStartWebSocketServer = async (port: Port, nodeId: NodeId): Promise<WebSocketServerInterface> => {
     return new MockWebSocketServer(port, nodeId)
 }
 

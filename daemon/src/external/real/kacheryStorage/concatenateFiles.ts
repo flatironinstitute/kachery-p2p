@@ -2,7 +2,6 @@ import crypto from 'crypto'
 import fs from 'fs'
 import { randomAlphaString } from '../../../common/util'
 import { localFilePath, LocalFilePath, Sha1Hash } from '../../../interfaces/core'
-import { kacheryStorageDir } from './kachery'
 
 export const concatenateFilesIntoTemporaryFile = async (paths: LocalFilePath[]): Promise<{sha1: Sha1Hash, path: LocalFilePath}> => {
     return new Promise((resolve, reject) => {
@@ -42,9 +41,9 @@ export const concatenateFilesIntoTemporaryFile = async (paths: LocalFilePath[]):
     })
 }
 
-export const moveFileIntoKacheryStorage = (args: {path: LocalFilePath, sha1: Sha1Hash}) => {
+export const moveFileIntoKacheryStorage = (storageDir: LocalFilePath, args: {path: LocalFilePath, sha1: Sha1Hash}) => {
     const s = args.sha1
-    const destParentPath = `${kacheryStorageDir()}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`
+    const destParentPath = `${storageDir}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`
     const destPath = `${destParentPath}/${s}`
     if (fs.existsSync(destPath)) {
         fs.unlinkSync(args.path.toString())

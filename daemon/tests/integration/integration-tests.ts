@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import { sleepMsec } from '../../src/common/util';
 import MockNodeDaemon, { MockNodeDaemonGroup } from '../../src/external/mock/MockNodeDaemon';
-import { byteCount, ByteCount, byteCountToNumber, ChannelName, durationMsec, Port } from '../../src/interfaces/core';
+import { byteCount, ByteCount, byteCountToNumber, ChannelName, durationMsec, FeedName, SubfeedHash, SubfeedMessage, toPort } from '../../src/interfaces/core';
 import { ApiLoadFileRequest } from '../../src/services/DaemonApiServer';
 
 const mockChannelName = 'mock-channel' as any as ChannelName
@@ -114,6 +114,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
 
                 await testFindFile(daemon1, daemon2)
                 // await testLoadFile(daemon1, daemon2)
+                await testSubfeedMessage(daemon1, daemon2)
 
                 resolve()
             }, done)
@@ -138,6 +139,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
 
                 await testFindFile(daemon1, daemon2)
                 await testLoadFile(daemon1, daemon2, byteCount(30000), byteCount(2010))
+                await testSubfeedMessage(daemon1, daemon2)
 
                 resolve()
             }, done)
@@ -189,8 +191,24 @@ const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fi
     expect(f.found).is.true
 }
 
+const testSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {
+    const fm1 = daemon1.feedManager()
+    const fm2 = daemon2.feedManager()
+
+    const feed1 = await fm1.createFeed({feedName: 'f1' as any as FeedName})
+    const sf1 = '0123456789012345678901234567890123456789' as any as SubfeedHash
+    await fm1.appendMessages({feedId: feed1, subfeedHash: sf1, messages: [{test: 42} as any as SubfeedMessage]})
+    const messages = await fm1.getMessages({feedId: feed1, subfeedHash: sf1, position: 0, maxNumMessages: 10, waitMsec: durationMsec(1000)})
+    expect(messages.length).equals(1)
+    expect(messages[0].test).equals(42)
+
+    const messages2 = await fm2.getMessages({feedId: feed1, subfeedHash: sf1, position: 0, maxNumMessages: 10, waitMsec: durationMsec(1000)})
+    expect(messages2.length).equals(1)
+    expect(messages2[0].test).equals(42)
+}
+
 let lastMockPort = 0
 const randomMockPort = () => {
     lastMockPort ++
-    return lastMockPort as any as Port
+    return toPort(lastMockPort)
 }

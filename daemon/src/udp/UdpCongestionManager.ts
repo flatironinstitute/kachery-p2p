@@ -17,7 +17,6 @@ export class UdpTimeoutError extends Error {
 export interface ByteCountPerSec extends Number {
     __byteCountPerSec__: never
 }
-export const exampleByteCountPerSec = 400 as any as ByteCountPerSec
 export const isByteCountPerSec = (x: any) : x is ByteCountPerSec => {
     if (!isNumber(x)) return false
     if (x < 0) return false
@@ -29,6 +28,7 @@ export const byteCountPerSecToNumber = (x: ByteCountPerSec): number => {
 export const byteCountPerSec = (n: number) => {
     return n as any as ByteCountPerSec
 }
+export const exampleByteCountPerSec = byteCountPerSec(400)
 
 export interface PacketCount extends Number {
     __packetCount__: never

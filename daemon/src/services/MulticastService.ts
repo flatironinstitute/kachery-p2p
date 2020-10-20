@@ -2,7 +2,7 @@ import { action } from "../common/action"
 import { getSignature, verifySignature } from "../common/crypto_util"
 import { sleepMsec } from "../common/util"
 import { DgramSocket } from "../external/ExternalInterface"
-import { Address, ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, HostName, isMulticastAnnounceMessage, JSONObject, KeyPair, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, tryParseJsonObject } from "../interfaces/core"
+import { Address, ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, hostName, isMulticastAnnounceMessage, JSONObject, KeyPair, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, tryParseJsonObject } from "../interfaces/core"
 import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
 import { protocolVersion } from "../protocolVersion"
 
@@ -49,7 +49,7 @@ export default class MulticastService {
                             return
                         const localUdpAddress: Address | null = msg2.body.udpListenPort ? (
                             {
-                                hostName: rinfo.address as any as HostName,
+                                hostName: hostName(rinfo.address),
                                 port: msg2.body.udpListenPort
                             }
                         ): null

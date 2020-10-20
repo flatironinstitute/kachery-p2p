@@ -1,12 +1,13 @@
 import { createKeyPair } from "../../common/crypto_util"
 import DataStreamy from "../../common/DataStreamy"
-import { Address, ChannelName, DurationMsec, FindFileResult, HostName, isNodeId, JSONObject, NodeId, Port, UrlPath } from "../../interfaces/core"
+import { Address, ChannelName, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, Port, toPort, UrlPath } from "../../interfaces/core"
 import KacheryP2PNode from "../../KacheryP2PNode"
 import DaemonApiServer, { ApiFindFileRequest } from "../../services/DaemonApiServer"
 import PublicApiServer from "../../services/PublicApiServer"
 import startDaemon from "../../startDaemon"
 import mockExternalInterface from "./mockExternalInterface"
 import MockKacheryStorageManager from './MockKacheryStorageManager'
+import MockLocalFeedManager from "./MockLocalFeedManager"
 
 export default class MockNodeDaemon {
     #daemonGroup: MockNodeDaemonGroup
@@ -29,8 +30,8 @@ export default class MockNodeDaemon {
     }
     address(): Address {
         return {
-            hostName: this.nodeId() as any as HostName,
-            port: 20 as any as Port
+            hostName: hostName(this.nodeId().toString()),
+            port: toPort(20)
         }
     }
 
@@ -78,6 +79,12 @@ export default class MockNodeDaemon {
     }
     mockKacheryStorageManager() {
         return this.node().kacheryStorageManager() as MockKacheryStorageManager
+    }
+    mockLocalFeedManager() {
+        return this.node().feedManager().localFeedManager() as MockLocalFeedManager
+    }
+    feedManager() {
+        return this.node().feedManager()
     }
     async mockPublicApiPost(path: string, data: JSONObject): Promise<JSONObject> {
         if (!this.#d) {

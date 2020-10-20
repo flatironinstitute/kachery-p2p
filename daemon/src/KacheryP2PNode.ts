@@ -7,7 +7,7 @@ import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import ExternalInterface, { ExpressInterface, HttpServerInterface, KacheryStorageManagerInterface } from './external/ExternalInterface'
 import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
-import { Address, byteCount, ByteCount, byteCountToNumber, ChannelInfo, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, errorMessage, FeedId, FileKey, FileManifestChunk, FindFileResult, FindLiveFeedResult, HostName, isAddress, isFileManifest, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, UrlPath } from './interfaces/core'
+import { Address, byteCount, ByteCount, byteCountToNumber, ChannelInfo, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, errorMessage, FeedId, FileKey, FileManifestChunk, FindFileResult, FindLiveFeedResult, hostName, HostName, isAddress, isFileManifest, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, UrlPath } from './interfaces/core'
 import { AnnounceRequestData, AnnounceResponseData, CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData, createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, GetChannelInfoRequestData, GetChannelInfoResponseData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isProbeRequestData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, ProbeRequestData, ProbeResponseData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import { daemonVersion, protocolVersion } from './protocolVersion'
 import { ProxyConnectionToClient } from './proxyConnections/ProxyConnectionToClient'
@@ -180,11 +180,11 @@ class KacheryP2PNode {
     createWebSocket(url: string, opts: {timeoutMsec: DurationMsec}) {
         return this.p.externalInterface.createWebSocket(url, opts)
     }
-    createWebSocketServer(port: Port) {
-        return this.p.externalInterface.createWebSocketServer(port, this.nodeId())
+    async startWebSocketServer(port: Port) {
+        return await this.p.externalInterface.startWebSocketServer(port, this.nodeId())
     }
-    startHttpServer(app: ExpressInterface, port: Port): HttpServerInterface {
-        return this.p.externalInterface.startHttpServer(app, port)
+    async startHttpServer(app: ExpressInterface, port: Port): Promise<HttpServerInterface> {
+        return await this.p.externalInterface.startHttpServer(app, port)
     }
     async _loadFileAsync(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): Promise<{found: boolean, size: ByteCount}> {
         const r = await this.#kacheryStorageManager.findFile(args.fileKey)
@@ -370,7 +370,7 @@ class KacheryP2PNode {
     hostName() {
         if (this.p.hostName) return this.p.hostName
         if (this.p.opts.mock) {
-            return this.nodeId() as any as HostName
+            return hostName(this.nodeId().toString())
         }
         else {
             return null

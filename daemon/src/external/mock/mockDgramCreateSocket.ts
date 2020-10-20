@@ -1,5 +1,5 @@
 import { randomAlphaString } from "../../common/util"
-import { HostName, NodeId, Port } from "../../interfaces/core"
+import { hostName, HostName, NodeId, Port, toPort } from "../../interfaces/core"
 import { DgramCreateSocketFunction, DgramRemoteInfo } from "../ExternalInterface"
 
 type DgramSocketType = 'udp4' | 'udp6'
@@ -38,7 +38,7 @@ class MockDgramSocket {
     #reuseAddr: boolean
     #hostName: HostName
     #bound = false
-    #port: Port = 0 as any as Port
+    #port: Port = toPort(1)
     #onListeningCallbacks: (() => void)[] = []
     #onMessageCallbacks: ((message: Buffer, rinfo: DgramRemoteInfo) => void)[] = []
     #memberships = new Set<string>()
@@ -47,10 +47,10 @@ class MockDgramSocket {
         this.#reuseAddr = args.reuseAddr
         this.#hostName = args.hostName
     }
-    bind(port: number) {
-        dgramSocketManager.bind(this.#id, port as any as Port, this)
+    bind(p: number) {
+        dgramSocketManager.bind(this.#id, toPort(p), this)
         this.#bound = true
-        this.#port = port as any as Port
+        this.#port = toPort(p)
         this.#onListeningCallbacks.forEach(cb => {cb()})
     }
     hasMembership(a: string) {
@@ -74,7 +74,7 @@ class MockDgramSocket {
         this.#memberships.add(address)
     }
     send(message: Buffer, offset: number, length: number, port: number, address: string, callback?: (err: Error | null, numBytesSent: number) => void) {
-        const sockets = dgramSocketManager.socketsBelongingToAddress(address, port as any as Port)
+        const sockets = dgramSocketManager.socketsBelongingToAddress(address, toPort(port))
         sockets.forEach(socket => {
             const rinfo: DgramRemoteInfo = {
                 address: this.#hostName.toString(),
@@ -94,7 +94,7 @@ class MockDgramSocket {
 }
 
 const mockDgramCreateSocket: DgramCreateSocketFunction = (args: {type: 'udp4', reuseAddr: boolean, nodeId: NodeId}) => {
-    const s = new MockDgramSocket({type: args.type, reuseAddr: args.reuseAddr, hostName: args.nodeId as any as HostName})
+    const s = new MockDgramSocket({type: args.type, reuseAddr: args.reuseAddr, hostName: hostName(args.nodeId.toString())})
     s.addMembership(args.nodeId.toString())
     return s
 }

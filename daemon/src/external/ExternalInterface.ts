@@ -1,5 +1,5 @@
 import DataStreamy from "../common/DataStreamy"
-import { Address, ByteCount, DurationMsec, FeedId, FeedName, FileKey, JSONObject, NodeId, Port, PrivateKeyHex, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, UrlPath } from "../interfaces/core"
+import { Address, ByteCount, DurationMsec, FeedId, FeedName, FileKey, JSONObject, NodeId, Port, PrivateKey, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, UrlPath } from "../interfaces/core"
 
 export type HttpPostJsonFunction = ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>)
 export type HttpGetDownloadFunction = ((address: Address, path: UrlPath) => Promise<DataStreamy>)
@@ -31,12 +31,11 @@ export interface WebSocketInterface {
 }
 
 export interface WebSocketServerInterface {
-    onListening: (callback: () => void) => void
     onConnection: (callback: (ws: WebSocketInterface) => void) => void
     close: () => void
 }
 
-export type CreateWebSocketServerFunction = (port: Port, nodeId: NodeId) => WebSocketServerInterface
+export type StartWebSocketServerFunction = (port: Port, nodeId: NodeId) => Promise<WebSocketServerInterface>
 
 export type CreateWebSocketFunction = (url: string, opts: {timeoutMsec: DurationMsec}) => WebSocketInterface
 
@@ -54,32 +53,32 @@ export interface LocalFeedManagerInterface {
     deleteFeed: (feedId: FeedId) => Promise<void>
     getFeedId: (feedName: FeedName) => Promise<FeedId | null>
     hasWriteableFeed: (feedId: FeedId) => Promise<boolean>
-    getPrivateKeyForFeed: (feedId: FeedId) => Promise<PrivateKeyHex | null>
+    getPrivateKeyForFeed: (feedId: FeedId) => Promise<PrivateKey | null>
     feedExistsLocally: (feedId: FeedId) => boolean
-    readSignedSubfeedMessages: (feedId: FeedId, subfeedHash: SubfeedHash) => Promise<SignedSubfeedMessage[]>
-    readSubfeedAccessRules: (feedId: FeedId, subfeedHash: SubfeedHash) => Promise<SubfeedAccessRules>
+    getSignedSubfeedMessages: (feedId: FeedId, subfeedHash: SubfeedHash) => Promise<SignedSubfeedMessage[]>
+    getSubfeedAccessRules: (feedId: FeedId, subfeedHash: SubfeedHash) => Promise<SubfeedAccessRules | null>
     appendSignedMessagesToSubfeed: (feedId: FeedId, subfeedHash: SubfeedHash, messages: SignedSubfeedMessage[]) => void // synchronous!
-    setSubfeedAccessRules: (feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules) => Promise<void>
+    setSubfeedAccessRules: (feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules) => void // synchronous!
 }
 
 export type CreateLocalFeedManagerFunction = () => LocalFeedManagerInterface
 
 export interface HttpServerInterface {
-    listen: (port: number) => void
     close: () => void
+    on: (eventName: 'listening', callback: () => void) => void
 }
 
 export interface ExpressInterface {
     
 }
 
-export type StartHttpServerFunction = (app: ExpressInterface, port: Port) => HttpServerInterface
+export type StartHttpServerFunction = (app: ExpressInterface, port: Port) => Promise<HttpServerInterface>
 
 export default interface ExternalInterface {
     httpPostJson: HttpPostJsonFunction,
     httpGetDownload: HttpGetDownloadFunction,
     dgramCreateSocket: DgramCreateSocketFunction,
-    createWebSocketServer: CreateWebSocketServerFunction,
+    startWebSocketServer: StartWebSocketServerFunction,
     createWebSocket: CreateWebSocketFunction,
     createKacheryStorageManager: CreateKacheryStorageManagerFunction,
     createLocalFeedManager: CreateLocalFeedManagerFunction,

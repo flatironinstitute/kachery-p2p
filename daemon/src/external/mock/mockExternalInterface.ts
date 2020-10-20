@@ -4,9 +4,9 @@ import mockDgramCreateSocket from './mockDgramCreateSocket'
 import MockKacheryStorageManager from './MockKacheryStorageManager'
 import MockLocalFeedManager from './MockLocalFeedManager'
 import { MockNodeDaemonGroup } from './MockNodeDaemon'
-import { mockCreateWebSocket, mockCreateWebSocketServer } from './MockWebSocket'
+import { mockCreateWebSocket, mockStartWebSocketServer } from './MockWebSocket'
 
-const mockStartHttpServer = (app: ExpressInterface, listenPort: Port): HttpServerInterface => {
+const mockStartHttpServer = async (app: ExpressInterface, listenPort: Port): Promise<HttpServerInterface> => {
     throw Error('Unable to start http server in mock mode')
 }
 
@@ -31,7 +31,7 @@ const mockExternalInterface = (daemonGroup: MockNodeDaemonGroup): ExternalInterf
         httpPostJson,
         httpGetDownload,
         dgramCreateSocket: mockDgramCreateSocket,
-        createWebSocketServer: mockCreateWebSocketServer,
+        startWebSocketServer: mockStartWebSocketServer,
         createWebSocket: mockCreateWebSocket,
         createKacheryStorageManager,
         createLocalFeedManager,

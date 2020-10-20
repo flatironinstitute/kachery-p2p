@@ -16,21 +16,16 @@ class PublicWebSocketServer {
         }
     }
     async startListening(port: Port) {
-        return new Promise((resolve, reject) => {
-            this.#webSocketServer = this.#node.createWebSocketServer(port)
-            this.#webSocketServer.onListening(() => {
-                resolve();
-            });
-            this.#webSocketServer.onConnection((ws: WebSocketInterface) => {
-                /////////////////////////////////////////////////////////////////////////
-                action('newProxyConnectionToClient', {context: 'PublicWebSocketServer'}, async () => {
-                    const X = new ProxyConnectionToClient(this.#node);
-                    await X.initialize(ws);
-                    this.#node.setProxyConnectionToClient(X.remoteNodeId(), X);
-                }, null);
-                /////////////////////////////////////////////////////////////////////////
-            });
-        });
+        this.#webSocketServer = await this.#node.startWebSocketServer(port)
+        this.#webSocketServer.onConnection((ws: WebSocketInterface) => {
+            /////////////////////////////////////////////////////////////////////////
+            action('newProxyConnectionToClient', {context: 'PublicWebSocketServer'}, async () => {
+                const X = new ProxyConnectionToClient(this.#node);
+                await X.initialize(ws);
+                this.#node.setProxyConnectionToClient(X.remoteNodeId(), X);
+            }, null);
+            /////////////////////////////////////////////////////////////////////////
+        })
     }
 }
 

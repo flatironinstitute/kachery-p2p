@@ -16,7 +16,7 @@ export const getSignature = (obj: Object, keyPair: KeyPair): Signature => {
     }
 }
 
-export const getSignatureJson = (obj: Object, keyPair: KeyPair): Signature => {
+export const getSignatureJson = (obj: JSONObject, keyPair: KeyPair): Signature => {
     try {
         return crypto.sign(null, Buffer.from(JSONStringifyDeterministic(obj)), keyPair.privateKey.toString()).toString('hex') as any as Signature;
     }
@@ -93,7 +93,7 @@ export const publicKeyToHex = (publicKey: PublicKey): PublicKeyHex => {
 }
 
 export const publicKeyHexToFeedId = (publicKeyHex: PublicKeyHex): FeedId => {
-    return publicKeyToHex as any as FeedId;
+    return publicKeyHex as any as FeedId
 }
 
 export const privateKeyToHex = (privateKey: PrivateKey): PrivateKeyHex => {

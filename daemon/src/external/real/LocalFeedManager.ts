@@ -1,13 +1,16 @@
 import fs from 'fs';
 import os from 'os';
-import { createKeyPair, JSONStringifyDeterministic, privateKeyToHex, publicKeyHexToFeedId, publicKeyToHex } from '../../common/crypto_util';
-import { FeedId, FeedName, FeedsConfigRAM, isFeedsConfig, isSignedSubfeedMessage, isSubfeedAccessRules, PrivateKeyHex, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, toFeedsConfig, toFeedsConfigRAM } from '../../interfaces/core';
-import { kacheryStorageDir } from './kacheryStorage/kachery';
+import { createKeyPair, hexToPrivateKey, JSONStringifyDeterministic, privateKeyToHex, publicKeyHexToFeedId, publicKeyToHex } from '../../common/crypto_util';
+import { FeedId, FeedName, FeedsConfigRAM, isFeedsConfig, isSignedSubfeedMessage, isSubfeedAccessRules, LocalFilePath, PrivateKey, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, toFeedsConfig, toFeedsConfigRAM } from '../../interfaces/core';
 
 export default class LocalFeedManager {
+    #storageDir: LocalFilePath
     _feedsConfig: FeedsConfigRAM | null = null // The config will be loaded from disk as need. Contains all the private keys for the feeds and the local name/ID associations.
-    constructor() {
-
+    constructor(storageDir: LocalFilePath) {
+        if (!fs.existsSync(storageDir.toString())) {
+            throw Error(`Storage directory does not exist: ${storageDir}`)
+        }
+        this.#storageDir = storageDir
     }
     async createFeed(feedName: FeedName | null): Promise<FeedId> {
         // Create a new writeable feed on this node and return the ID of the new feed
@@ -27,13 +30,13 @@ export default class LocalFeedManager {
         await this._saveFeedsConfig(config);
 
         // Create the feed directory for the actual feed
-        await _createFeedDirectoryIfNeeded(feedId);
+        await _createFeedDirectoryIfNeeded(this.#storageDir, feedId);
 
         // Return the feed ID
         return feedId;
     }
     async deleteFeed(feedId: FeedId) {
-        const dirPath = _feedDirectory(feedId);
+        const dirPath = _feedDirectory(this.#storageDir, feedId);
         await fs.promises.rmdir(dirPath, {recursive: true});
 
         const config = await this._loadFeedsConfig();
@@ -54,7 +57,7 @@ export default class LocalFeedManager {
         const feedId = config.feedIdsByName.get(feedName) || null;
         if (feedId) {
             // Return null if we don't actually have the feed directory
-            if (!fs.existsSync(_feedDirectory(feedId))) {
+            if (!fs.existsSync(_feedDirectory(this.#storageDir, feedId))) {
                 return null;
             }
         }
@@ -66,34 +69,31 @@ export default class LocalFeedManager {
         const privateKey = await this.getPrivateKeyForFeed(feedId)
         if (!privateKey) return false
         // Returns true if we have the writeable feed
-        return fs.existsSync(_feedDirectory(feedId))
+        return fs.existsSync(_feedDirectory(this.#storageDir, feedId))
     }
-    async getPrivateKeyForFeed(feedId: FeedId): Promise<PrivateKeyHex | null> {
+    async getPrivateKeyForFeed(feedId: FeedId): Promise<PrivateKey | null> {
         // Consult the config to get the private key associated with a particular feed ID
         const config = await this._loadFeedsConfig();
         const x = config.feeds.get(feedId)
         if (x) {
-            return x.privateKey || null
+            return x.privateKey ? hexToPrivateKey(x.privateKey) : null
         }
         else {
             return null
         }
     }
     feedExistsLocally(feedId: FeedId): boolean {
-        return fs.existsSync(_feedDirectory(feedId))
+        return fs.existsSync(_feedDirectory(this.#storageDir, feedId))
     }
-    async readSignedSubfeedMessages(feedId: FeedId, subfeedHash: SubfeedHash): Promise<SignedSubfeedMessage[]> {
-        // If feed exists. We create the subfeed directory (note: the subfeed directory is nested inside the feed directory)
-        await _createSubfeedDirectoryIfNeeded(feedId, subfeedHash);
-
-        // Read the messages file -- load these into memory
-        const subfeedMessagesPath = _subfeedDirectory(feedId, subfeedHash) + '/messages'
-        return await readMessagesFile(subfeedMessagesPath);
+    async getSignedSubfeedMessages(feedId: FeedId, subfeedHash: SubfeedHash): Promise<SignedSubfeedMessage[]> {
+        // Read the messages file
+        const subfeedMessagesPath = _subfeedDirectory(this.#storageDir, feedId, subfeedHash) + '/messages'
+        return await readMessagesFile(subfeedMessagesPath)
     }
-    async readSubfeedAccessRules(feedId: FeedId, subfeedHash: SubfeedHash): Promise<SubfeedAccessRules> {
-        await _createSubfeedDirectoryIfNeeded(feedId, subfeedHash);
+    async getSubfeedAccessRules(feedId: FeedId, subfeedHash: SubfeedHash): Promise<SubfeedAccessRules | null> {
+        await _createSubfeedDirectoryIfNeeded(this.#storageDir, feedId, subfeedHash);
 
-        const accessRulesPath = _subfeedDirectory(feedId, subfeedHash) + '/access'
+        const accessRulesPath = _subfeedDirectory(this.#storageDir, feedId, subfeedHash) + '/access'
         const accessRules = await readJsonFile(accessRulesPath, {rules: []})
         if (!isSubfeedAccessRules(accessRules)) {
             throw Error('Invalid access rules.')
@@ -103,12 +103,16 @@ export default class LocalFeedManager {
     appendSignedMessagesToSubfeed(feedId: FeedId, subfeedHash: SubfeedHash, messages: SignedSubfeedMessage[]) {
         // important that this is synchronous!
         const textLinesToAppend = messages.map(sm => (JSONStringifyDeterministic(sm)))
-        const subfeedMessagesPath = _subfeedDirectory(feedId, subfeedHash) + '/messages'
+        const subfeedDir = _subfeedDirectory(this.#storageDir, feedId, subfeedHash)
+        fs.mkdirSync(subfeedDir, {recursive: true})
+        const subfeedMessagesPath = subfeedDir + '/messages'
         fs.appendFileSync(subfeedMessagesPath, textLinesToAppend.join('\n') + '\n', {encoding: 'utf8'})
     }
-    async setSubfeedAccessRules(feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules): Promise<void> {
-        const accessRulesPath = _subfeedDirectory(feedId, subfeedHash) + '/access'
-        await writeJsonFile(accessRulesPath, accessRules);
+    setSubfeedAccessRules(feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules): void {
+        const subfeedDir = _subfeedDirectory(this.#storageDir, feedId, subfeedHash)
+        fs.mkdirSync(subfeedDir, {recursive: true})
+        const accessRulesPath = subfeedDir + '/access'
+        writeJsonFileSync(accessRulesPath, accessRules);
     }
     async _loadFeedsConfig(): Promise<FeedsConfigRAM> {
         // Load the configuration for all feeds, if not already loaded
@@ -143,15 +147,15 @@ export default class LocalFeedManager {
     
 }
 
-const _createSubfeedDirectoryIfNeeded = async (feedId: FeedId, subfeedHash: SubfeedHash) => {
-    const path = _subfeedDirectory(feedId, subfeedHash);
+const _createSubfeedDirectoryIfNeeded = async (storageDir: LocalFilePath, feedId: FeedId, subfeedHash: SubfeedHash) => {
+    const path = _subfeedDirectory(storageDir, feedId, subfeedHash);
     if (!fs.existsSync(path)) {
         await fs.promises.mkdir(path, {recursive: true});
     }
 }
 
-const _createFeedDirectoryIfNeeded = async (feedId: FeedId) => {
-    const path = _feedDirectory(feedId);
+const _createFeedDirectoryIfNeeded = async (storageDir: LocalFilePath, feedId: FeedId) => {
+    const path = _feedDirectory(storageDir, feedId);
     if (!fs.existsSync(path)) {
         await fs.promises.mkdir(path, {recursive: true});
     }
@@ -160,16 +164,16 @@ const _createFeedDirectoryIfNeeded = async (feedId: FeedId) => {
     }
 }
 
-const _feedParentDirectory = (feedId: FeedId): string => {
-    return kacheryStorageDir() + `/feeds/${feedId[0]}${feedId[1]}/${feedId[2]}${feedId[3]}/${feedId[4]}${feedId[5]}`;
+const _feedParentDirectory = (storageDir: LocalFilePath, feedId: FeedId): string => {
+    return `${storageDir}/feeds/${feedId[0]}${feedId[1]}/${feedId[2]}${feedId[3]}/${feedId[4]}${feedId[5]}`;
 }
 
-const _feedDirectory = (feedId: FeedId): string => {
-    return `${_feedParentDirectory(feedId)}/${feedId}`;
+const _feedDirectory = (storageDir: LocalFilePath, feedId: FeedId): string => {
+    return `${_feedParentDirectory(storageDir, feedId)}/${feedId}`;
 }
 
-const _subfeedDirectory = (feedId: FeedId, subfeedHash: SubfeedHash): string => {
-    const feedDir = _feedDirectory(feedId);
+const _subfeedDirectory = (storageDir: LocalFilePath, feedId: FeedId, subfeedHash: SubfeedHash): string => {
+    const feedDir = _feedDirectory(storageDir, feedId);
     return `${feedDir}/subfeeds/${subfeedHash[0]}${subfeedHash[1]}/${subfeedHash[2]}${subfeedHash[3]}/${subfeedHash[4]}${subfeedHash[5]}/${subfeedHash}`
 }
 
@@ -186,6 +190,11 @@ const readJsonFile = async (path: string, defaultVal: Object): Promise<Object> =
 const writeJsonFile = async (path: string, obj: Object) => {
     const txt = JSONStringifyDeterministic(obj, 4);
     await fs.promises.writeFile(path, txt);
+}
+
+const writeJsonFileSync = (path: string, obj: Object) => {
+    const txt = JSONStringifyDeterministic(obj, 4);
+    fs.writeFileSync(path, txt)
 }
 
 const readMessagesFile = async (path: string): Promise<SignedSubfeedMessage[]> => {

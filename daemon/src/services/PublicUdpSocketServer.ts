@@ -3,7 +3,7 @@ import { action } from "../common/action";
 import { getSignature, verifySignature } from "../common/crypto_util";
 import GarbageMap from "../common/GarbageMap";
 import { DgramSocket } from '../external/ExternalInterface';
-import { Address, durationMsec, DurationMsec, durationMsecToNumber, HostName, JSONObject, nodeIdToPublicKey, Port, RequestId, toNumber, tryParseJsonObject } from "../interfaces/core";
+import { Address, durationMsec, DurationMsec, durationMsecToNumber, hostName, JSONObject, nodeIdToPublicKey, Port, portToNumber, RequestId, toPort, tryParseJsonObject } from "../interfaces/core";
 import { isNodeToNodeRequest, isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeResponse } from "../interfaces/NodeToNodeRequest";
 import { createUdpMessageId, isUdpHeader, numParts, NumParts, partIndex, PartIndex, UdpHeader, UdpMessagePart, UdpMessageType, UDP_MESSAGE_HEADER_SIZE, UDP_PACKET_SIZE } from "../interfaces/UdpMessage";
 import KacheryP2PNode from "../KacheryP2PNode";
@@ -41,7 +41,7 @@ export default class PublicUdpSocketServer {
         return new Promise((resolve, reject) => {
             try {
                 this.#socket = this.#node.dgramCreateSocket({ type: "udp4", reuseAddr: false })
-                this.#socket.bind(toNumber(listenPort))
+                this.#socket.bind(portToNumber(listenPort))
                 this.#socket.on("listening", () => {
                     if (this.#socket === null) {
                         throw Error('Unexpected')
@@ -61,8 +61,8 @@ export default class PublicUdpSocketServer {
                             return;
                         }
                         const fromAddress: Address = {
-                            port: remoteInfo.port as any as Port,
-                            hostName: remoteInfo.address as any as HostName
+                            port: toPort(remoteInfo.port),
+                            hostName: hostName(remoteInfo.address)
                         }
                         /////////////////////////////////////////////////////////////////////////
                         action('handleUdpMessagePart', {fromAddress, fromNodeId: header.body.fromNodeId, udpMessageType: header.body.udpMessageType}, async () => {

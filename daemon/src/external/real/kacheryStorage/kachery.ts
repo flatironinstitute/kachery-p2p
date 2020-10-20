@@ -1,17 +1,4 @@
 import { exec } from 'child_process';
-import fs from 'fs';
-import { ByteCount, byteCount, Sha1Hash } from '../../../interfaces/core';
-
-export const kacheryStorageDir = () => {
-    const ret = process.env['KACHERY_STORAGE_DIR'];
-    if (!ret) {
-        throw Error('You must set the KACHERY_STORAGE_DIR environment variable.');
-    }
-    if (!fs.existsSync(ret)) {
-        throw Error(`Kachery storage directory does not exist: ${ret}`);
-    }
-    return ret;
-}
 
 export const kacheryStoreWithHardLink = async (path: string) => {
     try {
@@ -70,22 +57,6 @@ const executeAndGetStdout = async (command: string) => {
             resolve(stdout);
         });
     });
-}
-
-export const getLocalFileInfo = async (fileSha1: Sha1Hash): Promise<{path: string | null, size: ByteCount | null}> => {
-    const s = fileSha1;
-    const path = `${kacheryStorageDir()}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}/${s}`;
-    let stat0: fs.Stats
-    try {
-        stat0 = await fs.promises.stat(path);
-    }
-    catch(err) {
-        return {path: null, size: null};
-    }
-    return {
-        path,
-        size: byteCount(stat0.size)
-    }
 }
 
 // export const getLocalFileInfo = async ({fileKey}) => {

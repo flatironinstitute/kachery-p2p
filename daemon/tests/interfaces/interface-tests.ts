@@ -360,7 +360,7 @@ describe('Networking primitives', () => {
         })
         it('toNumber() returns expected value', () => {
             const myPort: ut.Port = 22 as any as ut.Port
-            expect(ut.toNumber(myPort)).to.equal(22)
+            expect(ut.portToNumber(myPort)).to.equal(22)
         })
     })
     describe('Hostname', () => {
