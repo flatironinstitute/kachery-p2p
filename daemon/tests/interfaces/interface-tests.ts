@@ -1006,7 +1006,7 @@ describe('Subfeed Access', () => {
 
 describe('Subfeed subscriptions', () => {
     const myWatchName: ut.SubfeedWatchName = 'Hortense the Subfeed Watch' as any as ut.SubfeedWatchName
-    const mySubfeedWatch: ut.SubfeedWatch = { feedId: validFeedId, subfeedHash: validSubfeedHash, position: 12 }
+    const mySubfeedWatch: ut.SubfeedWatch = { feedId: validFeedId, subfeedHash: validSubfeedHash, position: ut.subfeedPosition(12) }
     describe('Subfeed Watch Name', () => {
         it('isSubfeedWatchName() returns true for string input', () => {
             expect(ut.isSubfeedWatchName(myWatchName))
@@ -1070,7 +1070,7 @@ describe('Live Feed Subscriptions', () => {
         subscriptionName: "This is my subscription name" as any as ut.LiveFeedSubscriptionName,
         feedId: new Array(65).join('F') as any as ut.FeedId,
         subfeedHash: new Array(41).join('b') as any as ut.SubfeedHash,
-        position: 12
+        position: ut.subfeedPosition(12)
     }
     describe('Live Feed Subscription Name', () => {
         it('isLiveFeedSubscriptionName() returns true for valid name', () => {

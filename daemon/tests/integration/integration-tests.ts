@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import { sleepMsec } from '../../src/common/util';
 import MockNodeDaemon, { MockNodeDaemonGroup } from '../../src/external/mock/MockNodeDaemon';
-import { byteCount, ByteCount, byteCountToNumber, ChannelName, durationMsec, FeedName, SubfeedHash, SubfeedMessage, toPort } from '../../src/interfaces/core';
+import { byteCount, ByteCount, byteCountToNumber, ChannelName, durationMsec, FeedName, messageCount, SubfeedHash, SubfeedMessage, subfeedPosition, toPort } from '../../src/interfaces/core';
 import { ApiLoadFileRequest } from '../../src/services/DaemonApiServer';
 
 const mockChannelName = 'mock-channel' as any as ChannelName
@@ -198,11 +198,11 @@ const testSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaem
     const feed1 = await fm1.createFeed({feedName: 'f1' as any as FeedName})
     const sf1 = '0123456789012345678901234567890123456789' as any as SubfeedHash
     await fm1.appendMessages({feedId: feed1, subfeedHash: sf1, messages: [{test: 42} as any as SubfeedMessage]})
-    const messages = await fm1.getMessages({feedId: feed1, subfeedHash: sf1, position: 0, maxNumMessages: 10, waitMsec: durationMsec(1000)})
+    const messages = await fm1.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: durationMsec(1000)})
     expect(messages.length).equals(1)
     expect(messages[0].test).equals(42)
 
-    const messages2 = await fm2.getMessages({feedId: feed1, subfeedHash: sf1, position: 0, maxNumMessages: 10, waitMsec: durationMsec(1000)})
+    const messages2 = await fm2.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: durationMsec(1000)})
     expect(messages2.length).equals(1)
     expect(messages2[0].test).equals(42)
 }

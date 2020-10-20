@@ -101,7 +101,7 @@ def log():
 @click.option('--port', default=0, help='Optional port to listen on (0 means do not listen)')
 @click.option('--file-server-port', default=0, help='Optional port for serving static files')
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
-def start_daemon(method, channel, verbose, dverbose, host, toPort, file_server_port, bootstrap, nobootstrap, node_arg):
+def start_daemon(method, channel, verbose, dverbose, host, port, file_server_port, bootstrap, nobootstrap, node_arg):
     kp.start_daemon(method=method, channels=channel, verbose=verbose, dverbose=dverbose, host=host, port=port, file_server_port=file_server_port, nobootstrap=nobootstrap, bootstrap=bootstrap, node_arg=node_arg)
 
 @click.command(help="Stop the daemon.")

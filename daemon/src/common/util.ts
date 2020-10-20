@@ -1,5 +1,5 @@
 import bson from 'bson';
-import { DurationMsec, elapsedSince, FileKey, nowTimestamp, Sha1Hash } from '../interfaces/core';
+import { durationMsec, DurationMsec, elapsedSince, FileKey, nowTimestamp, Sha1Hash } from '../interfaces/core';
 
 export const randomString = (num_chars: number) => {
     var text = "";
@@ -99,7 +99,7 @@ const convertBinaryToBufferInObject = (x: any): any => {
 }
 
 
-export const sleepMsec = async (msec: number | DurationMsec, continueFunction: (() => boolean) | undefined = undefined): Promise<void> => {
+export const sleepMsec = async (msec: DurationMsec | number, continueFunction: (() => boolean) | undefined = undefined): Promise<void> => {
     const m = msec as any as number
     if (continueFunction) {
         const timer = nowTimestamp()
@@ -107,10 +107,10 @@ export const sleepMsec = async (msec: number | DurationMsec, continueFunction: (
             if (!continueFunction()) {
                 return
             }
-            await sleepMsec(1000)
+            await sleepMsec(durationMsec(1000))
         }
         if (m > elapsedSince(timer)) {
-            await sleepMsec(m - elapsedSince(timer))
+            await sleepMsec(durationMsec(m - elapsedSince(timer)))
         }
     }
     else return new Promise((resolve, reject) => {

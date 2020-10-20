@@ -12,14 +12,14 @@ export const isJSONObject = (x: any): x is JSONObject => {
     return isJSONSerializable(x);
 }
 export const tryParseJsonObject = (x: string): JSONObject | null => {
-    let a: any;
+    let a: any
     try {
-        a = JSON.parse(x);
+        a = JSON.parse(x)
     }
     catch {
-        return null;
+        return null
     }
-    if (!isJSONObject(a)) return null; // TODO: I think this may just be unreachable--parse should throw on failure
+    if (!isJSONObject(a)) return null
     return a;
 }
 export const isJSONSerializable = (obj: any): boolean => {
@@ -239,7 +239,7 @@ export interface HostName extends String {
     __hostName__: never
 }
 export const isHostName = (x: any): x is HostName => {
-    // TODO: can we be even more precise here? e.g. restrict number of elements?
+    // can we be even more precise here? e.g. restrict number of elements?
     if (!isString(x)) return false;
     let result = true;
     x.split(".").forEach((element) => {
@@ -611,7 +611,7 @@ export const isFeedsConfigFeed = (x: any): x is FeedsConfigFeed => {
         publicKey: isPublicKeyHex,
         privateKey: optional(isPrivateKeyHex)
     });
-    // TODO: check pair matches if the private key is given?
+    // check pair matches if the private key is given?
 }
 
 // FeedsConfig and FeedsConfigRAM
@@ -683,8 +683,6 @@ export const isSignedSubfeedMessage = (x: any): x is SignedSubfeedMessage => {
         signature: isSignature
     })) return false;
 
-    // TODO: If this is to be trusted elsewhere (which it will be based on its name & its being a
-    // type guard) it's essential we check the signature actually matches the message.
     return true;
 }
 
@@ -732,18 +730,46 @@ export const isSubfeedWatchName = (x: any) => {
     return x.length > 0;
 }
 
+export interface SubfeedPosition extends Number {
+    __subfeedPosition__: never; // phantom
+}
+export const isSubfeedPosition = (x: any) => {
+    if (!isNumber(x)) return false;
+    return (x >= 0)
+}
+export const subfeedPositionToNumber = (x: SubfeedPosition) => {
+    return x as any as number
+}
+export const subfeedPosition = (x: number): SubfeedPosition => {
+    return x as any as SubfeedPosition
+}
+
+export interface MessageCount extends Number {
+    __messageCount__: never; // phantom
+}
+export const isMessageCount = (x: any) => {
+    if (!isNumber(x)) return false;
+    return (x >= 0)
+}
+export const messageCountToNumber = (x: MessageCount) => {
+    return x as any as number
+}
+export const messageCount = (x: number): MessageCount => {
+    return x as any as MessageCount
+}
+
 // SubfeedWatch
 export interface SubfeedWatch {
     feedId: FeedId,
     subfeedHash: SubfeedHash,
-    position: number
+    position: SubfeedPosition
     // TODO: No name? Also, should we require position to be positive?
 }
 export const isSubfeedWatch = (x: any): x is SubfeedWatch => {
     return _validateObject(x, {
         feedId: isFeedId,
         subfeedHash: isSubfeedHash,
-        position: isNumber
+        position: isSubfeedPosition
     });
 }
 
@@ -773,14 +799,14 @@ export interface LiveFeedSubscription {
     subscriptionName: LiveFeedSubscriptionName,
     feedId: FeedId,
     subfeedHash: SubfeedHash,
-    position: number // TODO: is a negative position valid?
+    position: SubfeedPosition
 }
 export const isLiveFeedSubscription = (x: any): x is LiveFeedSubscription => {
     return _validateObject(x, {
         subscriptionName: isLiveFeedSubscriptionName,
         feedId: isFeedId,
         subfeedHash: isSubfeedHash,
-        position: isNumber
+        position: isSubfeedPosition
     })
 }
 

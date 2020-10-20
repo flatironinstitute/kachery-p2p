@@ -2,7 +2,7 @@ import assert from 'assert'
 import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
 import { ApiProbeResponse, isApiProbeResponse } from '../services/PublicApiServer'
-import { ByteCount, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isByteCount, isChannelInfo, isChannelName, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
+import { ByteCount, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isByteCount, isChannelInfo, isChannelName, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isMessageCount, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubfeedPosition, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, MessageCount, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
 
@@ -293,8 +293,8 @@ export interface GetLiveFeedSignedMessagesRequestData {
     requestType: 'getLiveFeedSignedMessages',
     feedId: FeedId,
     subfeedHash: SubfeedHash,
-    position: number,
-    maxNumMessages: number,
+    position: SubfeedPosition,
+    maxNumMessages: MessageCount,
     waitMsec: DurationMsec
 }
 export const isGetLiveFeedSignedMessagesRequestData = (x: any): x is GetLiveFeedSignedMessagesRequestData => {
@@ -302,8 +302,8 @@ export const isGetLiveFeedSignedMessagesRequestData = (x: any): x is GetLiveFeed
         requestType: isEqualTo('getLiveFeedSignedMessages'),
         feedId: isFeedId,
         subfeedHash: isSubfeedHash,
-        position: isNumber,
-        maxNumMessages: isNumber,
+        position: isSubfeedPosition,
+        maxNumMessages: isMessageCount,
         waitMsec: isDurationMsec
     })
 }

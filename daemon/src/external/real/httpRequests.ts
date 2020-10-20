@@ -14,7 +14,8 @@ export const httpGetDownload = async (address: Address, path: UrlPath): Promise<
     const ret = new DataStreamy()
     ret._start(size)
     ret._onCancel(() => {
-        // todo
+        // is this the right way to close it?
+        res.data.close()
     })
     res.data.on('data', (data: Buffer) => {
         ret._data(data)

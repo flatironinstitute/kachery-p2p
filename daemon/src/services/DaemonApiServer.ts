@@ -5,7 +5,7 @@ import { action } from '../common/action';
 import { DataStreamyProgress } from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
-import { ChannelName, DurationMsec, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isNodeId, isNull, isNumber, isOneOf, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
+import { ChannelName, DurationMsec, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isOneOf, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
 import { ApiProbeResponse } from './PublicApiServer';
@@ -509,16 +509,16 @@ export default class DaemonApiServer {
         interface FeedApiGetMessagesRequest {
             feedId: FeedId,
             subfeedHash: SubfeedHash,
-            position: number,
-            maxNumMessages: number,
+            position: SubfeedPosition,
+            maxNumMessages: MessageCount,
             waitMsec: DurationMsec
         }
         const isFeedApiGetMessagesRequest = (x: any): x is FeedApiGetMessagesRequest => {
             return _validateObject(x, {
                 feedId: isFeedId,
                 subfeedHash: isSubfeedHash,
-                position: isNumber,
-                maxNumMessages: isNumber,
+                position: isSubfeedPosition,
+                maxNumMessages: isMessageCount,
                 waitMsec: isDurationMsec,
             });
         }
@@ -544,16 +544,16 @@ export default class DaemonApiServer {
         interface FeedApiGetSignedMessagesRequest {
             feedId: FeedId,
             subfeedHash: SubfeedHash,
-            position: number,
-            maxNumMessages: number,
+            position: SubfeedPosition,
+            maxNumMessages: MessageCount,
             waitMsec: DurationMsec
         }
         const isFeedApiGetSignedMessagesRequest = (x: any): x is FeedApiGetSignedMessagesRequest => {
             return _validateObject(x, {
                 feedId: isFeedId,
                 subfeedHash: isSubfeedHash,
-                position: isNumber,
-                maxNumMessages: isNumber,
+                position: isSubfeedPosition,
+                maxNumMessages: isMessageCount,
                 waitMsec: isDurationMsec,
             });
         }
@@ -711,7 +711,7 @@ export default class DaemonApiServer {
         const { subfeedWatches, waitMsec } = reqData;
 
         const messages = await this.#node.feedManager().watchForNewMessages({
-            subfeedWatches: toSubfeedWatchesRAM(subfeedWatches), waitMsec, maxNumMessages: 0
+            subfeedWatches: toSubfeedWatchesRAM(subfeedWatches), waitMsec, maxNumMessages: messageCount(10) // todo: why 10?
         });
 
         const response: FeedApiWatchForNewMessagesResponse = {success: true, messages: mapToObject(messages)}

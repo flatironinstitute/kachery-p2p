@@ -1,6 +1,6 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
 import DataStreamy from "./common/DataStreamy";
-import { Address, ByteCount, ChannelName, ChannelNodeInfo, createRequestId, DurationMsec, FileKey, NodeId, nodeIdToPublicKey, nowTimestamp, urlPath } from "./interfaces/core";
+import { Address, ByteCount, ChannelName, ChannelNodeInfo, createRequestId, DurationMsec, NodeId, nodeIdToPublicKey, nowTimestamp, urlPath } from "./interfaces/core";
 import { isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import { protocolVersion } from "./protocolVersion";
@@ -67,13 +67,14 @@ class RemoteNode {
         return this.#channelNodeInfoByChannel.get(channelName) || null
     }
     getRemoteNodeWebSocketAddress(): Address | null {
-        // todo: if not a bootstrap node, check the channel node infos
-        return this.bootstrapWebSocketAddress()
-    }
-    getFileSizeForFileKey(fileKey: FileKey): ByteCount | null {
-        // todo
+        const ret = this.bootstrapWebSocketAddress()
+        if (ret) return ret
+        this.#channelNodeInfoByChannel.forEach((cni, channelName) => {
+            if (cni.body.webSocketAddress) {
+                return cni.body.webSocketAddress
+            }
+        })
         return null
-        // return this.#fileSizesByFileKey.get(fileKey) || null
     }
     setLocalUdpAddress(address: Address | null) {
         this.#localUdpAddress = address
@@ -213,7 +214,7 @@ class RemoteNode {
             }
             const R = await this.#node.httpPostJson(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
             if (!isNodeToNodeResponse(R)) {
-                // todo: in this situation, do we ban the node?
+                // ban the node?
                 throw Error('Invalid response from node.');
             }
             response = R
@@ -254,7 +255,7 @@ class RemoteNode {
             throw Error('Unexpected early timestamp in response.')
         }
         if (!verifySignature(response.body, response.signature, nodeIdToPublicKey(this.#remoteNodeId))) {
-            // todo: in this situation, do we ban the node?
+            // ban the node?
             throw Error('Invalid signature in response.');
         }
         return response.body.responseData;

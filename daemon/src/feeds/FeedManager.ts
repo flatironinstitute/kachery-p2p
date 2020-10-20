@@ -3,7 +3,7 @@ import { getSignatureJson, hexToPublicKey, verifySignatureJson } from '../common
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString, sleepMsec } from '../common/util';
 import { LocalFeedManagerInterface } from '../external/ExternalInterface';
-import { durationMsec, DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, JSONObject, NodeId, nowTimestamp, PrivateKey, PublicKey, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
+import { durationMsec, DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, JSONObject, messageCount, MessageCount, messageCountToNumber, NodeId, nowTimestamp, PrivateKey, PublicKey, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubfeedPosition, subfeedPositionToNumber, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 
 // todo fix feeds config on disk (too many in one .json file)
@@ -75,7 +75,7 @@ class FeedManager {
         }
         subfeed.appendSignedMessages(signedMessages);
     }
-    async getMessages({ feedId, subfeedHash, position, maxNumMessages, waitMsec }: {feedId: FeedId, subfeedHash: SubfeedHash, position: number, maxNumMessages: number, waitMsec: DurationMsec}) {
+    async getMessages({ feedId, subfeedHash, position, maxNumMessages, waitMsec }: {feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec}) {
         // Load messages from a subfeed.
         // If there are no messages available locally, and waitMsec > 0, then we will search
         // for the messages on the p2p network
@@ -86,7 +86,7 @@ class FeedManager {
         // Return just the messages (not the signed messages)
         return signedMessages.map(sm => (sm.body.message));
     }
-    async getSignedMessages({ feedId, subfeedHash, position, maxNumMessages, waitMsec }: {feedId: FeedId, subfeedHash: SubfeedHash, position: number, maxNumMessages: number, waitMsec: DurationMsec}) {
+    async getSignedMessages({ feedId, subfeedHash, position, maxNumMessages, waitMsec }: {feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec}) {
         // Same as getMessages() except we return the signed messages. This is also called by getMessages().
         const subfeed = await this._loadSubfeed({feedId, subfeedHash});
         if (!subfeed) {
@@ -154,7 +154,7 @@ class FeedManager {
     }: {
         subfeedWatches: SubfeedWatchesRAM,
         waitMsec: DurationMsec,
-        maxNumMessages: number
+        maxNumMessages: MessageCount
     }): Promise<Map<SubfeedWatchName, (SubfeedMessage[])>> {
         // assert(typeof(waitMsec) === 'number');
         // assert(typeof(waxNumMessages) === 'number');
@@ -262,7 +262,7 @@ class RemoteFeedManager {
     constructor(node: KacheryP2PNode) {
         this._node = node; // The kachery-p2p node
     }
-    async getSignedMessages({feedId, subfeedHash, position, maxNumMessages, waitMsec}: {feedId: FeedId, subfeedHash: SubfeedHash, position: number, maxNumMessages: number, waitMsec: DurationMsec}): Promise<SignedSubfeedMessage[] | null> {
+    async getSignedMessages({feedId, subfeedHash, position, maxNumMessages, waitMsec}: {feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec}): Promise<SignedSubfeedMessage[] | null> {
         // Get signed messages from a remote feed
 
         let w = durationMsecToNumber(waitMsec)
@@ -340,7 +340,6 @@ class RemoteFeedManager {
         // If not found, throws an error.
 
         // First check if we have the information in the memory cache
-        // todo: avoid a memory leak
         const cachedInfo = this._liveFeedInfos.get(feedId);
         if (cachedInfo) return cachedInfo;
 
@@ -350,7 +349,6 @@ class RemoteFeedManager {
         }
 
         // Store in memory cache
-        // todo: avoid memory leak
         this._liveFeedInfos.set(feedId, x);
         return x;
     }
@@ -460,7 +458,7 @@ class Subfeed {
                 this.#accessRules = null
 
                 // Let's try to load messages from remote nodes on the p2p network
-                await this.getSignedMessages({position: 0, maxNumMessages: 10, waitMsec: durationMsec(1)})
+                await this.getSignedMessages({position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: durationMsec(1)})
             }
         }
         catch(err) {
@@ -505,17 +503,17 @@ class Subfeed {
         const a = this.#accessRules.rules.filter(r => ((r.nodeId === remoteNodeId) && (r.write)));
         return (a.length > 0);
     }
-    _getInMemorySignedMessages({position, maxNumMessages}: {position: number, maxNumMessages: number}): SignedSubfeedMessage[] {
+    _getInMemorySignedMessages({position, maxNumMessages}: {position: SubfeedPosition, maxNumMessages: MessageCount}): SignedSubfeedMessage[] {
         if (!this.#signedMessages) {
             throw Error('_signedMessages is null. Perhaps _getInMemorySignedMessages was called before subfeed was initialized.');
         }
         let signedMessages: SignedSubfeedMessage[] = [];
-        if (position < this.#signedMessages.length) {
+        if (subfeedPositionToNumber(position) < this.#signedMessages.length) {
             // If we have some messages loaded into memory, let's return those!
-            for (let i = position; i < this.#signedMessages.length; i++) {
+            for (let i = subfeedPositionToNumber(position); i < this.#signedMessages.length; i++) {
                 signedMessages.push(this.#signedMessages[i]);
                 if (maxNumMessages) {
-                    if (signedMessages.length >= maxNumMessages) {
+                    if (signedMessages.length >= messageCountToNumber(maxNumMessages)) {
                         break;
                     }
                 }
@@ -523,16 +521,16 @@ class Subfeed {
         }
         return signedMessages;
     }
-    async getSignedMessages({position, maxNumMessages, waitMsec}: {position: number, maxNumMessages: number, waitMsec: DurationMsec}): Promise<SignedSubfeedMessage[]> {
+    async getSignedMessages({position, maxNumMessages, waitMsec}: {position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec}): Promise<SignedSubfeedMessage[]> {
         // Get some signed messages starting at position
         if (!this.#signedMessages) {
             throw Error('_signedMessages is null. Perhaps getSignedMessages was called before subfeed was initialized.');
         }
-        if (position < this.#signedMessages.length) {
+        if (subfeedPositionToNumber(position) < this.#signedMessages.length) {
             // If we have some messages loaded into memory, let's return those!
             return this._getInMemorySignedMessages({position, maxNumMessages});
         }
-        else if (position === this.#signedMessages.length) {
+        else if (subfeedPositionToNumber(position) === this.#signedMessages.length) {
             // We don't have any new messages in memory
             let signedMessages: SignedSubfeedMessage[] = [];
             if (!this.isWriteable()) {
@@ -540,19 +538,19 @@ class Subfeed {
                 const remoteSignedMessages = await this._remoteFeedManager.getSignedMessages({
                     feedId: this._feedId,
                     subfeedHash: this._subfeedHash,
-                    position: this.#signedMessages.length,
+                    position: subfeedPosition(this.#signedMessages.length),
                     maxNumMessages,
                     waitMsec
                 });
                 if ((remoteSignedMessages) && (remoteSignedMessages.length > 0)) {
                     // We found them! Let's first make sure that our position is still equal to this._signedMessages.length
-                    if (position === this.#signedMessages.length) {
+                    if (subfeedPositionToNumber(position) === this.#signedMessages.length) {
                         // We found them! So we append them to local feed, and then call getSignedMessages() again. We should then return the appropriate number of signed messages.
                         this.appendSignedMessages(remoteSignedMessages);
                         return this._getInMemorySignedMessages({position, maxNumMessages});
                     }
                     else {
-                        if (position < this.#signedMessages.length) {
+                        if (subfeedPositionToNumber(position) < this.#signedMessages.length) {
                             // we somehow got more signed messages. So let's go with those!
                             return this._getInMemorySignedMessages({position, maxNumMessages});
                         }
@@ -583,20 +581,6 @@ class Subfeed {
                         resolve();
                     }, durationMsecToNumber(waitMsec));
                 });
-                
-                // const timer = new Date();
-                // while (true) {
-                //     // todo: use callback strategy instead (call directly from appendSignedMessages)
-                //     await sleepMsec(100);
-                //     if (position < this._signedMessages.length) {
-                //         // We have new messages! Call getSignedMessages again to retrieve them.
-                //         return this._getInMemorySignedMessages({position, maxNumMessages});
-                //     }
-                //     const elapsed = (new Date()) - timer;
-                //     if (elapsed > waitMsec) {
-                //         break;
-                //     }
-                // }
             }
             // Finally, return the signed messages that have been accumulated above.
             return signedMessages;

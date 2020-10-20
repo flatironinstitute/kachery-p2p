@@ -7,7 +7,7 @@ import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import ExternalInterface, { ExpressInterface, HttpServerInterface, KacheryStorageManagerInterface } from './external/ExternalInterface'
 import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
-import { Address, byteCount, ByteCount, byteCountToNumber, ChannelInfo, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, errorMessage, FeedId, FileKey, FileManifestChunk, FindFileResult, FindLiveFeedResult, hostName, HostName, isAddress, isFileManifest, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubmittedSubfeedMessage, UrlPath } from './interfaces/core'
+import { Address, byteCount, ByteCount, byteCountToNumber, ChannelInfo, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, errorMessage, FeedId, FileKey, FileManifestChunk, FindFileResult, FindLiveFeedResult, hostName, HostName, isAddress, isFileManifest, KeyPair, MessageCount, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, UrlPath } from './interfaces/core'
 import { AnnounceRequestData, AnnounceResponseData, CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData, createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, GetChannelInfoRequestData, GetChannelInfoResponseData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isProbeRequestData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, ProbeRequestData, ProbeResponseData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import { daemonVersion, protocolVersion } from './protocolVersion'
 import { ProxyConnectionToClient } from './proxyConnections/ProxyConnectionToClient'
@@ -314,7 +314,7 @@ class KacheryP2PNode {
                 })
             }
         }
-        // todo: handle ret.onCancel ??
+        // todo: handle ret.onCancel ?? -- need to think about this
         return ret
     }
     feedManager() {
@@ -442,8 +442,8 @@ class KacheryP2PNode {
         nodeId: NodeId,
         feedId: FeedId,
         subfeedHash: SubfeedHash,
-        position: number,
-        maxNumMessages: number,
+        position: SubfeedPosition,
+        maxNumMessages: MessageCount,
         waitMsec: DurationMsec
     }): Promise<SignedSubfeedMessage[]> {
         const { nodeId, feedId, subfeedHash, position, maxNumMessages, waitMsec } = args
@@ -523,7 +523,7 @@ class KacheryP2PNode {
     async handleNodeToNodeRequest(request: NodeToNodeRequest): Promise<NodeToNodeResponse> {
         const { requestId, fromNodeId, toNodeId, timestamp, requestData } = request.body
         if (!verifySignature(request.body, request.signature, nodeIdToPublicKey(fromNodeId))) {
-            // todo: is this the right way to handle this situation?
+            // think about banning the node here
             throw Error('Invalid signature in node-to-node request')
         }
         if (toNodeId !== this.#nodeId) {
