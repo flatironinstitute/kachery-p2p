@@ -3,10 +3,10 @@ import DataStreamy from './common/DataStreamy'
 import GarbageMap from './common/GarbageMap'
 import DownloaderCreator from './downloadOptimizer/DownloaderCreator'
 import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
-import ExternalInterface, { ExpressInterface, HttpServerInterface, KacheryStorageManagerInterface } from './external/ExternalInterface'
+import ExternalInterface, { KacheryStorageManagerInterface } from './external/ExternalInterface'
 import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
-import { Address, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isAddress, KeyPair, MessageCount, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, UrlPath } from './interfaces/core'
+import { Address, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isAddress, KeyPair, MessageCount, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage } from './interfaces/core'
 import { CheckForFileRequestData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, GetLiveFeedSignedMessagesRequestData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import { handleCheckForFileRequest } from './nodeToNodeRequestHandlers/handleCheckForFileRequest'
 import { handleCheckForLiveFeedRequest } from './nodeToNodeRequestHandlers/handleCheckForLiveFeedRequest'
@@ -46,7 +46,7 @@ class KacheryP2PNode {
         verbose: number,
         hostName: HostName | null,
         httpListenPort: Port | null,
-        udpListenPort: Port | null,
+        udpSocketPort: Port | null,
         webSocketListenPort: Port | null,
         label: string,
         bootstrapAddresses: Address[] | null,
@@ -185,23 +185,8 @@ class KacheryP2PNode {
         })
         this.#proxyConnectionsToServers.clear()
     }
-    async httpPostJson(address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) {
-        return await this.p.externalInterface.httpPostJson(address, path, data, opts)
-    }
-    async httpGetDownload(address: Address, path: UrlPath) {
-        return await this.p.externalInterface.httpGetDownload(address, path)
-    }
-    dgramCreateSocket(args: {type: 'udp4', reuseAddr: boolean}) {
-        return this.p.externalInterface.dgramCreateSocket({type: args.type, reuseAddr: args.reuseAddr, nodeId: this.nodeId()})
-    }
-    createWebSocket(url: string, opts: {timeoutMsec: DurationMsec}) {
-        return this.p.externalInterface.createWebSocket(url, opts)
-    }
-    async startWebSocketServer(port: Port) {
-        return await this.p.externalInterface.startWebSocketServer(port, this.nodeId())
-    }
-    async startHttpServer(app: ExpressInterface, port: Port): Promise<HttpServerInterface> {
-        return await this.p.externalInterface.startHttpServer(app, port)
+    externalInterface() {
+        return this.p.externalInterface
     }
     feedManager() {
         return this.#feedManager
@@ -270,8 +255,8 @@ class KacheryP2PNode {
         const h = this.hostName()
         return (h !== null) && (this.p.webSocketListenPort !== null) ? {hostName: h, port: this.p.webSocketListenPort} : null
     }
-    udpListenPort() {
-        return this.p.udpListenPort
+    udpSocketPort() {
+        return this.p.udpSocketPort
     }
     publicUdpSocketAddress(): Address | null {
         if (this.#publicUdpSocketAddress !== null) {
@@ -279,10 +264,10 @@ class KacheryP2PNode {
         }
         else {
             const h = this.hostName()
-            if ((h !== null) && (this.p.udpListenPort !== null)) {
+            if ((h !== null) && (this.p.udpSocketPort !== null)) {
                 return {
                     hostName: h,
-                    port: this.p.udpListenPort
+                    port: this.p.udpSocketPort
                 }
             }
             else {

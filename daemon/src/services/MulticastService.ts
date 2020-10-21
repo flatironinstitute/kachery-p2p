@@ -1,7 +1,7 @@
 import { action } from "../common/action"
 import { getSignature, verifySignature } from "../common/crypto_util"
 import { sleepMsec } from "../common/util"
-import { DgramSocket } from "../external/ExternalInterface"
+import ExternalInterface from "../external/ExternalInterface"
 import { Address, ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, hostName, isMulticastAnnounceMessage, JSONObject, KeyPair, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, tryParseJsonObject } from "../interfaces/core"
 import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
 import { protocolVersion } from "../protocolVersion"
@@ -12,11 +12,11 @@ interface RemoteNodeManagerInterface {
 
 interface KacheryP2PNodeInterface {
     nodeId: () => NodeId
-    udpListenPort: () => Port | null
+    udpSocketPort: () => Port | null
     keyPair: () => KeyPair
     channelNames: () => ChannelName[]
     getChannelNodeInfo: (channelName: ChannelName) => ChannelNodeInfo
-    dgramCreateSocket: (args: {type: 'udp4', reuseAddr: boolean}) => DgramSocket
+    externalInterface: () => ExternalInterface
     useMulticastUdp: () => boolean
     remoteNodeManager: () => RemoteNodeManagerInterface
 }
@@ -34,8 +34,7 @@ export default class MulticastService {
     async _start() {
         if (!this.#node.useMulticastUdp()) return
         // to find nodes on the local network
-        const multicastSocket = this.#node.dgramCreateSocket({ type: "udp4", reuseAddr: true })
-        // const multicastSocket = dgram.createSocket({ type: "udp4", reuseAddr: true })
+        const multicastSocket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: true, nodeId: this.#node.nodeId() })
         const multicastAddress = this.opts.multicastAddress
         const multicastPort = 21010
         multicastSocket.bind(multicastPort)
@@ -51,10 +50,10 @@ export default class MulticastService {
                     if (verifySignature(msg2.body, msg2.signature, nodeIdToPublicKey(msg2.body.fromNodeId), {checkTimestamp: true})) {
                         if (msg2.body.fromNodeId === this.#node.nodeId())
                             return
-                        const localUdpAddress: Address | null = msg2.body.udpListenPort ? (
+                        const localUdpAddress: Address | null = msg2.body.udpSocketPort ? (
                             {
                                 hostName: hostName(rinfo.address),
-                                port: msg2.body.udpListenPort
+                                port: msg2.body.udpSocketPort
                             }
                         ): null
                         const response = this.#node.remoteNodeManager().handleAnnounceRequest({fromNodeId: msg2.body.fromNodeId, requestData: msg2.body.requestData, localUdpAddress})
@@ -82,7 +81,7 @@ export default class MulticastService {
                     fromNodeId: this.#node.nodeId(),
                     messageType: 'announce',
                     requestData,
-                    udpListenPort: this.#node.udpListenPort(),
+                    udpSocketPort: this.#node.udpSocketPort(),
                     timestamp: nowTimestamp()
                 }
                 const m: MulticastAnnounceMessage = {

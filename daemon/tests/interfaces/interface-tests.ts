@@ -640,7 +640,7 @@ describe('Kachery primitives', () => {
             fromNodeId: (new Array(65).join('0')) as any as ut.NodeId,
             messageType: 'announce',
             requestData: validAnnounceRequestData,
-            udpListenPort: null,
+            udpSocketPort: null,
             timestamp: ut.nowTimestamp()
         }
         it('Confirm validChannelNodeInfo is actually valid', () => {

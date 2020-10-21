@@ -40,7 +40,7 @@ export default class PublicUdpSocketServer {
     startListening(listenPort: Port) {
         return new Promise((resolve, reject) => {
             try {
-                this.#socket = this.#node.dgramCreateSocket({ type: "udp4", reuseAddr: false })
+                this.#socket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: false, nodeId: this.#node.nodeId() })
                 this.#socket.bind(portToNumber(listenPort))
                 this.#socket.on("listening", () => {
                     if (this.#socket === null) {

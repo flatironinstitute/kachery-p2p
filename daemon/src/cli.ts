@@ -110,7 +110,7 @@ function main() {
         }
         const hostName = argv.host || null;
         const httpListenPort = argv.port ? Number(argv.port) : 14507;
-        const udpListenPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort;
+        const udpSocketPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort;
         const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : 14508;
         const daemonApiPort = process.env.KACHERY_P2P_DAEMON_API_PORT || process.env.KACHERY_P2P_API_PORT || 20431;
         const label = argv.label as string;
@@ -136,8 +136,8 @@ function main() {
             throw new CLIError('Invalid websocket listen port');
           }
         }
-        if (udpListenPort !== null) {
-          if (!isPort(udpListenPort)) {
+        if (udpSocketPort !== null) {
+          if (!isPort(udpSocketPort)) {
             throw new CLIError('Invalid udp listen port');
           }
         }
@@ -159,7 +159,7 @@ function main() {
             isBootstrap: isBootstrapNode,
             channelNames,
             multicastUdpAddress: '237.0.0.0', // how to choose this?
-            udpListenPort,
+            udpSocketPort,
             webSocketListenPort,
             services: {
                 announce: true,
@@ -167,7 +167,7 @@ function main() {
                 bootstrap: noBootstrap ? false : true,
                 proxyClient: true,
                 multicast: true,
-                udpServer: udpListenPort ? true : false,
+                udpSocket: udpSocketPort ? true : false,
                 webSocketServer: webSocketListenPort ? true : false,
                 httpServer: true,
                 daemonServer: true

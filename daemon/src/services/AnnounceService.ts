@@ -58,7 +58,8 @@ export default class AnnounceService {
             requestType: 'announce',
             channelNodeInfo: this.#node.getChannelNodeInfo(channelName)
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: durationMsec(2000), method: 'default'})
+        let method: SendRequestMethod = 'prefer-udp' // we prefer to send via udp so that we can discover our own public udp address when we get the response
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: durationMsec(2000), method})
         if (!isAnnounceResponseData(responseData)) {
             throw Error('Unexpected.')
         }

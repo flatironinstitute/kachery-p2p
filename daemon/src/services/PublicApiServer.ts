@@ -243,6 +243,6 @@ export default class PublicApiServer {
     }
     // Start listening via http/https
     async listen(port: Port) {
-        this.#server = await this.#node.startHttpServer(this.#app, port);
+        this.#server = await this.#node.externalInterface().startHttpServer(this.#app, port);
     }
 }

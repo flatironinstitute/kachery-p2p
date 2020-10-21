@@ -2,7 +2,7 @@ import { action } from "../common/action";
 import DataStreamy from "../common/DataStreamy";
 import GarbageMap from '../common/GarbageMap';
 import { sleepMsec } from "../common/util";
-import { WebSocketInterface } from "../external/ExternalInterface";
+import ExternalInterface from "../external/ExternalInterface";
 import { Address, DurationMsec, durationMsec, durationMsecToNumber, elapsedSince, KeyPair, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core";
 import { NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
 import { ProxyConnectionToServer } from "../proxyConnections/ProxyConnectionToServer";
@@ -25,7 +25,7 @@ interface KacheryP2PNodeInterface {
     streamFileData: (nodeId: NodeId, streamId: StreamId) => DataStreamy
     getProxyConnectionToServer: (remoteNodeId: NodeId) => ProxyConnectionToServer | null
     setProxyConnectionToServer: (nodeId: NodeId, c: ProxyConnectionToServer) => void
-    createWebSocket: (url: string, opts: {timeoutMsec: DurationMsec}) => WebSocketInterface
+    externalInterface: () => ExternalInterface
 }
 
 export default class ProxyClientService {

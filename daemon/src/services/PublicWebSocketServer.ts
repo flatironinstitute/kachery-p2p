@@ -16,7 +16,7 @@ class PublicWebSocketServer {
         }
     }
     async startListening(port: Port) {
-        this.#webSocketServer = await this.#node.startWebSocketServer(port)
+        this.#webSocketServer = await this.#node.externalInterface().startWebSocketServer(port, this.#node.nodeId())
         this.#webSocketServer.onConnection((ws: WebSocketInterface) => {
             /////////////////////////////////////////////////////////////////////////
             action('newProxyConnectionToClient', {context: 'PublicWebSocketServer'}, async () => {

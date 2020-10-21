@@ -422,7 +422,7 @@ export interface MulticastAnnounceMessageBody {
     fromNodeId: NodeId,
     messageType: 'announce', // Should be actual type/enum?
     requestData: AnnounceRequestData,
-    udpListenPort: Port | null,
+    udpSocketPort: Port | null,
     timestamp: Timestamp
 }
 export const isMulticastAnnounceMessageBody = (x: any): x is MulticastAnnounceMessageBody => {
@@ -431,7 +431,7 @@ export const isMulticastAnnounceMessageBody = (x: any): x is MulticastAnnounceMe
         fromNodeId: isNodeId,
         messageType: isEqualTo('announce'),
         requestData: isAnnounceRequestData,
-        udpListenPort: isOneOf([isNull, isPort]),
+        udpSocketPort: isOneOf([isNull, isPort]),
         timestamp: isTimestamp
     })
 }

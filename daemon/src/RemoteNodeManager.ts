@@ -28,7 +28,7 @@ class RemoteNodeManager {
         if (localUdpAddress) {
             const n = this.#remoteNodes.get(channelNodeInfo.body.nodeId)
             if (n) {
-                n.setLocalUdpAddress(localUdpAddress)
+                n.setLocalUdpAddressForRemoteNode(localUdpAddress)
             }
         }
         return {

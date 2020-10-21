@@ -16,7 +16,7 @@ export interface StartDaemonOpts {
     isBootstrap: boolean,
     channelNames: ChannelName[],
     multicastUdpAddress: string | null,
-    udpListenPort: Port | null,
+    udpSocketPort: Port | null,
     webSocketListenPort: Port | null,
     services: {
         announce?: boolean,
@@ -24,7 +24,7 @@ export interface StartDaemonOpts {
         bootstrap?: boolean,
         proxyClient?: boolean,
         multicast?: boolean,
-        udpServer?: boolean,
+        udpSocket?: boolean,
         webSocketServer?: boolean,
         httpServer?: boolean,
         daemonServer?: boolean
@@ -57,7 +57,7 @@ const startDaemon = async (args: {
         hostName,
         httpListenPort,
         webSocketListenPort: opts.webSocketListenPort,
-        udpListenPort: opts.udpListenPort,
+        udpSocketPort: opts.udpSocketPort,
         label,
         bootstrapAddresses: opts.bootstrapAddresses,
         channelNames: opts.channelNames,
@@ -68,6 +68,13 @@ const startDaemon = async (args: {
             multicastUdpAddress: opts.services.multicast ? opts.multicastUdpAddress : null
         }
     })
+
+    if ((opts.services.multicast) && (!opts.services.udpSocket)) {
+        throw Error('You must enable the udpSocket service when the multicast service is enabled')
+    }
+    if ((opts.services.udpSocket) && (opts.udpSocketPort === null)) {
+        throw Error('Missing udp socket port')
+    }
 
     // Start the daemon http server
     const daemonApiServer = new DaemonApiServer(kNode, { verbose });
@@ -93,11 +100,11 @@ const startDaemon = async (args: {
 
     // Start the udp socket server
     let publicUdpSocketServer: PublicUdpSocketServer | null = null
-    if (opts.services.udpServer && opts.udpListenPort) {
+    if (opts.services.udpSocket && opts.udpSocketPort) {
         publicUdpSocketServer = new PublicUdpSocketServer(kNode);
-        await publicUdpSocketServer.startListening(opts.udpListenPort);
+        await publicUdpSocketServer.startListening(opts.udpSocketPort);
         kNode.setPublicUdpSocketServer(publicUdpSocketServer)
-        console.info(`Udp socket server listening on port ${opts.udpListenPort}`)
+        console.info(`Udp socket server listening on port ${opts.udpSocketPort}`)
     }
 
     const speedupFactor = externalInterface.isMock ? 1000 : 1

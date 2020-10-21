@@ -3,7 +3,7 @@ import { getSignature, verifySignature } from '../common/crypto_util';
 import DataStreamy from '../common/DataStreamy';
 import GarbageMap from '../common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize } from '../common/util';
-import { WebSocketInterface } from '../external/ExternalInterface';
+import ExternalInterface, { WebSocketInterface } from '../external/ExternalInterface';
 import { Address, durationMsec, DurationMsec, errorMessage, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp } from "../interfaces/core";
 import { isNodeToNodeRequest, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
 import { InitialMessageFromClient, InitialMessageFromClientBody, isInitialMessageFromServer, isMessageFromServer, isProxyStreamFileDataCancelRequest, isProxyStreamFileDataRequest, MessageFromClient, MessageFromServer, ProxyStreamFileDataCancelRequest, ProxyStreamFileDataRequest, ProxyStreamFileDataRequestId, ProxyStreamFileDataResponseDataMessage, ProxyStreamFileDataResponseErrorMessage, ProxyStreamFileDataResponseFinishedMessage, ProxyStreamFileDataResponseStartedMessage } from './ProxyConnectionToClient';
@@ -13,7 +13,7 @@ interface KacheryP2PNodeInterface {
     keyPair: () => KeyPair
     handleNodeToNodeRequest: (request: NodeToNodeRequest) => Promise<NodeToNodeResponse>
     streamFileData: (nodeId: NodeId, streamId: StreamId) => DataStreamy
-    createWebSocket: (url: string, opts: {timeoutMsec: DurationMsec}) => WebSocketInterface
+    externalInterface: () => ExternalInterface
 }
 
 export class ProxyConnectionToServer {
@@ -32,7 +32,7 @@ export class ProxyConnectionToServer {
         this.#remoteNodeId = remoteNodeId;
         return new Promise((resolve, reject) => {
             const url = `ws://${address.hostName}:${address.port}`;
-            this.#ws = this.#node.createWebSocket(url, {timeoutMsec: opts.timeoutMsec})
+            this.#ws = this.#node.externalInterface().createWebSocket(url, {timeoutMsec: opts.timeoutMsec})
             this.#ws.onClose((code, reason) => {
                 this.#closed = true;
                 this.#onClosedCallbacks.forEach(cb => cb(reason));
