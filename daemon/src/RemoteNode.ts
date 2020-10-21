@@ -237,21 +237,27 @@ class RemoteNode {
             }
         }
         else {
+            /* istanbul ignore next */
             throw Error ('Unexpected')
         }
         if (response.body.responseData.requestType !== request.body.requestData.requestType) {
+            /* istanbul ignore next */
             throw Error('Unexpected requestType in response.')
         }
         if (response.body.fromNodeId !== this.#remoteNodeId) {
+            /* istanbul ignore next */
             throw Error('Unexpected fromNodeId in response.')
         }
         if (response.body.toNodeId !== this.#node.nodeId()) {
+            /* istanbul ignore next */
             throw Error('Unexpected toNodeId in response.')
         }
         if (response.body.requestId !== requestId) {
+            /* istanbul ignore next */
             throw Error('Unexpected requestId in response.')
         }
         if (Number(response.body.timestamp) < Number(request.body.timestamp) - 1000) {
+            /* istanbul ignore next */
             throw Error('Unexpected early timestamp in response.')
         }
         if (!verifySignature(response.body, response.signature, nodeIdToPublicKey(this.#remoteNodeId))) {

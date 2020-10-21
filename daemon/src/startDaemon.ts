@@ -11,36 +11,43 @@ import PublicApiServer from './services/PublicApiServer';
 import PublicUdpSocketServer from './services/PublicUdpSocketServer';
 import PublicWebSocketServer from './services/PublicWebSocketServer';
 
-const startDaemon = async (args: {
+export interface StartDaemonOpts {
+    bootstrapAddresses: Address[] | null,
+    isBootstrap: boolean,
     channelNames: ChannelName[],
+    multicastUdpAddress: string | null,
+    udpListenPort: Port | null,
+    webSocketListenPort: Port | null,
+    services: {
+        announce?: boolean,
+        discover?: boolean,
+        bootstrap?: boolean,
+        proxyClient?: boolean,
+        multicast?: boolean,
+        udpServer?: boolean,
+        webSocketServer?: boolean,
+        httpServer?: boolean,
+        daemonServer?: boolean
+    }
+}
+
+const startDaemon = async (args: {
     keyPair: KeyPair,
     verbose: number,
     hostName: HostName | null,
     daemonApiPort: Port | null,
     httpListenPort: Port | null,
-    webSocketListenPort: Port | null,
-    udpListenPort: Port | null,
     label: string,
-    bootstrapAddresses: Address[] | null,
     externalInterface: ExternalInterface,
-    opts: {
-        noBootstrap: boolean,
-        isBootstrapNode: boolean,
-        mock: boolean,
-        multicastUdpAddress: string | null
-    }
+    opts: StartDaemonOpts
 }) => {
     const {
-        channelNames,
         keyPair,
         verbose,
         hostName,
         daemonApiPort,
         httpListenPort,
-        webSocketListenPort,
-        udpListenPort,
         label,
-        bootstrapAddresses,
         externalInterface,
         opts
     } = args
@@ -49,88 +56,85 @@ const startDaemon = async (args: {
         verbose,
         hostName,
         httpListenPort,
-        webSocketListenPort,
-        udpListenPort,
+        webSocketListenPort: opts.webSocketListenPort,
+        udpListenPort: opts.udpListenPort,
         label,
-        bootstrapAddresses,
-        channelNames,
+        bootstrapAddresses: opts.bootstrapAddresses,
+        channelNames: opts.channelNames,
         externalInterface,
-        opts
+        opts: {
+            noBootstrap: (opts.bootstrapAddresses === null),
+            isBootstrapNode: opts.isBootstrap,
+            multicastUdpAddress: opts.services.multicast ? opts.multicastUdpAddress : null
+        }
     })
 
     // Start the daemon http server
     const daemonApiServer = new DaemonApiServer(kNode, { verbose });
-    if (daemonApiPort) {
+    if (opts.services.daemonServer && daemonApiPort) {
         daemonApiServer.listen(daemonApiPort);
         console.info(`Daemon http server listening on port ${daemonApiPort}`)
     }
     
     // Start the public http server
     const publicApiServer = new PublicApiServer(kNode, { verbose })
-    if (httpListenPort) {
+    if (opts.services.httpServer && httpListenPort) {
         publicApiServer.listen(httpListenPort);
         console.info(`Public http server listening on port ${httpListenPort}`)
     }
 
     // Start the websocket server
     let publicWebSocketServer: PublicWebSocketServer | null = null
-    if (webSocketListenPort) {
+    if (opts.services.webSocketServer && opts.webSocketListenPort) {
         publicWebSocketServer = new PublicWebSocketServer(kNode, { verbose });
-        await publicWebSocketServer.startListening(webSocketListenPort);
-        console.info(`Websocket server listening on port ${webSocketListenPort}`)
+        await publicWebSocketServer.startListening(opts.webSocketListenPort);
+        console.info(`Websocket server listening on port ${opts.webSocketListenPort}`)
     }
 
     // Start the udp socket server
     let publicUdpSocketServer: PublicUdpSocketServer | null = null
-    if (udpListenPort) {
+    if (opts.services.udpServer && opts.udpListenPort) {
         publicUdpSocketServer = new PublicUdpSocketServer(kNode);
-        await publicUdpSocketServer.startListening(udpListenPort);
+        await publicUdpSocketServer.startListening(opts.udpListenPort);
         kNode.setPublicUdpSocketServer(publicUdpSocketServer)
-        console.info(`Udp socket server listening on port ${udpListenPort}`)
+        console.info(`Udp socket server listening on port ${opts.udpListenPort}`)
     }
 
-    const speedupFactor = opts.mock ? 1000 : 1
+    const speedupFactor = externalInterface.isMock ? 1000 : 1
 
     // start the other services
-    const announceService = new AnnounceService(kNode, {
+    const announceService = opts.services.announce ? new AnnounceService(kNode, {
         announceBootstrapIntervalMsec: durationMsec(21000 / speedupFactor),
         announceToRandomNodeIntervalMsec: durationMsec(2000 / speedupFactor)
-    })
-    const discoverService = new DiscoverService(kNode, {
+    }) : null
+    const discoverService = opts.services.discover ? new DiscoverService(kNode, {
         discoverBootstrapIntervalMsec: durationMsec(30000 / speedupFactor),
         discoverRandomNodeIntervalMsec: durationMsec(2200 / speedupFactor)
-    })
-    const bootstrapService = new BootstrapService(kNode, {
+    }) : null
+    const bootstrapService = opts.services.bootstrap ? new BootstrapService(kNode, {
         probeIntervalMsec: durationMsec(15000 / speedupFactor)
-    })
-    const proxyClientService = new ProxyClientService(kNode, {
+    }) : null
+    const proxyClientService = opts.services.proxyClient ? new ProxyClientService(kNode, {
         intervalMsec: durationMsec(3000 / speedupFactor)
-    })
-    let multicastService: MulticastService | null = null
-    if (opts.multicastUdpAddress) {
-        multicastService = new MulticastService(kNode, {
-            intervalMsec: durationMsec(12000 / speedupFactor),
-            multicastAddress: opts.multicastUdpAddress
-        })
-    }
+    }) : null
+    let multicastService = (opts.services.multicast && (opts.multicastUdpAddress !== null)) ? new MulticastService(kNode, {
+        intervalMsec: durationMsec(12000 / speedupFactor),
+        multicastAddress: opts.multicastUdpAddress
+    }) : null
 
     const _stop = () => {
-        announceService.stop()
-        discoverService.stop()
-        bootstrapService.stop()
-        proxyClientService.stop()
-        if (multicastService) multicastService.stop()
+        announceService && announceService.stop()
+        discoverService && discoverService.stop()
+        bootstrapService && bootstrapService.stop()
+        proxyClientService && proxyClientService.stop()
+        multicastService && multicastService.stop()
         // wait a bit after stopping services before cleaning up the rest (for clean exit of services)
         setTimeout(() => {
-            daemonApiServer.stop()
-            publicApiServer.stop()
+            daemonApiServer && daemonApiServer.stop()
+            publicApiServer && publicApiServer.stop()
             setTimeout(() => {
-                if (publicWebSocketServer) {
-                    publicWebSocketServer.stop()
-                }
-                if (publicUdpSocketServer) {
-                    publicUdpSocketServer.stop()
-                }
+                publicWebSocketServer && publicWebSocketServer.stop()
+                publicUdpSocketServer && publicUdpSocketServer.stop()
                 kNode.cleanup()
             }, 20)
         }, 20)

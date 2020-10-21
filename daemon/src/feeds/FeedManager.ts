@@ -65,16 +65,16 @@ class FeedManager {
         // Submit the messages to the p2p network
         await this._remoteFeedManager.submitMessage({feedId, subfeedHash, message, timeoutMsec});
     }
-    async appendSignedMessages({ feedId, subfeedHash, signedMessages}: {feedId: FeedId, subfeedHash: SubfeedHash, signedMessages: SignedSubfeedMessage[]}) {
-        // Append signed messages to the local version of a feed.
-        // This feed does not need to be writeable on this node. If the signatures
-        // are correct, then we know that they are valid. These will typically come from a remote node.
-        const subfeed = await this._loadSubfeed({feedId, subfeedHash});
-        if (!subfeed) {
-            throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
-        }
-        subfeed.appendSignedMessages(signedMessages);
-    }
+    // async appendSignedMessages({ feedId, subfeedHash, signedMessages}: {feedId: FeedId, subfeedHash: SubfeedHash, signedMessages: SignedSubfeedMessage[]}) {
+    //     // Append signed messages to the local version of a feed.
+    //     // This feed does not need to be writeable on this node. If the signatures
+    //     // are correct, then we know that they are valid. These will typically come from a remote node.
+    //     const subfeed = await this._loadSubfeed({feedId, subfeedHash});
+    //     if (!subfeed) {
+    //         throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
+    //     }
+    //     subfeed.appendSignedMessages(signedMessages);
+    // }
     async getMessages({ feedId, subfeedHash, position, maxNumMessages, waitMsec }: {feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec}) {
         // Load messages from a subfeed.
         // If there are no messages available locally, and waitMsec > 0, then we will search

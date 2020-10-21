@@ -1,10 +1,11 @@
 import { createKeyPair } from "../../common/crypto_util"
 import DataStreamy from "../../common/DataStreamy"
-import { Address, ChannelName, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, Port, toPort, UrlPath } from "../../interfaces/core"
+import { randomAlphaString } from "../../common/util"
+import { Address, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, toPort, UrlPath } from "../../interfaces/core"
 import KacheryP2PNode from "../../KacheryP2PNode"
 import DaemonApiServer, { ApiFindFileRequest } from "../../services/DaemonApiServer"
 import PublicApiServer from "../../services/PublicApiServer"
-import startDaemon from "../../startDaemon"
+import startDaemon, { StartDaemonOpts } from "../../startDaemon"
 import mockExternalInterface from "./mockExternalInterface"
 import MockKacheryStorageManager from './MockKacheryStorageManager'
 import MockLocalFeedManager from "./MockLocalFeedManager"
@@ -18,14 +19,7 @@ export default class MockNodeDaemon {
         stop: Function,
         node: KacheryP2PNode
     } | null = null
-    constructor(daemonGroup: MockNodeDaemonGroup, private opts: {
-        bootstrapAddresses: Address[],
-        isBootstrap: boolean,
-        channelNames: ChannelName[],
-        multicastUdpAddress: string | null,
-        udpListenPort: Port | null,
-        webSocketListenPort: Port | null
-    }) {
+    constructor(daemonGroup: MockNodeDaemonGroup, private opts: StartDaemonOpts) {
         this.#daemonGroup = daemonGroup
     }
     address(): Address {
@@ -38,23 +32,14 @@ export default class MockNodeDaemon {
     async initialize() {
         const externalInterface = mockExternalInterface(this.#daemonGroup)
         this.#d = await startDaemon({
-            channelNames: this.opts.channelNames,
             keyPair: this.#keyPair,
             verbose: 0,
             hostName: null,
             daemonApiPort: null,
             httpListenPort: null,
-            webSocketListenPort: this.opts.webSocketListenPort,
-            udpListenPort: this.opts.udpListenPort,
-            label: 'mock-daemon',
-            bootstrapAddresses: this.opts.bootstrapAddresses,
+            label: 'mock-daemon-' + randomAlphaString(5),
             externalInterface,
-            opts: {
-                noBootstrap: (this.opts.bootstrapAddresses.length === 0),
-                isBootstrapNode: this.opts.isBootstrap,
-                mock: true,
-                multicastUdpAddress: this.opts.multicastUdpAddress
-            }    
+            opts: this.opts  
         })
     }
     stop() {
@@ -133,7 +118,7 @@ export class MockNodeDaemonGroup {
         })
         // this.#daemons.clear()
     }
-    async createDaemon(opts: {bootstrapAddresses: Address[], isBootstrap: boolean, channelNames: ChannelName[], multicastUdpAddress: string | null, udpListenPort: Port | null, webSocketListenPort: Port | null}) {
+    async createDaemon(opts: StartDaemonOpts) {
         const daemon = new MockNodeDaemon(this, opts)
         await daemon.initialize()
         this.#daemons.set(daemon.nodeId(), daemon)

@@ -35,7 +35,8 @@ const mockExternalInterface = (daemonGroup: MockNodeDaemonGroup): ExternalInterf
         createWebSocket: mockCreateWebSocket,
         createKacheryStorageManager,
         createLocalFeedManager,
-        startHttpServer: mockStartHttpServer
+        startHttpServer: mockStartHttpServer,
+        isMock: true
     }
 }
 

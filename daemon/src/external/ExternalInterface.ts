@@ -82,5 +82,6 @@ export default interface ExternalInterface {
     createWebSocket: CreateWebSocketFunction,
     createKacheryStorageManager: CreateKacheryStorageManagerFunction,
     createLocalFeedManager: CreateLocalFeedManagerFunction,
-    startHttpServer: StartHttpServerFunction
+    startHttpServer: StartHttpServerFunction,
+    isMock: boolean
 }

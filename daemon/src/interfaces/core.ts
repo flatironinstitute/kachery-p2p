@@ -692,7 +692,7 @@ export interface SubmittedSubfeedMessage extends JSONObject {
     __submittedSubfeedMessage__: never;
 };
 export const isSubmittedSubfeedMessage = (x: any): x is SubmittedSubfeedMessage => {
-    return ((isObject(x)) && (JSON.stringify(x).length < 10000));
+    return ((isJSONObject(x)) && (JSON.stringify(x).length < 10000));
 }
 export const submittedSubfeedMessageToSubfeedMessage = (x: SubmittedSubfeedMessage) => {
     return x as any as SubfeedMessage;

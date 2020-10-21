@@ -1,7 +1,6 @@
 import assert from 'assert'
 import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
-import { ApiProbeResponse, isApiProbeResponse } from '../services/PublicApiServer'
 import { ByteCount, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isByteCount, isChannelInfo, isChannelName, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isMessageCount, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubfeedPosition, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, MessageCount, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
@@ -78,7 +77,7 @@ export const isNodeToNodeResponse = (x: any): x is NodeToNodeResponse => {
 }
 
 export type NodeToNodeRequestData = (
-    ProbeRequestData |
+    // ProbeRequestData |
     GetChannelInfoRequestData |
     AnnounceRequestData |
     CheckForFileRequestData |
@@ -101,7 +100,7 @@ export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
     ]) ? true : false;
 }
 export type NodeToNodeResponseData = (
-    ProbeResponseData |
+    // ProbeResponseData |
     GetChannelInfoResponseData |
     AnnounceResponseData |
     CheckForFileResponseData |
@@ -124,25 +123,25 @@ export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData =>
     ]) ? true : false;
 }
 
-// probe
-export interface ProbeRequestData {
-    requestType: 'probe'
-}
-export const isProbeRequestData = (x: any): x is ProbeRequestData => {
-    return _validateObject(x, {
-        requestType: isEqualTo('probe')
-    })
-}
-export interface ProbeResponseData {
-    requestType: 'probe',
-    probeResponse: ApiProbeResponse
-}
-export const isProbeResponseData = (x: any): x is ProbeResponseData => {
-    return _validateObject(x, {
-        requestType: isEqualTo('probe'),
-        probeResponse: isApiProbeResponse
-    })
-}
+// // probe
+// export interface ProbeRequestData {
+//     requestType: 'probe'
+// }
+// export const isProbeRequestData = (x: any): x is ProbeRequestData => {
+//     return _validateObject(x, {
+//         requestType: isEqualTo('probe')
+//     })
+// }
+// export interface ProbeResponseData {
+//     requestType: 'probe',
+//     probeResponse: ApiProbeResponse
+// }
+// export const isProbeResponseData = (x: any): x is ProbeResponseData => {
+//     return _validateObject(x, {
+//         requestType: isEqualTo('probe'),
+//         probeResponse: isApiProbeResponse
+//     })
+// }
 
 // getChannelInfo
 export interface GetChannelInfoRequestData {

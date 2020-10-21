@@ -33,7 +33,8 @@ const realExternalInterface = (): ExternalInterface => {
         createWebSocket,
         createKacheryStorageManager,
         createLocalFeedManager,
-        startHttpServer
+        startHttpServer,
+        isMock: false
     }
 }
 

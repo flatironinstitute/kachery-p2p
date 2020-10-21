@@ -147,22 +147,31 @@ function main() {
         const externalInterface = realExternalInterface()
 
         startDaemon({
-          channelNames,
           keyPair,
           verbose,
           hostName,
           daemonApiPort,
           httpListenPort,
-          webSocketListenPort,
-          udpListenPort,
           label,
-          bootstrapAddresses,
           externalInterface,
           opts: {
-            noBootstrap,
-            isBootstrapNode,
-            mock: false,
-            multicastUdpAddress: '237.0.0.0' // how to choose this?
+            bootstrapAddresses: bootstrapAddresses,
+            isBootstrap: isBootstrapNode,
+            channelNames,
+            multicastUdpAddress: '237.0.0.0', // how to choose this?
+            udpListenPort,
+            webSocketListenPort,
+            services: {
+                announce: true,
+                discover: true,
+                bootstrap: noBootstrap ? false : true,
+                proxyClient: true,
+                multicast: true,
+                udpServer: udpListenPort ? true : false,
+                webSocketServer: webSocketListenPort ? true : false,
+                httpServer: true,
+                daemonServer: true
+            }
           }
         });
       }

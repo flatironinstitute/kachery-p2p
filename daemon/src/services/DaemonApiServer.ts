@@ -7,6 +7,7 @@ import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
 import { ChannelName, DurationMsec, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isOneOf, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
+import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
 import { ApiProbeResponse } from './PublicApiServer';
 
@@ -363,10 +364,11 @@ export default class DaemonApiServer {
         if (!isApiLoadFileRequest(reqData)) throw Error('Invalid request in _apiLoadFile');
 
         const { fileKey, fromNode, fromChannel } = reqData;
-        const x = this.#node.loadFile({
-            fileKey: fileKey,
-            opts: {fromNode, fromChannel}
-        });
+        const x = loadFile(
+            this.#node,
+            fileKey,
+            {fromNode, fromChannel}
+        )
         return x
     }
     // /feed/createFeed - create a new writeable feed on this node

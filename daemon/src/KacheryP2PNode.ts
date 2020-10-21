@@ -1,21 +1,31 @@
 import { getSignature, publicKeyToHex, verifySignature } from './common/crypto_util'
-import DataStreamy, { DataStreamyProgress } from './common/DataStreamy'
+import DataStreamy from './common/DataStreamy'
 import GarbageMap from './common/GarbageMap'
-import { sha1MatchesFileKey } from './common/util'
 import DownloaderCreator from './downloadOptimizer/DownloaderCreator'
 import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import ExternalInterface, { ExpressInterface, HttpServerInterface, KacheryStorageManagerInterface } from './external/ExternalInterface'
 import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
-import { Address, byteCount, ByteCount, byteCountToNumber, ChannelInfo, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, errorMessage, FeedId, FileKey, FileManifestChunk, FindFileResult, FindLiveFeedResult, hostName, HostName, isAddress, isFileManifest, KeyPair, MessageCount, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, Sha1Hash, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, UrlPath } from './interfaces/core'
-import { AnnounceRequestData, AnnounceResponseData, CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, CheckForLiveFeedResponseData, createStreamId, DownloadFileDataRequestData, DownloadFileDataResponseData, GetChannelInfoRequestData, GetChannelInfoResponseData, GetLiveFeedSignedMessagesRequestData, GetLiveFeedSignedMessagesResponseData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isProbeRequestData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, ProbeRequestData, ProbeResponseData, SetLiveFeedSubscriptionsRequestData, SetLiveFeedSubscriptionsResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
-import { daemonVersion, protocolVersion } from './protocolVersion'
+import { Address, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isAddress, KeyPair, MessageCount, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, UrlPath } from './interfaces/core'
+import { CheckForFileRequestData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, GetLiveFeedSignedMessagesRequestData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
+import { handleCheckForFileRequest } from './nodeToNodeRequestHandlers/handleCheckForFileRequest'
+import { handleCheckForLiveFeedRequest } from './nodeToNodeRequestHandlers/handleCheckForLiveFeedRequest'
+import { handleDownloadFileDataRequest } from './nodeToNodeRequestHandlers/handleDownloadFileDataRequest'
+import { handleGetChannelInfoRequest } from './nodeToNodeRequestHandlers/handleGetChannelInfoRequest'
+import { handleGetLiveFeedSignedMessagesRequest } from './nodeToNodeRequestHandlers/handleGetLiveFeedSignedMessagesRequest'
+import { handleSetLiveFeedSubscriptionsRequest } from './nodeToNodeRequestHandlers/handleSetLiveFeedSubscriptionsRequest'
+import { handleSubmitMessageToLiveFeedRequest } from './nodeToNodeRequestHandlers/handleSubmitMessageToLiveFeedRequest'
+import { protocolVersion } from './protocolVersion'
 import { ProxyConnectionToClient } from './proxyConnections/ProxyConnectionToClient'
 import { ProxyConnectionToServer } from './proxyConnections/ProxyConnectionToServer'
-import RemoteNode from './RemoteNode'
 import RemoteNodeManager from './RemoteNodeManager'
-import { ApiProbeResponse } from './services/PublicApiServer'
 import PublicUdpSocketServer from './services/PublicUdpSocketServer'
+
+export interface KacheryP2PNodeOpts {
+    noBootstrap: boolean,
+    isBootstrapNode: boolean,
+    multicastUdpAddress: string | null
+}
 
 class KacheryP2PNode {
     #keyPair: KeyPair
@@ -27,7 +37,7 @@ class KacheryP2PNode {
     #proxyConnectionsToClients = new Map<NodeId, ProxyConnectionToClient>()
     #proxyConnectionsToServers = new Map<NodeId, ProxyConnectionToServer>()
     #bootstrapAddresses: Address[] // not same as argument to constructor
-    #downloadStreamInfos = new GarbageMap<StreamId, DownloadFileDataRequestData>(durationMsec(30 * 60 * 1000))
+    #downloadStreamManager = new DownloadStreamManager
     #publicUdpSocketAddress: Address | null = null
     #publicUdpSocketServer: PublicUdpSocketServer | null = null
     #downloadOptimizer: DownloadOptimizer
@@ -42,12 +52,7 @@ class KacheryP2PNode {
         bootstrapAddresses: Address[] | null,
         channelNames: ChannelName[],
         externalInterface: ExternalInterface,
-        opts: {
-            noBootstrap: boolean,
-            isBootstrapNode: boolean,
-            mock: boolean,
-            multicastUdpAddress: string | null
-        }
+        opts: KacheryP2PNodeOpts
     }) {
         this.#keyPair = p.keyPair // the keypair
         this.#nodeId = publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey)) // get the node id from the public key
@@ -61,7 +66,10 @@ class KacheryP2PNode {
         this.#remoteNodeManager = new RemoteNodeManager(this)
 
         let bootstrapAddresses = this.p.bootstrapAddresses
-        if (!this.p.opts.noBootstrap) {
+        if (this.p.opts.noBootstrap) {
+            // do not connect to bootstrap nodes
+        }
+        else {
             if (bootstrapAddresses === null) {
                 bootstrapAddresses = [
                         {hostName: '45.33.92.31', port: <Port><any>46002}, // kachery-p2p-spikeforest
@@ -111,6 +119,15 @@ class KacheryP2PNode {
     }
     kacheryStorageManager() {
         return this.#kacheryStorageManager
+    }
+    liveFeedSubscriptionManager() {
+        return this.#liveFeedSubscriptionManager
+    }
+    downloadStreamManager(): DownloadStreamManager {
+        return this.#downloadStreamManager
+    }
+    downloadOptimizer(): DownloadOptimizer {
+        return this.#downloadOptimizer
     }
     findFile(args: {fileKey: FileKey, timeoutMsec: DurationMsec, fromChannel: ChannelName | null}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
@@ -186,137 +203,6 @@ class KacheryP2PNode {
     async startHttpServer(app: ExpressInterface, port: Port): Promise<HttpServerInterface> {
         return await this.p.externalInterface.startHttpServer(app, port)
     }
-    async _loadFileAsync(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): Promise<{found: boolean, size: ByteCount}> {
-        const r = await this.#kacheryStorageManager.findFile(args.fileKey)
-        if (r.found) {
-            return r
-        }
-        return await new Promise<{found: boolean, size: ByteCount}>((resolve, reject) => {
-            const ds = this.loadFile({fileKey: args.fileKey, opts: args.opts})
-            ds.onError(err => {
-                reject(err)
-            })
-            ds.onFinished(() => {
-                this.#kacheryStorageManager.findFile(args.fileKey).then((r) => {
-                    if (r.found) {
-                        resolve(r)
-                    }
-                    else {
-                        reject(Error('Unexpected - unable to findFile after loadFile reported finished.'))
-                    }
-                }, (err: Error) => {
-                    reject(err)
-                })
-            })
-        })
-    }
-    loadFile(args: {fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}}): DataStreamy {
-        const { fileKey, opts } = args
-        const { fromNode, fromChannel } = opts
-        const ret = new DataStreamy()
-        const manifestSha1 = fileKey.manifestSha1
-        if (manifestSha1) {
-            (async () => {
-                const manifestFileKey = {sha1: manifestSha1}
-                const manifestR = await this._loadFileAsync({fileKey: manifestFileKey, opts: {fromNode, fromChannel}})
-                if (!manifestR.found) {
-                    throw Error('Unexpected... loadFileAsync should have thrown an error if not found')
-                }
-                const manifestDataStream = await this.#kacheryStorageManager.getFileReadStream(manifestFileKey)
-                const manifestJson = (await manifestDataStream.allData()).toString()
-                const manifest = JSON.parse(manifestJson)
-                if (!isFileManifest(manifest)) {
-                    console.warn(manifest)
-                    throw new Error('Invalid manifest file')
-                }
-                if (!sha1MatchesFileKey({sha1: manifest.sha1, fileKey})) {
-                    throw new Error(`Manifest sha1 does not match file key: ${manifest.sha1}`)
-                }
-                ret._start(manifest.size)
-                let numComplete = 0
-                const chunkDataStreams: DataStreamy[] = []
-                manifest.chunks.forEach((chunk: FileManifestChunk) => {
-                    const chunkFileKey: FileKey = {
-                        sha1: chunk.sha1,
-                        chunkOf: {
-                            fileKey: {
-                                sha1: manifest.sha1
-                            },
-                            startByte: chunk.start,
-                            endByte: chunk.end
-                        }
-                    }
-                    const ds = this.loadFile({fileKey: chunkFileKey, opts: {fromNode: opts.fromNode, fromChannel: opts.fromChannel}})
-                    ds.onError(err => {
-                        ret._error(err)
-                    })
-                    ds.onProgress((progress: DataStreamyProgress) => {
-                        _updateProgressForManifestLoad()
-                    })
-                    ds.onFinished(() => {
-                        numComplete ++
-                        if (numComplete === manifest.chunks.length) {
-                            _concatenateChunks().then(() => {
-                                ret._end()
-                            }).catch((err: Error) => {
-                                ret._error(err)
-                            })
-                        }
-                    })
-                })
-                const _updateProgressForManifestLoad = () => {
-                    // this can be made more efficient - don't need to loop through all in-progress files every time
-                    let bytesLoaded = 0
-                    chunkDataStreams.forEach(ds => {
-                        bytesLoaded += byteCountToNumber(ds.bytesLoaded())
-                    })
-                    ret._reportBytesLoaded(byteCount(bytesLoaded))
-                }
-                const _concatenateChunks = async () => {
-                    const chunkSha1s: Sha1Hash[] = manifest.chunks.map(c => c.sha1)
-                    await this.#kacheryStorageManager.concatenateChunks(manifest.sha1, chunkSha1s)
-                    ret._end()
-                }
-            })().catch((err: Error) => {
-                console.warn(err)
-                ret._error(err)
-            })
-        }
-        else {
-            let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null
-            const f = this.#downloadOptimizer.addFile(fileKey, fileSize)
-            f.incrementNumPointers()
-            f.onError(err => {
-                f.decrementNumPointers()
-                ret._error(err)
-            })
-            f.onProgress((progress: DataStreamyProgress) => {
-                ret._reportBytesLoaded(progress.bytesLoaded)
-            })
-            f.onFinished(() => {
-                f.decrementNumPointers()
-                ret._end()
-            })
-            if (opts.fromNode) {
-                this.#downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: opts.fromNode})
-            }
-            else {
-                const ff = this.findFile({fileKey, timeoutMsec: durationMsec(3000), fromChannel: opts.fromChannel})
-                let atLeastOneProviderFound = false
-                ff.onFound(result => {
-                    this.#downloadOptimizer.setProviderNodeForFile({fileKey, nodeId: result.nodeId})
-                    atLeastOneProviderFound = true
-                })
-                ff.onFinished(() => {
-                    if (!atLeastOneProviderFound) {
-                        ret._error(Error('File not found'))
-                    }
-                })
-            }
-        }
-        // todo: handle ret.onCancel ?? -- need to think about this
-        return ret
-    }
     feedManager() {
         return this.#feedManager
     }
@@ -352,24 +238,24 @@ class KacheryP2PNode {
     getProxyConnectionToServer(nodeId: NodeId) {
         return this.#proxyConnectionsToServers.get(nodeId) || null
     }
-    getChannelInfo(channelName: ChannelName): ChannelInfo {
-        const remoteNodesInChannel: RemoteNode[] = this.#remoteNodeManager.getRemoteNodesInChannel(channelName)
-        const x: ChannelInfo = {
-            nodes: remoteNodesInChannel.map(n => {
-                return n.getChannelNodeInfo(channelName)
-            }).filter(channelInfo => (channelInfo !== null))
-            .map(channelInfo => {
-                if (channelInfo === null) {
-                    throw Error('Unexpected channelInfo === null should have been filtered out')
-                }
-                return channelInfo
-            })
-        }
-        return x
-    }
+    // getChannelInfo(channelName: ChannelName): ChannelInfo {
+    //     const remoteNodesInChannel: RemoteNode[] = this.#remoteNodeManager.getRemoteNodesInChannel(channelName)
+    //     const x: ChannelInfo = {
+    //         nodes: remoteNodesInChannel.map(n => {
+    //             return n.getChannelNodeInfo(channelName)
+    //         }).filter(channelInfo => (channelInfo !== null))
+    //         .map(channelInfo => {
+    //             if (channelInfo === null) {
+    //                 throw Error('Unexpected channelInfo === null should have been filtered out')
+    //             }
+    //             return channelInfo
+    //         })
+    //     }
+    //     return x
+    // }
     hostName() {
         if (this.p.hostName) return this.p.hostName
-        if (this.p.opts.mock) {
+        if (this.p.externalInterface.isMock) {
             return hostName(this.nodeId().toString())
         }
         else {
@@ -536,29 +422,32 @@ class KacheryP2PNode {
         }
         
         let responseData: NodeToNodeResponseData
-        if (isProbeRequestData(requestData)) {
-            responseData = await this._handleProbeRequest({fromNodeId, requestData})
-        }
-        else if (isGetChannelInfoRequestData(requestData)) {
-            responseData = await this._handleGetChannelInfoRequest({fromNodeId, requestData})
+        // if (isProbeRequestData(requestData)) {
+        //     responseData = await handleProbeRequest(this, fromNodeId, requestData)
+        // }
+        if (isGetChannelInfoRequestData(requestData)) {
+            responseData = await handleGetChannelInfoRequest(this, fromNodeId, requestData)
         }
         else if (isAnnounceRequestData(requestData)) {
-            responseData = await this._handleAnnounceRequest({fromNodeId, requestData, localUdpAddress: null})
+            responseData = await this.remoteNodeManager().handleAnnounceRequest({fromNodeId, requestData, localUdpAddress: null})
         }
         else if (isCheckForFileRequestData(requestData)) {
-            responseData = await this._handleCheckForFileRequest({fromNodeId, requestData})
+            responseData = await handleCheckForFileRequest(this, fromNodeId, requestData)
         }
         else if (isCheckForLiveFeedRequestData(requestData)) {
-            responseData = await this._handleCheckForLiveFeedRequest({fromNodeId, requestData})
+            responseData = await handleCheckForLiveFeedRequest(this, fromNodeId, requestData)
         }
         else if (isSetLiveFeedSubscriptionsRequestData(requestData)) {
-            responseData = await this._handleSetLiveFeedSubscriptionsRequest({fromNodeId, requestData})
+            responseData = await handleSetLiveFeedSubscriptionsRequest(this, fromNodeId, requestData)
         }
         else if (isGetLiveFeedSignedMessagesRequestData(requestData)) {
-            responseData = await this._handleGetLiveFeedSignedMessagesRequest({fromNodeId, requestData})
+            responseData = await handleGetLiveFeedSignedMessagesRequest(this, fromNodeId, requestData)
         }
         else if (isDownloadFileDataRequestData(requestData)) {
-            responseData = await this._handleDownloadFileDataRequest({fromNodeId, requestData})
+            responseData = await handleDownloadFileDataRequest(this, fromNodeId, requestData)
+        }
+        else if (isSubmitMessageToLiveFeedRequestData(requestData)) {
+            responseData = await handleSubmitMessageToLiveFeedRequest(this, fromNodeId, requestData)
         }
         else {
             console.warn(requestData)
@@ -587,7 +476,7 @@ class KacheryP2PNode {
             return p.streamFileData(streamId)
         }
 
-        const s = this.#downloadStreamInfos.get(streamId)
+        const s = this.#downloadStreamManager.get(streamId)
         if (!s) {
             throw Error(`Unable to find download info for stream: ${streamId}: (node: ${this.#nodeId.slice(0, 6)})`)
         }
@@ -615,135 +504,16 @@ class KacheryP2PNode {
         })()
         return ret
     }
-    async _handleProbeRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: ProbeRequestData}): Promise<ProbeResponseData> {
-        const probeResponse: ApiProbeResponse = {
-            success: true,
-            protocolVersion: protocolVersion(),
-            daemonVersion: daemonVersion(),
-            nodeId: this.nodeId(),
-            isBootstrapNode: this.isBootstrapNode(),
-            webSocketAddress: this.webSocketAddress(),
-            publicUdpSocketAddress: this.publicUdpSocketAddress()
-        }
-        return {
-            requestType: 'probe',
-            probeResponse
-        }
-    }
-    async _handleGetChannelInfoRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: GetChannelInfoRequestData}): Promise<GetChannelInfoResponseData> {
-        const { channelName } = requestData
-        const channelInfo = await this.#remoteNodeManager.getChannelInfo(channelName)
-        return {
-            requestType: 'getChannelInfo',
-            channelInfo
-        }
-    }
-    async _handleAnnounceRequest({fromNodeId, requestData, localUdpAddress} : {fromNodeId: NodeId, requestData: AnnounceRequestData, localUdpAddress: Address | null}): Promise<AnnounceResponseData> {
-        return await this.#remoteNodeManager.handleAnnounceRequest({fromNodeId, requestData, localUdpAddress})
-    }
-    async _handleCheckForFileRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: CheckForFileRequestData}): Promise<CheckForFileResponseData> {
-        const { fileKey } = requestData
-        const {found, size} = await this.#kacheryStorageManager.findFile(fileKey)
-        return {
-            requestType: 'checkForFile',
-            found,
-            size
-        }
-    }
-    async _handleCheckForLiveFeedRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: CheckForLiveFeedRequestData}): Promise<CheckForLiveFeedResponseData> {
-        const { feedId } = requestData
-        const found = await this.#feedManager.hasWriteableFeed({feedId})
-        return {
-            requestType: 'checkForLiveFeed',
-            found
-        }
-    }
-    async _handleSetLiveFeedSubscriptionsRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: SetLiveFeedSubscriptionsRequestData}): Promise<SetLiveFeedSubscriptionsResponseData> {
-        const { liveFeedSubscriptions } = requestData
-        await this.#liveFeedSubscriptionManager.setSubscriptions({nodeId: fromNodeId, subscriptions: liveFeedSubscriptions})
-        return {
-            requestType: 'setLiveFeedSubscriptions',
-            success: true
-        }
-    }
-    async _handleGetLiveFeedSignedMessagesRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: GetLiveFeedSignedMessagesRequestData}): Promise<GetLiveFeedSignedMessagesResponseData> {
-        const { feedId, subfeedHash, position, maxNumMessages, waitMsec } = requestData
-        const hasLiveFeed = await this.#feedManager.hasWriteableFeed({feedId})
-        if (!hasLiveFeed) {
-            return {
-                requestType: 'getLiveFeedSignedMessages',
-                success: false,
-                errorMessage: errorMessage('Live feed not found.'),
-                signedMessages: null
-            }
-        }
-        const signedMessages = await this.#feedManager.getSignedMessages({feedId, subfeedHash, position, maxNumMessages, waitMsec})
-        return {
-            requestType: 'getLiveFeedSignedMessages',
-            success: true,
-            errorMessage: null,
-            signedMessages
-        }
-    }
-    async _handleDownloadFileDataRequest({fromNodeId, requestData} : {fromNodeId: NodeId, requestData: DownloadFileDataRequestData}): Promise<DownloadFileDataResponseData> {
-        let { fileKey, startByte, endByte } = requestData
-        if ((byteCountToNumber(startByte) < 0) || ((endByte !== null) && (byteCountToNumber(startByte) >= byteCountToNumber(endByte)))) {
-            return {
-                requestType: 'downloadFileData',
-                fileKey,
-                startByte,
-                endByte: endByte === null ? byteCount(0): endByte,
-                success: false,
-                streamId: null,
-                errorMessage: errorMessage('Invalid start/end bytes')
-            }
-        }
-        const {found, size} = await this.#kacheryStorageManager.findFile(fileKey)
-        if (!found) {
-            return {
-                requestType: 'downloadFileData',
-                fileKey,
-                startByte,
-                endByte: endByte === null ? byteCount(0): endByte,
-                success: false,
-                streamId: null,
-                errorMessage: errorMessage('Unable to find file')
-            }
-        }
-        if (size === null) {
-            throw Error('Unexpected')
-        }
-        if (endByte === null) {
-            endByte = size
-        }
-        if (endByte > size) {
-            return {
-                requestType: 'downloadFileData',
-                fileKey,
-                startByte,
-                endByte: endByte === null ? byteCount(0): endByte,
-                success: false,
-                streamId: null,
-                errorMessage: errorMessage('Start/end bytes out of range')
-            }
-        }
-        const streamId = createStreamId()
-        this.#downloadStreamInfos.set(streamId, {
-            ...requestData,
-            endByte
-        })
-        return {
-            requestType: 'downloadFileData',
-            fileKey,
-            startByte,
-            endByte,
-            success: true,
-            streamId,
-            errorMessage: null
-        }
-    }
 }
 
-function str(x: any): string {return x as string}
+class DownloadStreamManager {
+    #downloadStreamInfos = new GarbageMap<StreamId, DownloadFileDataRequestData>(durationMsec(30 * 60 * 1000))
+    set(streamId: StreamId, info: DownloadFileDataRequestData) {
+        this.#downloadStreamInfos.set(streamId, info)
+    }
+    get(streamId: StreamId) {
+        return this.#downloadStreamInfos.get(streamId)
+    }
+}
 
 export default KacheryP2PNode

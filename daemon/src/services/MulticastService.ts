@@ -6,15 +6,19 @@ import { Address, ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumb
 import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
 import { protocolVersion } from "../protocolVersion"
 
+interface RemoteNodeManagerInterface {
+    handleAnnounceRequest: (args: {fromNodeId: NodeId, requestData: AnnounceRequestData, localUdpAddress: Address | null}) => Promise<AnnounceResponseData>
+}
+
 interface KacheryP2PNodeInterface {
     nodeId: () => NodeId
     udpListenPort: () => Port | null
     keyPair: () => KeyPair
     channelNames: () => ChannelName[]
     getChannelNodeInfo: (channelName: ChannelName) => ChannelNodeInfo
-    _handleAnnounceRequest: (args: { fromNodeId: NodeId, requestData: AnnounceRequestData, localUdpAddress: Address | null }) => Promise<AnnounceResponseData>
     dgramCreateSocket: (args: {type: 'udp4', reuseAddr: boolean}) => DgramSocket
     useMulticastUdp: () => boolean
+    remoteNodeManager: () => RemoteNodeManagerInterface
 }
 
 export default class MulticastService {
@@ -53,7 +57,7 @@ export default class MulticastService {
                                 port: msg2.body.udpListenPort
                             }
                         ): null
-                        const response = this.#node._handleAnnounceRequest({ fromNodeId: msg2.body.fromNodeId, requestData: msg2.body.requestData, localUdpAddress })
+                        const response = this.#node.remoteNodeManager().handleAnnounceRequest({fromNodeId: msg2.body.fromNodeId, requestData: msg2.body.requestData, localUdpAddress})
                         // don't do anything with response here
                     }
                     else {
