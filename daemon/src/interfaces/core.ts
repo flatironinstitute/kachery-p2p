@@ -833,7 +833,6 @@ export const isBuffer = (x: any): x is Buffer => {
 export interface DurationMsec extends Number {
     __durationMsec__: never
 }
-export const exampleDurationMsec = 3000 as any as DurationMsec
 export const isDurationMsec = (x: any) : x is DurationMsec => {
     if (!isNumber(x)) return false;
     if (x < 0) return false;
@@ -843,8 +842,12 @@ export const durationMsecToNumber = (x: DurationMsec): number => {
     return x as any as number;
 }
 export const durationMsec = (n: number) => {
+    if (process.env.KACHERY_P2P_SPEEDUP_FACTOR) {
+        n /= Number(process.env.KACHERY_P2P_SPEEDUP_FACTOR)
+    }
     return n as any as DurationMsec
 }
+export const exampleDurationMsec = durationMsec(3000)
 
 export interface ByteCount extends Number {
     __byteCount__: never

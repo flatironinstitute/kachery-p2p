@@ -1,11 +1,12 @@
 import { action } from "../common/action"
-import { sleepMsec } from "../common/util"
+import { sleepMsec, sleepMsecNum } from "../common/util"
 import { ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core"
 import { AnnounceRequestData, isAnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from "../interfaces/NodeToNodeRequest"
 import { SendRequestMethod } from "../RemoteNode"
 
 interface RemoteNodeManagerInterface {
     onNodeChannelAdded: (callback: (remoteNodeId: NodeId, channelName: ChannelName) => void) => void,
+    onBootstrapNodeAdded: (callback: (bootstrapNodeId: NodeId) => void) => void
     sendRequestToNode: (remoteNodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}) => Promise<NodeToNodeResponseData>,
     getBootstrapRemoteNodes: () => RemoteNodeInterface[]
     getRemoteNodesInChannel: (channelName: ChannelName) => RemoteNodeInterface[]
@@ -22,6 +23,7 @@ interface KacheryP2PNodeInterface {
     getChannelNodeInfo: (channelName: ChannelName) => ChannelNodeInfo
     channelNames: () => ChannelName[]
     isBootstrapNode: () => boolean
+    onProxyConnectionToServer: (callback: (() => void)) => void
 }
 
 export default class AnnounceService {
@@ -34,6 +36,7 @@ export default class AnnounceService {
         // announce self when a new node-channel has been added
         this.#remoteNodeManager.onNodeChannelAdded((remoteNodeId: NodeId, channelName: ChannelName) => {
             
+            if (this.#halted) return
             if (this.#node.channelNames().includes(channelName)) { // only if we belong to this channel
                 // todo: check if we can send message to node, if not maybe we need to delay a bit
 
@@ -45,14 +48,35 @@ export default class AnnounceService {
             }
 
         })
+
+        this.#remoteNodeManager.onBootstrapNodeAdded((bootstrapNodeId) => {
+            if (this.#halted) return
+            const channelNames = this.#node.channelNames()
+            for (let channelName of channelNames) {
+                /////////////////////////////////////////////////////////////////////////
+                action('announceToNewBootstrap', {context: 'AnnounceService', bootstrapNodeId, channelName}, async () => {
+                    await this._announceToNode(bootstrapNodeId, channelName)
+                }, null)
+                /////////////////////////////////////////////////////////////////////////
+            }
+        })
+
+        this.#node.onProxyConnectionToServer(() => {
+            if (this.#halted) return
+            this._announceToAllBootstrapNodes()
+        })
+
         this._start()
     }
     stop() {
         this.#halted = true
     }
     async _announceToNode(remoteNodeId: NodeId, channelName: ChannelName) {
-        if (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
-            return
+        let numPasses = 0
+        while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
+            numPasses ++
+            if (numPasses > 3) return
+            await sleepMsec(durationMsec(1500))
         }
         const requestData: AnnounceRequestData = {
             requestType: 'announce',
@@ -68,47 +92,56 @@ export default class AnnounceService {
             console.warn(`Response error for announce: ${responseData.errorMessage}`)
         }
     }
+    async _announceToAllBootstrapNodes() {
+        const bootstrapNodes: RemoteNodeInterface[] = this.#remoteNodeManager.getBootstrapRemoteNodes()
+        const channelNames = this.#node.channelNames()
+        for (let bootstrapNode of bootstrapNodes) {
+            for (let channelName of channelNames) {
+
+                /////////////////////////////////////////////////////////////////////////
+                await action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
+                    await this._announceToNode(bootstrapNode.remoteNodeId(), channelName)
+                }, null);
+                /////////////////////////////////////////////////////////////////////////
+
+            }
+        }
+    }
     async _start() {
-        await sleepMsec(2) // important for tests
+        await sleepMsecNum(2) // important for tests
         // Announce self other nodes in our channels and to bootstrap nodes
         let lastBootstrapAnnounceTimestamp: Timestamp = zeroTimestamp()
+        let lastRandomNodeAnnounceTimestamp: Timestamp = zeroTimestamp()
         while (true) {
             if (this.#halted) return
             // periodically announce to bootstrap nodes
             const elapsedSinceLastBootstrapAnnounce = elapsedSince(lastBootstrapAnnounceTimestamp)
             if (elapsedSinceLastBootstrapAnnounce > durationMsecToNumber(this.opts.announceBootstrapIntervalMsec)) {
-                const bootstrapNodes: RemoteNodeInterface[] = this.#remoteNodeManager.getBootstrapRemoteNodes()
-                const channelNames = this.#node.channelNames();
-                for (let bootstrapNode of bootstrapNodes) {
-                    for (let channelName of channelNames) {
+                await this._announceToAllBootstrapNodes()
+                lastBootstrapAnnounceTimestamp = nowTimestamp()
+            }
+            
+            
+            const elapsedSinceLastRandomNodeAnnounce = elapsedSince(lastRandomNodeAnnounceTimestamp)
+            if (elapsedSinceLastRandomNodeAnnounce > durationMsecToNumber(this.opts.announceToRandomNodeIntervalMsec)) {
+                // for each channel, choose a random node and announce to that node
+                const channelNames = this.#node.channelNames()
+                for (let channelName of channelNames) {
+                    let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName)
+                    if (nodes.length > 0) {
+                        var randomNode = nodes[randomIndex(nodes.length)]
 
                         /////////////////////////////////////////////////////////////////////////
-                        await action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
-                            await this._announceToNode(bootstrapNode.remoteNodeId(), channelName)
-                        }, null);
+                        await action('announceToRandomNode', {context: 'AnnounceService', remoteNodeId: randomNode.remoteNodeId(), channelName}, async () => {
+                            await this._announceToNode(randomNode.remoteNodeId(), channelName)
+                        }, null)
                         /////////////////////////////////////////////////////////////////////////
 
                     }
                 }
-                lastBootstrapAnnounceTimestamp = nowTimestamp()
+                lastRandomNodeAnnounceTimestamp = nowTimestamp()
             }
-            
-            // for each channel, choose a random node and announce to that node
-            const channelNames = this.#node.channelNames()
-            for (let channelName of channelNames) {
-                let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName)
-                if (nodes.length > 0) {
-                    var randomNode = nodes[randomIndex(nodes.length)]
-
-                    /////////////////////////////////////////////////////////////////////////
-                    await action('announceToRandomNode', {context: 'AnnounceService', remoteNodeId: randomNode.remoteNodeId(), channelName}, async () => {
-                        await this._announceToNode(randomNode.remoteNodeId(), channelName)
-                    }, null)
-                    /////////////////////////////////////////////////////////////////////////
-
-                }
-            }
-            await sleepMsec(durationMsecToNumber(this.opts.announceToRandomNodeIntervalMsec), () => {return !this.#halted})
+            await sleepMsec(durationMsec(500), () => {return !this.#halted})
         }
     }
 }

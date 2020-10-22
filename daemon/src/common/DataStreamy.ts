@@ -5,22 +5,104 @@ export interface DataStreamyProgress {
     bytesTotal: ByteCount
 }
 
+class DataStreamyProducer {
+    #cancelled = false
+    #onCancelledCallbacks: (() => void)[] = []
+    #lastUnorderedDataIndex: number = -1
+    #unorderedDataChunksByIndex = new Map<number, Buffer>()
+    #unorderedEndNumDataChunks: number | null = null
+    constructor(private dataStream: DataStreamy) {
+    }
+    onCancelled(cb: () => void) {
+        if (this.#cancelled) {
+            cb()
+        }
+        this.#onCancelledCallbacks.push(cb)
+    }
+    error(err: Error) {
+        if (this.#cancelled) return
+        this.dataStream._producer_error(err)
+    }
+    start(size: ByteCount | null) {
+        if (this.#cancelled) return
+        this.dataStream._producer_start(size)
+    }
+    end() {
+        if (this.#cancelled) return
+        this.dataStream._producer_end()
+    }
+    data(buf: Buffer) {
+        if (this.#cancelled) return
+        this.dataStream._producer_data(buf)
+    }
+    unorderedData(index: number, buf: Buffer) {
+        this.#unorderedDataChunksByIndex.set(index, buf)
+        while (this.#unorderedDataChunksByIndex.has(this.#lastUnorderedDataIndex + 1)) {
+            this.#lastUnorderedDataIndex ++
+            const buf = this.#unorderedDataChunksByIndex.get(this.#lastUnorderedDataIndex)
+            if (!buf) {
+                /* istanbul ignore next */
+                throw Error('unexpected')
+            }
+            this.#unorderedDataChunksByIndex.delete(this.#lastUnorderedDataIndex)
+            this.data(buf)
+            if (this.#unorderedEndNumDataChunks !== null) {
+                if (this.#lastUnorderedDataIndex === this.#unorderedEndNumDataChunks - 1) {
+                    this.end()
+                }
+                else if (this.#lastUnorderedDataIndex > this.#unorderedEndNumDataChunks - 1) {
+                    throw Error('Unexpected lastUnorderedDataIndex')
+                }
+            }
+        }
+    }
+    unorderedEnd(numDataChunks: number) {
+        if (this.#lastUnorderedDataIndex >= numDataChunks - 1) {
+            this.end()
+        }
+        else {
+            this.#unorderedEndNumDataChunks = numDataChunks
+        }
+    }
+    incrementBytes(numBytes: ByteCount) {
+        if (this.#cancelled) return
+        this.dataStream._producer_incrementBytes(numBytes)
+    }
+    reportBytesLoaded(numBytes: ByteCount) {
+        if (this.#cancelled) return
+        this.dataStream._producer_reportBytesLoaded(numBytes)
+    }
+    _cancel() {
+        if (this.#cancelled) return
+        this.#cancelled = true
+        this.#onCancelledCallbacks.forEach(cb => {cb()})
+        this.dataStream._producer_error(Error('Cancelled'))
+    }
+}
+
 export default class DataStreamy {
+    #producer: DataStreamyProducer
+
+    // state
     #completed = false
     #finished = false
     #started = false
     #size: ByteCount | null = null
     #bytesLoaded: ByteCount = byteCount(0)
     #error: Error | null = null
+    #pendingDataChunks: Buffer[] = []
+
+    // callbacks
     #onStartedCallbacks: ((size: ByteCount | null) => void)[] = []
     #onDataCallbacks: ((data: Buffer) => void)[] = []
     #onFinishedCallbacks: (() => void)[] = []
     #onCompleteCallbacks: (() => void)[] = []
     #onErrorCallbacks: ((err: Error) => void)[] = []
     #onProgressCallbacks: ((progress: DataStreamyProgress) => void)[] = []
-    #cancelled = false
-    #_onCancelCallbacks: (() => void)[] = []
-    constructor() {}
+
+    constructor() {
+        this.#producer = new DataStreamyProducer(this)
+    }
     onStarted(callback: ((size: ByteCount | null) => void)) {
         if (this.#started) {
             callback(this.#size)
@@ -28,6 +110,13 @@ export default class DataStreamy {
         this.#onStartedCallbacks.push(callback)
     }
     onData(callback: ((data: Buffer) => void)) {
+        if ((this.#onDataCallbacks.length > 0) && (byteCountToNumber(this.#bytesLoaded) > 0)) {
+            throw Error('onData already called in DataStreamy, and we have already received data')
+        }
+        this.#pendingDataChunks.forEach((ch: Buffer) => {
+            callback(ch)
+        })
+        this.#pendingDataChunks = []
         this.#onDataCallbacks.push(callback)
     }
     async allData(): Promise<Buffer> {
@@ -55,6 +144,9 @@ export default class DataStreamy {
         this.#onErrorCallbacks.push(callback)
     }
     onComplete(callback: (() => void)) {
+        if ((this.#completed)) {
+            callback()
+        }
         this.#onCompleteCallbacks.push(callback)
     }
     onProgress(callback: (progress: DataStreamyProgress) => void) {
@@ -67,24 +159,22 @@ export default class DataStreamy {
         return this.#bytesLoaded
     }
     cancel() {
-        if (this.#cancelled) return
-        this.#cancelled = true
-        this.#_onCancelCallbacks.forEach(cb => {
-            cb()
-        })
-        this._error(Error('Cancelled'))
+        this.#producer._cancel()
     }
     isComplete() {
         return this.#completed
     }
-    _error(err: Error) {
+    producer() {
+        return this.#producer
+    }
+    _producer_error(err: Error) {
         if (this.#completed) return
         this.#completed = true
         this.#error = err
         this.#onErrorCallbacks.forEach(cb => {cb(err)})
-        this.#onCompleteCallbacks.forEach(cb => {cb()})
+        this._handle_complete()
     }
-    _start(size: ByteCount | null) {
+    _producer_start(size: ByteCount | null) {
         if (this.#completed) return
         if (this.#started) return
         this.#started = true
@@ -93,14 +183,22 @@ export default class DataStreamy {
             cb(size)
         })
     }
-    _end() {
+    _producer_end() {
         if (this.#completed) return
         this.#completed = true
         this.#finished = true
         this.#onFinishedCallbacks.forEach(cb => {cb()})
-        this.#onCompleteCallbacks.forEach(cb => {cb()})
+        this._handle_complete()
     }
-    _data(buf: Buffer) {
+    _handle_complete() {
+        this.#onCompleteCallbacks.forEach(cb => {cb()})
+        if (this.#pendingDataChunks.length > 0) {
+            setTimeout(() => {
+                this.#pendingDataChunks = []
+            }, 1000)
+        }
+    }
+    _producer_data(buf: Buffer) {
         if (this.#completed) return
         if (!this.#started) {
             this.#started = true
@@ -111,12 +209,15 @@ export default class DataStreamy {
         this.#onDataCallbacks.forEach(cb => {
             cb(buf)
         })
-        this._incrementBytes(byteCount(buf.length))
+        this._producer_incrementBytes(byteCount(buf.length))
+        if (this.#onDataCallbacks.length === 0) {
+            this.#pendingDataChunks.push(buf)
+        }
     }
-    _incrementBytes(numBytes: ByteCount) {
-        this._reportBytesLoaded(byteCount(byteCountToNumber(this.#bytesLoaded) + byteCountToNumber(numBytes)))
+    _producer_incrementBytes(numBytes: ByteCount) {
+        this._producer_reportBytesLoaded(byteCount(byteCountToNumber(this.#bytesLoaded) + byteCountToNumber(numBytes)))
     }
-    _reportBytesLoaded(numBytes: ByteCount) {
+    _producer_reportBytesLoaded(numBytes: ByteCount) {
         this.#bytesLoaded = numBytes
         const s = this.#size
         if (s !== null) {
@@ -124,8 +225,5 @@ export default class DataStreamy {
                 cb({bytesLoaded: this.#bytesLoaded, bytesTotal: s})
             })
         }
-    }
-    _onCancel(cb: () => void) {
-        this.#_onCancelCallbacks.push(cb)
     }
 }

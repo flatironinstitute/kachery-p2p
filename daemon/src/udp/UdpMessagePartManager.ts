@@ -1,12 +1,13 @@
 import GarbageMap from '../common/GarbageMap'
-import { Address, durationMsec } from '../interfaces/core'
+import { Address, durationMsec, NodeId } from '../interfaces/core'
 import { MessagePartData, NumParts, numPartsToNumber, partIndex, PartIndex, UdpHeader, UdpMessageId, udpMessagePartId, UdpMessagePartId } from '../interfaces/UdpMessage'
 
 export default class UdpMessagePartManager {
     #messageParts = new GarbageMap<UdpMessagePartId, MessagePartData>(durationMsec(30 * 60 * 1000))
-    #onMessageCompleteCallbacks: ((remoteAddress: Address, header: UdpHeader, data: Buffer) => void)[] = []
+    #remoteAddressesByNodeId = new GarbageMap<NodeId, Address>(durationMsec(30 * 60 * 1000))
+    #onMessageCompleteCallbacks: ((header: UdpHeader, data: Buffer) => void)[] = []
     constructor() {}
-    addMessagePart(remoteAddress: Address, udpMessageId: UdpMessageId, partInd: PartIndex, numParts: NumParts, header: UdpHeader, buffer: Buffer) {
+    addMessagePart(remoteAddress: Address | null, udpMessageId: UdpMessageId, partInd: PartIndex, numParts: NumParts, header: UdpHeader, buffer: Buffer) {
         this.#messageParts.set(udpMessagePartId(udpMessageId, partInd, numParts), {header, buffer})
         let complete = true
         const buffers: Buffer[] = []
@@ -28,11 +29,17 @@ export default class UdpMessagePartManager {
             }
             const fullBuffer = Buffer.concat(buffers)
             this.#onMessageCompleteCallbacks.forEach(cb => {
-                cb(remoteAddress, headers[0], fullBuffer)
+                cb(headers[0], fullBuffer)
             })
         }
+        if (remoteAddress) {
+            this.#remoteAddressesByNodeId.set(header.body.fromNodeId, remoteAddress)
+        }
     }
-    onMessageComplete(callback: (remoteAddress: Address, header: UdpHeader, data: Buffer) => void) {
+    onMessageComplete(callback: (header: UdpHeader, data: Buffer) => void) {
         this.#onMessageCompleteCallbacks.push(callback)
+    }
+    getRemoteAddressForNodeId(nodeId: NodeId): Address | null {
+        return this.#remoteAddressesByNodeId.get(nodeId) || null
     }
 }

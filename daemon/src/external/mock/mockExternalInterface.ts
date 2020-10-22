@@ -3,14 +3,14 @@ import ExternalInterface, { ExpressInterface, HttpServerInterface, LocalFeedMana
 import mockDgramCreateSocket from './mockDgramCreateSocket'
 import MockKacheryStorageManager from './MockKacheryStorageManager'
 import MockLocalFeedManager from './MockLocalFeedManager'
-import { MockNodeDaemonGroup } from './MockNodeDaemon'
+import { MockNodeDaemonGroup, MockNodeDefects } from './MockNodeDaemon'
 import { mockCreateWebSocket, mockStartWebSocketServer } from './MockWebSocket'
 
 const mockStartHttpServer = async (app: ExpressInterface, listenPort: Port): Promise<HttpServerInterface> => {
     throw Error('Unable to start http server in mock mode')
 }
 
-const mockExternalInterface = (daemonGroup: MockNodeDaemonGroup): ExternalInterface => {
+const mockExternalInterface = (daemonGroup: MockNodeDaemonGroup, getDefects: () => MockNodeDefects): ExternalInterface => {
 
     const httpPostJson = (address: Address, path: UrlPath, data: JSONObject, opts: { timeoutMsec: DurationMsec }) => {
         return daemonGroup.mockHttpPostJson(address, path, data, opts)
@@ -24,7 +24,7 @@ const mockExternalInterface = (daemonGroup: MockNodeDaemonGroup): ExternalInterf
     }
 
     const createKacheryStorageManager = () => {
-        return new MockKacheryStorageManager()
+        return new MockKacheryStorageManager(getDefects)
     }
 
     return {

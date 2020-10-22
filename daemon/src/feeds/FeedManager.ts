@@ -170,7 +170,7 @@ class FeedManager {
                 if (finished) return;
                 if (numMessages > 0) {
                     // maybe we have other messages coming in at exactly the same time. Wait a bit for those
-                    await sleepMsec(30);
+                    await sleepMsec(durationMsec(30));
                 }
                 finished = true;
                 resolve(messages);
@@ -290,8 +290,6 @@ class RemoteFeedManager {
             waitMsec
         });
 
-        console.info(`Got signed messages.`, {numMessages: signedMessages.length});
-
         // Return the retrieved messages
         return signedMessages;
     }
@@ -312,7 +310,7 @@ class RemoteFeedManager {
             catch(err) {
                 if (waitMsec >= 2000) {
                     // wait and try again
-                    await sleepMsec(2000);
+                    await sleepMsec(durationMsec(2000));
                     waitMsec -= 2000;
                 }
                 else {

@@ -24,9 +24,20 @@ class MockDgramSocketManager {
     unbind(id: string) {
         this.#boundSockets = this.#boundSockets.filter(x => (x.id !== id))
     }
-    socketsBelongingToAddress(address: string, port: Port) {
+    socketsBelongingToAddress(address: string, port: Port, fromAddress: string) {
         return this.#boundSockets.filter(x => {
-            return ((x.socket.hasMembership(address))  && (x.port === port))
+            if (x.port !== port) return false
+            if (x.socket.hasMembership(address)) {
+                return true
+            }
+            if (x.socket.hasFirewalledAddress(address)) {
+                if (x.socket.hasOutgoingAddress(fromAddress)) {
+                    return true
+                }
+                else {
+                    return false
+                }
+            }
         }).map(x => (x.socket))
     }
 }
@@ -42,6 +53,8 @@ class MockDgramSocket {
     #onListeningCallbacks: (() => void)[] = []
     #onMessageCallbacks: ((message: Buffer, rinfo: DgramRemoteInfo) => void)[] = []
     #memberships = new Set<string>()
+    #firewalledAddresses = new Set<string>()
+    #outgoingAddresses = new Set<string>()
     constructor(args: {type: DgramSocketType, reuseAddr: boolean, hostName: HostName}) {
         this.#type = args.type
         this.#reuseAddr = args.reuseAddr
@@ -55,6 +68,9 @@ class MockDgramSocket {
     }
     hasMembership(a: string) {
         return this.#memberships.has(a)
+    }
+    hasFirewalledAddress(a: string) {
+        return this.#firewalledAddresses.has(a)
     }
     close() {
         dgramSocketManager.unbind(this.#id)
@@ -73,18 +89,27 @@ class MockDgramSocket {
     addMembership(address: string) {
         this.#memberships.add(address)
     }
+    addFirewalledAddress(address: string) {
+        this.#firewalledAddresses.add(address)
+    }
     send(message: Buffer, offset: number, length: number, port: number, address: string, callback?: (err: Error | null, numBytesSent: number) => void) {
-        const sockets = dgramSocketManager.socketsBelongingToAddress(address, toPort(port))
+        this.#outgoingAddresses.add(address + ':' + port)
+        const sockets = dgramSocketManager.socketsBelongingToAddress(address, toPort(port), this.#hostName + ':' + this.#port)
         sockets.forEach(socket => {
+            const rinfoAddress = address.startsWith('local-') ? 'local-' + this.#hostName.toString() : this.#hostName.toString()
             const rinfo: DgramRemoteInfo = {
-                address: this.#hostName.toString(),
+                address: rinfoAddress,
                 family: 'IPv4',
                 port: this.#port as any as number,
                 size: 0
             }
+            // todo - implement mock nat rules here
             socket._handleMessage(message, rinfo)
         })
         callback && callback(null, message.length)
+    }
+    hasOutgoingAddress(x: string) {
+        return this.#outgoingAddresses.has(x)
     }
     _handleMessage(message: Buffer, rinfo: DgramRemoteInfo) {
         this.#onMessageCallbacks.forEach(cb => {
@@ -93,9 +118,15 @@ class MockDgramSocket {
     }
 }
 
-const mockDgramCreateSocket: DgramCreateSocketFunction = (args: {type: 'udp4', reuseAddr: boolean, nodeId: NodeId}) => {
+const mockDgramCreateSocket: DgramCreateSocketFunction = (args: {type: 'udp4', reuseAddr: boolean, nodeId: NodeId, firewalled: boolean}) => {
     const s = new MockDgramSocket({type: args.type, reuseAddr: args.reuseAddr, hostName: hostName(args.nodeId.toString())})
-    s.addMembership(args.nodeId.toString())
+    if (args.firewalled) {
+        s.addFirewalledAddress(args.nodeId.toString())
+    }
+    else {
+        s.addMembership(args.nodeId.toString())
+    }
+    s.addMembership('local-' + args.nodeId.toString())
     return s
 }
 

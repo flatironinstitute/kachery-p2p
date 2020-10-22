@@ -1,6 +1,6 @@
 import { action } from "../common/action";
-import { sleepMsec } from "../common/util";
-import { Address, DurationMsec, durationMsec, durationMsecToNumber, JSONObject, NodeId, urlPath, UrlPath } from "../interfaces/core";
+import { sleepMsec, sleepMsecNum } from "../common/util";
+import { Address, DurationMsec, durationMsec, JSONObject, NodeId, urlPath, UrlPath } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import { isApiProbeResponse } from "../services/PublicApiServer";
 
@@ -44,7 +44,7 @@ export default class BootstrapService {
         this.#remoteNodeManager.setBootstrapNode(remoteNodeId, address, webSocketAddress, publicUdpSocketAddress)
     }
     async _start() {
-        await sleepMsec(2) // important for tests
+        await sleepMsecNum(2) // important for tests
         // probe the bootstrap nodes periodically
         while (true) {
             if (this.#halted) return
@@ -58,7 +58,7 @@ export default class BootstrapService {
                 
             }
             
-            await sleepMsec(durationMsecToNumber(this.opts.probeIntervalMsec), () => {return !this.#halted})
+            await sleepMsec(this.opts.probeIntervalMsec, () => {return !this.#halted})
         }
     }
 }

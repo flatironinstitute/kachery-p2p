@@ -85,18 +85,18 @@ const createDataStreamForFile = (path: LocalFilePath, offset: ByteCount, size: B
     // note.. for some reason if we put {encoding: 'binary'} we get text data chunks
     const readStream = fs.createReadStream(path.toString(), { start: byteCountToNumber(offset), end: byteCountToNumber(offset) + byteCountToNumber(size) - 1 })
     const ret = new DataStreamy()
-    ret._start(size)
+    ret.producer().start(size)
     readStream.on('data', (chunk: any) => {
         if (!isBuffer(chunk)) {
             throw Error('Unexpected type of data chunk')
         }
-        ret._data(chunk)
+        ret.producer().data(chunk)
     })
     readStream.on('end', () => {
-        ret._end()
+        ret.producer().end()
     })
     readStream.on('error', (err: Error) => {
-        ret._error(err)
+        ret.producer().error(err)
     })
     return ret
 }

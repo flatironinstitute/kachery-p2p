@@ -146,11 +146,12 @@ class RemoteNodeManager {
         return this.#remoteNodes.get(remoteNodeId) || null
     }
     sendRequestToNodesInChannels(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, channelNames: ChannelName[]}) {
-        let finished = false;
+        let finished = false
+        let numComplete = 0
+        let numTotal = 0
         const _onResponseCallbacks: ((nodeId: NodeId, responseData: NodeToNodeResponseData) => void)[] = [];
         const _onErrorResponseCallbacks: ((nodeId: NodeId, reason: any) => void)[] = [];
         const _onFinishedCallbacks: (() => void)[] = [];
-        const promises: (Promise<NodeToNodeResponseData>)[] = [];
         this.#remoteNodes.forEach(n => {
             const nodeChannelNames = n.getChannelNames();
             let okay = false;
@@ -159,20 +160,24 @@ class RemoteNodeManager {
                     okay = true;
                 }
             })
-            if (okay) {
+            if ((okay) && (this.canSendRequestToNode(n.remoteNodeId(), 'default'))) {
                 const promise = this.sendRequestToNode(n.remoteNodeId(), requestData, {timeoutMsec: opts.timeoutMsec, method: 'default'});
+                numTotal ++
                 promise.then(responseData => {
                     if (finished) return;
                     _onResponseCallbacks.forEach(cb => {
                         cb(n.remoteNodeId(), responseData);
                     });
+                    numComplete ++
+                    _checkComplete()
                 })
                 promise.catch((reason) => {
                     _onErrorResponseCallbacks.forEach(cb => {
                         cb(n.remoteNodeId(), reason);
                     });
+                    numComplete ++
+                    _checkComplete()
                 })
-                promises.push(promise);
             }
         });
         const _finalize = () => {
@@ -197,12 +202,14 @@ class RemoteNodeManager {
         setTimeout(() => {
             _cancel();
         }, durationMsecToNumber(opts.timeoutMsec))
-        // the .map is required so that we wait until all are settled
-        Promise.all(promises.map(p => p.catch(e => e))).finally(() => {
-            setTimeout(() => {
-                _finalize()
-            }, 0)
-        })
+
+        const _checkComplete = () => {
+            if (numComplete === numTotal) {
+                setTimeout(() => {
+                    _finalize()
+                }, 0)
+            }
+        }
         return {
             onResponse,
             onErrorResponse,

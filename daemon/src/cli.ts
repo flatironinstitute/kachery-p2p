@@ -154,6 +154,7 @@ function main() {
           httpListenPort,
           label,
           externalInterface,
+          getDefects: () => {return {}}, // no defects
           opts: {
             bootstrapAddresses: bootstrapAddresses,
             isBootstrap: isBootstrapNode,

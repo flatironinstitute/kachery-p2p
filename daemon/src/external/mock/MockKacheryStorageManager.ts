@@ -1,9 +1,13 @@
 import crypto from 'crypto'
 import DataStreamy from "../../common/DataStreamy"
 import { byteCount, ByteCount, byteCountToNumber, FileKey, FileManifest, FileManifestChunk, Sha1Hash } from "../../interfaces/core"
+import { MockNodeDefects } from './MockNodeDaemon'
 
 export default class MockKacheryStorageManager {
     #mockFiles = new Map<Sha1Hash, Buffer>() 
+    constructor(private getDefects: () => MockNodeDefects) {
+        
+    }
     async findFile(fileKey: FileKey):  Promise<{found: boolean, size: ByteCount}> {
         const content = this.#mockFiles.get(fileKey.sha1)
         if (content) {
@@ -24,9 +28,13 @@ export default class MockKacheryStorageManager {
         if (content) {
             const ret = new DataStreamy()
             setTimeout(() => {
-                ret._start(byteCount(content.length))
-                ret._data(content)
-                ret._end()
+                ret.producer().start(byteCount(content.length))
+                if (this.getDefects().fileReadDefect) {
+                    ret.producer().error(Error('fileReadDefect'))
+                    return
+                }
+                ret.producer().data(content)
+                ret.producer().end()
             }, 2)
             return ret
         }

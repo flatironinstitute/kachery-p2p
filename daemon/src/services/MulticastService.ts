@@ -1,8 +1,8 @@
 import { action } from "../common/action"
 import { getSignature, verifySignature } from "../common/crypto_util"
-import { sleepMsec } from "../common/util"
+import { sleepMsec, sleepMsecNum } from "../common/util"
 import ExternalInterface from "../external/ExternalInterface"
-import { Address, ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, hostName, isMulticastAnnounceMessage, JSONObject, KeyPair, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, tryParseJsonObject } from "../interfaces/core"
+import { Address, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, hostName, isMulticastAnnounceMessage, JSONObject, KeyPair, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, tryParseJsonObject } from "../interfaces/core"
 import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
 import { protocolVersion } from "../protocolVersion"
 
@@ -34,7 +34,7 @@ export default class MulticastService {
     async _start() {
         if (!this.#node.useMulticastUdp()) return
         // to find nodes on the local network
-        const multicastSocket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: true, nodeId: this.#node.nodeId() })
+        const multicastSocket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: true, nodeId: this.#node.nodeId(), firewalled: true })
         const multicastAddress = this.opts.multicastAddress
         const multicastPort = 21010
         multicastSocket.bind(multicastPort)
@@ -68,7 +68,7 @@ export default class MulticastService {
                 /////////////////////////////////////////////////////////////////////////
             }
         })
-        await sleepMsec(Math.min(1000, durationMsecToNumber(this.opts.intervalMsec)))
+        await sleepMsecNum(Math.min(durationMsecToNumber(durationMsec(1000)), durationMsecToNumber(this.opts.intervalMsec)))
         while (true) {
             if (this.#halted) return
             for (let channelName of this.#node.channelNames()) {
@@ -102,7 +102,7 @@ export default class MulticastService {
                 })
                 /////////////////////////////////////////////////////////////////////////
             }
-            await sleepMsec(durationMsecToNumber(this.opts.intervalMsec), () => {return !this.#halted})
+            await sleepMsec(this.opts.intervalMsec, () => {return !this.#halted})
         }
     }
 }

@@ -1,18 +1,22 @@
+import { JSONStringifyDeterministic } from '../common/crypto_util'
 import { randomAlphaString } from '../common/util'
-import { Address, isAddress, isBoolean, isNodeId, isNull, isNumber, isOneOf, isProtocolVersion, isRequestId, isSignature, isString, NodeId, ProtocolVersion, Signature, _validateObject } from './core'
+import { Address, isAddress, isBoolean, isJSONObject, isNodeId, isNumber, isProtocolVersion, isSignature, isString, NodeId, ProtocolVersion, Signature, _validateObject } from './core'
 
 export const UDP_MESSAGE_HEADER_SIZE = 1000
 export const UDP_PACKET_SIZE = 20000
 
 // todo: do we use KeepAlive?
-export type UdpMessageType = "NodeToNodeRequest" | "NodeToNodeResponse" | "KeepAlive"
+export type UdpMessageType = "NodeToNodeRequest" | "NodeToNodeResponse" | "KeepAlive" | "streamDataChunk" | "streamDataError" | "streamDataEnd"
 const exampleUdpMessageType: UdpMessageType = "NodeToNodeRequest"
 export const isUdpMessageType = (x: any): x is UdpMessageType => {
     if (!isString(x)) return false;
     const possible: UdpMessageType[] = [
         "NodeToNodeRequest",
         "NodeToNodeResponse",
-        "KeepAlive"
+        "KeepAlive",
+        "streamDataChunk",
+        "streamDataError",
+        "streamDataEnd"
     ]
     return possible.includes(x as any as UdpMessageType)
 }
@@ -78,13 +82,31 @@ export interface UdpMessagePart {
     dataBuffer: Buffer
 }
 
+export interface UdpMessageMetaData {
+    __udpMessageMetaData__: never
+}
+export const isUdpMessageMetaData = (x: any): x is UdpMessageMetaData => {
+    if (!isJSONObject(x)) return false
+    if (JSONStringifyDeterministic(x).length > 100) {
+        return false
+    }
+    return true
+}
+export const udpMessageMetaData = (x: any): UdpMessageMetaData => {
+    if (JSONStringifyDeterministic(x).length > 100) {
+        throw Error('UDP message meta data is too large')
+    }
+    return x as any as UdpMessageMetaData
+}
+
 export interface UdpHeader {
     body: {
         udpMessageId: UdpMessageId,
         protocolVersion: ProtocolVersion,
         fromNodeId: NodeId,
-        toAddress: Address,
+        toAddress: Address | null, // null happens if the incoming message came by fallback, and in this case we'll use fallback to send back
         udpMessageType: UdpMessageType,
+        metaData: UdpMessageMetaData,
         partIndex: PartIndex,
         numParts: NumParts,
         payloadIsJson: boolean
@@ -99,10 +121,10 @@ export const isUdpHeader = (x: any): x is UdpHeader => {
             fromNodeId: isNodeId,
             toAddress: isAddress,
             udpMessageType: isUdpMessageType,
+            metaData: isUdpMessageMetaData,
             partIndex: isPartIndex,
             numParts: isNumParts,
-            payloadIsJson: isBoolean,
-            requestId: isOneOf([isNull, isRequestId])
+            payloadIsJson: isBoolean
         },
         signature: isSignature
     })

@@ -27,7 +27,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
 
  // need to explicitly use mocha prefix once or the dependency gets wrongly cleaned up
  mocha.describe('Integration', () => {
-    describe('Test connect to bootstrap node', () => {
+    describe('Test connect to bootstrap node aaa01', () => {
         it('Create this node and bootstrap node', (done) => {
             testContext(async (g, resolve, reject) => {
                 const bootstrapOpts: StartDaemonOpts = {
@@ -37,6 +37,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     multicastUdpAddress: null,
                     udpSocketPort: null,
                     webSocketListenPort: null,
+                    firewalled: false,
                     services: {
                     }
                 }
@@ -47,6 +48,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     multicastUdpAddress: null,
                     udpSocketPort: null,
                     webSocketListenPort: null,
+                    firewalled: true,
                     services: {
                         announce: true,
                         discover: true,
@@ -55,11 +57,9 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
                 const daemon1 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()]})
-                // we expect to have no bootstrap nodes (yet)
-                expect(daemon1.remoteNodeManager().getBootstrapRemoteNodes().length).equals(0)
 
                 // wait a bit
-                await sleepMsec(100)
+                await sleepMsec(durationMsec(15000))
 
                 // we expect to have one bootstrap node
                 expect(daemon1.remoteNodeManager().getBootstrapRemoteNodes().length).equals(1)
@@ -77,64 +77,64 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 resolve()
             }, done)
         })
-        it('Find file on bootstrap node', (done) => {
-            testContext(async (g, resolve, reject) => {
-                const bootstrapOpts: StartDaemonOpts = {
-                    bootstrapAddresses: [],
-                    isBootstrap: true,
-                    channelNames: [mockChannelName],
-                    multicastUdpAddress: null,
-                    udpSocketPort: null,
-                    webSocketListenPort: null,
-                    services: {
-                    }
-                }
-                const daemonOpts = {
-                    bootstrapAddresses: [],
-                    isBootstrap: false,
-                    channelNames: [mockChannelName],
-                    multicastUdpAddress: null,
-                    udpSocketPort: null,
-                    webSocketListenPort: null,
-                    mock: true,
-                    services: {
-                        announce: true,
-                        discover: true,
-                        bootstrap: true
-                    }
-                }
-                const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
-                const daemon1 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()]})
+        // it('Find file on bootstrap node', (done) => {
+        //     testContext(async (g, resolve, reject) => {
+        //         const bootstrapOpts: StartDaemonOpts = {
+        //             bootstrapAddresses: [],
+        //             isBootstrap: true,
+        //             channelNames: [mockChannelName],
+        //             multicastUdpAddress: null,
+        //             udpSocketPort: null,
+        //             webSocketListenPort: null,
+        //             services: {
+        //             }
+        //         }
+        //         const daemonOpts = {
+        //             bootstrapAddresses: [],
+        //             isBootstrap: false,
+        //             channelNames: [mockChannelName],
+        //             multicastUdpAddress: null,
+        //             udpSocketPort: null,
+        //             webSocketListenPort: null,
+        //             mock: true,
+        //             services: {
+        //                 announce: true,
+        //                 discover: true,
+        //                 bootstrap: true
+        //             }
+        //         }
+        //         const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
+        //         const daemon1 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()]})
 
-                const f1Content = Buffer.from('123456')
-                const f1Key = bootstrapDaemon.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize: byteCount(1000)})
+        //         const f1Content = Buffer.from('123456')
+        //         const f1Key = bootstrapDaemon.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize: byteCount(1000)})
 
-                // wait a bit
-                await sleepMsec(100)
+        //         // wait a bit
+        //         await sleepMsec(durationMsec(15000))
 
-                expect(daemon1.remoteNodeManager().getBootstrapRemoteNodes().length).equals(1)
+        //         expect(daemon1.remoteNodeManager().getBootstrapRemoteNodes().length).equals(1)
 
-                let numFound = 0
-                const a = await daemon1.mockDaemonPostFindFile({
-                    fileKey: f1Key,
-                    timeoutMsec: durationMsec(100),
-                    fromChannel: null
-                })
-                a.onFinished(() => {
-                    expect(numFound).equals(1)
-                    resolve()
-                })
-                a.onFound((result) => {
-                    expect(result.fileKey.sha1).equals(f1Key.sha1)
-                    numFound ++
-                })
-            }, done)
-        })
+        //         let numFound = 0
+        //         const a = await daemon1.mockDaemonPostFindFile({
+        //             fileKey: f1Key,
+        //             timeoutMsec: durationMsec(100),
+        //             fromChannel: null
+        //         })
+        //         a.onFinished(() => {
+        //             expect(numFound).equals(1)
+        //             resolve()
+        //         })
+        //         a.onFound((result) => {
+        //             expect(result.fileKey.sha1).equals(f1Key.sha1)
+        //             numFound ++
+        //         })
+        //     }, done)
+        // })
     })
-    describe('Test multicast udp discovery a89', () => {
+    describe('Test multicast udp discovery aaa89', () => {
         it('Create two nodes communicating through multicast sockets', (done) => {
             testContext(async (g, resolve, reject) => {
-                const multicastUdpAddress = 'mock-multicast-udp-address-1'
+                const multicastUdpAddress = 'local-mock-multicast-udp-address-1'
                 const daemonOpts = {
                     bootstrapAddresses: [],
                     isBootstrap: false,
@@ -142,64 +142,35 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     multicastUdpAddress,
                     udpSocketPort: 'x', // random below
                     webSocketListenPort: null,
+                    firewalled: true,
                     services: {
+                        announce: true,
+                        discover: true,
                         multicast: true,
                         udpSocket: true
                     }
                 }
                 const daemon1 = await g.createDaemon({...daemonOpts, udpSocketPort: randomMockPort()})
                 const daemon2 = await g.createDaemon({...daemonOpts, udpSocketPort: randomMockPort()})
-                // // we expect to have no remote nodes yet
-                expect(daemon1.remoteNodeManager().getAllRemoteNodes().length).equals(0)
-                expect(daemon2.remoteNodeManager().getAllRemoteNodes().length).equals(0)
 
-                // // wait a bit
-                await sleepMsec(50)
+                // wait a bit
+                await sleepMsec(durationMsec(15000))
 
                 // // we expect to have one remote node now
                 expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
                 expect(daemon2.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
 
                 await testFindFile(daemon1, daemon2)
-                // await testLoadFile(daemon1, daemon2)
+                await testLoadFile(daemon1, daemon2)
                 await testSubfeedMessage(daemon1, daemon2)
                 await testSubmitSubfeedMessage(daemon1, daemon2)
 
                 resolve()
             }, done)
-        })
-        it('Find file between two local nodes', (done) => {
-            testContext(async (g, resolve, reject) => {
-                const multicastUdpAddress = 'mock-multicast-udp-address-2'
-                const daemonOpts = {
-                    bootstrapAddresses: [],
-                    isBootstrap: false,
-                    channelNames: [mockChannelName],
-                    multicastUdpAddress,
-                    udpSocketPort: 'x', // random below
-                    webSocketListenPort: null,
-                    services: {
-                        multicast: true,
-                        udpSocket: true
-                    }
-                }
-                const daemon1 = await g.createDaemon({...daemonOpts, udpSocketPort: randomMockPort()})
-                const daemon2 = await g.createDaemon({...daemonOpts, udpSocketPort: randomMockPort()})
-
-                // // wait a bit
-                await sleepMsec(50)
-
-                await testFindFile(daemon1, daemon2)
-                // await testLoadFile(daemon1, daemon2)
-                await testSubfeedMessage(daemon1, daemon2)
-                await testSubmitSubfeedMessage(daemon1, daemon2)
-
-                resolve()
-            }, done)
-        })
+        }).timeout(10000)
     })
     describe('Test proxy connections', () => {
-        it('Create two nodes communicating through proxy server aa90', (done) => {
+        it('Create two nodes communicating through proxy server aaa90', (done) => {
             testContext(async (g, resolve, reject) => {
                 const bootstrapOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
@@ -208,6 +179,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     multicastUdpAddress: null,
                     udpSocketPort: null,
                     webSocketListenPort: randomMockPort(),
+                    firewalled: false,
                     services: {
                         webSocketServer: true
                     }
@@ -219,6 +191,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     multicastUdpAddress: null,
                     udpSocketPort: null,
                     webSocketListenPort: null,
+                    firewalled: true,
                     services: {
                         announce: true,
                         discover: true,
@@ -230,12 +203,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const daemon1 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()]})
                 const daemon2 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()]})
 
-                // // we expect to have no remote nodes yet
-                expect(daemon1.remoteNodeManager().getAllRemoteNodes().length).equals(0)
-                expect(daemon2.remoteNodeManager().getAllRemoteNodes().length).equals(0)
-
-                // // wait a bit
-                await sleepMsec(50)
+                // wait a bit
+                await sleepMsec(durationMsec(15000))
 
                 // // we expect to have one remote node now
                 expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
@@ -247,7 +216,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
 
                 resolve()
             }, done)
-        })
+        }).timeout(10000)
     })
     describe('Test udp connections', () => {
         it('Create two nodes communicating through udp aaa91', (done) => {
@@ -259,7 +228,9 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     multicastUdpAddress: null,
                     udpSocketPort: randomMockPort(),
                     webSocketListenPort: null,
+                    firewalled: false,
                     services: {
+                        httpServer: true,
                         udpSocket: true
                     }
                 }
@@ -270,23 +241,20 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     multicastUdpAddress: null,
                     udpSocketPort: null, // determined below
                     webSocketListenPort: null,
+                    firewalled: true,
                     services: {
                         announce: true,
                         discover: true,
                         bootstrap: true,
-                        udpSocket: true
+                        udpSocket: true,
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
                 const daemon1 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()], udpSocketPort: randomMockPort()})
                 const daemon2 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()], udpSocketPort: randomMockPort()})
 
-                // // we expect to have no remote nodes yet
-                expect(daemon1.remoteNodeManager().getAllRemoteNodes().length).equals(0)
-                expect(daemon2.remoteNodeManager().getAllRemoteNodes().length).equals(0)
-
-                // // wait a bit
-                await sleepMsec(500)
+                // wait a bit
+                await sleepMsec(durationMsec(35000))
 
                 // // we expect to have one remote node now
                 expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
@@ -294,6 +262,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
 
                 await testFindFile(daemon1, daemon2)
                 await testLoadFile(daemon1, daemon2)
+                await testLoadFileWithDefects(daemon1, daemon2)
                 await testSubfeedMessage(daemon1, daemon2)
 
                 resolve()
@@ -309,7 +278,7 @@ const testFindFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) =>
     let numFound = 0
     const a = await daemon2.mockDaemonPostFindFile({
         fileKey: f1Key,
-        timeoutMsec: durationMsec(100),
+        timeoutMsec: durationMsec(5000),
         fromChannel: null
     })
     return new Promise((resolve, reject) => {
@@ -344,6 +313,69 @@ const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fi
     })
     const f = await daemon2.mockKacheryStorageManager().findFile(f1Key)
     expect(f.found).is.true
+}
+
+const testLoadFileWithDefects = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fileSize: ByteCount = byteCount(20000), chunkSize: ByteCount = byteCount(1200)) => {
+    const f1Content = Buffer.alloc(byteCountToNumber(fileSize), 'a')
+    const f2Content = Buffer.alloc(byteCountToNumber(fileSize), 'b')
+    const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize})
+    const f2Key = daemon1.mockKacheryStorageManager().addMockFile(f2Content, {chunkSize})
+
+    daemon1.setDefects({
+        fileReadDefect: true
+    })
+
+    try {
+        await new Promise((resolve, reject) => {
+            const reqData: ApiLoadFileRequest = {
+                fileKey: f1Key,
+                fromChannel: null,
+                fromNode: null
+            }
+            const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData)
+            x.onError(err => {
+                reject(err)
+            })
+            x.onFinished(() => {
+                resolve()
+            })
+        })
+        throw Error('Did not get fileReadDefect error')
+    }
+    catch(err) {
+        expect(err.message === 'fileReadDefect')
+    }
+
+    daemon1.clearDefects()
+    daemon2.setDefects({
+        badDownloadFileDataRequest: true
+    })
+
+    try {
+        await new Promise((resolve, reject) => {
+            const reqData: ApiLoadFileRequest = {
+                fileKey: f2Key,
+                fromChannel: null,
+                fromNode: null
+            }
+            const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData)
+            x.onError(err => {
+                reject(err)
+            })
+            x.onFinished(() => {
+                resolve()
+            })
+        })
+        throw Error('Did not get expected error')
+    }
+    catch(err) {
+        if (err.message !== 'Unable to stream file data') {
+            throw err
+        }
+    }
+
+    daemon1.clearDefects()
+    daemon2.clearDefects()
 }
 
 const testSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {

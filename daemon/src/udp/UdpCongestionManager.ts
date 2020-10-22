@@ -1,10 +1,8 @@
 import { randomAlphaString } from "../common/util";
 import { addByteCount, byteCount, ByteCount, byteCountToNumber, durationMsec, DurationMsec, durationMsecToNumber, elapsedSince, isNumber, nowTimestamp } from "../interfaces/core";
-import { createPacketId, PacketId } from "./UdpPacketSender";
+import { PacketId } from "./UdpPacketSender";
 
 const TARGET_PCT_LOST_BYTES = 2;
-
-export const _tests: {[key: string]: () => Promise<void>} = {}
 
 type Callbacks = (() => void)[]
 
@@ -303,21 +301,4 @@ const median = (x: number[]) => {
         return values[half];
     else
         return (values[half - 1] + values[half]) / 2.0;
-}
-
-_tests.UdpCongestionManager = async () => {
-    return new Promise((resolve, reject) => {
-        const x = new UdpCongestionManager()
-        let numSent = 0
-        const _check = () => {
-            if (numSent === 3) {
-                resolve()
-            }
-        }
-        const send = async (timeoutMsec: DurationMsec) => {
-            numSent ++
-            _check()
-        }
-        x.sendPacket(createPacketId(), byteCount(100), send)
-    })
 }

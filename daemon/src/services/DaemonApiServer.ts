@@ -5,7 +5,7 @@ import { action } from '../common/action';
 import { DataStreamyProgress } from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
-import { ChannelName, DurationMsec, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isOneOf, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
+import { ChannelName, durationMsec, DurationMsec, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isOneOf, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -93,7 +93,7 @@ export default class DaemonApiServer {
             /////////////////////////////////////////////////////////////////////////
             await action('/halt', {context: 'Daemon API'}, async () => {
                 await this._apiHalt(req, res)
-                await sleepMsec(3000);
+                await sleepMsec(durationMsec(3000));
                 process.exit(0);
             }, async (err: Error) => {
                 await this._errorResponse(req, res, 500, err.message);
@@ -728,7 +728,7 @@ export default class DaemonApiServer {
         catch(err) {
             console.warn(`Problem sending error`, {error: err.message});
         }
-        await sleepMsec(100);
+        await sleepMsec(durationMsec(100));
         try {
             req.connection.destroy();
         }

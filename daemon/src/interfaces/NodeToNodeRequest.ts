@@ -86,7 +86,8 @@ export type NodeToNodeRequestData = (
     SubmitMessageToLiveFeedRequestData |
     GetLiveFeedSignedMessagesRequestData |
     DownloadFileDataRequestData |
-    StartStreamViaUdpRequestData
+    StartStreamViaUdpRequestData |
+    FallbackUdpPacketRequestData
 )
 export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
     return isOneOf([
@@ -98,7 +99,8 @@ export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
         isSubmitMessageToLiveFeedRequestData,
         isGetLiveFeedSignedMessagesRequestData,
         isDownloadFileDataRequestData,
-        isStartStreamViaUdpRequestData
+        isStartStreamViaUdpRequestData,
+        isFallbackUdpPacketRequestData
     ]) ? true : false;
 }
 export type NodeToNodeResponseData = (
@@ -111,7 +113,8 @@ export type NodeToNodeResponseData = (
     SubmitMessageToLiveFeedResponseData |
     GetLiveFeedSignedMessagesResponseData |
     DownloadFileDataResponseData |
-    StartStreamViaUdpResponseData
+    StartStreamViaUdpResponseData |
+    FallbackUdpPacketResponseData
 )
 export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData => {
     return isOneOf([
@@ -123,7 +126,8 @@ export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData =>
         isSubmitMessageToLiveFeedResponseData,
         isGetLiveFeedSignedMessagesResponseData,
         isDownloadFileDataResponseData,
-        isStartStreamViaUdpResponseData
+        isStartStreamViaUdpResponseData,
+        isFallbackUdpPacketResponseData
     ]) ? true : false;
 }
 
@@ -379,6 +383,29 @@ export interface StartStreamViaUdpResponseData {
 export const isStartStreamViaUdpResponseData = (x: any): x is DownloadFileDataResponseData => {
     return _validateObject(x, {
         requestType: isEqualTo('startStreamViaUdp'),
+        success: isBoolean,
+        errorMessage: isOneOf([isNull, isErrorMessage])
+    })
+}
+
+export interface FallbackUdpPacketRequestData {
+    requestType: 'fallbackUdpPacket',
+    dataBase64: string
+}
+export const isFallbackUdpPacketRequestData = (x: any): x is DownloadFileDataRequestData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('fallbackUdpPacket'),
+        dataBase64: isString
+    })
+}
+export interface FallbackUdpPacketResponseData {
+    requestType: 'fallbackUdpPacket',
+    success: boolean,
+    errorMessage: ErrorMessage | null
+}
+export const isFallbackUdpPacketResponseData = (x: any): x is DownloadFileDataResponseData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('fallbackUdpPacket'),
         success: isBoolean,
         errorMessage: isOneOf([isNull, isErrorMessage])
     })

@@ -1,16 +1,17 @@
 import dgram from 'dgram';
 import { action } from "../common/action";
 import { getSignature, verifySignature } from "../common/crypto_util";
+import DataStreamy from '../common/DataStreamy';
 import GarbageMap from "../common/GarbageMap";
-import { DgramSocket } from '../external/ExternalInterface';
-import { Address, durationMsec, DurationMsec, durationMsecToNumber, hostName, JSONObject, nodeIdToPublicKey, Port, portToNumber, RequestId, toPort, tryParseJsonObject } from "../interfaces/core";
-import { isNodeToNodeRequest, isNodeToNodeResponse, NodeToNodeRequest, NodeToNodeResponse } from "../interfaces/NodeToNodeRequest";
-import { createUdpMessageId, isUdpHeader, numParts, NumParts, partIndex, PartIndex, UdpHeader, UdpMessagePart, UdpMessageType, UDP_MESSAGE_HEADER_SIZE, UDP_PACKET_SIZE } from "../interfaces/UdpMessage";
+import { DgramRemoteInfo, DgramSocket } from '../external/ExternalInterface';
+import { Address, durationMsec, DurationMsec, durationMsecToNumber, errorMessage, ErrorMessage, hostName, isErrorMessage, isNodeId, isNumber, JSONObject, NodeId, nodeIdToPublicKey, Port, portToNumber, RequestId, toPort, tryParseJsonObject, _validateObject } from "../interfaces/core";
+import { FallbackUdpPacketRequestData, isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
+import { createUdpMessageId, isUdpHeader, numParts, NumParts, partIndex, PartIndex, UdpHeader, UdpMessageMetaData, udpMessageMetaData, UdpMessagePart, UdpMessageType, UDP_MESSAGE_HEADER_SIZE, UDP_PACKET_SIZE } from "../interfaces/UdpMessage";
 import KacheryP2PNode from "../KacheryP2PNode";
 import { protocolVersion } from "../protocolVersion";
 import UdpMessagePartManager from '../udp/UdpMessagePartManager';
 import UdpPacketReceiver from '../udp/UdpPacketReceiver';
-import UdpPacketSender from "../udp/UdpPacketSender";
+import UdpPacketSender, { FallbackAddress } from "../udp/UdpPacketSender";
 
 interface ResponseListener {
     onResponse: (response: NodeToNodeResponse, header: UdpHeader) => void
@@ -21,6 +22,51 @@ interface DataListener {
     onFinished: () => void
 }
 
+interface StreamDataChunkMetaData {
+    streamId: StreamId,
+    dataChunkIndex: number
+}
+const isStreamDataChunkMetaData = (x: any): x is StreamDataChunkMetaData => {
+    return _validateObject(x, {
+        streamId: isStreamId,
+        dataChunkIndex: isNumber
+    })
+}
+
+export interface NodeIdFallbackAddress {
+    nodeId: NodeId
+}
+export const isNodeIdFallbackAddress = (x: any): x is NodeIdFallbackAddress => {
+    return _validateObject(x, {
+        nodeId: isNodeId
+    })
+}
+export const nodeIdFallbackAddress = (nodeId: NodeId): NodeIdFallbackAddress & FallbackAddress => {
+    return {nodeId} as (NodeIdFallbackAddress & FallbackAddress)
+}
+
+interface StreamDataErrorMetaData {
+    streamId: StreamId,
+    errorMessage: ErrorMessage
+}
+const isStreamDataErrorMetaData = (x: any): x is StreamDataErrorMetaData => {
+    return _validateObject(x, {
+        streamId: isStreamId,
+        errorMessage: isErrorMessage
+    })
+}
+
+interface StreamDataEndMetaData {
+    streamId: StreamId,
+    numDataChunks: number
+}
+const isStreamDataEndMetaData = (x: any): x is StreamDataEndMetaData => {
+    return _validateObject(x, {
+        streamId: isStreamId,
+        numDataChunks: isNumber
+    })
+}
+
 export default class PublicUdpSocketServer {
     #node: KacheryP2PNode
     #messagePartManager = new UdpMessagePartManager()
@@ -28,11 +74,16 @@ export default class PublicUdpSocketServer {
     #udpPacketSender: UdpPacketSender | null = null
     #udpPacketReceiver: UdpPacketReceiver | null = null
     #responseListeners = new GarbageMap<RequestId, ResponseListener>(durationMsec(3 * 60 * 1000))
-    constructor(node: KacheryP2PNode) {
+    #incomingDataStreams = new GarbageMap<StreamId, DataStreamy>(durationMsec(60 * 60 * 1000))
+    #fallbackPacketSender: FallbackPacketSender
+    #stopped = false
+    constructor(node: KacheryP2PNode, private firewalled: boolean) {
         this.#node = node
-        this.#messagePartManager.onMessageComplete((remoteAddress, header, buffer) => {this._handleCompleteMessage(remoteAddress, header, buffer)})
+        this.#messagePartManager.onMessageComplete((header, buffer) => {this._handleCompleteMessage(header, buffer)})
+        this.#fallbackPacketSender = new FallbackPacketSender(this.#node)
     }
     stop() {
+        this.#stopped = true
         if (this.#socket) {
             this.#socket.close()
         }
@@ -40,36 +91,16 @@ export default class PublicUdpSocketServer {
     startListening(listenPort: Port) {
         return new Promise((resolve, reject) => {
             try {
-                this.#socket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: false, nodeId: this.#node.nodeId() })
+                this.#socket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: false, nodeId: this.#node.nodeId(), firewalled: this.firewalled })
                 this.#socket.bind(portToNumber(listenPort))
                 this.#socket.on("listening", () => {
                     if (this.#socket === null) {
                         throw Error('Unexpected')
                     }
-                    this.#udpPacketSender = new UdpPacketSender(this.#socket)
+                    this.#udpPacketSender = new UdpPacketSender(this.#socket, this.#fallbackPacketSender)
                     this.#udpPacketReceiver = new UdpPacketReceiver(this.#socket)
                     this.#udpPacketReceiver.onPacket((packet: Buffer, remoteInfo: dgram.RemoteInfo) => {
-                        const headerTxt = packet.slice(0, UDP_MESSAGE_HEADER_SIZE).toString().trimEnd()
-                        const dataBuffer = packet.slice(UDP_MESSAGE_HEADER_SIZE);
-                        const header = tryParseJsonObject(headerTxt)
-                        if (header === null) {
-                            return;
-                        }
-                        if (!isUdpHeader(header)) {
-                            console.warn(header)
-                            console.warn('Problem with udp header')
-                            return;
-                        }
-                        const fromAddress: Address = {
-                            port: toPort(remoteInfo.port),
-                            hostName: hostName(remoteInfo.address)
-                        }
-                        /////////////////////////////////////////////////////////////////////////
-                        action('handleUdpMessagePart', {fromAddress, fromNodeId: header.body.fromNodeId, udpMessageType: header.body.udpMessageType}, async () => {
-                            this._handleMessagePart(fromAddress, header, dataBuffer);
-                        }, async () => {
-                        })
-                        /////////////////////////////////////////////////////////////////////////
+                        this._receiveUdpPacket(packet, remoteInfo, null)
                     })
                     this.#udpPacketReceiver.onConfirmation((packetId) => {
                         /////////////////////////////////////////////////////////////////////////
@@ -91,6 +122,7 @@ export default class PublicUdpSocketServer {
         });
     }
     async sendRequest(address: Address, request: NodeToNodeRequest, opts: {timeoutMsec: DurationMsec}): Promise<{response: NodeToNodeResponse, header: UdpHeader}> {
+        const fallbackAddress: FallbackAddress = nodeIdFallbackAddress(request.body.toNodeId)
         return new Promise<{response: NodeToNodeResponse, header: UdpHeader}>((resolve, reject) => {
             let complete = false
             const _handleError = ((err: Error) => {
@@ -122,13 +154,80 @@ export default class PublicUdpSocketServer {
             }, durationMsecToNumber(opts.timeoutMsec))
             /////////////////////////////////////////////////////////////////////////
             action('/Udp/sendNodeToNodeRequest', {}, async () => {
-                await this._sendMessage(address, "NodeToNodeRequest", request as any as JSONObject, {timeoutMsec: opts.timeoutMsec, requestId: request.body.requestId})
+                await this._sendMessage(address, fallbackAddress, "NodeToNodeRequest", request as any as JSONObject, udpMessageMetaData({}), {timeoutMsec: opts.timeoutMsec})
             }, async () => {
             })
             /////////////////////////////////////////////////////////////////////////
         })
     }
-    async _sendMessage(address: Address, messageType: UdpMessageType, messageData: Buffer | JSONObject, opts: {timeoutMsec: DurationMsec, requestId: RequestId | null}): Promise<void> {
+    getIncomingDataStream(streamId: StreamId): DataStreamy {
+        if (this.#incomingDataStreams.has(streamId)) {
+            throw Error('Cannot get incoming data stream twice')
+        }
+        const ds = new DataStreamy()
+        this.#incomingDataStreams.set(streamId, ds)
+        return ds
+    }
+    setOutgoingDataStream(address: Address, fallbackAddress: FallbackAddress, streamId: StreamId, dataStream: DataStreamy) {
+        let dataChunkIndex = 0
+        dataStream.onFinished(() => {
+            const metaData: StreamDataEndMetaData = {
+                streamId,
+                numDataChunks: dataChunkIndex
+            }
+            this._sendMessage(address, fallbackAddress, 'streamDataEnd', Buffer.alloc(0), udpMessageMetaData(metaData), {timeoutMsec: durationMsec(4000)})
+        })
+        dataStream.onError((err: Error) => {
+            const metaData: StreamDataErrorMetaData = {
+                streamId,
+                errorMessage: errorMessage(err.message)
+            }
+            this._sendMessage(address, fallbackAddress, 'streamDataError', Buffer.alloc(0), udpMessageMetaData(metaData), {timeoutMsec: durationMsec(4000)})
+        })
+        dataStream.onData((dataChunk: Buffer) => {
+            const metaData: StreamDataChunkMetaData = {
+                streamId,
+                dataChunkIndex
+            }
+            this._sendMessage(address, fallbackAddress, 'streamDataChunk', dataChunk, udpMessageMetaData(metaData), {timeoutMsec: durationMsec(4000)})
+            dataChunkIndex ++
+        })
+    }
+    receiveFallbackUdpPacket(fromNodeId: NodeId, packet: Buffer): void {
+        this._receiveUdpPacket(packet, null, fromNodeId)
+    }
+    _receiveUdpPacket(packet: Buffer, remoteInfo: DgramRemoteInfo | null, checkFromNodeId: NodeId | null) {
+        const fromAddress: Address | null = remoteInfo ? {
+            port: toPort(remoteInfo.port),
+            hostName: hostName(remoteInfo.address)
+        } : null
+        
+        const headerTxt = packet.slice(0, UDP_MESSAGE_HEADER_SIZE).toString().trimEnd()
+        const dataBuffer = packet.slice(UDP_MESSAGE_HEADER_SIZE);
+        const header = tryParseJsonObject(headerTxt)
+        if (header === null) {
+            return;
+        }
+        if (!isUdpHeader(header)) {
+            console.warn(header)
+            console.warn('Problem with udp header')
+            return
+        }
+        if (checkFromNodeId) {
+            if (checkFromNodeId !== header.body.fromNodeId) {
+                console.warn('fromNodeId does not match in udp packet')
+                return
+            }
+        }
+        
+        /////////////////////////////////////////////////////////////////////////
+        action('handleUdpMessagePart', {fromAddress, fromNodeId: header.body.fromNodeId, udpMessageType: header.body.udpMessageType}, async () => {
+            this._handleMessagePart(fromAddress, header, dataBuffer);
+        }, async () => {
+        })
+        /////////////////////////////////////////////////////////////////////////
+    }
+    async _sendMessage(address: Address | null, fallbackAddress: FallbackAddress, messageType: UdpMessageType, messageData: Buffer | JSONObject, metaData: UdpMessageMetaData, opts: {timeoutMsec: DurationMsec}): Promise<void> {
         if ((this.#socket === null) || (this.#udpPacketSender === null)) {
             throw Error("Cannot _sendMessage before calling startListening()")
         }
@@ -142,7 +241,7 @@ export default class PublicUdpSocketServer {
             payloadIsJson = true
             messageBuffer = Buffer.from(JSON.stringify(messageData))
         }
-        const parts: UdpMessagePart[] = this._createUdpMessageParts(messageType, address, messageBuffer, {payloadIsJson, requestId: opts.requestId})
+        const parts: UdpMessagePart[] = this._createUdpMessageParts(messageType, address, messageBuffer, metaData, {payloadIsJson})
         const packets: Buffer[] = []
         for (let part of parts) {
             const b = Buffer.concat([
@@ -151,15 +250,24 @@ export default class PublicUdpSocketServer {
             ])
             packets.push(b)
         }
-        await this.#udpPacketSender.sendPackets(address, packets, {timeoutMsec: opts.timeoutMsec})
+        try {
+            await this.#udpPacketSender.sendPackets(address, fallbackAddress, packets, {timeoutMsec: opts.timeoutMsec})
+        }
+        catch(err) {
+            if (this.#stopped) {
+                // do not throw the error if stopped
+                return
+            }
+            throw(err)
+        }
     }
-    _handleMessagePart(fromAddress: Address, header: UdpHeader, dataBuffer: Buffer) {
+    _handleMessagePart(remoteAddress: Address | null, header: UdpHeader, dataBuffer: Buffer) {
         if (!verifySignature(header.body, header.signature, nodeIdToPublicKey(header.body.fromNodeId))) {
             throw Error('Error verifying signature in udp message')
         }
-        this.#messagePartManager.addMessagePart(fromAddress, header.body.udpMessageId, header.body.partIndex, header.body.numParts, header, dataBuffer)
+        this.#messagePartManager.addMessagePart(remoteAddress, header.body.udpMessageId, header.body.partIndex, header.body.numParts, header, dataBuffer)
     }
-    _handleCompleteMessage(remoteAddress: Address, header: UdpHeader, dataBuffer: Buffer) {
+    _handleCompleteMessage(header: UdpHeader, dataBuffer: Buffer) {
         const mt = header.body.udpMessageType
         if (mt === "NodeToNodeRequest") {
             const req = tryParseJsonObject(dataBuffer.toString())
@@ -170,7 +278,9 @@ export default class PublicUdpSocketServer {
             /////////////////////////////////////////////////////////////////////////
             action('/Udp/handleNodeToNodeRequest', {fromNodeId: req.body.fromNodeId, requestId: req.body.requestId, requestType: req.body.requestData.requestType}, async () => {
                 const response: NodeToNodeResponse = await this.#node.handleNodeToNodeRequest(req)
-                await this._sendMessage(remoteAddress, "NodeToNodeResponse", response as any as JSONObject, {timeoutMsec: durationMsec(5000), requestId: req.body.requestId})
+                const fallbackAddress = nodeIdFallbackAddress(req.body.fromNodeId)
+                const remoteAddress = this.#messagePartManager.getRemoteAddressForNodeId(req.body.fromNodeId)
+                await this._sendMessage(remoteAddress, fallbackAddress, "NodeToNodeResponse", response as any as JSONObject, udpMessageMetaData({}), {timeoutMsec: durationMsec(5000)})
             }, async () => {
             })
             /////////////////////////////////////////////////////////////////////////
@@ -197,8 +307,47 @@ export default class PublicUdpSocketServer {
         else if (mt === "KeepAlive") {
             // todo
         }
+        else if (mt === 'streamDataChunk') {
+            const metaData = header.body.metaData
+            if (!isStreamDataChunkMetaData(metaData)) {
+                // do we want to throw error here? ban node?
+                throw Error('Invalid meta data for stream data chunk message')
+            }
+            const ds = this.#incomingDataStreams.get(metaData.streamId)
+            if (!ds) {
+                // do we want to throw error here?
+                throw Error('No incoming data stream found for data chunk message')
+            }
+            ds.producer().unorderedData(metaData.dataChunkIndex, dataBuffer)
+        }
+        else if (mt === 'streamDataError') {
+            const metaData = header.body.metaData
+            if (!isStreamDataErrorMetaData(metaData)) {
+                // do we want to throw error here? ban node?
+                throw Error('Invalid meta data for stream data error message')
+            }
+            const ds = this.#incomingDataStreams.get(metaData.streamId)
+            if (!ds) {
+                // do we want to throw error here?
+                throw Error('No incoming data stream found for data chunk error')
+            }
+            ds.producer().error(Error(metaData.errorMessage.toString()))
+        }
+        else if (mt === 'streamDataEnd') {
+            const metaData = header.body.metaData
+            if (!isStreamDataEndMetaData(metaData)) {
+                // do we want to throw error here? ban node?
+                throw Error('Invalid meta data for stream data end message')
+            }
+            const ds = this.#incomingDataStreams.get(metaData.streamId)
+            if (!ds) {
+                // do we want to throw error here?
+                throw Error('No incoming data stream found for data end error')
+            }
+            ds.producer().unorderedEnd(metaData.numDataChunks)
+        }
     }
-    _createUdpMessageParts(udpMessageType: UdpMessageType, toAddress: Address, messageData: Buffer, opts: {payloadIsJson: boolean, requestId: RequestId | null}): UdpMessagePart[] {
+    _createUdpMessageParts(udpMessageType: UdpMessageType, toAddress: Address | null, messageData: Buffer, metaData: UdpMessageMetaData, opts: {payloadIsJson: boolean}): UdpMessagePart[] {
         const parts: UdpMessagePart[] = []
         const partSize = UDP_PACKET_SIZE - UDP_MESSAGE_HEADER_SIZE
         const buffers: Buffer[] = []
@@ -206,6 +355,10 @@ export default class PublicUdpSocketServer {
         while (i < messageData.length) {
             buffers.push(messageData.slice(i, i + partSize))
             i += partSize
+        }
+        if (buffers.length === 0) {
+            // important to have at least one so that the header gets sent (some messages are header-only)
+            buffers.push(Buffer.alloc(0))
         }
         const udpMessageId = createUdpMessageId()
         buffers.forEach((b: Buffer, ii: number) => {
@@ -215,10 +368,10 @@ export default class PublicUdpSocketServer {
                 fromNodeId: this.#node.nodeId(),
                 toAddress,
                 udpMessageType: udpMessageType,
+                metaData,
                 partIndex: partIndex(ii),
                 numParts: numParts(buffers.length),
-                payloadIsJson: opts.payloadIsJson,
-                requestId: opts.requestId
+                payloadIsJson: opts.payloadIsJson
             }
             const header: UdpHeader = {
                 body,
@@ -233,3 +386,17 @@ export default class PublicUdpSocketServer {
     }
 }
 
+class FallbackPacketSender {
+    constructor(private node: KacheryP2PNode) {
+    }
+    async sendPacket(fallbackAddress: FallbackAddress, packet: Buffer): Promise<void> {
+        if (!isNodeIdFallbackAddress(fallbackAddress)) {
+            throw Error('Invalid fallback address')
+        }
+        const requestData: FallbackUdpPacketRequestData = {
+            requestType: 'fallbackUdpPacket',
+            dataBase64: packet.toString('base64')
+        }
+        this.node.remoteNodeManager().sendRequestToNode(fallbackAddress.nodeId, requestData, {timeoutMsec: durationMsec(3000), method: 'udp-fallback'})
+    }
+}

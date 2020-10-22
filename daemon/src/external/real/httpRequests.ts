@@ -12,19 +12,19 @@ export const httpGetDownload = async (address: Address, path: UrlPath): Promise<
     const res = await axios.get('http://' + address.hostName + ':' + address.port + path, {responseType: 'stream'})
     const size: ByteCount = res.headers['Content-Length']
     const ret = new DataStreamy()
-    ret._start(size)
-    ret._onCancel(() => {
+    ret.producer().start(size)
+    ret.producer().onCancelled(() => {
         // is this the right way to close it?
         res.data.close()
     })
     res.data.on('data', (data: Buffer) => {
-        ret._data(data)
+        ret.producer().data(data)
     })
     res.data.on('error', (err: Error) => {
-        ret._error(err)
+        ret.producer().error(err)
     })
     res.data.on('end', () => {
-        ret._end()
+        ret.producer().end()
     })
 
     return ret

@@ -286,16 +286,16 @@ export class ProxyConnectionToClient {
 
         const _handleResponseMessageFromServer = (msg: ProxyStreamFileDataResponseMessage) => {
             if (isProxyStreamFileDataResponseStartedMessage(msg)) {
-                ret._start(msg.size)
+                ret.producer().start(msg.size)
             }
             else if (isProxyStreamFileDataResponseDataMessage(msg)) {
-                ret._data(msg.data)
+                ret.producer().data(msg.data)
             }
             else if (isProxyStreamFileDataResponseFinishedMessage(msg)) {
-                ret._end()
+                ret.producer().end()
             }
             else if (isProxyStreamFileDataResponseErrorMessage(msg)) {
-                ret._error(Error(msg.errorMessage.toString()))
+                ret.producer().error(Error(msg.errorMessage.toString()))
             }
             else {
                 throw Error('Unexpected')
@@ -311,7 +311,7 @@ export class ProxyConnectionToClient {
             _handleResponseMessageFromServer(msg)
         })
         this._sendMessageToClient(request)
-        ret._onCancel(() => {
+        ret.producer().onCancelled(() => {
             const cancelRequest: ProxyStreamFileDataCancelRequest = {
                 messageType: 'proxyStreamFileDataCancelRequest',
                 proxyStreamFileDataRequestId
@@ -385,7 +385,7 @@ export class ProxyConnectionToClient {
                         reject(Error('Timeout while waiting for response.'))
                         return
                     }
-                    await sleepMsec(Math.min(800, durationMsecToNumber(timeoutMsec)))
+                    await sleepMsec(durationMsec(Math.min(durationMsecToNumber(durationMsec(800)), durationMsecToNumber(timeoutMsec))))
                 }
             })()
         });

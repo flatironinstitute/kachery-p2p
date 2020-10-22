@@ -1,7 +1,7 @@
 import { createKeyPair } from "../../common/crypto_util"
 import DataStreamy from "../../common/DataStreamy"
-import { randomAlphaString } from "../../common/util"
-import { Address, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, toPort, UrlPath } from "../../interfaces/core"
+import { randomAlphaString, sleepMsec } from "../../common/util"
+import { Address, durationMsec, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, toPort, UrlPath } from "../../interfaces/core"
 import KacheryP2PNode from "../../KacheryP2PNode"
 import DaemonApiServer, { ApiFindFileRequest } from "../../services/DaemonApiServer"
 import PublicApiServer from "../../services/PublicApiServer"
@@ -9,6 +9,11 @@ import startDaemon, { StartDaemonOpts } from "../../startDaemon"
 import mockExternalInterface from "./mockExternalInterface"
 import MockKacheryStorageManager from './MockKacheryStorageManager'
 import MockLocalFeedManager from "./MockLocalFeedManager"
+
+export interface MockNodeDefects {
+    fileReadDefect?: boolean
+    badDownloadFileDataRequest?: boolean
+}
 
 export default class MockNodeDaemon {
     #daemonGroup: MockNodeDaemonGroup
@@ -19,6 +24,7 @@ export default class MockNodeDaemon {
         stop: Function,
         node: KacheryP2PNode
     } | null = null
+    #defects: MockNodeDefects = {}
     constructor(daemonGroup: MockNodeDaemonGroup, private opts: StartDaemonOpts) {
         this.#daemonGroup = daemonGroup
     }
@@ -29,8 +35,18 @@ export default class MockNodeDaemon {
         }
     }
 
+    defects() {
+        return this.#defects
+    }
+    setDefects(defects: MockNodeDefects) {
+        this.#defects = defects
+    }
+    clearDefects() {
+        this.setDefects({})
+    }
+
     async initialize() {
-        const externalInterface = mockExternalInterface(this.#daemonGroup)
+        const externalInterface = mockExternalInterface(this.#daemonGroup, () => (this.#defects))
         this.#d = await startDaemon({
             keyPair: this.#keyPair,
             verbose: 0,
@@ -39,6 +55,7 @@ export default class MockNodeDaemon {
             httpListenPort: null,
             label: 'mock-daemon-' + randomAlphaString(5),
             externalInterface,
+            getDefects: () => (this.#defects),
             opts: this.opts  
         })
     }
@@ -122,6 +139,7 @@ export class MockNodeDaemonGroup {
         const daemon = new MockNodeDaemon(this, opts)
         await daemon.initialize()
         this.#daemons.set(daemon.nodeId(), daemon)
+        await sleepMsec(durationMsec(1000))
         return daemon
     }
     getDaemon(nodeId: NodeId) {

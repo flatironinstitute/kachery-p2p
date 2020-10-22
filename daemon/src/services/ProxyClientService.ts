@@ -3,11 +3,13 @@ import DataStreamy from "../common/DataStreamy";
 import GarbageMap from '../common/GarbageMap';
 import { sleepMsec } from "../common/util";
 import ExternalInterface from "../external/ExternalInterface";
-import { Address, DurationMsec, durationMsec, durationMsecToNumber, elapsedSince, KeyPair, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core";
+import { MockNodeDefects } from "../external/mock/MockNodeDaemon";
+import { Address, DurationMsec, durationMsec, elapsedSince, KeyPair, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core";
 import { NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
 import { ProxyConnectionToServer } from "../proxyConnections/ProxyConnectionToServer";
 
 interface RemoteNodeManagerInterface {
+    onBootstrapNodeAdded: (callback: (bootstrapNodeId: NodeId) => void) => void
     getAllRemoteNodes: () => RemoteNodeInterface[]
     getRemoteNode: (remoteNodeId: NodeId) => RemoteNodeInterface | null
 }
@@ -26,6 +28,7 @@ interface KacheryP2PNodeInterface {
     getProxyConnectionToServer: (remoteNodeId: NodeId) => ProxyConnectionToServer | null
     setProxyConnectionToServer: (nodeId: NodeId, c: ProxyConnectionToServer) => void
     externalInterface: () => ExternalInterface
+    getDefects: () => MockNodeDefects
 }
 
 export default class ProxyClientService {
@@ -37,6 +40,18 @@ export default class ProxyClientService {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
         this.#proxyClientManager = new ProxyClientManager(this.#node)
+
+        this.#remoteNodeManager.onBootstrapNodeAdded((bootstrapNodeId) => {
+            const rn = this.#remoteNodeManager.getRemoteNode(bootstrapNodeId)
+            if ((rn) && (rn.getRemoteNodeWebSocketAddress())) {
+                /////////////////////////////////////////////////////////////////////////
+                action('tryOutgoingProxyConnectionForNewBootstrapNode', {context: 'ProxyClientService', bootstrapNodeId}, async () => {
+                    await this.#proxyClientManager.tryConnection(bootstrapNodeId, {timeoutMsec: durationMsec(3000)});
+                }, null)
+                /////////////////////////////////////////////////////////////////////////
+            }
+        })
+
         this._start()
     }
     stop() {
@@ -63,7 +78,7 @@ export default class ProxyClientService {
                     }
                 }
             }
-            await sleepMsec(durationMsecToNumber(this.opts.intervalMsec), () => {return !this.#halted})
+            await sleepMsec(this.opts.intervalMsec, () => {return !this.#halted})
         }
     }
 }

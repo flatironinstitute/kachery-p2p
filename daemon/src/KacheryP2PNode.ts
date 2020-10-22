@@ -4,16 +4,19 @@ import GarbageMap from './common/GarbageMap'
 import DownloaderCreator from './downloadOptimizer/DownloaderCreator'
 import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import ExternalInterface, { KacheryStorageManagerInterface } from './external/ExternalInterface'
+import { MockNodeDefects } from './external/mock/MockNodeDaemon'
 import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
 import { Address, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isAddress, KeyPair, MessageCount, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage } from './interfaces/core'
-import { CheckForFileRequestData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, GetLiveFeedSignedMessagesRequestData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
+import { CheckForFileRequestData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, GetLiveFeedSignedMessagesRequestData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import { handleCheckForFileRequest } from './nodeToNodeRequestHandlers/handleCheckForFileRequest'
 import { handleCheckForLiveFeedRequest } from './nodeToNodeRequestHandlers/handleCheckForLiveFeedRequest'
 import { handleDownloadFileDataRequest } from './nodeToNodeRequestHandlers/handleDownloadFileDataRequest'
+import { handleFallbackUdpPacketRequest } from './nodeToNodeRequestHandlers/handleFallbackUdpPacketRequest'
 import { handleGetChannelInfoRequest } from './nodeToNodeRequestHandlers/handleGetChannelInfoRequest'
 import { handleGetLiveFeedSignedMessagesRequest } from './nodeToNodeRequestHandlers/handleGetLiveFeedSignedMessagesRequest'
 import { handleSetLiveFeedSubscriptionsRequest } from './nodeToNodeRequestHandlers/handleSetLiveFeedSubscriptionsRequest'
+import { handleStartStreamViaUdpRequest } from './nodeToNodeRequestHandlers/handleStartStreamViaUdpRequest'
 import { handleSubmitMessageToLiveFeedRequest } from './nodeToNodeRequestHandlers/handleSubmitMessageToLiveFeedRequest'
 import { protocolVersion } from './protocolVersion'
 import { ProxyConnectionToClient } from './proxyConnections/ProxyConnectionToClient'
@@ -24,7 +27,8 @@ import PublicUdpSocketServer from './services/PublicUdpSocketServer'
 export interface KacheryP2PNodeOpts {
     noBootstrap: boolean,
     isBootstrapNode: boolean,
-    multicastUdpAddress: string | null
+    multicastUdpAddress: string | null,
+    getDefects: () => MockNodeDefects
 }
 
 class KacheryP2PNode {
@@ -41,6 +45,7 @@ class KacheryP2PNode {
     #publicUdpSocketAddress: Address | null = null
     #publicUdpSocketServer: PublicUdpSocketServer | null = null
     #downloadOptimizer: DownloadOptimizer
+    #onProxyConnectionToServerCallbacks: (() => void)[] = []
     constructor(private p : {
         keyPair: KeyPair,
         verbose: number,
@@ -93,7 +98,7 @@ class KacheryP2PNode {
         }
         this.#bootstrapAddresses = bootstrapAddresses || []
 
-        const downloaderCreator = new DownloaderCreator(this)
+        const downloaderCreator = new DownloaderCreator(this, this.p.opts.getDefects)
         this.#downloadOptimizer = new DownloadOptimizer(downloaderCreator)
     }
     nodeId() {
@@ -128,6 +133,9 @@ class KacheryP2PNode {
     }
     downloadOptimizer(): DownloadOptimizer {
         return this.#downloadOptimizer
+    }
+    getDefects() {
+        return this.p.opts.getDefects()
     }
     findFile(args: {fileKey: FileKey, timeoutMsec: DurationMsec, fromChannel: ChannelName | null}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
@@ -219,6 +227,10 @@ class KacheryP2PNode {
                 this.#proxyConnectionsToServers.delete(nodeId)
             }
         })
+        this.#onProxyConnectionToServerCallbacks.forEach(cb => {cb()})
+    }
+    onProxyConnectionToServer(callback: (() => void)) {
+        this.#onProxyConnectionToServerCallbacks.push(callback)
     }
     getProxyConnectionToServer(nodeId: NodeId) {
         return this.#proxyConnectionsToServers.get(nodeId) || null
@@ -434,6 +446,12 @@ class KacheryP2PNode {
         else if (isSubmitMessageToLiveFeedRequestData(requestData)) {
             responseData = await handleSubmitMessageToLiveFeedRequest(this, fromNodeId, requestData)
         }
+        else if (isStartStreamViaUdpRequestData(requestData)) {
+            responseData = await handleStartStreamViaUdpRequest(this, fromNodeId, requestData)
+        }
+        else if (isFallbackUdpPacketRequestData(requestData)) {
+            responseData = await handleFallbackUdpPacketRequest(this, fromNodeId, requestData)
+        }
         else {
             console.warn(requestData)
             throw Error('Unexpected error: unrecognized request data.')
@@ -475,19 +493,25 @@ class KacheryP2PNode {
             const dataStream = await this.#kacheryStorageManager.getFileReadStream(s.fileKey)
             try {
                 if (ret.isComplete()) return
-                dataStream.onStarted(size => {ret._start(size)})
-                ret._onCancel(() => {
+                dataStream.onStarted(size => {ret.producer().start(size)})
+                ret.producer().onCancelled(() => {
                     dataStream.cancel()
                 })
-                dataStream.onData(b => {ret._data(b)})
-                dataStream.onFinished(() => {ret._end()})
-                dataStream.onError(err => {ret._error(err)})
+                dataStream.onData(b => {ret.producer().data(b)})
+                dataStream.onFinished(() => {ret.producer().end()})
+                dataStream.onError(err => {ret.producer().error(err)})
             }
             catch(err) {
-                ret._error(err)
+                ret.producer().error(err)
             }
         })()
         return ret
+    }
+    receiveFallbackUdpPacket(fromNodeId: NodeId, packet: Buffer): void {
+        if (!this.#publicUdpSocketServer) {
+            throw Error('Cannot receive fallback udp packet. No public udp socket server set.')
+        }
+        this.#publicUdpSocketServer.receiveFallbackUdpPacket(fromNodeId, packet)
     }
 }
 
@@ -496,8 +520,8 @@ class DownloadStreamManager {
     set(streamId: StreamId, info: DownloadFileDataRequestData) {
         this.#downloadStreamInfos.set(streamId, info)
     }
-    get(streamId: StreamId) {
-        return this.#downloadStreamInfos.get(streamId)
+    get(streamId: StreamId): DownloadFileDataRequestData | null {
+        return this.#downloadStreamInfos.get(streamId) || null
     }
 }
 

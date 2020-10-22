@@ -1,11 +1,12 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
 import DataStreamy from "./common/DataStreamy";
 import { Address, ChannelName, ChannelNodeInfo, createRequestId, durationMsec, DurationMsec, NodeId, nodeIdToPublicKey, nowTimestamp, urlPath } from "./interfaces/core";
-import { isNodeToNodeResponse, isStartStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
+import { DownloadFileDataRequestData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import { protocolVersion } from "./protocolVersion";
+import { nodeIdFallbackAddress } from './services/PublicUdpSocketServer';
 
-export type SendRequestMethod = 'default' | 'http' | 'udp' | 'prefer-udp' | 'prefer-http'
+export type SendRequestMethod = 'default' | 'http' | 'udp' | 'prefer-udp' | 'prefer-http' | 'udp-fallback'
 
 class RemoteNode {
     #node: KacheryP2PNode
@@ -136,7 +137,15 @@ class RemoteNode {
         }
     }
     _determineSendRequestMethod(method: SendRequestMethod): SendRequestMethod | null {
-        if ((method === 'default') || (method === 'prefer-http')) {
+        if (method === 'udp-fallback') {
+            if (this._getRemoteNodeHttpAddress()) {
+                return 'http'
+            }
+            else {
+                return null
+            }
+        }
+        else if ((method === 'default') || (method === 'prefer-http')) {
             if (this._getRemoteNodeHttpAddress()) {
                 return 'http'
             }
@@ -217,22 +226,52 @@ class RemoteNode {
             return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${streamId}`))
         }
         else if (method === 'udp') {
-            return await this._streamDataViaUdp(streamId)
+            return await this._streamDataViaUdpFromRemoteNode(streamId)
         }
         else {
             throw Error ('Unexpected')
         }
     }
-    async _streamDataViaUdp(streamId: StreamId): Promise<DataStreamy> {
+    async _streamDataViaUdpFromRemoteNode(streamId: StreamId): Promise<DataStreamy> {
+        const udpS = this.#node.publicUdpSocketServer()
+        if (!udpS) {
+            throw Error('Cannot stream from remote node without udp socket server')
+        }
         const requestData: StartStreamViaUdpRequestData = {
             requestType: 'startStreamViaUdp',
             streamId
         }
-        const response = this.sendRequest(requestData, {timeoutMsec: durationMsec(5000), method: 'default'})
-        if (!isStartStreamViaUdpResponseData(response)) {
-            throw Error('unexpected')
+        const incomingDataStream = udpS.getIncomingDataStream(streamId)
+        try {
+            const responseData = await this.sendRequest(requestData, {timeoutMsec: durationMsec(5000), method: 'default'})
+            if (!isStartStreamViaUdpResponseData(responseData)) {
+                console.warn(responseData)
+                throw Error('unexpected')
+            }
         }
-        throw Error('Not yet implemented')
+        catch(err) {
+            incomingDataStream.producer().error(err)
+        }
+        return incomingDataStream
+    }
+    async startStreamViaUdpToRemoteNode(streamId: StreamId): Promise<void> {
+        const r: DownloadFileDataRequestData | null = this.#node.downloadStreamManager().get(streamId)
+        if (r === null) {
+            throw Error('Stream not found')
+        }
+
+        const udpS = this.#node.publicUdpSocketServer()
+        const udpA = this.getUdpAddressForRemoteNode()
+        if (!udpS) {
+            throw Error('Cannot use stream via udp when there is no udp socket server')
+        }
+        if (!udpA) {
+            throw Error('Cannot stream via udp when there is no udp address')
+        }
+
+        const ds = await this.#node.kacheryStorageManager().getFileReadStream(r.fileKey)
+        const fallbackAddress = nodeIdFallbackAddress(this.#remoteNodeId)
+        udpS.setOutgoingDataStream(udpA, fallbackAddress, streamId, ds)
     }
     async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
         const request = this._formRequestFromRequestData(requestData);
@@ -240,7 +279,7 @@ class RemoteNode {
 
         let method2 = this._determineSendRequestMethod(opts.method)
         if (method2 === null) {
-            throw Error(`Method not available for sending message: ${opts.method}`)
+            throw Error(`Method not available for sending request ${requestData.requestType}: ${opts.method} (from ${this.#node.nodeId().slice(0, 6)} to ${this.#remoteNodeId.slice(0, 6)})`)
         }
 
         let response: NodeToNodeResponse
@@ -271,7 +310,9 @@ class RemoteNode {
             if (this.#isBootstrap) {
                 // only trust the reported public udp address if it is a bootstrap node
                 const publicUdpAddress = udpHeader.body.toAddress
-                this.#node.setPublicUdpSocketAddress(publicUdpAddress)
+                if (publicUdpAddress) {
+                    this.#node.setPublicUdpSocketAddress(publicUdpAddress)
+                }
             }
         }
         else {

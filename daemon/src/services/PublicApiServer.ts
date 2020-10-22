@@ -4,7 +4,7 @@ import { action } from '../common/action';
 import DataStreamy from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
-import { Address, ByteCount, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, _validateObject } from '../interfaces/core';
+import { Address, ByteCount, DaemonVersion, durationMsec, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, _validateObject } from '../interfaces/core';
 import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -141,7 +141,8 @@ export default class PublicApiServer {
                 console.warn(JSON.stringify(data, null, 4))
                 throw Error('Invalid data for node to node request')
             }
-            return await this._nodeToNodeRequest(data)
+            const ret = await this._nodeToNodeRequest(data)
+            return ret
         }
         else {
             throw Error(`mock unexpected path: ${path}`)
@@ -233,7 +234,7 @@ export default class PublicApiServer {
         catch(err) {
             console.warn(`Problem sending error`, {error: err.message});
         }
-        await sleepMsec(100);
+        await sleepMsec(durationMsec(100));
         try {
             req.connection.destroy();
         }

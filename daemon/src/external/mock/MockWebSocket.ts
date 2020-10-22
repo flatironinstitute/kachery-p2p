@@ -1,4 +1,4 @@
-import { randomAlphaString, sleepMsec } from "../../common/util"
+import { randomAlphaString, sleepMsecNum } from "../../common/util"
 import { DurationMsec, durationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, Port } from "../../interfaces/core"
 import { WebSocketInterface, WebSocketServerInterface } from "../ExternalInterface"
 
@@ -131,7 +131,7 @@ export default class MockWebSocket {
                         return
                     }
                     else {
-                        await sleepMsec(1)
+                        await sleepMsecNum(1)
                     }
                 }
             }

@@ -49,7 +49,7 @@ export const loadFile = (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode
             if (!sha1MatchesFileKey({sha1: manifest.sha1, fileKey})) {
                 throw new Error(`Manifest sha1 does not match file key: ${manifest.sha1}`)
             }
-            ret._start(manifest.size)
+            ret.producer().start(manifest.size)
             let numComplete = 0
             const chunkDataStreams: DataStreamy[] = []
             manifest.chunks.forEach((chunk: FileManifestChunk) => {
@@ -65,7 +65,7 @@ export const loadFile = (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode
                 }
                 const ds = loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel})
                 ds.onError(err => {
-                    ret._error(err)
+                    ret.producer().error(err)
                 })
                 ds.onProgress((progress: DataStreamyProgress) => {
                     _updateProgressForManifestLoad()
@@ -74,9 +74,9 @@ export const loadFile = (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode
                     numComplete ++
                     if (numComplete === manifest.chunks.length) {
                         _concatenateChunks().then(() => {
-                            ret._end()
+                            ret.producer().end()
                         }).catch((err: Error) => {
-                            ret._error(err)
+                            ret.producer().error(err)
                         })
                     }
                 })
@@ -87,16 +87,16 @@ export const loadFile = (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode
                 chunkDataStreams.forEach(ds => {
                     bytesLoaded += byteCountToNumber(ds.bytesLoaded())
                 })
-                ret._reportBytesLoaded(byteCount(bytesLoaded))
+                ret.producer().reportBytesLoaded(byteCount(bytesLoaded))
             }
             const _concatenateChunks = async () => {
                 const chunkSha1s: Sha1Hash[] = manifest.chunks.map(c => c.sha1)
                 await node.kacheryStorageManager().concatenateChunks(manifest.sha1, chunkSha1s)
-                ret._end()
+                ret.producer().end()
             }
         })().catch((err: Error) => {
             console.warn(err)
-            ret._error(err)
+            ret.producer().error(err)
         })
     }
     else {
@@ -105,14 +105,14 @@ export const loadFile = (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode
         f.incrementNumPointers()
         f.onError(err => {
             f.decrementNumPointers()
-            ret._error(err)
+            ret.producer().error(err)
         })
         f.onProgress((progress: DataStreamyProgress) => {
-            ret._reportBytesLoaded(progress.bytesLoaded)
+            ret.producer().reportBytesLoaded(progress.bytesLoaded)
         })
         f.onFinished(() => {
             f.decrementNumPointers()
-            ret._end()
+            ret.producer().end()
         })
         if (opts.fromNode) {
             node.downloadOptimizer().setProviderNodeForFile({fileKey, nodeId: opts.fromNode})
@@ -126,7 +126,7 @@ export const loadFile = (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode
             })
             ff.onFinished(() => {
                 if (!atLeastOneProviderFound) {
-                    ret._error(Error('File not found'))
+                    ret.producer().error(Error('File not found'))
                 }
             })
         }

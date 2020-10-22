@@ -99,8 +99,12 @@ const convertBinaryToBufferInObject = (x: any): any => {
 }
 
 
-export const sleepMsec = async (msec: DurationMsec | number, continueFunction: (() => boolean) | undefined = undefined): Promise<void> => {
-    const m = msec as any as number
+export const sleepMsec = async (msec: DurationMsec, continueFunction: (() => boolean) | undefined = undefined): Promise<void> => {
+    return await sleepMsecNum(msec as any as number)
+}
+
+export const sleepMsecNum = async (msec: number, continueFunction: (() => boolean) | undefined = undefined): Promise<void> => {
+    const m = msec
     if (continueFunction) {
         const timer = nowTimestamp()
         while (m - elapsedSince(timer) > 1000) {

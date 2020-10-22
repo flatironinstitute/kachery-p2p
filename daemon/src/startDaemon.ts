@@ -1,4 +1,5 @@
 import ExternalInterface from './external/ExternalInterface';
+import { MockNodeDefects } from './external/mock/MockNodeDaemon';
 import { Address, ChannelName, durationMsec, HostName, KeyPair, Port } from './interfaces/core';
 import KacheryP2PNode from './KacheryP2PNode';
 import AnnounceService from './services/AnnounceService';
@@ -18,6 +19,7 @@ export interface StartDaemonOpts {
     multicastUdpAddress: string | null,
     udpSocketPort: Port | null,
     webSocketListenPort: Port | null,
+    firewalled: boolean,
     services: {
         announce?: boolean,
         discover?: boolean,
@@ -39,6 +41,7 @@ const startDaemon = async (args: {
     httpListenPort: Port | null,
     label: string,
     externalInterface: ExternalInterface,
+    getDefects: () => MockNodeDefects,
     opts: StartDaemonOpts
 }) => {
     const {
@@ -65,7 +68,8 @@ const startDaemon = async (args: {
         opts: {
             noBootstrap: (opts.bootstrapAddresses === null),
             isBootstrapNode: opts.isBootstrap,
-            multicastUdpAddress: opts.services.multicast ? opts.multicastUdpAddress : null
+            multicastUdpAddress: opts.services.multicast ? opts.multicastUdpAddress : null,
+            getDefects: args.getDefects
         }
     })
 
@@ -101,31 +105,29 @@ const startDaemon = async (args: {
     // Start the udp socket server
     let publicUdpSocketServer: PublicUdpSocketServer | null = null
     if (opts.services.udpSocket && opts.udpSocketPort) {
-        publicUdpSocketServer = new PublicUdpSocketServer(kNode);
+        publicUdpSocketServer = new PublicUdpSocketServer(kNode, opts.firewalled);
         await publicUdpSocketServer.startListening(opts.udpSocketPort);
         kNode.setPublicUdpSocketServer(publicUdpSocketServer)
         console.info(`Udp socket server listening on port ${opts.udpSocketPort}`)
     }
 
-    const speedupFactor = externalInterface.isMock ? 1000 : 1
-
     // start the other services
     const announceService = opts.services.announce ? new AnnounceService(kNode, {
-        announceBootstrapIntervalMsec: durationMsec(21000 / speedupFactor),
-        announceToRandomNodeIntervalMsec: durationMsec(2000 / speedupFactor)
+        announceBootstrapIntervalMsec: durationMsec(21000),
+        announceToRandomNodeIntervalMsec: durationMsec(2000)
     }) : null
     const discoverService = opts.services.discover ? new DiscoverService(kNode, {
-        discoverBootstrapIntervalMsec: durationMsec(30000 / speedupFactor),
-        discoverRandomNodeIntervalMsec: durationMsec(2200 / speedupFactor)
+        discoverBootstrapIntervalMsec: durationMsec(30000),
+        discoverRandomNodeIntervalMsec: durationMsec(1500)
     }) : null
     const bootstrapService = opts.services.bootstrap ? new BootstrapService(kNode, {
-        probeIntervalMsec: durationMsec(15000 / speedupFactor)
+        probeIntervalMsec: durationMsec(15000)
     }) : null
     const proxyClientService = opts.services.proxyClient ? new ProxyClientService(kNode, {
-        intervalMsec: durationMsec(3000 / speedupFactor)
+        intervalMsec: durationMsec(3000)
     }) : null
     let multicastService = (opts.services.multicast && (opts.multicastUdpAddress !== null)) ? new MulticastService(kNode, {
-        intervalMsec: durationMsec(12000 / speedupFactor),
+        intervalMsec: durationMsec(12000),
         multicastAddress: opts.multicastUdpAddress
     }) : null
 

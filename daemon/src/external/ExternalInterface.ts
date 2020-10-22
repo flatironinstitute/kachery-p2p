@@ -19,7 +19,7 @@ export interface DgramRemoteInfo {
     size: number
 }
 
-export type DgramCreateSocketFunction = (args: {type: 'udp4', reuseAddr: boolean, nodeId: NodeId}) => DgramSocket
+export type DgramCreateSocketFunction = (args: {type: 'udp4', reuseAddr: boolean, nodeId: NodeId, firewalled: boolean}) => DgramSocket
 
 export interface WebSocketInterface {
     onOpen: (callback: () => void) => void

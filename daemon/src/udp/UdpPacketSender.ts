@@ -1,7 +1,7 @@
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { DgramSocket } from '../external/ExternalInterface';
-import { Address, byteCount, durationMsec, DurationMsec, durationMsecToNumber, isBoolean, isProtocolVersion, isString, portToNumber, ProtocolVersion, _validateObject } from '../interfaces/core';
+import { Address, byteCount, durationMsec, DurationMsec, durationMsecToNumber, isBoolean, isJSONObject, isProtocolVersion, isString, JSONObject, portToNumber, ProtocolVersion, _validateObject } from '../interfaces/core';
 import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { UdpTimeoutError } from './UdpCongestionManager';
 
@@ -19,6 +19,14 @@ export const createPacketId = () => {
     return randomAlphaString(10) as any as PacketId;
 }
 
+export interface FallbackAddress extends JSONObject {
+    __packetId__: never // phantom type
+}
+export const isFallbackAddress = (x: any): x is FallbackAddress => {
+    if (!isJSONObject(x)) return false
+    return true
+}
+
 export interface UdpPacketSenderHeader {
     protocolVersion: ProtocolVersion,
     packetId: PacketId,
@@ -34,26 +42,30 @@ export const isUdpPacketSenderHeader = (x: any): x is UdpPacketSenderHeader => {
     })
 }
 
+interface FallbackPacketSenderInterface {
+    sendPacket: (fallbackAddress: FallbackAddress, packet: Buffer) => Promise<void>
+}
+
 export default class UdpPacketSender {
     #socket: DgramSocket
     #congestionManagers = new GarbageMap<Address, UdpCongestionManager>(durationMsec(5 * 60 * 1000))
     #unconfirmedOutgoingPackets = new GarbageMap<PacketId, OutgoingPacket>(durationMsec(5 * 60 * 1000))
     #debugId = randomAlphaString(4)
-    constructor(socket: DgramSocket) {
+    constructor(socket: DgramSocket, private fallbackPacketSender: FallbackPacketSenderInterface) {
         this.#socket = socket
     }
     socket() {
         return this.#socket
     }
-    async sendPackets(address: Address, packets: Buffer[], opts: {timeoutMsec: DurationMsec}): Promise<void> {
+    async sendPackets(address: Address | null, fallbackAddress: FallbackAddress, packets: Buffer[], opts: {timeoutMsec: DurationMsec}): Promise<void> {
         const outgoingPackets = packets.map(p => {
-            const pkt = new OutgoingPacket(this, address, p, opts.timeoutMsec)
+            const pkt = new OutgoingPacket(this, address, fallbackAddress, p, opts.timeoutMsec)
             this.#unconfirmedOutgoingPackets.set(pkt.packetId(), pkt)
             return pkt
         })
         try {
             await Promise.all(
-                outgoingPackets.map(pkt => (pkt.send()))
+                outgoingPackets.map(pkt => (pkt.send())) // send the packets and await all the promises
             )
         }
         catch(err) {
@@ -77,21 +89,26 @@ export default class UdpPacketSender {
         this.#congestionManagers.set(address, c)
         return c
     }
+    async _fallbackSendPacket(fallbackAddress: FallbackAddress, buffer: Buffer): Promise<void> {
+        this.fallbackPacketSender.sendPacket(fallbackAddress, buffer)
+    }
 }
 
 class OutgoingPacket {
-    #manager: UdpPacketSender
+    #packetSender: UdpPacketSender
     #packetId: PacketId
-    #address: Address
+    #address: Address | null
+    #fallbackAddress: FallbackAddress
     #buffer: Buffer
     #onConfirmed: (() => void) | null
     #onCancelled: (() => void) | null
     #confirmed = false
     #cancelled = false
     #timeoutMsec: DurationMsec
-    constructor(manager: UdpPacketSender, address: Address, buffer: Buffer, timeoutMsec: DurationMsec) {
-        this.#manager = manager
+    constructor(packetSender: UdpPacketSender, address: Address | null, fallbackAddress: FallbackAddress, buffer: Buffer, timeoutMsec: DurationMsec) {
+        this.#packetSender = packetSender
         this.#address = address
+        this.#fallbackAddress = fallbackAddress
         this.#buffer = buffer
         this.#timeoutMsec = timeoutMsec
         this.#packetId = createPacketId()
@@ -103,13 +120,22 @@ class OutgoingPacket {
         this.#onConfirmed && this.#onConfirmed()
     }
     async send() {
-        const cm = this.#manager.congestionManagers(this.#address)
-        await cm.sendPacket(this.#packetId, byteCount(this.#buffer.length), async (timeoutMsec) => {
-            await this._trySend(timeoutMsec)
-        })
+        if (!this.#address) {
+            await this.#packetSender._fallbackSendPacket(this.#fallbackAddress, this.#buffer)
+            return
+        }
+        const cm = this.#packetSender.congestionManagers(this.#address)
+        try {
+            await cm.sendPacket(this.#packetId, byteCount(this.#buffer.length), async (timeoutMsec) => {
+                await this._trySend(timeoutMsec)
+            })
+        }
+        catch(err) {
+            await this.#packetSender._fallbackSendPacket(this.#fallbackAddress, this.#buffer)
+        }
     }
     async _trySend(timeoutMsec: DurationMsec) {
-        const socket = this.#manager.socket()
+        const socket = this.#packetSender.socket()
         const b = this.#buffer
         return new Promise((resolve, reject) => {
             if (this.#confirmed) {
@@ -140,6 +166,9 @@ class OutgoingPacket {
                 Buffer.from(JSON.stringify(h).padEnd(UDP_PACKET_HEADER_SIZE)),
                 b
             ])
+            if (!this.#address) {
+                throw Error('unexpected')
+            }
             socket.send(b2, 0, b2.length, portToNumber(this.#address.port), this.#address.hostName.toString(), (err, numBytesSent) => {
                 if (err) {
                     if (completed) return;
