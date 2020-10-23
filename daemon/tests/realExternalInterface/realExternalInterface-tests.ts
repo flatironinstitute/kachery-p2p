@@ -8,7 +8,7 @@ import { getSignature, hexToPublicKey, JSONStringifyDeterministic } from '../../
 import { randomAlphaString } from '../../src/common/util';
 import ExternalInterface from '../../src/external/ExternalInterface';
 import realExternalInterface from '../../src/external/real/realExternalInterface';
-import { Address, byteCount, durationMsec, feedIdToPublicKeyHex, FeedName, FileKey, hostName, NodeId, nowTimestamp, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, toPort, urlPath } from '../../src/interfaces/core';
+import { Address, byteCount, durationMsecNoScale, feedIdToPublicKeyHex, FeedName, FileKey, hostName, NodeId, nowTimestamp, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, toPort, urlPath } from '../../src/interfaces/core';
 
 const testContext = (testFunction: (externalInterface: ExternalInterface, resolve: () => void, reject: (err: Error) => void) => Promise<void>, done: (err?: Error) => void) => {
     const tempPath = `${os.tmpdir()}/kachery-p2p-test-${randomAlphaString(10)}.tmp`
@@ -50,7 +50,7 @@ mocha.describe('Real external interface', () => {
                 const server = await ri.startHttpServer(app, port)
                 const address: Address = {hostName: hostName('localhost'), port}
                 const req = {test: 3}
-                const resp = await ri.httpPostJson(address, urlPath('/test'), req, {timeoutMsec: durationMsec(1000)})
+                const resp = await ri.httpPostJson(address, urlPath('/test'), req, {timeoutMsec: durationMsecNoScale(500)})
                 expect(JSONStringifyDeterministic(resp)).equals(JSONStringifyDeterministic({echo: req}))
                 server.close()
                 done()
@@ -106,7 +106,7 @@ mocha.describe('Real external interface', () => {
                 })
 
                 const url = `ws://localhost:${port}`
-                const ws = ri.createWebSocket(url, {timeoutMsec: durationMsec(1000)})
+                const ws = ri.createWebSocket(url, {timeoutMsec: durationMsecNoScale(1000)})
 
                 ws.onOpen(() => {
                     ws.send(Buffer.from('abc'))

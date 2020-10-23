@@ -59,7 +59,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const daemon1 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()]})
 
                 // wait a bit
-                await sleepMsec(durationMsec(15000))
+                await sleepMsec(durationMsec(60000))
 
                 // we expect to have one bootstrap node
                 expect(daemon1.remoteNodeManager().getBootstrapRemoteNodes().length).equals(1)
@@ -154,7 +154,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const daemon2 = await g.createDaemon({...daemonOpts, udpSocketPort: randomMockPort()})
 
                 // wait a bit
-                await sleepMsec(durationMsec(15000))
+                await sleepMsec(durationMsec(60000))
 
                 // // we expect to have one remote node now
                 expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
@@ -204,7 +204,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const daemon2 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()]})
 
                 // wait a bit
-                await sleepMsec(durationMsec(15000))
+                await sleepMsec(durationMsec(60000))
 
                 // // we expect to have one remote node now
                 expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
@@ -254,7 +254,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const daemon2 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()], udpSocketPort: randomMockPort()})
 
                 // wait a bit
-                await sleepMsec(durationMsec(35000))
+                await sleepMsec(durationMsec(60000))
 
                 // // we expect to have one remote node now
                 expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)

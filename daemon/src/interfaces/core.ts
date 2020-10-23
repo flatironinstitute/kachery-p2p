@@ -847,6 +847,9 @@ export const durationMsec = (n: number) => {
     }
     return n as any as DurationMsec
 }
+export const durationMsecNoScale = (n: number) => {
+    return n as any as DurationMsec
+}
 export const exampleDurationMsec = durationMsec(3000)
 
 export interface ByteCount extends Number {
