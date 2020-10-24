@@ -1,6 +1,6 @@
 import ExternalInterface from './external/ExternalInterface';
 import { MockNodeDefects } from './external/mock/MockNodeDaemon';
-import { Address, ChannelName, durationMsec, HostName, KeyPair, Port } from './interfaces/core';
+import { Address, ChannelName, HostName, KeyPair, Port, scaledDurationMsec } from './interfaces/core';
 import KacheryP2PNode from './KacheryP2PNode';
 import AnnounceService from './services/AnnounceService';
 import BootstrapService from './services/BootstrapService';
@@ -13,7 +13,7 @@ import PublicUdpSocketServer from './services/PublicUdpSocketServer';
 import PublicWebSocketServer from './services/PublicWebSocketServer';
 
 export interface StartDaemonOpts {
-    bootstrapAddresses: Address[] | null,
+    bootstrapAddresses: Address[],
     isBootstrap: boolean,
     channelNames: ChannelName[],
     multicastUdpAddress: string | null,
@@ -66,7 +66,6 @@ const startDaemon = async (args: {
         channelNames: opts.channelNames,
         externalInterface,
         opts: {
-            noBootstrap: (opts.bootstrapAddresses === null),
             isBootstrapNode: opts.isBootstrap,
             multicastUdpAddress: opts.services.multicast ? opts.multicastUdpAddress : null,
             getDefects: args.getDefects
@@ -78,6 +77,9 @@ const startDaemon = async (args: {
     }
     if ((opts.services.udpSocket) && (opts.udpSocketPort === null)) {
         throw Error('Missing udp socket port')
+    }
+    if ((opts.services.webSocketServer) && (opts.webSocketListenPort === null)) {
+        throw Error('Missing web socket port')
     }
 
     // Start the daemon http server
@@ -113,21 +115,21 @@ const startDaemon = async (args: {
 
     // start the other services
     const announceService = opts.services.announce ? new AnnounceService(kNode, {
-        announceBootstrapIntervalMsec: durationMsec(21000),
-        announceToRandomNodeIntervalMsec: durationMsec(2000)
+        announceBootstrapIntervalMsec: scaledDurationMsec(21000),
+        announceToRandomNodeIntervalMsec: scaledDurationMsec(2000)
     }) : null
     const discoverService = opts.services.discover ? new DiscoverService(kNode, {
-        discoverBootstrapIntervalMsec: durationMsec(30000),
-        discoverRandomNodeIntervalMsec: durationMsec(1500)
+        discoverBootstrapIntervalMsec: scaledDurationMsec(30000),
+        discoverRandomNodeIntervalMsec: scaledDurationMsec(1500)
     }) : null
     const bootstrapService = opts.services.bootstrap ? new BootstrapService(kNode, {
-        probeIntervalMsec: durationMsec(15000)
+        probeIntervalMsec: scaledDurationMsec(15000)
     }) : null
     const proxyClientService = opts.services.proxyClient ? new ProxyClientService(kNode, {
-        intervalMsec: durationMsec(3000)
+        intervalMsec: scaledDurationMsec(3000)
     }) : null
     let multicastService = (opts.services.multicast && (opts.multicastUdpAddress !== null)) ? new MulticastService(kNode, {
-        intervalMsec: durationMsec(12000),
+        intervalMsec: scaledDurationMsec(12000),
         multicastAddress: opts.multicastUdpAddress
     }) : null
 

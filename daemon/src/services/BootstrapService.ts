@@ -1,6 +1,6 @@
 import { action } from "../common/action";
 import { sleepMsec, sleepMsecNum } from "../common/util";
-import { Address, DurationMsec, durationMsec, JSONObject, NodeId, urlPath, UrlPath } from "../interfaces/core";
+import { Address, DurationMsec, JSONObject, NodeId, scaledDurationMsec, urlPath, UrlPath } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import { isApiProbeResponse } from "../services/PublicApiServer";
 
@@ -32,7 +32,7 @@ export default class BootstrapService {
         this.#halted = true
     }
     async _probeBootstrapNode(address: Address) {
-        const response = await this.#node.externalInterface().httpPostJson(address, urlPath('/probe'), {}, {timeoutMsec: durationMsec(2000)});
+        const response = await this.#node.externalInterface().httpPostJson(address, urlPath('/probe'), {}, {timeoutMsec: scaledDurationMsec(2000)});
         if (!isApiProbeResponse(response)) {
             throw Error('Invalid probe response from bootstrap node.')
         }

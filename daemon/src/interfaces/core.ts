@@ -601,49 +601,6 @@ export const isFeedSubfeedId = (x: any): x is FeedSubfeedId => {
            (isSubfeedHash(parts[1]));
 }
 
-// FeedsConfigFeed
-export interface FeedsConfigFeed {
-    publicKey: PublicKeyHex,
-    privateKey: PrivateKeyHex | undefined
-}
-export const isFeedsConfigFeed = (x: any): x is FeedsConfigFeed => {
-    return _validateObject(x, {
-        publicKey: isPublicKeyHex,
-        privateKey: optional(isPrivateKeyHex)
-    });
-    // check pair matches if the private key is given?
-}
-
-// FeedsConfig and FeedsConfigRAM
-export interface FeedsConfig {
-    feeds: {[key: string]: FeedsConfigFeed},
-    feedIdsByName: {[key: string]: FeedId}
-    // QUERY: do the feeds and feedIdsByName need to match in any way?
-}
-export interface FeedsConfigRAM {
-    feeds: Map<FeedId, FeedsConfigFeed>,
-    feedIdsByName: Map<FeedName, FeedId>
-}
-export const toFeedsConfigRAM = (x: FeedsConfig): FeedsConfigRAM => {
-    return {
-        feeds: objectToMap<FeedId, FeedsConfigFeed>(x.feeds),
-        feedIdsByName: objectToMap<FeedName, FeedId>(x.feedIdsByName)
-    }
-}
-export const toFeedsConfig = (x: FeedsConfigRAM): FeedsConfig => {
-    return {
-        feeds: mapToObject<FeedId, FeedsConfigFeed>(x.feeds),
-        feedIdsByName: mapToObject<FeedName, FeedId>(x.feedIdsByName)
-    }
-}
-export const isFeedsConfig = (x: any): x is FeedsConfig => {
-    return _validateObject(x, {
-        feeds: isObjectOf(isFeedId, isFeedsConfigFeed),
-        feedIdsByName: isObjectOf(isFeedName, isFeedId)
-    })
-}
-
-
 
 // SubfeedMessage
 export interface SubfeedMessage extends JSONObject {
@@ -794,6 +751,7 @@ export const isLiveFeedSubscriptionName = (x: any): x is LiveFeedSubscriptionNam
 }
 
 // LiveFeedSubscription
+// not used right now
 export interface LiveFeedSubscription {
     subscriptionName: LiveFeedSubscriptionName,
     feedId: FeedId,
@@ -841,16 +799,28 @@ export const isDurationMsec = (x: any) : x is DurationMsec => {
 export const durationMsecToNumber = (x: DurationMsec): number => {
     return x as any as number;
 }
-export const durationMsec = (n: number) => {
+export const scaledDurationMsec = (n: number) => {
     if (process.env.KACHERY_P2P_SPEEDUP_FACTOR) {
         n /= Number(process.env.KACHERY_P2P_SPEEDUP_FACTOR)
     }
     return n as any as DurationMsec
 }
-export const durationMsecNoScale = (n: number) => {
+export const unscaledDurationMsec = (n: number) => {
     return n as any as DurationMsec
 }
-export const exampleDurationMsec = durationMsec(3000)
+export const addDurations = (a: DurationMsec, b: DurationMsec) => {
+    return ((a as any as number) + (b as any as number)) as any as DurationMsec
+}
+export const minDuration = (a: DurationMsec, b: DurationMsec) => {
+    return Math.min(a as any as number, b as any as number) as any as DurationMsec
+}
+export const scaleDurationBy = (a: DurationMsec, factor: number) => {
+    return (a as any as number) * factor as any as DurationMsec
+}
+export const durationGreaterThan = (a: DurationMsec, b: DurationMsec): boolean => {
+    return (a as any as number) > (b as any as number)
+}
+export const exampleDurationMsec = scaledDurationMsec(3000)
 
 export interface ByteCount extends Number {
     __byteCount__: never

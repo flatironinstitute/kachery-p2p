@@ -430,7 +430,7 @@ describe('Time', () => {
         })
         it('nowTimestamp() matches current dateTime', () => {
             const now = Number(new Date())
-            expect((ut.nowTimestamp() as any as number) - now).to.equal(0)
+            expect((ut.nowTimestamp() as any as number) - now).is.closeTo(0, 2)
         })
         it('elapsedSince() returns correct result', () => {
             const now = ut.nowTimestamp()
@@ -811,84 +811,6 @@ describe('Feeds', () => {
             let b = hash as any as ut.SubfeedHash
             let c = ut.feedSubfeedId(a, b)
             expect(c).to.equal(`${a}:${b}`)
-        })
-    })
-})
-
-describe('Feeds Configuration', () => {
-    const myFeedsConfigFeed: ut.FeedsConfigFeed = {
-        publicKey: new Array(65).join('a') as any as ut.PublicKeyHex,
-        privateKey: new Array(65).join('b') as any as ut.PrivateKeyHex
-    }
-    // FeedsConfig: { feeds: { [string]: FeedsConfigFeed }, feedIdsByName: { [string]: FeedId }}
-    // where FeedId is 64-char hex and FeedName is any nonempty string
-    const feedId1: ut.FeedId = new Array(65).join('1') as any as ut.FeedId
-    const feedId2: ut.FeedId = new Array(65).join('2') as any as ut.FeedId
-    const validFeedsConfig: ut.FeedsConfig = {
-        feeds: {
-            [feedId1.toString()]: myFeedsConfigFeed,
-            [feedId2.toString()]: { ...myFeedsConfigFeed, privateKey: undefined }
-        },
-        feedIdsByName: {
-            one: new Array(65).join('7') as any as ut.FeedId,
-            b: new Array(65).join('b') as any as ut.FeedId
-        }
-    }
-    describe('FeedsConfigFeed', () => {
-        it('isFeedsConfigFeed() returns true for pair of valid hexes', () => {
-            expect(ut.isFeedsConfigFeed(myFeedsConfigFeed)).to.be.true
-        })
-        it('isFeedsConfigFeed() returns true for public key hex only', () => {
-            expect(ut.isFeedsConfigFeed({ publicKey: new Array(65).join('2') })).to.be.true
-        })
-        it('isFeedsConfigFeed() returns false for invalid public key hex', () => {
-            expect(ut.isFeedsConfigFeed({ ...myFeedsConfigFeed, publicKey: 'foo' })).to.be.false
-        })
-        it('isFeedsConfigFeed() returns false for invalid private key hex', () => {
-            expect(ut.isFeedsConfigFeed({ ...myFeedsConfigFeed, privateKey: 'foo' })).to.be.false
-        })
-    })
-    describe('FeedsConfig', () => {
-        it('isFeedsConfig() returns true on valid feeds configuration', () => {
-            expect(ut.isFeedsConfig(validFeedsConfig)).to.be.true
-        })
-        it('isFeedsConfig() returns false on non-FeedId keys', () => {
-            expect(ut.isFeedsConfig({
-                ...validFeedsConfig,
-                feeds: {
-                    a: myFeedsConfigFeed
-                }
-            })).to.be.false
-        })
-    })
-    describe('Conversions', () => {
-        const ram = { feeds: new Map<ut.FeedId, ut.FeedsConfigFeed>(), feedIdsByName: new Map<ut.FeedName, ut.FeedId>() }
-        ram.feeds.set(feedId1 as any as ut.FeedId, myFeedsConfigFeed as any as ut.FeedsConfigFeed)
-        ram.feeds.set(feedId2 as any as ut.FeedId, { ...myFeedsConfigFeed, privateKey: undefined } as any as ut.FeedsConfigFeed)
-        ram.feedIdsByName.set('one' as any as ut.FeedName, new Array(65).join('7') as any as ut.FeedId)
-        ram.feedIdsByName.set('b' as any as ut.FeedName, new Array(65).join('b') as any as ut.FeedId)
-        const match = (obj: { feeds: {[key: string]: any }, feedIdsByName: {[key: string]: any} },
-                       maps: { feeds: Map<ut.FeedId, ut.FeedsConfigFeed>, feedIdsByName: Map<ut.FeedName, ut.FeedId> }): boolean =>
-                        {
-                            const oFeeds = obj.feeds
-                            const oByName = obj.feedIdsByName
-                            const mFeeds = maps.feeds
-                            const mByName = maps.feedIdsByName
-                            for (let k in oFeeds) if (oFeeds[k] !== mFeeds.get(k as any as ut.FeedId)) return false
-                            for (let k in oByName) if (oByName[k] !== mByName.get(k as any as ut.FeedName)) return false
-                            for (let k in mFeeds.keys()) if (mFeeds.get(k as any as ut.FeedId) !== oFeeds[k]) return false
-                            for (let k in mByName.keys()) if (mByName.get(k as any as ut.FeedName) !== oByName[k]) return false
-                            return true
-                        }
-        it('toFeedsConfig() is identity function', () => {
-            const res = ut.toFeedsConfig(ram)
-            expect(match(res, ram)).to.be.true
-            expect(res).to.deep.equal(validFeedsConfig)
-        })
-        it('toFeedsConfigRAM() is identity function', () => {
-            const res = ut.toFeedsConfigRAM(validFeedsConfig as any as ut.FeedsConfig)
-            expect(match(validFeedsConfig, res)).to.be.true
-            expect(res).to.deep.equal(ram)
         })
     })
 })

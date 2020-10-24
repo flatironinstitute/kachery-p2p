@@ -1,6 +1,6 @@
 import DataStreamy, { DataStreamyProgress } from './common/DataStreamy'
 import { sha1MatchesFileKey } from './common/util'
-import { byteCount, ByteCount, byteCountToNumber, ChannelName, durationMsec, FileKey, FileManifestChunk, isFileManifest, NodeId, Sha1Hash } from './interfaces/core'
+import { byteCount, ByteCount, byteCountToNumber, ChannelName, FileKey, FileManifestChunk, isFileManifest, NodeId, scaledDurationMsec, Sha1Hash } from './interfaces/core'
 import KacheryP2PNode from './KacheryP2PNode'
 
 
@@ -95,7 +95,6 @@ export const loadFile = (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode
                 ret.producer().end()
             }
         })().catch((err: Error) => {
-            console.warn(err)
             ret.producer().error(err)
         })
     }
@@ -118,7 +117,7 @@ export const loadFile = (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode
             node.downloadOptimizer().setProviderNodeForFile({fileKey, nodeId: opts.fromNode})
         }
         else {
-            const ff = node.findFile({fileKey, timeoutMsec: durationMsec(3000), fromChannel: opts.fromChannel})
+            const ff = node.findFile({fileKey, timeoutMsec: scaledDurationMsec(3000), fromChannel: opts.fromChannel})
             let atLeastOneProviderFound = false
             ff.onFound(result => {
                 node.downloadOptimizer().setProviderNodeForFile({fileKey, nodeId: result.nodeId})

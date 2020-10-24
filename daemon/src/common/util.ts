@@ -1,5 +1,5 @@
 import bson from 'bson';
-import { durationMsec, DurationMsec, elapsedSince, FileKey, nowTimestamp, Sha1Hash } from '../interfaces/core';
+import { DurationMsec, durationMsecToNumber, elapsedSince, FileKey, nowTimestamp, scaledDurationMsec, Sha1Hash, unscaledDurationMsec } from '../interfaces/core';
 
 export const randomString = (num_chars: number) => {
     var text = "";
@@ -107,14 +107,14 @@ export const sleepMsecNum = async (msec: number, continueFunction: (() => boolea
     const m = msec
     if (continueFunction) {
         const timer = nowTimestamp()
-        while (m - elapsedSince(timer) > 1000) {
+        while (m - elapsedSince(timer) > durationMsecToNumber(scaledDurationMsec(1000))) {
             if (!continueFunction()) {
                 return
             }
-            await sleepMsec(durationMsec(1000))
+            await sleepMsec(scaledDurationMsec(1000))
         }
         if (m > elapsedSince(timer)) {
-            await sleepMsec(durationMsec(m - elapsedSince(timer)))
+            await sleepMsec(unscaledDurationMsec(m - elapsedSince(timer)))
         }
     }
     else return new Promise((resolve, reject) => {

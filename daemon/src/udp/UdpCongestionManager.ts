@@ -1,8 +1,8 @@
 import { randomAlphaString } from "../common/util";
-import { addByteCount, byteCount, ByteCount, byteCountToNumber, durationMsec, DurationMsec, durationMsecToNumber, elapsedSince, isNumber, nowTimestamp } from "../interfaces/core";
+import { addByteCount, byteCount, ByteCount, byteCountToNumber, DurationMsec, durationMsecToNumber, elapsedSince, isNumber, nowTimestamp, scaledDurationMsec, scaleDurationBy, unscaledDurationMsec } from "../interfaces/core";
 import { PacketId } from "./UdpPacketSender";
 
-const TARGET_PCT_LOST_BYTES = 2;
+const TARGET_FRAC_LOST_BYTES = 0.02
 
 type Callbacks = (() => void)[]
 
@@ -68,8 +68,8 @@ export const createInternalId = () => {
 
 export default class UdpCongestionManager {
     #maxNumBytesPerSecondToSend = byteCountPerSec(3 * 1000 * 1000) // current number of bytes per second allowed to send
-    #estimatedRoundtripLatencyMsec = durationMsec(200) // current estimated roundtrip latency
-    #trialDurationMsec = durationMsec(5000); // duration of a single trial
+    #estimatedRoundtripLatencyMsec = scaledDurationMsec(200) // current estimated roundtrip latency
+    #trialDurationMsec = scaledDurationMsec(5000); // duration of a single trial
     #currentTrialData = new TrialData();
     #queuedPackets = new Queue<QueuedPacket>()
     constructor() {}
@@ -91,7 +91,7 @@ export default class UdpCongestionManager {
     _sendPacket(p: QueuedPacket) {
         const timer = nowTimestamp()
         const _onConfirmed = () => {
-            const elapsedMsec = durationMsec(elapsedSince(timer))
+            const elapsedMsec = unscaledDurationMsec(elapsedSince(timer))
             this.#currentTrialData.reportConfirmed(p.internalId, p.packetSize, elapsedMsec)
             p.onFinished()
             this._handleNextPackets()
@@ -99,7 +99,6 @@ export default class UdpCongestionManager {
         const _onTimedOut = () => {
             this.#currentTrialData.reportTimedOut(p.internalId, p.packetSize)
             this._handleNextPackets()
-            // todo: retry udp send
             p.onError(new UdpTimeoutError('Timeout while waiting for udp confirmation'))
         }
         const _onError = (err: Error) => {
@@ -107,7 +106,7 @@ export default class UdpCongestionManager {
             this._handleNextPackets()
             p.onError(err)
         }
-        const timeoutMsec = durationMsec(durationMsecToNumber(this.#estimatedRoundtripLatencyMsec) * 5)
+        const timeoutMsec = scaleDurationBy(this.#estimatedRoundtripLatencyMsec, 5)
         p.send(timeoutMsec).then(() => {
             _onConfirmed()
         }).catch((err: Error) => {
@@ -222,11 +221,11 @@ class TrialData {
         }
         // adjust the round-trip latency by taking a weighted average of existing estimate with new estimate (median)
         const alpha = 0.3 // how much to weight the new estimate
-        let estimatedRoundtripLatencyMsec = durationMsec(median(this.#roundtripLatenciesMsec.map(l => durationMsecToNumber(l))) * alpha + durationMsecToNumber(oldEstimateMsec) * (1 - alpha))
+        let estimatedRoundtripLatencyMsec = unscaledDurationMsec(median(this.#roundtripLatenciesMsec.map(l => durationMsecToNumber(l))) * alpha + durationMsecToNumber(oldEstimateMsec) * (1 - alpha))
 
         // constrain the estimate
-        const minEstLatency = durationMsec(20)
-        const maxEstLatency = durationMsec(1000)
+        const minEstLatency = scaledDurationMsec(20)
+        const maxEstLatency = scaledDurationMsec(1000)
         if (durationMsecToNumber(estimatedRoundtripLatencyMsec) < durationMsecToNumber(minEstLatency)) estimatedRoundtripLatencyMsec = minEstLatency
         if (durationMsecToNumber(estimatedRoundtripLatencyMsec) > durationMsecToNumber(maxEstLatency)) estimatedRoundtripLatencyMsec = maxEstLatency
         return estimatedRoundtripLatencyMsec
@@ -238,14 +237,14 @@ class TrialData {
         }
 
         // The target of % bytes we want to lose
-        const targetPctLostBytes = TARGET_PCT_LOST_BYTES;
+        const targetFracLostBytes = TARGET_FRAC_LOST_BYTES;
 
         let maxNumBytesPerSecondToSend = oldMaxNumBytesPerSecondToSend
 
-        // Percentage of lost bytes
-        const pctConfirmedBytes = (byteCountToNumber(this.#numConfirmedBytes) / byteCountToNumber(this.#numSentBytes)) * 100;
-        const pctLostBytes = 1 - pctConfirmedBytes
-        if (pctLostBytes < targetPctLostBytes) {
+        // Fraction of lost bytes
+        const fracConfirmedBytes = byteCountToNumber(this.#numConfirmedBytes) / byteCountToNumber(this.#numSentBytes)
+        const fracLostBytes = 1 - fracConfirmedBytes
+        if (fracLostBytes < targetFracLostBytes) {
             // didn't lose enough bytes... let's see if we were actually limited
             // calculate the expected peak number of outstanding bytes if we were at full load
             const a = byteCountPerSecToNumber(oldMaxNumBytesPerSecondToSend) / 1000 * durationMsecToNumber(estimatedRoundtripLatencyMsec)
@@ -261,8 +260,8 @@ class TrialData {
             maxNumBytesPerSecondToSend = byteCountPerSec(byteCountPerSecToNumber(maxNumBytesPerSecondToSend) / 1.2)
         }
 
-        if (pctLostBytes < 20) {
-            // don't let the rate get too low
+        if (fracLostBytes < 0.2) {
+            // don't let the rate get too low (unless we are losing a very high fraction)
             const lowerBound = byteCountPerSec(1 * 1000 * 1000)
             if (byteCountPerSecToNumber(maxNumBytesPerSecondToSend) < byteCountPerSecToNumber(lowerBound)) {
                 maxNumBytesPerSecondToSend = lowerBound;

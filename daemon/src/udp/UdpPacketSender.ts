@@ -1,7 +1,7 @@
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { DgramSocket } from '../external/ExternalInterface';
-import { Address, byteCount, durationMsec, DurationMsec, durationMsecToNumber, isBoolean, isJSONObject, isProtocolVersion, isString, JSONObject, portToNumber, ProtocolVersion, _validateObject } from '../interfaces/core';
+import { Address, byteCount, DurationMsec, durationMsecToNumber, isBoolean, isJSONObject, isProtocolVersion, isString, JSONObject, portToNumber, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
 import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { UdpTimeoutError } from './UdpCongestionManager';
 
@@ -37,19 +37,17 @@ export const isUdpPacketSenderHeader = (x: any): x is UdpPacketSenderHeader => {
         protocolVersion: isProtocolVersion,
         packetId: isPacketId,
         isConfirmation: isBoolean
-    }, (a) => {
-        console.warn(a)
     })
 }
 
 interface FallbackPacketSenderInterface {
-    sendPacket: (fallbackAddress: FallbackAddress, packet: Buffer) => Promise<void>
+    sendPacket: (fallbackAddress: FallbackAddress, packetId: PacketId, packet: Buffer) => Promise<void>
 }
 
 export default class UdpPacketSender {
     #socket: DgramSocket
-    #congestionManagers = new GarbageMap<Address, UdpCongestionManager>(durationMsec(5 * 60 * 1000))
-    #unconfirmedOutgoingPackets = new GarbageMap<PacketId, OutgoingPacket>(durationMsec(5 * 60 * 1000))
+    #congestionManagers = new GarbageMap<Address, UdpCongestionManager>(scaledDurationMsec(5 * 60 * 1000))
+    #unconfirmedOutgoingPackets = new GarbageMap<PacketId, OutgoingPacket>(scaledDurationMsec(5 * 60 * 1000))
     #debugId = randomAlphaString(4)
     constructor(socket: DgramSocket, private fallbackPacketSender: FallbackPacketSenderInterface) {
         this.#socket = socket
@@ -73,7 +71,7 @@ export default class UdpPacketSender {
             throw(err)
         }
     }
-    confirmPacket(packetId: PacketId) {
+    receivePacketConfirmation(packetId: PacketId) {
         const p = this.#unconfirmedOutgoingPackets.get(packetId)
         if (p) {
             p.confirm()
@@ -89,8 +87,8 @@ export default class UdpPacketSender {
         this.#congestionManagers.set(address, c)
         return c
     }
-    async _fallbackSendPacket(fallbackAddress: FallbackAddress, buffer: Buffer): Promise<void> {
-        this.fallbackPacketSender.sendPacket(fallbackAddress, buffer)
+    async _fallbackSendPacket(fallbackAddress: FallbackAddress, packetId: PacketId, buffer: Buffer): Promise<void> {
+        this.fallbackPacketSender.sendPacket(fallbackAddress, packetId, buffer)
     }
 }
 
@@ -120,8 +118,8 @@ class OutgoingPacket {
         this.#onConfirmed && this.#onConfirmed()
     }
     async send() {
-        if (!this.#address) {
-            await this.#packetSender._fallbackSendPacket(this.#fallbackAddress, this.#buffer)
+        if (this.#address === null) {
+            await this.#packetSender._fallbackSendPacket(this.#fallbackAddress, this.#packetId, this.#buffer)
             return
         }
         const cm = this.#packetSender.congestionManagers(this.#address)
@@ -131,17 +129,19 @@ class OutgoingPacket {
             })
         }
         catch(err) {
-            await this.#packetSender._fallbackSendPacket(this.#fallbackAddress, this.#buffer)
+            await this.#packetSender._fallbackSendPacket(this.#fallbackAddress, this.#packetId, this.#buffer)
         }
     }
     async _trySend(timeoutMsec: DurationMsec) {
         const socket = this.#packetSender.socket()
         const b = this.#buffer
         return new Promise((resolve, reject) => {
+            /* istanbul ignore next */
             if (this.#confirmed) {
                 resolve()
                 return
             }
+            /* istanbul ignore next */
             if (this.#cancelled) {
                 reject(Error('Cancelled'))
                 return
@@ -166,18 +166,21 @@ class OutgoingPacket {
                 Buffer.from(JSON.stringify(h).padEnd(UDP_PACKET_HEADER_SIZE)),
                 b
             ])
+            /* istanbul ignore next */
             if (!this.#address) {
                 throw Error('unexpected')
             }
             socket.send(b2, 0, b2.length, portToNumber(this.#address.port), this.#address.hostName.toString(), (err, numBytesSent) => {
+                /* istanbul ignore next */
                 if (err) {
-                    if (completed) return;
-                    completed = true;
+                    if (completed) return
+                    completed = true
                     reject(Error(`Failed to send udp message to remote: ${err.message}`))
                 }
+                /* istanbul ignore next */
                 if (numBytesSent !== b2.length) {
-                    if (completed) return;
-                    completed = true;
+                    if (completed) return
+                    completed = true
                     console.warn(this.#address)
                     reject(Error(`Failed to send udp message to remote: unexpected numBytesSent: ${numBytesSent} <> ${b.length}`))
                 }

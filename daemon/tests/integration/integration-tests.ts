@@ -1,8 +1,8 @@
 import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import { sleepMsec } from '../../src/common/util';
-import MockNodeDaemon, { MockNodeDaemonGroup } from '../../src/external/mock/MockNodeDaemon';
-import { byteCount, ByteCount, byteCountToNumber, ChannelName, durationMsec, FeedName, messageCount, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubmittedSubfeedMessage, toPort } from '../../src/interfaces/core';
+import MockNodeDaemon, { MockNodeDaemonGroup, MockNodeDefects } from '../../src/external/mock/MockNodeDaemon';
+import { byteCount, ByteCount, byteCountToNumber, ChannelName, FeedName, messageCount, scaledDurationMsec, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubmittedSubfeedMessage, toPort } from '../../src/interfaces/core';
 import { ApiLoadFileRequest } from '../../src/services/DaemonApiServer';
 import { StartDaemonOpts } from '../../src/startDaemon';
 
@@ -59,7 +59,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const daemon1 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()]})
 
                 // wait a bit
-                await sleepMsec(durationMsec(60000))
+                await sleepMsec(scaledDurationMsec(60000))
 
                 // we expect to have one bootstrap node
                 expect(daemon1.remoteNodeManager().getBootstrapRemoteNodes().length).equals(1)
@@ -154,7 +154,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const daemon2 = await g.createDaemon({...daemonOpts, udpSocketPort: randomMockPort()})
 
                 // wait a bit
-                await sleepMsec(durationMsec(60000))
+                await sleepMsec(scaledDurationMsec(60000))
 
                 // // we expect to have one remote node now
                 expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
@@ -162,6 +162,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
 
                 await testFindFile(daemon1, daemon2)
                 await testLoadFile(daemon1, daemon2)
+                await testLoadFileWithDefects(daemon1, daemon2)
                 await testSubfeedMessage(daemon1, daemon2)
                 await testSubmitSubfeedMessage(daemon1, daemon2)
 
@@ -200,11 +201,14 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
+                bootstrapDaemon.setDefects({
+                    disconnectIncomingProxyConnectionOnce: true
+                })
                 const daemon1 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()]})
                 const daemon2 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()]})
 
                 // wait a bit
-                await sleepMsec(durationMsec(60000))
+                await sleepMsec(scaledDurationMsec(60000))
 
                 // // we expect to have one remote node now
                 expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
@@ -212,6 +216,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
 
                 await testFindFile(daemon1, daemon2)
                 await testLoadFile(daemon1, daemon2)
+                await testLoadFileWithDefects(daemon1, daemon2)
                 await testSubfeedMessage(daemon1, daemon2)
 
                 resolve()
@@ -227,11 +232,12 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     channelNames: [],
                     multicastUdpAddress: null,
                     udpSocketPort: randomMockPort(),
-                    webSocketListenPort: null,
+                    webSocketListenPort: randomMockPort(),
                     firewalled: false,
                     services: {
                         httpServer: true,
-                        udpSocket: true
+                        udpSocket: true,
+                        webSocketServer: true
                     }
                 }
                 const daemonOpts: StartDaemonOpts = {
@@ -247,6 +253,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         discover: true,
                         bootstrap: true,
                         udpSocket: true,
+                        proxyClient: true
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -254,16 +261,74 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const daemon2 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()], udpSocketPort: randomMockPort()})
 
                 // wait a bit
-                await sleepMsec(durationMsec(60000))
+                await sleepMsec(scaledDurationMsec(60000))
 
                 // // we expect to have one remote node now
                 expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
                 expect(daemon2.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
 
+                daemon1.setDefects({
+                    udpPacketLossNum: 5
+                })
+                daemon2.setDefects({
+                    udpPacketLossNum: 5
+                })
+
                 await testFindFile(daemon1, daemon2)
                 await testLoadFile(daemon1, daemon2)
                 await testLoadFileWithDefects(daemon1, daemon2)
                 await testSubfeedMessage(daemon1, daemon2)
+
+                daemon1.clearDefects()
+                daemon2.clearDefects()
+
+                resolve()
+            }, done)
+        })
+        it('Test udp socket creation error aaa92', (done) => {
+            testContext(async (g, resolve, reject) => {
+                const bootstrapOpts: StartDaemonOpts = {
+                    bootstrapAddresses: [],
+                    isBootstrap: true,
+                    channelNames: [],
+                    multicastUdpAddress: null,
+                    udpSocketPort: randomMockPort(),
+                    webSocketListenPort: randomMockPort(),
+                    firewalled: false,
+                    services: {
+                        httpServer: true,
+                        udpSocket: true,
+                        webSocketServer: true
+                    }
+                }
+                const daemonOpts: StartDaemonOpts = {
+                    bootstrapAddresses: [],
+                    isBootstrap: false,
+                    channelNames: [mockChannelName],
+                    multicastUdpAddress: null,
+                    udpSocketPort: null, // determined below
+                    webSocketListenPort: null,
+                    firewalled: true,
+                    services: {
+                        announce: true,
+                        discover: true,
+                        bootstrap: true,
+                        udpSocket: true,
+                        proxyClient: true
+                    }
+                }
+                const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
+                const daemon1Defects: MockNodeDefects = {createUdpSocketDefect: true}
+                try {
+                    const daemon1 = await g.createDaemon({...daemonOpts, bootstrapAddresses: [bootstrapDaemon.address()], udpSocketPort: randomMockPort()}, daemon1Defects)
+                    await sleepMsec(scaledDurationMsec(60000))
+                    throw Error('Did not get expected exception')
+                }
+                catch(err) {
+                    if (!err.message.includes('Intentional error creating socket due to defect')) {
+                        throw(err)
+                    }
+                }                
 
                 resolve()
             }, done)
@@ -278,7 +343,7 @@ const testFindFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) =>
     let numFound = 0
     const a = await daemon2.mockDaemonPostFindFile({
         fileKey: f1Key,
-        timeoutMsec: durationMsec(5000),
+        timeoutMsec: scaledDurationMsec(5000),
         fromChannel: null
     })
     return new Promise((resolve, reject) => {
@@ -343,7 +408,9 @@ const testLoadFileWithDefects = async (daemon1: MockNodeDaemon, daemon2: MockNod
         throw Error('Did not get fileReadDefect error')
     }
     catch(err) {
-        expect(err.message === 'fileReadDefect')
+        if (err.message !== 'fileReadDefect') {
+            throw(err)
+        }
     }
 
     daemon1.clearDefects()
@@ -385,13 +452,34 @@ const testSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaem
     const feed1 = await fm1.createFeed({feedName: 'f1' as any as FeedName})
     const sf1 = '0123456789012345678901234567890123456789' as any as SubfeedHash
     await fm1.appendMessages({feedId: feed1, subfeedHash: sf1, messages: [{test: 42} as any as SubfeedMessage]})
-    const messages = await fm1.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: durationMsec(1000)})
-    expect(messages.length).equals(1)
+    await fm1.submitMessage({feedId: feed1, subfeedHash: sf1, message: {test: 420} as any as SubmittedSubfeedMessage, timeoutMsec: scaledDurationMsec(5000)})
+    const messages = await fm1.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: scaledDurationMsec(1000)})
+    expect(messages.length).equals(2)
     expect(messages[0].test).equals(42)
 
-    const messages2 = await fm2.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: durationMsec(1000)})
-    expect(messages2.length).equals(1)
+    // do this first line so that we can test the simultaneous loading of the same subfeed (code coverage)
+    const p1 =fm2.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: scaledDurationMsec(1000)})
+    const messages2 = await fm2.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: scaledDurationMsec(1000)})
+    const messages2b = await p1
+    expect(messages2.length).equals(2)
+    expect(messages2b.length).equals(2)
     expect(messages2[0].test).equals(42)
+    expect(await fm2.getNumMessages({feedId: feed1, subfeedHash: sf1})).to.equal(2)
+
+    const fi = await fm2.getFeedInfo({feedId: feed1, timeoutMsec: scaledDurationMsec(5000)})
+    expect(fi.nodeId).equals(daemon1.nodeId())
+    const fi2 = await fm1.getFeedInfo({feedId: feed1, timeoutMsec: scaledDurationMsec(5000)})
+    expect(fi2.nodeId).equals(daemon1.nodeId())
+
+    try {
+        await fm2.appendMessages({feedId: feed1, subfeedHash: sf1, messages: [{test: 43} as any as SubfeedMessage]})
+        throw Error('Did not get expected error')
+    }
+    catch(err) {
+        if (!err.message.includes('Subfeed is not writeable')) {
+            throw(err)
+        }
+    }
 
     expect(await fm1.hasWriteableFeed({feedId: feed1})).is.true
     const feed1b = await fm1.getFeedId({feedName: 'f1' as any as FeedName})
@@ -414,11 +502,46 @@ const testSubmitSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNo
             }
         ]
     }
+    
+    try {
+        await fm2.submitMessage({feedId: feed1, subfeedHash: sf1, message: {test: 41} as any as SubmittedSubfeedMessage, timeoutMsec: scaledDurationMsec(1000)})
+        throw Error('Did not get submit message permission denied error')
+    }
+    catch(err) {       
+        if (!err.message.includes('Error submitting message to remote live feed: Permission denied')) { 
+            throw Error(err)
+        }
+    }
     fm1.setAccessRules({feedId: feed1, subfeedHash: sf1, accessRules: accessRules})
-    await fm2.submitMessage({feedId: feed1, subfeedHash: sf1, message: {test: 42} as any as SubmittedSubfeedMessage, timeoutMsec: durationMsec(1000)})
-    const messages = await fm1.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: durationMsec(1000)})
+    await fm2.submitMessage({feedId: feed1, subfeedHash: sf1, message: {test: 42} as any as SubmittedSubfeedMessage, timeoutMsec: scaledDurationMsec(1000)})
+    const messages = await fm1.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: scaledDurationMsec(1000)})
     expect(messages.length).equals(1)
     expect(messages[0].test).equals(42)
+
+    const ar1 = await fm1.getAccessRules({feedId: feed1, subfeedHash: sf1})
+    if (!ar1) {
+        throw(Error('Unable to get access rules'))
+    }
+    expect(ar1.rules.length).equals(1)
+    try {
+        const ar2 = await fm2.getAccessRules({feedId: feed1, subfeedHash: sf1})
+        throw Error('Did not get expected error')
+    }
+    catch(err) {
+        if (!err.message.includes('Cannot get access rules for subfeed that is not writeable')) {
+            throw(err)
+        }
+    }
+
+    try {
+        await fm2.setAccessRules({feedId: feed1, subfeedHash: sf1, accessRules: ar1})
+        throw Error('Did not get expected error')
+    }
+    catch(err) {
+        if (!err.message.includes('Cannot set access rules for subfeed that is not writeable')) {
+            throw(err)
+        }
+    }
 }
 
 let lastMockPort = 0

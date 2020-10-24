@@ -4,7 +4,7 @@ import DataStreamy from '../common/DataStreamy';
 import GarbageMap from '../common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString, sleepMsec } from '../common/util';
 import { WebSocketInterface } from '../external/ExternalInterface';
-import { ByteCount, DurationMsec, durationMsec, durationMsecToNumber, elapsedSince, ErrorMessage, isBuffer, isByteCount, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, Signature, Timestamp, _validateObject } from "../interfaces/core";
+import { ByteCount, DurationMsec, durationMsecToNumber, elapsedSince, ErrorMessage, isBuffer, isByteCount, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, minDuration, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, scaledDurationMsec, Signature, Timestamp, _validateObject } from "../interfaces/core";
 import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
 
@@ -182,8 +182,8 @@ export class ProxyConnectionToClient {
     #closed = false
     #onClosedCallbacks: ((reason: any) => void)[] = []
     #onInitializedCallbacks: (() => void)[] = []
-    #responseListeners = new GarbageMap<RequestId, ((response: NodeToNodeResponse) => void)>(durationMsec(5 * 60 * 1000))
-    #proxyStreamFileDataResponseMessageListeners = new GarbageMap<ProxyStreamFileDataRequestId, (msg: ProxyStreamFileDataResponseMessage) => void>(durationMsec(30 * 60 * 1000))
+    #responseListeners = new GarbageMap<RequestId, ((response: NodeToNodeResponse) => void)>(scaledDurationMsec(5 * 60 * 1000))
+    #proxyStreamFileDataResponseMessageListeners = new GarbageMap<ProxyStreamFileDataRequestId, (msg: ProxyStreamFileDataResponseMessage) => void>(scaledDurationMsec(30 * 60 * 1000))
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
@@ -279,7 +279,7 @@ export class ProxyConnectionToClient {
     }
     async sendRequest(request: NodeToNodeRequest): Promise<NodeToNodeResponse> {
         this._sendMessageToClient(request);
-        return await this._waitForResponse(request.body.requestId, {timeoutMsec: durationMsec(10000)});
+        return await this._waitForResponse(request.body.requestId, {timeoutMsec: scaledDurationMsec(10000)});
     }
     streamFileData(streamId: StreamId): DataStreamy {
         const ret = new DataStreamy()
@@ -385,7 +385,7 @@ export class ProxyConnectionToClient {
                         reject(Error('Timeout while waiting for response.'))
                         return
                     }
-                    await sleepMsec(durationMsec(Math.min(durationMsecToNumber(durationMsec(800)), durationMsecToNumber(timeoutMsec))))
+                    await sleepMsec(minDuration(scaledDurationMsec(800), timeoutMsec))
                 }
             })()
         });

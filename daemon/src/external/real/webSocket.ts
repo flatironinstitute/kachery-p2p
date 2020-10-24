@@ -5,6 +5,7 @@ import { WebSocketInterface, WebSocketServerInterface } from '../ExternalInterfa
 const webSocketInterfaceFromWebSocket = (ws: WebSocket): WebSocketInterface => {
     const onMessage = (cb: (buf: Buffer) => void) => {
         ws.on('message', (buf) => {
+            /* istanbul ignore next */
             if (!isBuffer(buf)) {
                 console.warn('Incoming message is not a Buffer')
                 ws.close()
@@ -58,6 +59,7 @@ export const startWebSocketServer = async (port: Port, nodeId: NodeId): Promise<
             resolve(wsi)
         })
         S.on('error', err => {
+            /* istanbul ignore next */
             reject(err)
         })
     })

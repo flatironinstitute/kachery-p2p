@@ -3,7 +3,7 @@ import { getSignatureJson, hexToPublicKey, verifySignatureJson } from '../common
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString, sleepMsec } from '../common/util';
 import { LocalFeedManagerInterface } from '../external/ExternalInterface';
-import { durationMsec, DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, JSONObject, messageCount, MessageCount, messageCountToNumber, NodeId, nowTimestamp, PrivateKey, PublicKey, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubfeedPosition, subfeedPositionToNumber, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
+import { DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, JSONObject, messageCount, MessageCount, messageCountToNumber, NodeId, nowTimestamp, PrivateKey, PublicKey, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubfeedPosition, subfeedPositionToNumber, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 
 // todo fix feeds config on disk (too many in one .json file)
@@ -12,7 +12,7 @@ class FeedManager {
     // Manages the local feeds and access to the remote feeds in the p2p network
     _node: KacheryP2PNode // The kachery-p2p daemon
     #localFeedManager: LocalFeedManagerInterface
-    _subfeeds = new GarbageMap<FeedSubfeedId, Subfeed>(durationMsec(8 * 60 * 1000)) // The subfeed instances (Subfeed()) that have been loaded into memory
+    _subfeeds = new GarbageMap<FeedSubfeedId, Subfeed>(scaledDurationMsec(8 * 60 * 1000)) // The subfeed instances (Subfeed()) that have been loaded into memory
     _remoteFeedManager: RemoteFeedManager // Manages the interaction with feeds on remote nodes
     constructor(node: KacheryP2PNode, localFeedManager: LocalFeedManagerInterface) {
         this._node = node
@@ -40,6 +40,7 @@ class FeedManager {
         // Load the subfeed and make sure it is writeable
         const subfeed = await this._loadSubfeed({feedId: args.feedId, subfeedHash: args.subfeedHash});
         if (!subfeed) {
+            /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${args.feedId} ${args.subfeedHash}`);
         }
         if (!subfeed.isWriteable()) {
@@ -54,12 +55,13 @@ class FeedManager {
         // and then, on success, it will append the messages on the node where the feed is writeable
         const subfeed = await this._loadSubfeed({feedId, subfeedHash});
         if (!subfeed) {
+            /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
         }
         if (subfeed.isWriteable()) {
             // If writeable, let's just append the messages
             await this.appendMessages({feedId, subfeedHash, messages: [submittedSubfeedMessageToSubfeedMessage(message)]});
-            return;
+            return
             // throw Error(`Cannot submit messages. Subfeed is writeable: ${feedId} ${subfeedHash}`);
         }
         // Submit the messages to the p2p network
@@ -90,6 +92,7 @@ class FeedManager {
         // Same as getMessages() except we return the signed messages. This is also called by getMessages().
         const subfeed = await this._loadSubfeed({feedId, subfeedHash});
         if (!subfeed) {
+            /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
         }
         const signedMessages = await subfeed.getSignedMessages({ position, maxNumMessages, waitMsec });
@@ -100,6 +103,7 @@ class FeedManager {
         // future: we may want to optionally do a p2p search, and retrieve the number of messages without retrieving the actual messages
         const subfeed = await this._loadSubfeed({feedId, subfeedHash});
         if (!subfeed) {
+            /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
         }
         return subfeed.getNumMessages();
@@ -127,9 +131,10 @@ class FeedManager {
         // to this subfeed.
         const subfeed = await this._loadSubfeed({feedId, subfeedHash});
         if (!subfeed) {
+            /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
         }
-        if (!subfeed.isWriteable) {
+        if (!subfeed.isWriteable()) {
             throw Error('Cannot get access rules for subfeed that is not writeable')
         }
         return await subfeed.getAccessRules();
@@ -140,9 +145,10 @@ class FeedManager {
         // to this subfeed.
         const subfeed = await this._loadSubfeed({feedId, subfeedHash});
         if (!subfeed) {
+            /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
         }
-        if (!subfeed.isWriteable) {
+        if (!subfeed.isWriteable()) {
             throw Error('Cannot set access rules for subfeed that is not writeable')
         }
         subfeed.setAccessRules(accessRules)
@@ -170,7 +176,7 @@ class FeedManager {
                 if (finished) return;
                 if (numMessages > 0) {
                     // maybe we have other messages coming in at exactly the same time. Wait a bit for those
-                    await sleepMsec(durationMsec(30));
+                    await sleepMsec(scaledDurationMsec(30));
                 }
                 finished = true;
                 resolve(messages);
@@ -194,32 +200,6 @@ class FeedManager {
                 if (!finished) doFinish();
             }, durationMsecToNumber(waitMsec));
         });
-    }
-    localFeedManager() {
-        return this.#localFeedManager
-    }
-    async _submitMessageToLiveFeedFromRemoteNode({fromNodeId, feedId, subfeedHash, message}: {fromNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage}) {
-        // Some messages have been submitted from a remote node
-        // Determine whether they can been written, and if so, append them
-
-        // Check whether we have that writeable feed
-        if (!(await this.hasWriteableFeed({ feedId }))) {
-            throw Error(`Does not have writeable feed: ${feedId}`);
-        }
-
-        // Load the subfeed
-        const subfeed = await this._loadSubfeed({feedId, subfeedHash});
-        if (!subfeed) {
-            throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
-        }
-
-        // Check whether the sending node has write access to the subfeed
-        if (!(await subfeed.remoteNodeHasWriteAccess(fromNodeId))) {
-            throw Error(`Write access not allowed for node: ${feedId} ${subfeedHash} ${fromNodeId}`);
-        }
-
-        // If so, append the messages. We also provide the sending node ID in the meta data for the messages
-        subfeed.appendMessages([submittedSubfeedMessageToSubfeedMessage(message)], {metaData: {submittedByNodeId: fromNodeId}});
     }
     async _loadSubfeed({feedId, subfeedHash}: {feedId: FeedId, subfeedHash: SubfeedHash}) {
         // Load a subfeed (Subfeed() instance
@@ -257,7 +237,7 @@ class FeedManager {
 
 class RemoteFeedManager {
     _node: KacheryP2PNode
-    _liveFeedInfos = new GarbageMap<FeedId, FindLiveFeedResult>(durationMsec(5 * 60 * 1000)) // Information about the live feeds (cached in memory)
+    _liveFeedInfos = new GarbageMap<FeedId, FindLiveFeedResult>(scaledDurationMsec(5 * 60 * 1000)) // Information about the live feeds (cached in memory)
     // Manages interactions with feeds on remote nodes within the p2p network
     constructor(node: KacheryP2PNode) {
         this._node = node; // The kachery-p2p node
@@ -310,7 +290,7 @@ class RemoteFeedManager {
             catch(err) {
                 if (waitMsec >= 2000) {
                     // wait and try again
-                    await sleepMsec(durationMsec(2000));
+                    await sleepMsec(scaledDurationMsec(2000));
                     waitMsec -= 2000;
                 }
                 else {
@@ -456,7 +436,7 @@ class Subfeed {
                 this.#accessRules = null
 
                 // Let's try to load messages from remote nodes on the p2p network
-                await this.getSignedMessages({position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: durationMsec(1)})
+                await this.getSignedMessages({position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: scaledDurationMsec(1)})
             }
         }
         catch(err) {

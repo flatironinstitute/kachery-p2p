@@ -1,18 +1,20 @@
 import { createKeyPair } from "../../common/crypto_util"
 import DataStreamy from "../../common/DataStreamy"
 import { randomAlphaString, sleepMsec } from "../../common/util"
-import { Address, durationMsec, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, toPort, UrlPath } from "../../interfaces/core"
+import { Address, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, scaledDurationMsec, toPort, UrlPath } from "../../interfaces/core"
 import KacheryP2PNode from "../../KacheryP2PNode"
 import DaemonApiServer, { ApiFindFileRequest } from "../../services/DaemonApiServer"
 import PublicApiServer from "../../services/PublicApiServer"
 import startDaemon, { StartDaemonOpts } from "../../startDaemon"
 import mockExternalInterface from "./mockExternalInterface"
 import MockKacheryStorageManager from './MockKacheryStorageManager'
-import MockLocalFeedManager from "./MockLocalFeedManager"
 
 export interface MockNodeDefects {
     fileReadDefect?: boolean
     badDownloadFileDataRequest?: boolean
+    udpPacketLossNum?: number
+    disconnectIncomingProxyConnectionOnce?: boolean
+    createUdpSocketDefect?: boolean
 }
 
 export default class MockNodeDaemon {
@@ -46,7 +48,7 @@ export default class MockNodeDaemon {
     }
 
     async initialize() {
-        const externalInterface = mockExternalInterface(this.#daemonGroup, () => (this.#defects))
+        const externalInterface = mockExternalInterface(this.#daemonGroup, () => (this.defects()))
         this.#d = await startDaemon({
             keyPair: this.#keyPair,
             verbose: 0,
@@ -66,6 +68,7 @@ export default class MockNodeDaemon {
     }
     node() {
         if (!this.#d) {
+            /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
         return this.#d.node
@@ -76,38 +79,36 @@ export default class MockNodeDaemon {
     nodeId() {
         return this.node().nodeId()
     }
-    keyPair() {
-        return this.node().keyPair()
-    }
     mockKacheryStorageManager() {
         return this.node().kacheryStorageManager() as MockKacheryStorageManager
-    }
-    mockLocalFeedManager() {
-        return this.node().feedManager().localFeedManager() as MockLocalFeedManager
     }
     feedManager() {
         return this.node().feedManager()
     }
     async mockPublicApiPost(path: string, data: JSONObject): Promise<JSONObject> {
         if (!this.#d) {
+            /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
         return await this.#d.publicApiServer.mockPostJson(path, data)
     }
     async mockPublicApiGetDownload(path: string): Promise<DataStreamy> {
         if (!this.#d) {
+            /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
         return await this.#d.publicApiServer.mockGetDownload(path)
     }
     async mockDaemonApiPost(path: string, data: JSONObject): Promise<JSONObject> {
         if (!this.#d) {
+            /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
         return await this.#d.daemonApiServer.mockPostJson(path, data)
     }
     mockDaemonApiServer() {
         if (!this.#d) {
+            /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
         return this.#d.daemonApiServer
@@ -118,6 +119,7 @@ export default class MockNodeDaemon {
         cancel: () => void;
     }> {
         if (!this.#d) {
+            /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
         return await this.#d.daemonApiServer.mockPostFindFile(reqData)
@@ -135,11 +137,14 @@ export class MockNodeDaemonGroup {
         })
         // this.#daemons.clear()
     }
-    async createDaemon(opts: StartDaemonOpts) {
+    async createDaemon(opts: StartDaemonOpts, initialDefects?: MockNodeDefects) {
         const daemon = new MockNodeDaemon(this, opts)
+        if (initialDefects) {
+            daemon.setDefects(initialDefects)
+        }
         await daemon.initialize()
         this.#daemons.set(daemon.nodeId(), daemon)
-        await sleepMsec(durationMsec(1000))
+        await sleepMsec(scaledDurationMsec(1000))
         return daemon
     }
     getDaemon(nodeId: NodeId) {
@@ -150,12 +155,14 @@ export class MockNodeDaemonGroup {
         if (isNodeId(nodeId)) {
             const daemon = this.getDaemon(nodeId)
             if (!daemon) {
+                /* istanbul ignore next */
                 throw Error(`No daemon: ${nodeId}`)
             }
             const responseMessage = await daemon.mockPublicApiPost(path.toString(), data)
             return responseMessage
         }
         
+        /* istanbul ignore next */
         throw Error('mock - unable to process http post json')
     }
     async mockHttpGetDownload(address: Address, path: UrlPath): Promise<DataStreamy> {
@@ -163,11 +170,13 @@ export class MockNodeDaemonGroup {
         if (isNodeId(nodeId)) {
             const daemon = this.getDaemon(nodeId)
             if (!daemon) {
+                /* istanbul ignore next */
                 throw Error(`No daemon: ${nodeId}`)
             }
             return await daemon.mockPublicApiGetDownload(path.toString())
         }
         else {
+            /* istanbul ignore next */
             throw Error('mock - unable to process http get download')
         }
     }

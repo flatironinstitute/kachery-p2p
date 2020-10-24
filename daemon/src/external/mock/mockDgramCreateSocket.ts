@@ -103,7 +103,6 @@ class MockDgramSocket {
                 port: this.#port as any as number,
                 size: 0
             }
-            // todo - implement mock nat rules here
             socket._handleMessage(message, rinfo)
         })
         callback && callback(null, message.length)

@@ -1,8 +1,8 @@
 import { action } from "../common/action"
 import { getSignature, verifySignature } from "../common/crypto_util"
-import { sleepMsec, sleepMsecNum } from "../common/util"
+import { sleepMsec } from "../common/util"
 import ExternalInterface from "../external/ExternalInterface"
-import { Address, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, hostName, isMulticastAnnounceMessage, JSONObject, KeyPair, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, tryParseJsonObject } from "../interfaces/core"
+import { Address, ChannelName, ChannelNodeInfo, DurationMsec, hostName, isMulticastAnnounceMessage, JSONObject, KeyPair, minDuration, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, scaledDurationMsec, tryParseJsonObject } from "../interfaces/core"
 import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
 import { protocolVersion } from "../protocolVersion"
 
@@ -68,7 +68,7 @@ export default class MulticastService {
                 /////////////////////////////////////////////////////////////////////////
             }
         })
-        await sleepMsecNum(Math.min(durationMsecToNumber(durationMsec(1000)), durationMsecToNumber(this.opts.intervalMsec)))
+        await sleepMsec(minDuration(scaledDurationMsec(1000), this.opts.intervalMsec))
         while (true) {
             if (this.#halted) return
             for (let channelName of this.#node.channelNames()) {

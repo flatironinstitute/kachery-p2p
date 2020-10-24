@@ -45,7 +45,7 @@ export class KacheryStorageManager {
         fs.renameSync(destPathTmp, destPath)
     }
     async concatenateChunks(sha1: Sha1Hash, chunkSha1s: Sha1Hash[]): Promise<void> {
-        throw Error('not-implemented') // todo
+        throw Error('not-implemented') // todo ********************
     }
     async getFileReadStream(fileKey: FileKey): Promise<DataStreamy> {
         if (fileKey.sha1) {

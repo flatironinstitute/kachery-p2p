@@ -4,7 +4,7 @@ import DataStreamy from '../common/DataStreamy';
 import GarbageMap from '../common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize } from '../common/util';
 import ExternalInterface, { WebSocketInterface } from '../external/ExternalInterface';
-import { Address, durationMsec, DurationMsec, errorMessage, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp } from "../interfaces/core";
+import { Address, DurationMsec, errorMessage, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec } from "../interfaces/core";
 import { isNodeToNodeRequest, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
 import { InitialMessageFromClient, InitialMessageFromClientBody, isInitialMessageFromServer, isMessageFromServer, isProxyStreamFileDataCancelRequest, isProxyStreamFileDataRequest, MessageFromClient, MessageFromServer, ProxyStreamFileDataCancelRequest, ProxyStreamFileDataRequest, ProxyStreamFileDataRequestId, ProxyStreamFileDataResponseDataMessage, ProxyStreamFileDataResponseErrorMessage, ProxyStreamFileDataResponseFinishedMessage, ProxyStreamFileDataResponseStartedMessage } from './ProxyConnectionToClient';
 
@@ -24,7 +24,7 @@ export class ProxyConnectionToServer {
     #closed = false
     #onClosedCallbacks: ((reason: any) => void)[] = []
     #onInitializedCallbacks: (() => void)[] = []
-    #proxyStreamFileDataCancelCallbacks = new GarbageMap<ProxyStreamFileDataRequestId, () => void>(durationMsec(30 * 60 * 1000))
+    #proxyStreamFileDataCancelCallbacks = new GarbageMap<ProxyStreamFileDataRequestId, () => void>(scaledDurationMsec(30 * 60 * 1000))
     constructor(node: KacheryP2PNodeInterface) {
         this.#node = node
     }

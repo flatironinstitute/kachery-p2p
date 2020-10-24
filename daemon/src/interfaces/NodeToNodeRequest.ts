@@ -1,7 +1,8 @@
 import assert from 'assert'
 import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
-import { ByteCount, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isByteCount, isChannelInfo, isChannelName, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isMessageCount, isNodeId, isNull, isNumber, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubfeedPosition, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, MessageCount, NodeId, optional, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
+import { isPacketId, PacketId } from '../udp/UdpPacketSender'
+import { ByteCount, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isByteCount, isChannelInfo, isChannelName, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isMessageCount, isNodeId, isNull, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubfeedPosition, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, MessageCount, NodeId, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
 
@@ -234,14 +235,12 @@ export const isCheckForLiveFeedRequestData = (x: any): x is CheckForLiveFeedRequ
 }
 export interface CheckForLiveFeedResponseData {
     requestType: 'checkForLiveFeed',
-    found: boolean,
-    numMessages?: number // todo: is this used?
+    found: boolean
 }
 export const isCheckForLiveFeedResponseData = (x: any): x is CheckForLiveFeedResponseData => {
     return _validateObject(x, {
         requestType: isEqualTo('checkForLiveFeed'),
-        found: isBoolean,
-        numMessages: optional(isNumber)
+        found: isBoolean
     })
 }
 
@@ -390,12 +389,14 @@ export const isStartStreamViaUdpResponseData = (x: any): x is DownloadFileDataRe
 
 export interface FallbackUdpPacketRequestData {
     requestType: 'fallbackUdpPacket',
-    dataBase64: string
+    dataBase64: string,
+    packetId: PacketId
 }
 export const isFallbackUdpPacketRequestData = (x: any): x is DownloadFileDataRequestData => {
     return _validateObject(x, {
         requestType: isEqualTo('fallbackUdpPacket'),
-        dataBase64: isString
+        dataBase64: isString,
+        packetId: isPacketId
     })
 }
 export interface FallbackUdpPacketResponseData {

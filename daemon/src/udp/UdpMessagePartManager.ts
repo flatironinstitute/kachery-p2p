@@ -1,10 +1,10 @@
 import GarbageMap from '../common/GarbageMap'
-import { Address, durationMsec, NodeId } from '../interfaces/core'
+import { Address, NodeId, scaledDurationMsec } from '../interfaces/core'
 import { MessagePartData, NumParts, numPartsToNumber, partIndex, PartIndex, UdpHeader, UdpMessageId, udpMessagePartId, UdpMessagePartId } from '../interfaces/UdpMessage'
 
 export default class UdpMessagePartManager {
-    #messageParts = new GarbageMap<UdpMessagePartId, MessagePartData>(durationMsec(30 * 60 * 1000))
-    #remoteAddressesByNodeId = new GarbageMap<NodeId, Address>(durationMsec(30 * 60 * 1000))
+    #messageParts = new GarbageMap<UdpMessagePartId, MessagePartData>(scaledDurationMsec(30 * 60 * 1000))
+    #remoteAddressesByNodeId = new GarbageMap<NodeId, Address>(scaledDurationMsec(30 * 60 * 1000))
     #onMessageCompleteCallbacks: ((header: UdpHeader, data: Buffer) => void)[] = []
     constructor() {}
     addMessagePart(remoteAddress: Address | null, udpMessageId: UdpMessageId, partInd: PartIndex, numParts: NumParts, header: UdpHeader, buffer: Buffer) {

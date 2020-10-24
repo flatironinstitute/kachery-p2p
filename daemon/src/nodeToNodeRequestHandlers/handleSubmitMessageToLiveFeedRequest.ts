@@ -13,14 +13,7 @@ export const handleSubmitMessageToLiveFeedRequest = async (node: KacheryP2PNode,
         }
     }
     const rules = await node.feedManager().getAccessRules({feedId, subfeedHash})
-    if (rules === null) {
-        return {
-            requestType: 'submitMessageToLiveFeed',
-            success: false,
-            errorMessage: errorMessage('Permission denied')
-        }
-    }
-    if (rules.rules.filter(r => ((r.nodeId === fromNodeId) && (r.write))).length === 0) {
+    if ((rules === null) || (rules.rules.filter(r => ((r.nodeId === fromNodeId) && (r.write))).length === 0)) {
         return {
             requestType: 'submitMessageToLiveFeed',
             success: false,
@@ -31,6 +24,7 @@ export const handleSubmitMessageToLiveFeedRequest = async (node: KacheryP2PNode,
         await node.feedManager().appendMessages({feedId, subfeedHash, messages: [submittedSubfeedMessageToSubfeedMessage(message)]})
     }
     catch(err) {
+        /* istanbul ignore next */
         return {
             requestType: 'submitMessageToLiveFeed',
             success: false,

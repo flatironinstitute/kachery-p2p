@@ -1,6 +1,6 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
 import DataStreamy from "./common/DataStreamy";
-import { Address, ChannelName, ChannelNodeInfo, createRequestId, durationMsec, DurationMsec, NodeId, nodeIdToPublicKey, nowTimestamp, urlPath } from "./interfaces/core";
+import { Address, ChannelName, ChannelNodeInfo, createRequestId, DurationMsec, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec, urlPath } from "./interfaces/core";
 import { DownloadFileDataRequestData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import { protocolVersion } from "./protocolVersion";
@@ -41,9 +41,6 @@ class RemoteNode {
     }
     bootstrapWebSocketAddress() {
         return this.#bootstrapWebSocketAddress
-    }
-    bootstrapUdpSocketAddress() {
-        return this.#bootstrapUdpSocketAddress
     }
     setChannelNodeInfoIfMoreRecent(channelName: ChannelName, channelNodeInfo: ChannelNodeInfo) {
         if (this.#channelNodeInfoByChannel.has(channelName)) {
@@ -122,13 +119,13 @@ class RemoteNode {
             if (channelNodeData === null) {
                 return null;
             }
-            const remoteInfo = channelNodeData.body;
+            const remoteInfo = channelNodeData.body
             if (remoteInfo.httpAddress) {
-                return remoteInfo.httpAddress;
+                return remoteInfo.httpAddress
             }
             else {
                 if (remoteInfo.proxyHttpAddresses.length > 0) {
-                    return remoteInfo.proxyHttpAddresses[0];
+                    return remoteInfo.proxyHttpAddresses[0]
                 }
                 else {
                     return null;
@@ -229,12 +226,14 @@ class RemoteNode {
             return await this._streamDataViaUdpFromRemoteNode(streamId)
         }
         else {
+            /* istanbul ignore next */
             throw Error ('Unexpected')
         }
     }
     async _streamDataViaUdpFromRemoteNode(streamId: StreamId): Promise<DataStreamy> {
         const udpS = this.#node.publicUdpSocketServer()
         if (!udpS) {
+            /* istanbul ignore next */
             throw Error('Cannot stream from remote node without udp socket server')
         }
         const requestData: StartStreamViaUdpRequestData = {
@@ -243,9 +242,11 @@ class RemoteNode {
         }
         const incomingDataStream = udpS.getIncomingDataStream(streamId)
         try {
-            const responseData = await this.sendRequest(requestData, {timeoutMsec: durationMsec(5000), method: 'default'})
+            const responseData = await this.sendRequest(requestData, {timeoutMsec: scaledDurationMsec(5000), method: 'default'})
             if (!isStartStreamViaUdpResponseData(responseData)) {
+                /* istanbul ignore next */
                 console.warn(responseData)
+                /* istanbul ignore next */
                 throw Error('unexpected')
             }
         }
@@ -257,15 +258,18 @@ class RemoteNode {
     async startStreamViaUdpToRemoteNode(streamId: StreamId): Promise<void> {
         const r: DownloadFileDataRequestData | null = this.#node.downloadStreamManager().get(streamId)
         if (r === null) {
+            /* istanbul ignore next */
             throw Error('Stream not found')
         }
 
         const udpS = this.#node.publicUdpSocketServer()
         const udpA = this.getUdpAddressForRemoteNode()
         if (!udpS) {
+            /* istanbul ignore next */
             throw Error('Cannot use stream via udp when there is no udp socket server')
         }
         if (!udpA) {
+            /* istanbul ignore next */
             throw Error('Cannot stream via udp when there is no udp address')
         }
 
@@ -299,9 +303,11 @@ class RemoteNode {
             const udpS = this.#node.publicUdpSocketServer()
             const udpA = this.getUdpAddressForRemoteNode()
             if (!udpS) {
+                /* istanbul ignore next */
                 throw Error('Cannot use udp method when there is no udp socket server')
             }
             if (!udpA) {
+                /* istanbul ignore next */
                 throw Error('Cannot use udp method when there is no udp address')
             }
             const R = await udpS.sendRequest(udpA, request, {timeoutMsec: opts.timeoutMsec})

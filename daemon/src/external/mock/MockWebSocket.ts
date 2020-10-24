@@ -1,5 +1,5 @@
 import { randomAlphaString, sleepMsecNum } from "../../common/util"
-import { DurationMsec, durationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, Port } from "../../interfaces/core"
+import { DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, Port, scaledDurationMsec } from "../../interfaces/core"
 import { WebSocketInterface, WebSocketServerInterface } from "../ExternalInterface"
 
 interface MockWebSocketUrl extends String {
@@ -48,7 +48,7 @@ class MockWebSocketServer {
         mockWebSocketManager.stopServer(this.port, this.nodeId)
     }
     _addConnection(ws: MockWebSocket) {
-        const incomingWs = new MockWebSocket(null, {timeoutMsec: durationMsec(0)})
+        const incomingWs = new MockWebSocket(null, {timeoutMsec: scaledDurationMsec(0)})
         incomingWs._setCompanion(ws)
         this.#incomingConnections.set(ws._id(), ws)
         this.#onConnectionCallbacks.forEach(cb => {
@@ -181,7 +181,12 @@ const mockWebSocketManager = new MockWebSocketManager()
 
 
 export const mockStartWebSocketServer = async (port: Port, nodeId: NodeId): Promise<WebSocketServerInterface> => {
-    return new MockWebSocketServer(port, nodeId)
+    const wss = new MockWebSocketServer(port, nodeId)
+    return new Promise((resolve, reject) => {
+        wss.onListening(() => {
+            resolve(wss)
+        })
+    })
 }
 
 export const mockCreateWebSocket = (url: string, opts: {timeoutMsec: DurationMsec}): WebSocketInterface => {

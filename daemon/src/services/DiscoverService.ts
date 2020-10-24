@@ -1,6 +1,6 @@
 import { action } from "../common/action";
 import { sleepMsec } from "../common/util";
-import { ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core";
+import { ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core";
 import { GetChannelInfoRequestData, isGetChannelInfoResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from "../interfaces/NodeToNodeRequest";
 import { SendRequestMethod } from "../RemoteNode";
 
@@ -53,13 +53,13 @@ export default class DiscoverService {
         while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
             numPasses ++
             if (numPasses > 3) return
-            await sleepMsec(durationMsec(1500))
+            await sleepMsec(scaledDurationMsec(1500))
         }
         const requestData: GetChannelInfoRequestData = {
             requestType: 'getChannelInfo',
             channelName
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: durationMsec(3000), method: 'default'})
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: scaledDurationMsec(4000), method: 'default'})
         if (!isGetChannelInfoResponseData(responseData)) {
             throw Error('Unexpected.');
         }
@@ -111,7 +111,7 @@ export default class DiscoverService {
                 lastRandomNodeDiscoverTimestamp = nowTimestamp()
             }
 
-            await sleepMsec(durationMsec(500), () => {return !this.#halted})
+            await sleepMsec(scaledDurationMsec(500), () => {return !this.#halted})
         }
     }
 }

@@ -1,4 +1,4 @@
-import { Address, DurationMsec, JSONObject, Port, UrlPath } from '../../interfaces/core'
+import { Address, DurationMsec, JSONObject, NodeId, Port, UrlPath } from '../../interfaces/core'
 import ExternalInterface, { ExpressInterface, HttpServerInterface, LocalFeedManagerInterface } from '../ExternalInterface'
 import mockDgramCreateSocket from './mockDgramCreateSocket'
 import MockKacheryStorageManager from './MockKacheryStorageManager'
@@ -27,10 +27,17 @@ const mockExternalInterface = (daemonGroup: MockNodeDaemonGroup, getDefects: () 
         return new MockKacheryStorageManager(getDefects)
     }
 
+    const dgramCreateSocket = (args: { type: "udp4", reuseAddr: boolean, nodeId: NodeId, firewalled: boolean }) => {
+        if (getDefects().createUdpSocketDefect) {
+            throw Error('Intentional error creating socket due to defect')
+        }
+        return mockDgramCreateSocket(args)
+    }
+
     return {
         httpPostJson,
         httpGetDownload,
-        dgramCreateSocket: mockDgramCreateSocket,
+        dgramCreateSocket,
         startWebSocketServer: mockStartWebSocketServer,
         createWebSocket: mockCreateWebSocket,
         createKacheryStorageManager,

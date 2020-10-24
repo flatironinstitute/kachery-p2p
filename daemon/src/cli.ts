@@ -6,7 +6,7 @@ import os from 'os';
 import yargs from 'yargs';
 import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util';
 import realExternalInterface from './external/real/realExternalInterface';
-import { Address, isAddress, isChannelName, isHostName, isKeyPair, isPort, JSONObject, KeyPair, localFilePath, LocalFilePath } from './interfaces/core';
+import { Address, isAddress, isChannelName, isHostName, isKeyPair, isPort, JSONObject, KeyPair, localFilePath, LocalFilePath, toPort } from './interfaces/core';
 import startDaemon from './startDaemon';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
@@ -101,9 +101,9 @@ function main() {
         });
         
         const bootstrapStrings = argv.bootstrap || null;
-        const bootstrapAddresses = bootstrapStrings ? (
+        let bootstrapAddresses = bootstrapStrings ? (
           (bootstrapStrings as string[]).map(x => parseBootstrapInfo(x))
-        ): null;
+        ): [];
         const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
         if (!fs.existsSync(configDir)) {
           fs.mkdirSync(configDir);
@@ -117,6 +117,28 @@ function main() {
         const noBootstrap = argv['no-bootstrap'] ? true : false;
         const isBootstrapNode = argv['is-bootstrap'] ? true : false;
         const verbose = Number(argv.verbose || 0);
+
+        if ((!noBootstrap) && (bootstrapAddresses.length === 0)) {
+          bootstrapAddresses = [
+            // todo - set these properly
+            {hostName: '45.33.92.31', port: toPort(46002)}, // kachery-p2p-spikeforest
+            {hostName: '45.33.92.33', port: toPort(46002)} // kachery-p2p-flatiron1
+          ].map(bpi => {
+              if (isAddress(bpi)) {
+                  return bpi
+              }
+              else {
+                  throw Error(`Not an address: ${bpi}`)
+              }
+          }).filter(bpi => {
+              if ((bpi.hostName === 'localhost') || (bpi.hostName === this.p.hostName)) {
+                  if (bpi.port === this.p.httpListenPort) {
+                      return false
+                  }
+              }
+              return true
+          })
+        }
 
         if (hostName !== null) {
           if (!isHostName(hostName)) {
@@ -144,7 +166,12 @@ function main() {
 
         const keyPair = _loadKeypair(localFilePath(configDir))
 
-        const externalInterface = realExternalInterface()
+        const storageDir = process.env['KACHERY_STORAGE_DIR']
+        if (!storageDir) {
+            throw Error('You must set the KACHERY_STORAGE_DIR environment variable.');
+        }
+
+        const externalInterface = realExternalInterface(localFilePath(storageDir), localFilePath(configDir))
 
         startDaemon({
           keyPair,
@@ -162,6 +189,7 @@ function main() {
             multicastUdpAddress: '237.0.0.0', // how to choose this?
             udpSocketPort,
             webSocketListenPort,
+            firewalled: false,
             services: {
                 announce: true,
                 discover: true,

@@ -1,6 +1,6 @@
 import { action } from "../common/action"
 import { sleepMsec, sleepMsecNum } from "../common/util"
-import { ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core"
+import { ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core"
 import { AnnounceRequestData, isAnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from "../interfaces/NodeToNodeRequest"
 import { SendRequestMethod } from "../RemoteNode"
 
@@ -34,11 +34,16 @@ export default class AnnounceService {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
         // announce self when a new node-channel has been added
-        this.#remoteNodeManager.onNodeChannelAdded((remoteNodeId: NodeId, channelName: ChannelName) => {
-            
+        this.#remoteNodeManager.onNodeChannelAdded(async (remoteNodeId: NodeId, channelName: ChannelName) => {
             if (this.#halted) return
+            // check if we can send message to node, if not, delay a bit
+            let numPasses = 0
+            while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
+                if (numPasses > 3) return
+                numPasses ++
+                await sleepMsec(scaledDurationMsec(1000))
+            }
             if (this.#node.channelNames().includes(channelName)) { // only if we belong to this channel
-                // todo: check if we can send message to node, if not maybe we need to delay a bit
 
                 /////////////////////////////////////////////////////////////////////////
                 action('announceToNewNode', {context: 'AnnounceService', remoteNodeId, channelName}, async () => {
@@ -76,14 +81,14 @@ export default class AnnounceService {
         while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
             numPasses ++
             if (numPasses > 3) return
-            await sleepMsec(durationMsec(1500))
+            await sleepMsec(scaledDurationMsec(1500))
         }
         const requestData: AnnounceRequestData = {
             requestType: 'announce',
             channelNodeInfo: this.#node.getChannelNodeInfo(channelName)
         }
         let method: SendRequestMethod = 'prefer-udp' // we prefer to send via udp so that we can discover our own public udp address when we get the response
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: durationMsec(2000), method})
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: scaledDurationMsec(4000), method})
         if (!isAnnounceResponseData(responseData)) {
             throw Error('Unexpected.')
         }
@@ -141,7 +146,7 @@ export default class AnnounceService {
                 }
                 lastRandomNodeAnnounceTimestamp = nowTimestamp()
             }
-            await sleepMsec(durationMsec(500), () => {return !this.#halted})
+            await sleepMsec(scaledDurationMsec(500), () => {return !this.#halted})
         }
     }
 }

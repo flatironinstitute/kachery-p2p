@@ -7,7 +7,7 @@ import ExternalInterface, { KacheryStorageManagerInterface } from './external/Ex
 import { MockNodeDefects } from './external/mock/MockNodeDaemon'
 import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
-import { Address, ChannelName, ChannelNodeInfo, durationMsec, DurationMsec, durationMsecToNumber, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isAddress, KeyPair, MessageCount, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage } from './interfaces/core'
+import { addDurations, Address, ChannelName, ChannelNodeInfo, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, KeyPair, MessageCount, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage } from './interfaces/core'
 import { CheckForFileRequestData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, GetLiveFeedSignedMessagesRequestData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import { handleCheckForFileRequest } from './nodeToNodeRequestHandlers/handleCheckForFileRequest'
 import { handleCheckForLiveFeedRequest } from './nodeToNodeRequestHandlers/handleCheckForLiveFeedRequest'
@@ -23,9 +23,9 @@ import { ProxyConnectionToClient } from './proxyConnections/ProxyConnectionToCli
 import { ProxyConnectionToServer } from './proxyConnections/ProxyConnectionToServer'
 import RemoteNodeManager from './RemoteNodeManager'
 import PublicUdpSocketServer from './services/PublicUdpSocketServer'
+import { PacketId } from './udp/UdpPacketSender'
 
 export interface KacheryP2PNodeOpts {
-    noBootstrap: boolean,
     isBootstrapNode: boolean,
     multicastUdpAddress: string | null,
     getDefects: () => MockNodeDefects
@@ -37,10 +37,9 @@ class KacheryP2PNode {
     #feedManager: FeedManager
     #remoteNodeManager: RemoteNodeManager
     #kacheryStorageManager: KacheryStorageManagerInterface
-    #liveFeedSubscriptionManager: LiveFeedSubscriptionManager
+    #liveFeedSubscriptionManager: LiveFeedSubscriptionManager // not used right now
     #proxyConnectionsToClients = new Map<NodeId, ProxyConnectionToClient>()
     #proxyConnectionsToServers = new Map<NodeId, ProxyConnectionToServer>()
-    #bootstrapAddresses: Address[] // not same as argument to constructor
     #downloadStreamManager = new DownloadStreamManager
     #publicUdpSocketAddress: Address | null = null
     #publicUdpSocketServer: PublicUdpSocketServer | null = null
@@ -54,7 +53,7 @@ class KacheryP2PNode {
         udpSocketPort: Port | null,
         webSocketListenPort: Port | null,
         label: string,
-        bootstrapAddresses: Address[] | null,
+        bootstrapAddresses: Address[],
         channelNames: ChannelName[],
         externalInterface: ExternalInterface,
         opts: KacheryP2PNodeOpts
@@ -62,7 +61,7 @@ class KacheryP2PNode {
         this.#keyPair = p.keyPair // the keypair
         this.#nodeId = publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey)) // get the node id from the public key
         this.#kacheryStorageManager = p.externalInterface.createKacheryStorageManager()
-        this.#liveFeedSubscriptionManager = new LiveFeedSubscriptionManager()
+        this.#liveFeedSubscriptionManager = new LiveFeedSubscriptionManager() // not used right now
 
         // The feed manager -- each feed is a collection of append-only logs
         const localFeedManager = this.p.externalInterface.createLocalFeedManager()
@@ -71,32 +70,6 @@ class KacheryP2PNode {
         this.#remoteNodeManager = new RemoteNodeManager(this)
 
         let bootstrapAddresses = this.p.bootstrapAddresses
-        if (this.p.opts.noBootstrap) {
-            // do not connect to bootstrap nodes
-        }
-        else {
-            if (bootstrapAddresses === null) {
-                bootstrapAddresses = [
-                        {hostName: '45.33.92.31', port: <Port><any>46002}, // kachery-p2p-spikeforest
-                        {hostName: '45.33.92.33', port: <Port><any>46002} // kachery-p2p-flatiron1
-                ].map(bpi => {
-                    if (isAddress(bpi)) {
-                        return bpi
-                    }
-                    else {
-                        throw Error(`Not an address: ${bpi}`)
-                    }
-                }).filter(bpi => {
-                    if ((bpi.hostName === 'localhost') || (bpi.hostName === this.p.hostName)) {
-                        if (bpi.port === this.p.httpListenPort) {
-                            return false
-                        }
-                    }
-                    return true
-                })
-            }
-        }
-        this.#bootstrapAddresses = bootstrapAddresses || []
 
         const downloaderCreator = new DownloaderCreator(this, this.p.opts.getDefects)
         this.#downloadOptimizer = new DownloadOptimizer(downloaderCreator)
@@ -114,7 +87,7 @@ class KacheryP2PNode {
         return this.#remoteNodeManager
     }
     bootstrapAddresses() {
-        return [...this.#bootstrapAddresses]
+        return [...this.p.bootstrapAddresses]
     }
     isBootstrapNode() {
         return this.p.opts.isBootstrapNode
@@ -126,7 +99,8 @@ class KacheryP2PNode {
         return this.#kacheryStorageManager
     }
     liveFeedSubscriptionManager() {
-        return this.#liveFeedSubscriptionManager
+        /* istanbul ignore next */
+        return this.#liveFeedSubscriptionManager // not used right now
     }
     downloadStreamManager(): DownloadStreamManager {
         return this.#downloadStreamManager
@@ -152,7 +126,7 @@ class KacheryP2PNode {
         const onFinishedCallbacks: (() => void)[] = []
         onResponse((nodeId: NodeId, responseData: NodeToNodeResponseData) => {
             if (!isCheckForFileResponseData(responseData)) {
-                console.warn(responseData)
+                /* istanbul ignore next */
                 throw Error(`Unexpected response type: ${responseData.requestType} <> 'checkForFile'`)
             }
             const { found, size } = responseData
@@ -212,9 +186,6 @@ class KacheryP2PNode {
             }
         })
     }
-    getProxyConnectionToClient(nodeId: NodeId) {
-        return this.#proxyConnectionsToClients.get(nodeId) || null
-    }
     setProxyConnectionToServer(nodeId: NodeId, c: ProxyConnectionToServer) {
         if (this.#proxyConnectionsToServers.has(nodeId)) {
             // we already have this connection
@@ -256,6 +227,7 @@ class KacheryP2PNode {
             return hostName(this.nodeId().toString())
         }
         else {
+            /* istanbul ignore next */
             return null
         }
     }
@@ -338,15 +310,18 @@ class KacheryP2PNode {
             maxNumMessages,
             waitMsec
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, {timeoutMsec: durationMsec(durationMsecToNumber(waitMsec) + 1000), method: 'default'})
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, {timeoutMsec: addDurations(waitMsec, scaledDurationMsec(1000)), method: 'default'})
         if (!isGetLiveFeedSignedMessagesResponseData(responseData)) {
+            /* istanbul ignore next */
             throw Error('Unexpected response type.')
         }
         if (!responseData.success) {
+            /* istanbul ignore next */
             throw Error(`Error getting remote live feed signed messages: ${responseData.errorMessage}`)
         }
         const { signedMessages } = responseData
         if (signedMessages === null) {
+            /* istanbul ignore next */
             throw Error('Unexpected: signedMessages is null.')
         }
         return signedMessages
@@ -366,6 +341,7 @@ class KacheryP2PNode {
         }
         const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, {timeoutMsec: timeoutMsec, method: 'default'})
         if (!isSubmitMessageToLiveFeedResponseData(responseData)) {
+            /* istanbul ignore next */
             throw Error(`Error submitting message to remote live feed: Unexpected response data.`)
         }
         if (!responseData.success) {
@@ -387,6 +363,7 @@ class KacheryP2PNode {
             onResponse((nodeId, responseData) => {
                 if (found) return
                 if (!isCheckForLiveFeedResponseData(responseData)) {
+                    /* istanbul ignore next */
                     throw Error('Unexpected response type.')
                 }
                 if (responseData.found) {
@@ -435,6 +412,7 @@ class KacheryP2PNode {
             responseData = await handleCheckForLiveFeedRequest(this, fromNodeId, requestData)
         }
         else if (isSetLiveFeedSubscriptionsRequestData(requestData)) {
+            /* istanbul ignore next */
             responseData = await handleSetLiveFeedSubscriptionsRequest(this, fromNodeId, requestData)
         }
         else if (isGetLiveFeedSignedMessagesRequestData(requestData)) {
@@ -453,7 +431,9 @@ class KacheryP2PNode {
             responseData = await handleFallbackUdpPacketRequest(this, fromNodeId, requestData)
         }
         else {
+            /* istanbul ignore next */
             console.warn(requestData)
+            /* istanbul ignore next */
             throw Error('Unexpected error: unrecognized request data.')
         }
         const body = {
@@ -481,10 +461,12 @@ class KacheryP2PNode {
 
         const s = this.#downloadStreamManager.get(streamId)
         if (!s) {
+            /* istanbul ignore next */
             throw Error(`Unable to find download info for stream: ${streamId}: (node: ${this.#nodeId.slice(0, 6)})`)
         }
         const {startByte, endByte} = s
         if (endByte === null) {
+            /* istanbul ignore next */
             throw Error('Unexpected')
         }
         const ret = new DataStreamy();
@@ -507,16 +489,17 @@ class KacheryP2PNode {
         })()
         return ret
     }
-    receiveFallbackUdpPacket(fromNodeId: NodeId, packet: Buffer): void {
+    receiveFallbackUdpPacket(fromNodeId: NodeId, packetId: PacketId, packet: Buffer): void {
         if (!this.#publicUdpSocketServer) {
+            /* istanbul ignore next */
             throw Error('Cannot receive fallback udp packet. No public udp socket server set.')
         }
-        this.#publicUdpSocketServer.receiveFallbackUdpPacket(fromNodeId, packet)
+        this.#publicUdpSocketServer.receiveFallbackUdpPacket(fromNodeId, packetId, packet)
     }
 }
 
 class DownloadStreamManager {
-    #downloadStreamInfos = new GarbageMap<StreamId, DownloadFileDataRequestData>(durationMsec(30 * 60 * 1000))
+    #downloadStreamInfos = new GarbageMap<StreamId, DownloadFileDataRequestData>(scaledDurationMsec(30 * 60 * 1000))
     set(streamId: StreamId, info: DownloadFileDataRequestData) {
         this.#downloadStreamInfos.set(streamId, info)
     }

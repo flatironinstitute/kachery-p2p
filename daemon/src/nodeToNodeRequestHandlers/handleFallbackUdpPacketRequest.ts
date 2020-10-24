@@ -3,10 +3,10 @@ import { FallbackUdpPacketRequestData, FallbackUdpPacketResponseData } from '../
 import KacheryP2PNode from '../KacheryP2PNode'
 
 export const handleFallbackUdpPacketRequest = async (node: KacheryP2PNode, fromNodeId: NodeId, requestData: FallbackUdpPacketRequestData): Promise<FallbackUdpPacketResponseData> => {
-    let { dataBase64 } = requestData
+    let { dataBase64, packetId } = requestData
     const packet = Buffer.from(dataBase64, 'base64')
 
-    node.receiveFallbackUdpPacket(fromNodeId, packet)
+    node.receiveFallbackUdpPacket(fromNodeId, packetId, packet)
 
     return {
         requestType: 'fallbackUdpPacket',

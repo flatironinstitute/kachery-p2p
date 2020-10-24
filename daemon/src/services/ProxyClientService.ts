@@ -4,7 +4,7 @@ import GarbageMap from '../common/GarbageMap';
 import { sleepMsec } from "../common/util";
 import ExternalInterface from "../external/ExternalInterface";
 import { MockNodeDefects } from "../external/mock/MockNodeDaemon";
-import { Address, DurationMsec, durationMsec, elapsedSince, KeyPair, NodeId, nowTimestamp, Timestamp, zeroTimestamp } from "../interfaces/core";
+import { Address, durationGreaterThan, DurationMsec, elapsedSince, KeyPair, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, unscaledDurationMsec, zeroTimestamp } from "../interfaces/core";
 import { NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
 import { ProxyConnectionToServer } from "../proxyConnections/ProxyConnectionToServer";
 
@@ -46,7 +46,7 @@ export default class ProxyClientService {
             if ((rn) && (rn.getRemoteNodeWebSocketAddress())) {
                 /////////////////////////////////////////////////////////////////////////
                 action('tryOutgoingProxyConnectionForNewBootstrapNode', {context: 'ProxyClientService', bootstrapNodeId}, async () => {
-                    await this.#proxyClientManager.tryConnection(bootstrapNodeId, {timeoutMsec: durationMsec(3000)});
+                    await this.#proxyClientManager.tryConnection(bootstrapNodeId, {timeoutMsec: scaledDurationMsec(3000)});
                 }, null)
                 /////////////////////////////////////////////////////////////////////////
             }
@@ -68,10 +68,10 @@ export default class ProxyClientService {
                     const c = this.#node.getProxyConnectionToServer(remoteNodeId)
                     if (!c) {
                         const elapsedMsec = this.#proxyClientManager.elapsedMsecSinceLastFailedOutgoingConnection(remoteNodeId)
-                        if (elapsedMsec > 15000) {
+                        if (durationGreaterThan(elapsedMsec, scaledDurationMsec(15000))) {
                             /////////////////////////////////////////////////////////////////////////
                             await action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
-                                await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: durationMsec(3000)});
+                                await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: scaledDurationMsec(3000)});
                             }, null)
                             /////////////////////////////////////////////////////////////////////////
                         }
@@ -86,7 +86,7 @@ export default class ProxyClientService {
 class ProxyClientManager {
     #node: KacheryP2PNodeInterface
     // #outgoingConnections = new Map<NodeId, ProxyConnectionToServer>()
-    #failedConnectionAttemptTimestamps = new GarbageMap<NodeId, Timestamp>(durationMsec(120000))
+    #failedConnectionAttemptTimestamps = new GarbageMap<NodeId, Timestamp>(scaledDurationMsec(120 * 1000))
     constructor(node: KacheryP2PNodeInterface) {
         this.#node = node
     }
@@ -107,9 +107,9 @@ class ProxyClientManager {
             throw(err);
         }
     }
-    elapsedMsecSinceLastFailedOutgoingConnection(remoteNodeId: NodeId): number {
+    elapsedMsecSinceLastFailedOutgoingConnection(remoteNodeId: NodeId): DurationMsec {
         const timestamp: Timestamp = this.#failedConnectionAttemptTimestamps.get(remoteNodeId) || zeroTimestamp()
-        return elapsedSince(timestamp)
+        return unscaledDurationMsec(elapsedSince(timestamp))
     }
     getConnection(remoteNodeId: NodeId): ProxyConnectionToServer | null {
         return this.#node.getProxyConnectionToServer(remoteNodeId)

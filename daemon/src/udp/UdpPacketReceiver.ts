@@ -1,17 +1,27 @@
 import dgram from 'dgram';
 import { DgramSocket } from '../external/ExternalInterface';
+import { MockNodeDefects } from '../external/mock/MockNodeDaemon';
 import { tryParseJsonObject } from '../interfaces/core';
 import { protocolVersion } from '../protocolVersion';
 import { isUdpPacketSenderHeader, PacketId, UdpPacketSenderHeader, UDP_PACKET_HEADER_SIZE } from './UdpPacketSender';
 
 export default class UdpPacketReceiver {
     #socket: DgramSocket
-    #onPacketCallbacks: ((buffer: Buffer, remoteInfo: dgram.RemoteInfo) => void)[] = []
+    #onPacketCallbacks: ((packetId: PacketId, buffer: Buffer, remoteInfo: dgram.RemoteInfo) => void)[] = []
     #onConfirmationCallbacks: ((packetId: PacketId) => void)[] = []
-    constructor(socket: DgramSocket) {
+    #numMessagesReceived: number = 0
+    constructor(socket: DgramSocket, private getDefects: () => MockNodeDefects) {
         this.#socket = socket
 
         this.#socket.on('message', (message, remoteInfo) => {
+            this.#numMessagesReceived ++
+            const udpPacketLossNum = this.getDefects().udpPacketLossNum || null
+            if (udpPacketLossNum !== null) {
+                if (((this.#numMessagesReceived - 1) % udpPacketLossNum) === (udpPacketLossNum - 1)) {
+                    // lose this message
+                    return
+                }
+            }
             const headerTxt = message.slice(0, UDP_PACKET_HEADER_SIZE).toString().trimEnd()
             const dataBuffer = message.slice(UDP_PACKET_HEADER_SIZE);
             const header = tryParseJsonObject(headerTxt)
@@ -36,11 +46,11 @@ export default class UdpPacketReceiver {
             this.#socket.send(buf, 0, buf.length, remoteInfo.port, remoteInfo.address)
 
             this.#onPacketCallbacks.forEach(cb => {
-                cb(dataBuffer, remoteInfo)
+                cb(header.packetId, dataBuffer, remoteInfo)
             })
         })
     }
-    onPacket(callback: (buffer: Buffer, remoteInfo: dgram.RemoteInfo) => void) {
+    onPacket(callback: (packetId: PacketId, buffer: Buffer, remoteInfo: dgram.RemoteInfo) => void) {
         this.#onPacketCallbacks.push(callback)
     }
     onConfirmation(callback: (packetId: PacketId) => void) {

@@ -1,6 +1,7 @@
 import { action } from '../common/action';
+import { sleepMsec } from '../common/util';
 import { WebSocketInterface, WebSocketServerInterface } from '../external/ExternalInterface';
-import { Port } from '../interfaces/core';
+import { Port, scaledDurationMsec } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { ProxyConnectionToClient } from '../proxyConnections/ProxyConnectionToClient';
 
@@ -16,6 +17,7 @@ class PublicWebSocketServer {
         }
     }
     async startListening(port: Port) {
+        let usedDisconnectDefect = false
         this.#webSocketServer = await this.#node.externalInterface().startWebSocketServer(port, this.#node.nodeId())
         this.#webSocketServer.onConnection((ws: WebSocketInterface) => {
             /////////////////////////////////////////////////////////////////////////
@@ -23,6 +25,16 @@ class PublicWebSocketServer {
                 const X = new ProxyConnectionToClient(this.#node);
                 await X.initialize(ws);
                 this.#node.setProxyConnectionToClient(X.remoteNodeId(), X);
+
+                // TEST DEFECT ////////////////////////////////////////////////
+                if ((this.#node.getDefects().disconnectIncomingProxyConnectionOnce) && (!usedDisconnectDefect)) {
+                    usedDisconnectDefect = true;
+                    (async () => {
+                        await sleepMsec(scaledDurationMsec(4000))
+                        X.close()
+                    })()
+                }
+                ///////////////////////////////////////////////////////////////
             }, null);
             /////////////////////////////////////////////////////////////////////////
         })

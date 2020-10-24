@@ -5,7 +5,7 @@ import { action } from '../common/action';
 import { DataStreamyProgress } from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
-import { ChannelName, durationMsec, DurationMsec, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isOneOf, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
+import { ChannelName, DurationMsec, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isChannelName, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isOneOf, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -52,6 +52,23 @@ const isApiLoadFileRequest = (x: any): x is ApiLoadFileRequest => {
     });
 }
 
+interface FeedApiWatchForNewMessagesRequest {
+    subfeedWatches: SubfeedWatches,
+    waitMsec: DurationMsec,
+    maxNumMessages?: MessageCount
+}
+const isFeedApiWatchForNewMessagesRequest = (x: any): x is FeedApiWatchForNewMessagesRequest => {
+    return _validateObject(x, {
+        subfeedWatches: isSubfeedWatches,
+        waitMsec: isDurationMsec,
+        maxNumMessages: optional(isMessageCount)
+    })
+}
+interface FeedApiWatchForNewMessagesResponse {
+    success: boolean,
+    messages: {[key: string]: SubfeedMessage[]}
+}
+
 export default class DaemonApiServer {
     #node: KacheryP2PNode
     #app: Express
@@ -93,7 +110,7 @@ export default class DaemonApiServer {
             /////////////////////////////////////////////////////////////////////////
             await action('/halt', {context: 'Daemon API'}, async () => {
                 await this._apiHalt(req, res)
-                await sleepMsec(durationMsec(3000));
+                await sleepMsec(scaledDurationMsec(3000));
                 process.exit(0);
             }, async (err: Error) => {
                 await this._errorResponse(req, res, 500, err.message);
@@ -692,32 +709,18 @@ export default class DaemonApiServer {
     }
     // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
     async _feedApiWatchForNewMessages(req: Req, res: Res) {
-        interface FeedApiWatchForNewMessagesRequest {
-            subfeedWatches: SubfeedWatches,
-            waitMsec: DurationMsec
-        }
-        const isFeedApiWatchForNewMessagesRequest = (x: any): x is FeedApiWatchForNewMessagesRequest => {
-            return _validateObject(x, {
-                subfeedWatches: isSubfeedWatches,
-                waitMsec: isDurationMsec
-            });
-        }
-        interface FeedApiWatchForNewMessagesResponse {
-            success: boolean,
-            messages: {[key: string]: SubfeedMessage[]}
-        }
         const reqData = req.body;
-        if (!isFeedApiWatchForNewMessagesRequest(reqData)) throw Error('Invalid request in _feedApiWatchForNewMessages');
+        if (!isFeedApiWatchForNewMessagesRequest(reqData)) throw Error('Invalid request in _feedApiWatchForNewMessages')
 
-        const { subfeedWatches, waitMsec } = reqData;
+        const { subfeedWatches, waitMsec, maxNumMessages } = reqData
 
         const messages = await this.#node.feedManager().watchForNewMessages({
-            subfeedWatches: toSubfeedWatchesRAM(subfeedWatches), waitMsec, maxNumMessages: messageCount(10) // todo: why 10?
-        });
+            subfeedWatches: toSubfeedWatchesRAM(subfeedWatches), waitMsec, maxNumMessages: maxNumMessages || messageCount(10)
+        })
 
         const response: FeedApiWatchForNewMessagesResponse = {success: true, messages: mapToObject(messages)}
-        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
-        res.json(response);
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object')
+        res.json(response)
     }
     // Helper function for returning http request with an error response
     async _errorResponse(req: Req, res: Res, code: number, errorString: string) {
@@ -728,7 +731,7 @@ export default class DaemonApiServer {
         catch(err) {
             console.warn(`Problem sending error`, {error: err.message});
         }
-        await sleepMsec(durationMsec(100));
+        await sleepMsec(scaledDurationMsec(100));
         try {
             req.connection.destroy();
         }

@@ -1,16 +1,117 @@
 import fs from 'fs';
-import os from 'os';
 import { createKeyPair, hexToPrivateKey, JSONStringifyDeterministic, privateKeyToHex, publicKeyHexToFeedId, publicKeyToHex } from '../../common/crypto_util';
-import { FeedId, FeedName, FeedsConfigRAM, isFeedsConfig, isSignedSubfeedMessage, isSubfeedAccessRules, LocalFilePath, PrivateKey, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, toFeedsConfig, toFeedsConfigRAM } from '../../interfaces/core';
+import GarbageMap from '../../common/GarbageMap';
+import { FeedId, FeedName, isFeedId, isJSONObject, isPrivateKeyHex, isSignedSubfeedMessage, isSubfeedAccessRules, localFilePath, LocalFilePath, PrivateKey, PrivateKeyHex, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, _validateObject } from '../../interfaces/core';
+
+interface FeedConfig {
+    feedId: FeedId,
+    privateKey: PrivateKeyHex
+}
+const isFeedConfig = (x: any): x is FeedConfig => {
+    return _validateObject(x, {
+        feedId: isFeedId,
+        privateKey: isPrivateKeyHex
+    })
+}
+
+class FeedsConfigManager {
+    #configDir: LocalFilePath
+    #feedsConfigMemCache = new GarbageMap<FeedId, FeedConfig>(scaledDurationMsec(60 * 60 * 1000))
+    #feedIdsByNameMemCache = new GarbageMap<FeedName, FeedId>(scaledDurationMsec(60 * 60 * 1000))
+    constructor(configDir: LocalFilePath, private opts: {useMemoryCache: boolean}) {
+        this.#configDir = configDir
+    }
+
+    async addFeed(feedId: FeedId, privateKey: PrivateKeyHex) {
+        const c = await this.getFeedConfig(feedId)
+        if (c) {
+            throw Error('Cannot add feed. Feed with this ID already exists')
+        }
+        const dirPath = await this._feedConfigDirectory(feedId, {create: true})
+        const config: FeedConfig = {
+            feedId,
+            privateKey
+        }
+        await writeJsonFile(`${dirPath}/config.json`, config)
+        this.#feedsConfigMemCache.set(feedId, {feedId, privateKey})
+    }
+    async getFeedConfig(feedId: FeedId): Promise<FeedConfig | null> {
+        const c = this.#feedsConfigMemCache.get(feedId)
+        if ((c) && (this.opts.useMemoryCache)) {
+            return c
+        }
+        const dirPath = await this._feedConfigDirectory(feedId, {create: false})
+        if (fs.existsSync(dirPath.toString())) {
+            const config = await readJsonFile(`${dirPath}/config.json`, {})
+            if (isFeedConfig(config)) {
+                this.#feedsConfigMemCache.set(feedId, config)
+                return config
+            }
+        }
+        return null
+    }
+    async deleteFeed(feedId: FeedId) {
+        if (this.#feedsConfigMemCache.has(feedId)) {
+            this.#feedsConfigMemCache.delete(feedId)
+        }
+        const dirPath = await this._feedConfigDirectory(feedId, {create: false})
+        if (fs.existsSync(dirPath.toString())) {
+            await fs.promises.rmdir(dirPath.toString(), {recursive: true})
+        }
+    }
+    async setFeedIdForName(feedName: FeedName, feedId: FeedId) {
+        const path = await this._feedIdByNamePath(feedName, {create: true})
+        await writeJsonFile(path.toString(), {feedName, feedId})
+        this.#feedIdsByNameMemCache.set(feedName, feedId)
+    }
+    async getFeedIdForName(feedName: FeedName): Promise<FeedId | null> {
+        const f = this.#feedIdsByNameMemCache.get(feedName)
+        if ((f) && (this.opts.useMemoryCache)) return f
+        const path = await this._feedIdByNamePath(feedName, {create: false})
+        if (!fs.existsSync(path.toString())) return null
+        const a = await readJsonFile(path.toString(), {})
+        if (!isJSONObject(a)) return null
+        const feedId = a.feedId
+        if (!feedId) return null
+        if (isFeedId(feedId)) {
+            this.#feedIdsByNameMemCache.set(feedName, feedId)
+            return feedId
+        }
+        else return null
+    }
+    async _feedConfigDirectory(feedId: FeedId, opts: {create: boolean}): Promise<LocalFilePath> {
+        const f = feedId
+        const ret = `${this.#configDir}/feeds/${f[0]}${f[1]}/${f[2]}${f[3]}/${f[4]}${f[5]}/${f}`
+        if (opts.create) {
+            if (!fs.existsSync(ret)) {
+                await fs.promises.mkdir(ret, {recursive: true})
+            }
+        }
+        return localFilePath(ret)
+    }
+    async _feedIdByNamePath(feedName: FeedName, opts: {create: boolean}): Promise<LocalFilePath> {
+        const f = feedName
+        const p = `${this.#configDir}/feeds/byName`
+        if (opts.create) {
+            if (!fs.existsSync(p)) {
+                await fs.promises.mkdir(p, {recursive: true})
+            }
+        }
+        return localFilePath(`${p}/${feedName}.json`)
+    }
+}
 
 export default class LocalFeedManager {
     #storageDir: LocalFilePath
-    _feedsConfig: FeedsConfigRAM | null = null // The config will be loaded from disk as need. Contains all the private keys for the feeds and the local name/ID associations.
-    constructor(storageDir: LocalFilePath) {
+    #configDir: LocalFilePath
+    #feedsConfigManager: FeedsConfigManager
+    constructor(storageDir: LocalFilePath, configDir: LocalFilePath) {
         if (!fs.existsSync(storageDir.toString())) {
             throw Error(`Storage directory does not exist: ${storageDir}`)
         }
         this.#storageDir = storageDir
+        this.#configDir = configDir
+        this.#feedsConfigManager = new FeedsConfigManager(this.#configDir, {useMemoryCache: false}) // todo: how to turn this on?
     }
     async createFeed(feedName: FeedName | null): Promise<FeedId> {
         // Create a new writeable feed on this node and return the ID of the new feed
@@ -19,49 +120,25 @@ export default class LocalFeedManager {
         const {publicKey, privateKey} = createKeyPair();
         const feedId = publicKeyHexToFeedId(publicKeyToHex(publicKey));
 
-        // Load and modify the config (which contains the private keys and associates names to feed IDs)
-        const config = await this._loadFeedsConfig();
-        config.feeds.set(feedId, {
-            publicKey: publicKeyToHex(publicKey),
-            privateKey: privateKeyToHex(privateKey)
-        });
-        if (feedName)
-            config.feedIdsByName.set(feedName, feedId);
-        await this._saveFeedsConfig(config);
+        await this.#feedsConfigManager.addFeed(feedId, privateKeyToHex(privateKey))
+        if (feedName !== null) {
+            await this.#feedsConfigManager.setFeedIdForName(feedName, feedId)
+        }
 
         // Create the feed directory for the actual feed
-        await _createFeedDirectoryIfNeeded(this.#storageDir, feedId);
+        await _createFeedDirectoryIfNeeded(this.#storageDir, feedId)
 
         // Return the feed ID
-        return feedId;
+        return feedId
     }
     async deleteFeed(feedId: FeedId) {
-        const dirPath = _feedDirectory(this.#storageDir, feedId);
-        await fs.promises.rmdir(dirPath, {recursive: true});
-
-        const config = await this._loadFeedsConfig();
-        if (config.feeds.has(feedId)) {
-            config.feeds.delete(feedId);
-        }
-        config.feedIdsByName.forEach((feedId, feedName) => {
-            if (config.feedIdsByName.get(feedName) === feedId) {
-                config.feedIdsByName.delete(feedName)
-            }
-        })
-        await this._saveFeedsConfig(config);
+        await this.#feedsConfigManager.deleteFeed(feedId)
     }
-    async getFeedId(feedName: FeedName) {
+    async getFeedId(feedName: FeedName): Promise<FeedId | null> {
         // assert(typeof(feedName) === 'string');
         // Look up the feed ID for a particular feed name by consulting the config file
-        const config = await this._loadFeedsConfig();
-        const feedId = config.feedIdsByName.get(feedName) || null;
-        if (feedId) {
-            // Return null if we don't actually have the feed directory
-            if (!fs.existsSync(_feedDirectory(this.#storageDir, feedId))) {
-                return null;
-            }
-        }
-        return feedId;
+
+        return await this.#feedsConfigManager.getFeedIdForName(feedName)
     }
     async hasWriteableFeed(feedId: FeedId) {
         // Check whether this node has a writeable feed.
@@ -73,14 +150,8 @@ export default class LocalFeedManager {
     }
     async getPrivateKeyForFeed(feedId: FeedId): Promise<PrivateKey | null> {
         // Consult the config to get the private key associated with a particular feed ID
-        const config = await this._loadFeedsConfig();
-        const x = config.feeds.get(feedId)
-        if (x) {
-            return x.privateKey ? hexToPrivateKey(x.privateKey) : null
-        }
-        else {
-            return null
-        }
+        const c = await this.#feedsConfigManager.getFeedConfig(feedId)
+        return c ? hexToPrivateKey(c.privateKey) : null
     }
     feedExistsLocally(feedId: FeedId): boolean {
         return fs.existsSync(_feedDirectory(this.#storageDir, feedId))
@@ -114,37 +185,6 @@ export default class LocalFeedManager {
         const accessRulesPath = subfeedDir + '/access'
         writeJsonFileSync(accessRulesPath, accessRules);
     }
-    async _loadFeedsConfig(): Promise<FeedsConfigRAM> {
-        // Load the configuration for all feeds, if not already loaded
-        // This contains all the private keys for the feeds as well as the local name/ID associations for feed
-
-        // Only load if not already in memory
-        if (this._feedsConfig) {
-            return this._feedsConfig;
-        }
-        else {
-            const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
-            const x = await readJsonFile(configDir + '/feeds.json', {});
-            if (isFeedsConfig(x)) {
-                x.feeds = x.feeds || {};
-                x.feedIdsByName = x.feedIdsByName || {};
-                this._feedsConfig = toFeedsConfigRAM(x);
-                return this._feedsConfig;
-            }
-            else {
-                throw Error(`Error loading feeds config from: ${configDir}/feeds.json`);
-            }
-        }
-    }
-    async _saveFeedsConfig(config: FeedsConfigRAM) {
-        // Store the configuration for all feeds
-        // This contains all the private keys for the feeds as well as the local name/ID associations for feed
-
-        this._feedsConfig = config;
-        const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
-        await writeJsonFile(configDir + '/feeds.json', toFeedsConfig(this._feedsConfig));
-    }
-    
 }
 
 const _createSubfeedDirectoryIfNeeded = async (storageDir: LocalFilePath, feedId: FeedId, subfeedHash: SubfeedHash) => {

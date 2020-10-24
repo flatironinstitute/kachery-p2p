@@ -15,7 +15,7 @@ export const action = async (
         await operation()
     }
     catch(err) {
-        console.warn(err)
+        console.warn(`@@@@@@@@@@@@@@@@@@ Error in ${actionName}: ${err.message}`)
         if (onError) {
             await onError(err);
         }

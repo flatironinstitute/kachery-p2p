@@ -1,6 +1,6 @@
 import { JSONStringifyDeterministic } from '../common/crypto_util'
 import { randomAlphaString } from '../common/util'
-import { Address, isAddress, isBoolean, isJSONObject, isNodeId, isNumber, isProtocolVersion, isSignature, isString, NodeId, ProtocolVersion, Signature, _validateObject } from './core'
+import { Address, isAddress, isBoolean, isJSONObject, isNodeId, isNull, isNumber, isOneOf, isProtocolVersion, isSignature, isString, NodeId, ProtocolVersion, Signature, _validateObject } from './core'
 
 export const UDP_MESSAGE_HEADER_SIZE = 1000
 export const UDP_PACKET_SIZE = 20000
@@ -119,7 +119,7 @@ export const isUdpHeader = (x: any): x is UdpHeader => {
             udpMessageId: isUdpMessageId,
             protocolVersion: isProtocolVersion,
             fromNodeId: isNodeId,
-            toAddress: isAddress,
+            toAddress: isOneOf([isNull, isAddress]),
             udpMessageType: isUdpMessageType,
             metaData: isUdpMessageMetaData,
             partIndex: isPartIndex,

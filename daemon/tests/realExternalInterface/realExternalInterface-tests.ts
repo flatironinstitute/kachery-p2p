@@ -8,7 +8,7 @@ import { getSignature, hexToPublicKey, JSONStringifyDeterministic } from '../../
 import { randomAlphaString } from '../../src/common/util';
 import ExternalInterface from '../../src/external/ExternalInterface';
 import realExternalInterface from '../../src/external/real/realExternalInterface';
-import { Address, byteCount, durationMsecNoScale, feedIdToPublicKeyHex, FeedName, FileKey, hostName, NodeId, nowTimestamp, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, toPort, urlPath } from '../../src/interfaces/core';
+import { Address, byteCount, feedIdToPublicKeyHex, FeedName, FileKey, hostName, localFilePath, NodeId, nowTimestamp, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, toPort, unscaledDurationMsec, urlPath } from '../../src/interfaces/core';
 
 const testContext = (testFunction: (externalInterface: ExternalInterface, resolve: () => void, reject: (err: Error) => void) => Promise<void>, done: (err?: Error) => void) => {
     const tempPath = `${os.tmpdir()}/kachery-p2p-test-${randomAlphaString(10)}.tmp`
@@ -22,10 +22,7 @@ const testContext = (testFunction: (externalInterface: ExternalInterface, resolv
         done(err)
     }
     
-    const old = process.env.KACHERY_STORAGE_DIR
-    process.env.KACHERY_STORAGE_DIR = tempPath.toString()
-    const ri = realExternalInterface()
-    process.env.KACHERY_STORAGE_DIR = old
+    const ri = realExternalInterface(localFilePath(tempPath), localFilePath(tempPath + '/config'))
 
     testFunction(ri, resolve, reject).then(() => {
     }).catch((err: Error) => {
@@ -37,8 +34,7 @@ const testContext = (testFunction: (externalInterface: ExternalInterface, resolv
 mocha.describe('Real external interface', () => {
     describe('http requests', () => {
         it('httpPostJson', (done) => {
-            (async () => {
-                const ri = realExternalInterface()
+            testContext(async (ri, resolve, reject) => {
                 const port = toPort(8059)
 
                 const app = express()
@@ -50,15 +46,14 @@ mocha.describe('Real external interface', () => {
                 const server = await ri.startHttpServer(app, port)
                 const address: Address = {hostName: hostName('localhost'), port}
                 const req = {test: 3}
-                const resp = await ri.httpPostJson(address, urlPath('/test'), req, {timeoutMsec: durationMsecNoScale(500)})
+                const resp = await ri.httpPostJson(address, urlPath('/test'), req, {timeoutMsec: unscaledDurationMsec(500)})
                 expect(JSONStringifyDeterministic(resp)).equals(JSONStringifyDeterministic({echo: req}))
                 server.close()
                 done()
-            })()
+            }, done)
         })
         it('httpGetDownload', (done) => {
-            (async () => {
-                const ri = realExternalInterface()
+            testContext(async (ri, resolve, reject) => {
                 const port = toPort(8060)
 
                 const data = Buffer.alloc(1000 * 20, 'b')
@@ -88,13 +83,12 @@ mocha.describe('Real external interface', () => {
                     server.close()
                     done(err)
                 })
-            })()
+            }, done)
         })
     })
     describe('web sockets', () => {
         it('webSocket', (done) => {
-            (async () => {
-                const ri = realExternalInterface()
+            testContext(async (ri, resolve, reject) => {
                 const port = toPort(8061)
 
                 const wss = await ri.startWebSocketServer(port, '' as any as NodeId)
@@ -106,7 +100,7 @@ mocha.describe('Real external interface', () => {
                 })
 
                 const url = `ws://localhost:${port}`
-                const ws = ri.createWebSocket(url, {timeoutMsec: durationMsecNoScale(1000)})
+                const ws = ri.createWebSocket(url, {timeoutMsec: unscaledDurationMsec(1000)})
 
                 ws.onOpen(() => {
                     ws.send(Buffer.from('abc'))
@@ -119,7 +113,7 @@ mocha.describe('Real external interface', () => {
                         done()
                     }, 3)
                 })
-            })()
+            }, done)
         })
     })
     describe('local feed manager', () => {
