@@ -1,7 +1,7 @@
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { DgramSocket } from '../external/ExternalInterface';
-import { Address, byteCount, DurationMsec, durationMsecToNumber, isBoolean, isJSONObject, isProtocolVersion, isString, JSONObject, portToNumber, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
+import { Address, byteCount, DurationMsec, durationMsecToNumber, isBoolean, isProtocolVersion, isString, JSONObject, portToNumber, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
 import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { UdpTimeoutError } from './UdpCongestionManager';
 
@@ -21,10 +21,6 @@ export const createPacketId = () => {
 
 export interface FallbackAddress extends JSONObject {
     __packetId__: never // phantom type
-}
-export const isFallbackAddress = (x: any): x is FallbackAddress => {
-    if (!isJSONObject(x)) return false
-    return true
 }
 
 export interface UdpPacketSenderHeader {

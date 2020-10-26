@@ -3,7 +3,7 @@ import { getSignatureJson, hexToPublicKey, verifySignatureJson } from '../common
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString, sleepMsec } from '../common/util';
 import { LocalFeedManagerInterface } from '../external/ExternalInterface';
-import { DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, JSONObject, messageCount, MessageCount, messageCountToNumber, NodeId, nowTimestamp, PrivateKey, PublicKey, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubfeedPosition, subfeedPositionToNumber, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
+import { DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, JSONObject, messageCount, MessageCount, messageCountToNumber, nowTimestamp, PrivateKey, PublicKey, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubfeedPosition, subfeedPositionToNumber, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 
 // todo fix feeds config on disk (too many in one .json file)
@@ -98,7 +98,7 @@ class FeedManager {
         const signedMessages = await subfeed.getSignedMessages({ position, maxNumMessages, waitMsec });
         return signedMessages;
     }
-    async getNumMessages({ feedId, subfeedHash }: {feedId: FeedId, subfeedHash: SubfeedHash}) {
+    async getNumMessages({ feedId, subfeedHash }: {feedId: FeedId, subfeedHash: SubfeedHash}): Promise<MessageCount> {
         // Get the total number of messages in the local feed only
         // future: we may want to optionally do a p2p search, and retrieve the number of messages without retrieving the actual messages
         const subfeed = await this._loadSubfeed({feedId, subfeedHash});
@@ -106,7 +106,7 @@ class FeedManager {
             /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
         }
-        return subfeed.getNumMessages();
+        return subfeed.getNumMessages()
     }
     async getFeedInfo({ feedId, timeoutMsec }: {feedId: FeedId, timeoutMsec: DurationMsec}): Promise<FindLiveFeedResult> {
         // Get the p2p information about the feed
@@ -225,7 +225,9 @@ class FeedManager {
                 await sf.initialize(privateKey)
             }
             catch(err) {
+                /* istanbul ignore next */
                 this._subfeeds.delete(k)
+                /* istanbul ignore next */
                 throw err;
             }
         }
@@ -460,29 +462,32 @@ class Subfeed {
             })
         });
     }
-    getNumMessages(): number {
+    getNumMessages(): MessageCount {
         // Return the number of messages that are currently loaded into memory
         if (this.#signedMessages === null) {
+            /* istanbul ignore next */
             throw Error('#signedMessages is null. Perhaps getNumMessages was called before subfeed was initialized.');
         }
-        return this.#signedMessages.length;
+        return messageCount(this.#signedMessages.length)
     }
     isWriteable(): boolean {
         // Whether this subfeed is writeable. That depends on whether we have a private key
         if (this.#isWriteable === null) {
+            /* istanbul ignore next */
             throw Error('#isWriteable is null. Perhaps isWriteable was called before subfeed was initialized.');
         }
         return this.#isWriteable
     }
-    async remoteNodeHasWriteAccess(remoteNodeId: NodeId) {
-        // Check whether a remote node has permission to submit messages to this subfeed
-        if (!this.#accessRules) return false;
-        if (!this.#accessRules.rules) return false;
-        const a = this.#accessRules.rules.filter(r => ((r.nodeId === remoteNodeId) && (r.write)));
-        return (a.length > 0);
-    }
+    // async remoteNodeHasWriteAccess(remoteNodeId: NodeId) {
+    //     // Check whether a remote node has permission to submit messages to this subfeed
+    //     if (!this.#accessRules) return false;
+    //     if (!this.#accessRules.rules) return false;
+    //     const a = this.#accessRules.rules.filter(r => ((r.nodeId === remoteNodeId) && (r.write)));
+    //     return (a.length > 0);
+    // }
     _getInMemorySignedMessages({position, maxNumMessages}: {position: SubfeedPosition, maxNumMessages: MessageCount}): SignedSubfeedMessage[] {
         if (!this.#signedMessages) {
+            /* istanbul ignore next */
             throw Error('_signedMessages is null. Perhaps _getInMemorySignedMessages was called before subfeed was initialized.');
         }
         let signedMessages: SignedSubfeedMessage[] = [];
@@ -502,6 +507,7 @@ class Subfeed {
     async getSignedMessages({position, maxNumMessages, waitMsec}: {position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec}): Promise<SignedSubfeedMessage[]> {
         // Get some signed messages starting at position
         if (!this.#signedMessages) {
+            /* istanbul ignore next */
             throw Error('_signedMessages is null. Perhaps getSignedMessages was called before subfeed was initialized.');
         }
         if (subfeedPositionToNumber(position) < this.#signedMessages.length) {
@@ -533,6 +539,7 @@ class Subfeed {
                             return this._getInMemorySignedMessages({position, maxNumMessages});
                         }
                         else {
+                            /* istanbul ignore next */
                             throw Error('Unexpected problem. Position is now greater than signedMessages.length.')
                         }
                     }
@@ -570,9 +577,11 @@ class Subfeed {
     // important that this is synchronous
     appendMessages(messages: SubfeedMessage[], {metaData} : {metaData: Object | undefined}) {
         if (!this.#signedMessages) {
+            /* istanbul ignore next */
             throw Error('_signedMessages is null. Perhaps appendMessages was called before subfeed was initialized.');
         }
         if (!this._privateKey) {
+            /* istanbul ignore next */
             throw Error(`Cannot write to feed without private key: ${this._privateKey}`);
         }
         let previousSignature;
@@ -594,7 +603,7 @@ class Subfeed {
                 signature: getSignatureJson(body as any as JSONObject, {publicKey: this._publicKey, privateKey: this._privateKey})
             };
             if (!verifySignatureJson(body as any as JSONObject, getSignatureJson(body as any as JSONObject, {publicKey: this._publicKey, privateKey: this._privateKey}), this._publicKey)) {
-                throw Error('test')
+                throw Error('Error verifying signature')
             }
             signedMessages.push(signedMessage);
             previousSignature = signedMessage.signature;
@@ -605,6 +614,7 @@ class Subfeed {
     // important that this is synchronous!
     appendSignedMessages(signedMessages: SignedSubfeedMessage[]) {
         if (!this.#signedMessages) {
+            /* istanbul ignore next */
             throw Error('_signedMessages is null. Perhaps appendSignedMessages was called before subfeed was initialized.');
         }
         if (signedMessages.length === 0)
@@ -643,6 +653,7 @@ class Subfeed {
     }
     setAccessRules(accessRules: SubfeedAccessRules): void {
         if (!this.isWriteable()) {
+            /* istanbul ignore next */
             throw Error(`Cannot set access rules for not writeable subfeed.`);
         }
         this.#localFeedManager.setSubfeedAccessRules(this._feedId, this._subfeedHash, accessRules)

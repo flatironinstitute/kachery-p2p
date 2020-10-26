@@ -1,19 +1,19 @@
-from typing import Tuple, Union, List, Dict
-from types import SimpleNamespace
-import numpy as np
 import hashlib
-import subprocess
-import time
-import os
-import sys
-import pathlib
 import json
+import os
+import pathlib
+import subprocess
+import sys
 import time
-from typing import Optional
+from types import SimpleNamespace
+from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import parse_qs
+
 import kachery as ka
-from ._temporarydirectory import TemporaryDirectory
+import numpy as np
+
 from ._shellscript import ShellScript
+from ._temporarydirectory import TemporaryDirectory
 from .exceptions import LoadFileError
 
 _global_config = {
@@ -321,7 +321,7 @@ def _probe_daemon(api_port=None):
         return None
     return x
 
-def start_daemon(*, port: int=0, file_server_port: int=0, method: str='npx', channels: List[str]=[], verbose: int=0, dverbose: int=0, host: str='', bootstrap: List[str], nobootstrap: bool=False, node_arg: List[str]=[]):
+def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verbose: int=0, host: str='', bootstrap: List[str], nobootstrap: bool=False, node_arg: List[str]=[]):
     from kachery_p2p import __version__
 
     if _probe_daemon() is not None:
@@ -338,11 +338,9 @@ def start_daemon(*, port: int=0, file_server_port: int=0, method: str='npx', cha
     if nobootstrap:
         start_args.append(f'--nobootstrap')
     start_args.append(f'--verbose {verbose}')
-    start_args.append(f'--dverbose {dverbose}')
     if host:
         start_args.append(f'--host {host}')
     start_args.append(f'--port {port}')
-    start_args.append(f'--file-server-port {file_server_port}')
 
     # Note that npx-latest/npm-latest uses the latest version of the daemon on npm, which may be desireable for some bootstrap nodes, but not adviseable if you want to be sure that kachery-p2p is constistent with the node daemon
     if (method == 'npx') or (method == 'npx-latest') or (method == 'npm') or (method == 'npm-latest'):
@@ -425,7 +423,8 @@ def start_daemon(*, port: int=0, file_server_port: int=0, method: str='npx', cha
 
         export KACHERY_P2P_API_PORT="{api_port}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-        exec ts-node {' '.join(node_arg)} --experimental-modules {thisdir}/../daemon/src/cli.js start {' '.join(start_args)}
+        cd {thisdir}/../daemon
+        exec node_modules/ts-node/dist/bin.js {' '.join(node_arg)} ./src/cli.ts start {' '.join(start_args)}
         ''')
         ss.start()
         try:

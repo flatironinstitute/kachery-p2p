@@ -2,8 +2,8 @@ import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import { sleepMsec } from '../../src/common/util';
 import MockNodeDaemon, { MockNodeDaemonGroup, MockNodeDefects } from '../../src/external/mock/MockNodeDaemon';
-import { byteCount, ByteCount, byteCountToNumber, ChannelName, FeedName, messageCount, scaledDurationMsec, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubmittedSubfeedMessage, toPort } from '../../src/interfaces/core';
-import { ApiLoadFileRequest } from '../../src/services/DaemonApiServer';
+import { byteCount, ByteCount, byteCountToNumber, ChannelName, DurationMsec, durationMsecToNumber, FeedId, FeedName, JSONObject, MessageCount, messageCount, scaledDurationMsec, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, subfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toPort } from '../../src/interfaces/core';
+import { ApiLoadFileRequest, FeedApiAppendMessagesRequest, FeedApiCreateFeedRequest, FeedApiDeleteFeedRequest, FeedApiGetAccessRulesRequest, FeedApiGetFeedIdRequest, FeedApiGetLiveFeedInfoRequest, FeedApiGetMessagesRequest, FeedApiGetNumMessagesRequest, FeedApiGetSignedMessagesRequest, FeedApiSetAccessRulesRequest, FeedApiSubmitMessageRequest, FeedApiWatchForNewMessagesRequest, isFeedApiAppendMessagesResponse, isFeedApiCreateFeedResponse, isFeedApiDeleteFeedResponse, isFeedApiGetAccessRulesResponse, isFeedApiGetFeedIdResponse, isFeedApiGetLiveFeedInfoResponse, isFeedApiGetMessagesResponse, isFeedApiGetNumMessagesResponse, isFeedApiGetSignedMessagesResponse, isFeedApiSetAccessRulesResponse, isFeedApiSubmitMessageResponse, isFeedApiWatchForNewMessagesResponse } from '../../src/services/DaemonApiServer';
 import { StartDaemonOpts } from '../../src/startDaemon';
 
 const mockChannelName = 'mock-channel' as any as ChannelName
@@ -368,7 +368,7 @@ const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fi
             fromChannel: null,
             fromNode: null
         }
-        const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData)
+        const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
         x.onError(err => {
             reject(err)
         })
@@ -397,7 +397,7 @@ const testLoadFileWithDefects = async (daemon1: MockNodeDaemon, daemon2: MockNod
                 fromChannel: null,
                 fromNode: null
             }
-            const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData)
+            const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
             x.onError(err => {
                 reject(err)
             })
@@ -425,7 +425,7 @@ const testLoadFileWithDefects = async (daemon1: MockNodeDaemon, daemon2: MockNod
                 fromChannel: null,
                 fromNode: null
             }
-            const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData)
+            const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
             x.onError(err => {
                 reject(err)
             })
@@ -445,34 +445,145 @@ const testLoadFileWithDefects = async (daemon1: MockNodeDaemon, daemon2: MockNod
     daemon2.clearDefects()
 }
 
-const testSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {
-    const fm1 = daemon1.feedManager()
-    const fm2 = daemon2.feedManager()
+const createFeed = async (daemon: MockNodeDaemon, feedName: FeedName) => {
+    const req: FeedApiCreateFeedRequest = {feedName}
+    const res = await daemon.mockDaemonApiPost('/feed/createFeed', req as any as JSONObject)
+    if (!isFeedApiCreateFeedResponse(res)) throw Error('Unexpected')
+    return res.feedId
+}
 
-    const feed1 = await fm1.createFeed({feedName: 'f1' as any as FeedName})
+const deleteFeed = async (daemon: MockNodeDaemon, feedId: FeedId) => {
+    const req: FeedApiDeleteFeedRequest = {feedId}
+    const res = await daemon.mockDaemonApiPost('/feed/deleteFeed', req as any as JSONObject)
+    if (!isFeedApiDeleteFeedResponse(res)) throw Error('Unexpected')
+    return res.success
+}
+
+const appendMessages = async (daemon: MockNodeDaemon, feedId: FeedId, subfeedHash: SubfeedHash, messages: SubfeedMessage[]) => {
+    const req: FeedApiAppendMessagesRequest = {
+        feedId, subfeedHash, messages
+    }
+    const res = await daemon.mockDaemonApiPost('/feed/appendMessages', req as any as JSONObject)
+    if (!isFeedApiAppendMessagesResponse(res)) throw Error('Unexpected')
+    return res.success
+}
+
+const submitMessage = async (daemon: MockNodeDaemon, feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage, timeoutMsec: DurationMsec) => {
+    const req: FeedApiSubmitMessageRequest = {
+        feedId, subfeedHash, message, timeoutMsec
+    }
+    const res = await daemon.mockDaemonApiPost('/feed/submitMessage', req as any as JSONObject)
+    if (!isFeedApiSubmitMessageResponse(res)) throw Error('Unexpected')
+    return res.success
+}
+
+const getMessages = async (daemon: MockNodeDaemon, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec) => {
+    const req: FeedApiGetMessagesRequest = {
+        feedId, subfeedHash, position, maxNumMessages, waitMsec
+    }
+    const res = await daemon.mockDaemonApiPost('/feed/getMessages', req as any as JSONObject)
+    if (!isFeedApiGetMessagesResponse(res)) throw Error('Unexpected')
+    if (!res.success) throw Error('Error getting messages')
+    return res.messages
+}
+const getSignedMessages = async (daemon: MockNodeDaemon, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec) => {
+    const req: FeedApiGetSignedMessagesRequest = {
+        feedId, subfeedHash, position, maxNumMessages, waitMsec
+    }
+    const res = await daemon.mockDaemonApiPost('/feed/getSignedMessages', req as any as JSONObject)
+    if (!isFeedApiGetSignedMessagesResponse(res)) throw Error('Unexpected')
+    if (!res.success) throw Error('Error getting signed messages')
+    return res.signedMessages
+}
+
+const getNumMessages = async (daemon: MockNodeDaemon, feedId: FeedId, subfeedHash: SubfeedHash) => {
+    const req: FeedApiGetNumMessagesRequest = {
+        feedId, subfeedHash
+    }
+    const res = await daemon.mockDaemonApiPost('/feed/getNumMessages', req as any as JSONObject)
+    if (!isFeedApiGetNumMessagesResponse(res)) throw Error('Unexpected')
+    if (!res.success) throw Error('Error getting messages')
+    return res.numMessages
+}
+
+const getLiveFeedInfo = async (daemon: MockNodeDaemon, feedId: FeedId, timeoutMsec: DurationMsec) => {
+    const req: FeedApiGetLiveFeedInfoRequest = {
+        feedId, timeoutMsec
+    }
+    const res = await daemon.mockDaemonApiPost('/feed/getLiveFeedInfo', req as any as JSONObject)
+    if (!isFeedApiGetLiveFeedInfoResponse(res)) throw Error('Unexpected')
+    if (!res.success) throw Error('Error getting live feed info')
+    return res.liveFeedInfo
+}
+
+const getAccessRules = async (daemon: MockNodeDaemon, feedId: FeedId, subfeedHash: SubfeedHash) => {
+    const req: FeedApiGetAccessRulesRequest = {
+        feedId, subfeedHash
+    }
+    const res = await daemon.mockDaemonApiPost('/feed/getAccessRules', req as any as JSONObject)
+    if (!isFeedApiGetAccessRulesResponse(res)) throw Error('Unexpected')
+    if (!res.success) throw Error('Error getting access rules')
+    return res.accessRules
+}
+
+const setAccessRules = async (daemon: MockNodeDaemon, feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules) => {
+    const req: FeedApiSetAccessRulesRequest = {
+        feedId, subfeedHash, accessRules
+    }
+    const res = await daemon.mockDaemonApiPost('/feed/setAccessRules', req as any as JSONObject)
+    if (!isFeedApiSetAccessRulesResponse(res)) throw Error('Unexpected')
+    if (!res.success) throw Error('Error setting access rules')
+    return
+}
+
+const watchForNewMessages = async (daemon: MockNodeDaemon, subfeedWatches: SubfeedWatches, waitMsec: DurationMsec, maxNumMessages: MessageCount) => {
+    const req: FeedApiWatchForNewMessagesRequest = {
+        subfeedWatches,
+        waitMsec,
+        maxNumMessages
+    }
+    const res = await daemon.mockDaemonApiPost('/feed/watchForNewMessages', req as any as JSONObject)
+    if (!isFeedApiWatchForNewMessagesResponse(res)) throw Error('Unexpected')
+    if (!res.success) throw Error('Problem watching for new messages')
+    return res.messages
+}
+
+const getFeedId = async (daemon: MockNodeDaemon, feedName: FeedName) => {
+    const req: FeedApiGetFeedIdRequest = {
+        feedName
+    }
+    const res = await daemon.mockDaemonApiPost('/feed/getFeedId', req as any as JSONObject)
+    if (!isFeedApiGetFeedIdResponse(res)) throw Error('Unexpected')
+    return res.feedId
+}
+
+const testSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {
+    const feed1 = await createFeed(daemon1, 'f1' as any as FeedName)
     const sf1 = '0123456789012345678901234567890123456789' as any as SubfeedHash
-    await fm1.appendMessages({feedId: feed1, subfeedHash: sf1, messages: [{test: 42} as any as SubfeedMessage]})
-    await fm1.submitMessage({feedId: feed1, subfeedHash: sf1, message: {test: 420} as any as SubmittedSubfeedMessage, timeoutMsec: scaledDurationMsec(5000)})
-    const messages = await fm1.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: scaledDurationMsec(1000)})
+    await appendMessages(daemon1, feed1, sf1, [{test: 42} as any as SubfeedMessage])
+    await submitMessage(daemon1, feed1, sf1, {test: 420} as any as SubmittedSubfeedMessage, scaledDurationMsec(5000))
+    const messages = await getMessages(daemon1, feed1, sf1, subfeedPosition(0), messageCount(10), scaledDurationMsec(3000))
+    const signedMessages = await getSignedMessages(daemon1, feed1, sf1, subfeedPosition(0), messageCount(10), scaledDurationMsec(3000))
     expect(messages.length).equals(2)
+    expect(signedMessages.length).equals(2)
     expect(messages[0].test).equals(42)
 
     // do this first line so that we can test the simultaneous loading of the same subfeed (code coverage)
-    const p1 =fm2.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: scaledDurationMsec(1000)})
-    const messages2 = await fm2.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: scaledDurationMsec(1000)})
+    const p1 = getMessages(daemon2, feed1, sf1, subfeedPosition(0), messageCount(10), scaledDurationMsec(1000))
+    const messages2 = await getMessages(daemon2, feed1, sf1, subfeedPosition(0), messageCount(10), scaledDurationMsec(1000))
     const messages2b = await p1
     expect(messages2.length).equals(2)
     expect(messages2b.length).equals(2)
     expect(messages2[0].test).equals(42)
-    expect(await fm2.getNumMessages({feedId: feed1, subfeedHash: sf1})).to.equal(2)
+    expect(await getNumMessages(daemon2, feed1, sf1)).to.equal(2)
 
-    const fi = await fm2.getFeedInfo({feedId: feed1, timeoutMsec: scaledDurationMsec(5000)})
+    const fi = await getLiveFeedInfo(daemon2, feed1, scaledDurationMsec(5000))
     expect(fi.nodeId).equals(daemon1.nodeId())
-    const fi2 = await fm1.getFeedInfo({feedId: feed1, timeoutMsec: scaledDurationMsec(5000)})
+    const fi2 = await getLiveFeedInfo(daemon1, feed1, scaledDurationMsec(5000))
     expect(fi2.nodeId).equals(daemon1.nodeId())
 
     try {
-        await fm2.appendMessages({feedId: feed1, subfeedHash: sf1, messages: [{test: 43} as any as SubfeedMessage]})
+        await appendMessages(daemon2, feed1, sf1, [{test: 43} as any as SubfeedMessage])
         throw Error('Did not get expected error')
     }
     catch(err) {
@@ -481,18 +592,53 @@ const testSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaem
         }
     }
 
-    expect(await fm1.hasWriteableFeed({feedId: feed1})).is.true
-    const feed1b = await fm1.getFeedId({feedName: 'f1' as any as FeedName})
+    const reqData: FeedApiGetMessagesRequest = {
+        feedId: feed1,
+        subfeedHash: sf1,
+        position: subfeedPosition(2),
+        maxNumMessages: messageCount(10),
+        waitMsec: scaledDurationMsec(10000)
+    }
+    setTimeout(() => {
+        appendMessages(daemon1, feed1, sf1, [{m: 1} as any as SubfeedMessage, {m: 2} as any as SubfeedMessage])
+    }, durationMsecToNumber(scaledDurationMsec(3000)))
+    const response = await daemon2.mockDaemonApiPost('/feed/getMessages', reqData as any as JSONObject)
+    if (!isFeedApiGetMessagesResponse(response)) {
+        throw Error('Unexpected')
+    }
+    expect(response.messages.length).equals(2)
+
+    // expect(await fm1.hasWriteableFeed({feedId: feed1})).is.true
+    const feed1b = await getFeedId(daemon1, 'f1' as any as FeedName)
     expect(feed1b).equals(feed1)
-    await fm1.deleteFeed({feedId: feed1})
-    expect(await fm1.hasWriteableFeed({feedId: feed1})).is.false
+
+    const watchReq: FeedApiWatchForNewMessagesRequest = {
+        subfeedWatches: {
+            'w1': {
+                feedId: feed1,
+                subfeedHash: sf1,
+                position: subfeedPosition(4)
+            }
+        },
+        waitMsec: scaledDurationMsec(10000),
+        maxNumMessages: messageCount(10)
+    }
+    setTimeout(() => {
+        appendMessages(daemon1, feed1, sf1, [{m: 3} as any as SubfeedMessage, {m: 4} as any as SubfeedMessage])
+    }, durationMsecToNumber(scaledDurationMsec(3000)))
+    const response2 = await daemon2.mockDaemonApiPost('/feed/watchForNewMessages', watchReq as any as JSONObject)
+    if (!isFeedApiWatchForNewMessagesResponse(response2)) {
+        throw Error('Unexpected')
+    }
+    const w1 = response2.messages.w1 as any as []
+    expect(w1.length).equals(2)
+
+    await deleteFeed(daemon1, feed1)
+    // expect(await fm1.hasWriteableFeed({feedId: feed1})).is.false
 }
 
 const testSubmitSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {
-    const fm1 = daemon1.feedManager()
-    const fm2 = daemon2.feedManager()
-
-    const feed1 = await fm1.createFeed({feedName: 'f1' as any as FeedName})
+    const feed1 = await createFeed(daemon1, 'f1' as any as FeedName)
     const sf1 = '0123456789012345678901234567890123456789' as any as SubfeedHash
     const accessRules: SubfeedAccessRules = {
         rules: [
@@ -504,7 +650,7 @@ const testSubmitSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNo
     }
     
     try {
-        await fm2.submitMessage({feedId: feed1, subfeedHash: sf1, message: {test: 41} as any as SubmittedSubfeedMessage, timeoutMsec: scaledDurationMsec(1000)})
+        await submitMessage(daemon2, feed1, sf1, {test: 41} as any as SubmittedSubfeedMessage, scaledDurationMsec(1000))
         throw Error('Did not get submit message permission denied error')
     }
     catch(err) {       
@@ -512,19 +658,19 @@ const testSubmitSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNo
             throw Error(err)
         }
     }
-    fm1.setAccessRules({feedId: feed1, subfeedHash: sf1, accessRules: accessRules})
-    await fm2.submitMessage({feedId: feed1, subfeedHash: sf1, message: {test: 42} as any as SubmittedSubfeedMessage, timeoutMsec: scaledDurationMsec(1000)})
-    const messages = await fm1.getMessages({feedId: feed1, subfeedHash: sf1, position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: scaledDurationMsec(1000)})
+    await setAccessRules(daemon1, feed1, sf1, accessRules)
+    await submitMessage(daemon2, feed1, sf1, {test: 42} as any as SubmittedSubfeedMessage, scaledDurationMsec(1000))
+    const messages = await getMessages(daemon1, feed1, sf1, subfeedPosition(0), messageCount(10), scaledDurationMsec(1000))
     expect(messages.length).equals(1)
     expect(messages[0].test).equals(42)
 
-    const ar1 = await fm1.getAccessRules({feedId: feed1, subfeedHash: sf1})
+    const ar1 = await getAccessRules(daemon1, feed1, sf1)
     if (!ar1) {
         throw(Error('Unable to get access rules'))
     }
     expect(ar1.rules.length).equals(1)
     try {
-        const ar2 = await fm2.getAccessRules({feedId: feed1, subfeedHash: sf1})
+        const ar2 = await getAccessRules(daemon2, feed1, sf1)
         throw Error('Did not get expected error')
     }
     catch(err) {
@@ -534,7 +680,7 @@ const testSubmitSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNo
     }
 
     try {
-        await fm2.setAccessRules({feedId: feed1, subfeedHash: sf1, accessRules: ar1})
+        await setAccessRules(daemon2, feed1, sf1, ar1)
         throw Error('Did not get expected error')
     }
     catch(err) {

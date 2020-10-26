@@ -323,7 +323,7 @@ export const isGetLiveFeedSignedMessagesResponseData = (x: any): x is GetLiveFee
     return _validateObject(x, {
         requestType: isEqualTo('getLiveFeedSignedMessages'),
         success: isBoolean,
-        signedMessages: isArrayOf(isSignedSubfeedMessage),
+        signedMessages: isOneOf([isNull, isArrayOf(isSignedSubfeedMessage)]),
         errorMessage: isOneOf([isNull, isErrorMessage])
     })
 }

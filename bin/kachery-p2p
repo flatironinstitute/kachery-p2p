@@ -95,14 +95,12 @@ def log():
 @click.option('--bootstrap', multiple=True, help='Override the default bootstrap node(s). Use --bootstrap ip:port')
 @click.option('--nobootstrap', is_flag=True, help='Do not use bootstrap nodes')
 @click.option('--verbose', default=0, help='Verbosity level')
-@click.option('--dverbose', default=0, help='Discovery verbosity level')
 @click.option('--method', default='npx', help='Method for starting daemon: npx (default), npx-latest, npm, npm-latest or dev')
 @click.option('--host', default='', help='IP for connecting to this daemon')
 @click.option('--port', default=0, help='Optional port to listen on (0 means do not listen)')
-@click.option('--file-server-port', default=0, help='Optional port for serving static files')
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
-def start_daemon(method, channel, verbose, dverbose, host, port, file_server_port, bootstrap, nobootstrap, node_arg):
-    kp.start_daemon(method=method, channels=channel, verbose=verbose, dverbose=dverbose, host=host, port=port, file_server_port=file_server_port, nobootstrap=nobootstrap, bootstrap=bootstrap, node_arg=node_arg)
+def start_daemon(method, channel, verbose, host, port, bootstrap, nobootstrap, node_arg):
+    kp.start_daemon(method=method, channels=channel, verbose=verbose, host=host, port=port, nobootstrap=nobootstrap, bootstrap=bootstrap, node_arg=node_arg)
 
 @click.command(help="Stop the daemon.")
 def stop_daemon():

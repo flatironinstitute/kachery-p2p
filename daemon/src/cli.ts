@@ -109,10 +109,10 @@ function main() {
           fs.mkdirSync(configDir);
         }
         const hostName = argv.host || null;
-        const httpListenPort = argv.port ? Number(argv.port) : 14507;
+        const httpListenPort = argv.port ? Number(argv.port) || null : 14507;
         const udpSocketPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort;
         const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : 14508;
-        const daemonApiPort = process.env.KACHERY_P2P_DAEMON_API_PORT || process.env.KACHERY_P2P_API_PORT || 20431;
+        const daemonApiPort = Number(process.env.KACHERY_P2P_DAEMON_API_PORT || process.env.KACHERY_P2P_API_PORT || 20431)
         const label = argv.label as string;
         const noBootstrap = argv['no-bootstrap'] ? true : false;
         const isBootstrapNode = argv['is-bootstrap'] ? true : false;
@@ -131,8 +131,8 @@ function main() {
                   throw Error(`Not an address: ${bpi}`)
               }
           }).filter(bpi => {
-              if ((bpi.hostName === 'localhost') || (bpi.hostName === this.p.hostName)) {
-                  if (bpi.port === this.p.httpListenPort) {
+              if ((bpi.hostName === 'localhost') || (bpi.hostName === hostName)) {
+                  if (Number(bpi.port) === httpListenPort) {
                       return false
                   }
               }
@@ -146,11 +146,11 @@ function main() {
           }
         }
         if (!isPort(daemonApiPort)) {
-          throw new CLIError('Invalid daemon api port');
+          throw new CLIError(`Invalid daemon api port: ${daemonApiPort}`);
         }
         if (httpListenPort !== null) {
           if (!isPort(httpListenPort)) {
-            throw new CLIError('Invalid http listen port');
+            throw new CLIError(`Invalid http listen port: ${httpListenPort}`);
           }
         }
         if (webSocketListenPort !== null) {

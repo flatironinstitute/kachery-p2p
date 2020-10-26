@@ -38,6 +38,7 @@ export class ProxyConnectionToServer {
                 this.#onClosedCallbacks.forEach(cb => cb(reason));
             })
             this.#ws.onError(err => {
+                /* istanbul ignore next */
                 console.warn(err)
                 // this is important so we don't throw an exception
                 // question: do we need to do something here? will 'close' be called also?
@@ -100,8 +101,12 @@ export class ProxyConnectionToServer {
                         this.#onInitializedCallbacks.forEach(cb => {cb()});
                     }
                     else {
-                        if (!this.#remoteNodeId) throw Error('Unexpected.');
+                        if (!this.#remoteNodeId) {
+                            /* istanbul ignore next */
+                            throw Error('Unexpected.')
+                        }
                         if (!isMessageFromServer(messageParsed)) {
+                            /* istanbul ignore next */
                             console.warn(`Invalid websocket message from server. Closing.`);
                             this.#ws.close();
                             return;
@@ -124,12 +129,13 @@ export class ProxyConnectionToServer {
     onClosed(callback: (reason: any) => void) {
         this.#onClosedCallbacks.push(callback);
     }
-    remoteNodeId(): NodeId {
-        if (!this.#remoteNodeId) {
-            throw Error('Unexpected. remoteNodeId() called before initialized.');
-        }
-        return this.#remoteNodeId
-    }
+    // remoteNodeId(): NodeId {
+    //     if (!this.#remoteNodeId) {
+    //         /* istanbul ignore next */
+    //         throw Error('Unexpected. remoteNodeId() called before initialized.');
+    //     }
+    //     return this.#remoteNodeId
+    // }
     async _handleMessageFromServer(message: MessageFromServer) {
         if (this.#closed) return;
         if (isNodeToNodeRequest(message)) {
@@ -151,6 +157,7 @@ export class ProxyConnectionToServer {
         const s = this.#node.streamFileData(this.#node.nodeId(), streamId)
         s.onStarted(size => {
             if (size === null) {
+                /* istanbul ignore next */
                 throw Error('unexpected.')
             }
             const response: ProxyStreamFileDataResponseStartedMessage = {
@@ -191,6 +198,7 @@ export class ProxyConnectionToServer {
     }
     _sendMessageToServer(msg: MessageFromClient) {
         if (!this.#initialized) {
+            /* istanbul ignore next */
             throw Error('Cannot send message to server before initialized.');
         }
         if (this.#closed) return;

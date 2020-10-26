@@ -82,9 +82,9 @@ export default class MockNodeDaemon {
     mockKacheryStorageManager() {
         return this.node().kacheryStorageManager() as MockKacheryStorageManager
     }
-    feedManager() {
-        return this.node().feedManager()
-    }
+    // feedManager() {
+    //     return this.node().feedManager()
+    // }
     async mockPublicApiPost(path: string, data: JSONObject): Promise<JSONObject> {
         if (!this.#d) {
             /* istanbul ignore next */
@@ -118,11 +118,11 @@ export default class MockNodeDaemon {
         onFinished: (callback: () => void) => void;
         cancel: () => void;
     }> {
+        /* istanbul ignore next */
         if (!this.#d) {
-            /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
-        return await this.#d.daemonApiServer.mockPostFindFile(reqData)
+        return await this.#d.daemonApiServer.mockPostFindFile(reqData as any as JSONObject)
     }
 }
 

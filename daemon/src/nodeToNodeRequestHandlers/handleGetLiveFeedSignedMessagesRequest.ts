@@ -9,7 +9,7 @@ export const handleGetLiveFeedSignedMessagesRequest = async (node: KacheryP2PNod
         return {
             requestType: 'getLiveFeedSignedMessages',
             success: false,
-            errorMessage: errorMessage('Live feed not found.'),
+            errorMessage: errorMessage(`Live feed not found.`),
             signedMessages: null
         }
     }

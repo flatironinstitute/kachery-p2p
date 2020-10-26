@@ -202,6 +202,7 @@ export class ProxyConnectionToClient {
             this.#ws.onError((err: Error) => {
                 // this is important so we don't throw an exception
                 // question: do we need to do something here? will 'close' be called also?
+                /* istanbul ignore next */
                 console.warn(err)
             });
             this.onInitialized(() => {
@@ -298,6 +299,7 @@ export class ProxyConnectionToClient {
                 ret.producer().error(Error(msg.errorMessage.toString()))
             }
             else {
+                /* istanbul ignore next */
                 throw Error('Unexpected')
             }
         }
@@ -331,6 +333,7 @@ export class ProxyConnectionToClient {
     }
     remoteNodeId(): NodeId {
         if (!this.#remoteNodeId) {
+            /* istanbul ignore next */
             throw Error('Unexpected. remoteNodeId() called before initialized.');
         }
         return this.#remoteNodeId
@@ -352,11 +355,13 @@ export class ProxyConnectionToClient {
             }
         }
         else {
+            /* istanbul ignore next */
             throw Error('Unexpected message from client')
         }
     }
     _sendMessageToClient(msg: MessageFromServer) {
         if (!this.#initialized) {
+            /* istanbul ignore next */
             throw Error('Cannot send message to client before initialized.');
         }
         if (this.#closed) return;
