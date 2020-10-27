@@ -1,4 +1,3 @@
-import { createKeyPair } from "../../common/crypto_util"
 import DataStreamy from "../../common/DataStreamy"
 import { randomAlphaString, sleepMsec } from "../../common/util"
 import { Address, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, scaledDurationMsec, toPort, UrlPath } from "../../interfaces/core"
@@ -19,7 +18,6 @@ export interface MockNodeDefects {
 
 export default class MockNodeDaemon {
     #daemonGroup: MockNodeDaemonGroup
-    #keyPair = createKeyPair()
     #d: {
         publicApiServer: PublicApiServer,
         daemonApiServer: DaemonApiServer,
@@ -50,7 +48,7 @@ export default class MockNodeDaemon {
     async initialize() {
         const externalInterface = mockExternalInterface(this.#daemonGroup, () => (this.defects()))
         this.#d = await startDaemon({
-            keyPair: this.#keyPair,
+            configDir: null,
             verbose: 0,
             hostName: null,
             daemonApiPort: null,

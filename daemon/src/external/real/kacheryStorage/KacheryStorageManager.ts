@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import DataStreamy from '../../../common/DataStreamy';
 import { randomAlphaString } from '../../../common/util';
@@ -44,8 +45,58 @@ export class KacheryStorageManager {
         }
         fs.renameSync(destPathTmp, destPath)
     }
-    async concatenateChunks(sha1: Sha1Hash, chunkSha1s: Sha1Hash[]): Promise<void> {
-        throw Error('not-implemented') // todo ********************
+    async concatenateChunksAndStoreResult(sha1: Sha1Hash, chunkSha1s: Sha1Hash[]): Promise<void> {
+        const s = sha1
+        const destParentPath = `${this.#storageDir}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`
+        const destPath = `${destParentPath}/${s}`
+        if (fs.existsSync(destPath)) {
+            // already exists
+            return
+        }
+
+        // verify we have all the files
+        for (let chunkSha1 of chunkSha1s) {
+            const f = await this.findFile({sha1: chunkSha1})
+            if (!f.found) {
+                throw Error(`Cannot concatenate chunk. Missing chunk: ${chunkSha1}`)
+            }
+        }
+
+        const tmpPath = createTemporaryFilePath({prefix: 'kachery-p2p-concat-'})
+        const writeStream = fs.createWriteStream(tmpPath)
+        const shasum = crypto.createHash('sha1')
+        for (let chunkSha1 of chunkSha1s) {
+            const readStream = await this.getFileReadStream({sha1: chunkSha1})
+            await new Promise((resolve, reject) => {
+                readStream.onData(buf => {
+                    shasum.update(buf)
+                    writeStream.write(buf)
+                })
+                readStream.onError(err => {
+                    reject(err)
+                })
+                readStream.onComplete(() => {
+                    resolve()
+                })
+            })
+        }
+        await new Promise((resolve, reject) => {
+            writeStream.end(() => {
+                const sha1Computed = shasum.digest('hex') as any as Sha1Hash
+                if (sha1Computed !== sha1) {
+                    reject(Error('Did not get the expected SHA-1 sum for concatenated file'))
+                    return
+                }
+                resolve()
+            })
+        })
+        if (fs.existsSync(destPath)) {
+            // already exists
+            fs.unlinkSync(tmpPath)
+            return
+        }
+        fs.mkdirSync(destParentPath, {recursive: true});
+        fs.renameSync(tmpPath, destPath)
     }
     async getFileReadStream(fileKey: FileKey): Promise<DataStreamy> {
         if (fileKey.sha1) {
@@ -99,4 +150,28 @@ const createDataStreamForFile = (path: LocalFilePath, offset: ByteCount, size: B
         ret.producer().error(err)
     })
     return ret
+}
+
+const _getTemporaryDirectory = () => {
+    const ret = process.env['KACHERY_STORAGE_DIR'] + '/tmp'
+    mkdirIfNeeded(localFilePath(ret))
+    return ret
+}
+
+const mkdirIfNeeded = (path: LocalFilePath) => {
+    if (!fs.existsSync(path.toString())) {
+        try {
+            fs.mkdirSync(path.toString())
+        }
+        catch(err) {
+            if (!fs.existsSync(path.toString())) {
+                fs.mkdirSync(path.toString())
+            }
+        }
+    }
+}
+
+export const createTemporaryFilePath = (args: {prefix: string}) => {
+    const dirPath = _getTemporaryDirectory()
+    return `${dirPath}/${args.prefix}-${randomAlphaString(10)}`
 }

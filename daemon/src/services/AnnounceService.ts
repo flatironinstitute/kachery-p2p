@@ -1,36 +1,16 @@
 import { action } from "../common/action"
 import { sleepMsec, sleepMsecNum } from "../common/util"
-import { ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core"
-import { AnnounceRequestData, isAnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from "../interfaces/NodeToNodeRequest"
-import { SendRequestMethod } from "../RemoteNode"
-
-interface RemoteNodeManagerInterface {
-    onNodeChannelAdded: (callback: (remoteNodeId: NodeId, channelName: ChannelName) => void) => void,
-    onBootstrapNodeAdded: (callback: (bootstrapNodeId: NodeId) => void) => void
-    sendRequestToNode: (remoteNodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}) => Promise<NodeToNodeResponseData>,
-    getBootstrapRemoteNodes: () => RemoteNodeInterface[]
-    getRemoteNodesInChannel: (channelName: ChannelName) => RemoteNodeInterface[]
-    canSendRequestToNode: (remoteNodeId: NodeId, method: SendRequestMethod) => boolean
-}
-
-interface RemoteNodeInterface {
-    remoteNodeId: () => NodeId
-}
-
-interface KacheryP2PNodeInterface {
-    nodeId: () => NodeId
-    remoteNodeManager: () => RemoteNodeManagerInterface
-    getChannelNodeInfo: (channelName: ChannelName) => ChannelNodeInfo
-    channelNames: () => ChannelName[]
-    isBootstrapNode: () => boolean
-    onProxyConnectionToServer: (callback: (() => void)) => void
-}
+import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core"
+import { AnnounceRequestData, isAnnounceResponseData } from "../interfaces/NodeToNodeRequest"
+import KacheryP2PNode from "../KacheryP2PNode"
+import RemoteNode, { SendRequestMethod } from "../RemoteNode"
+import RemoteNodeManager from "../RemoteNodeManager"
 
 export default class AnnounceService {
-    #node: KacheryP2PNodeInterface
-    #remoteNodeManager: RemoteNodeManagerInterface
+    #node: KacheryP2PNode
+    #remoteNodeManager: RemoteNodeManager
     #halted = false
-    constructor(node: KacheryP2PNodeInterface, private opts: {announceBootstrapIntervalMsec: DurationMsec, announceToRandomNodeIntervalMsec: DurationMsec}) {
+    constructor(node: KacheryP2PNode, private opts: {announceBootstrapIntervalMsec: DurationMsec, announceToRandomNodeIntervalMsec: DurationMsec}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
         // announce self when a new node-channel has been added
@@ -98,7 +78,7 @@ export default class AnnounceService {
         }
     }
     async _announceToAllBootstrapNodes() {
-        const bootstrapNodes: RemoteNodeInterface[] = this.#remoteNodeManager.getBootstrapRemoteNodes()
+        const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes()
         const channelNames = this.#node.channelNames()
         for (let bootstrapNode of bootstrapNodes) {
             for (let channelName of channelNames) {

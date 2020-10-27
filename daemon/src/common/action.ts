@@ -10,7 +10,7 @@ export const action = async (
 ) => {
     try {
         if (_globalData.verbose > 0) {
-            console.info(`${actionName} ${actionData}`);
+            console.info(`${actionName} ${JSON.stringify(actionData)}`);
         }
         await operation()
     }

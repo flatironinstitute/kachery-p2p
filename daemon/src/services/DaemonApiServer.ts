@@ -5,11 +5,34 @@ import { action } from '../common/action';
 import { DataStreamyProgress } from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
-import { ChannelName, DurationMsec, durationMsecToNumber, FeedId, FeedName, FileKey, FindFileResult, FindLiveFeedResult, isArrayOf, isBoolean, isChannelName, isDurationMsec, isFeedId, isFeedName, isFileKey, isFindLiveFeedResult, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
+import { Address, ChannelName, DaemonVersion, DurationMsec, durationMsecToNumber, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelName, isDaemonVersion, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isProtocolVersion, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
-import { ApiProbeResponse } from './PublicApiServer';
+import { PublicApiProbeResponse } from './PublicApiServer';
+
+export interface DaemonApiProbeResponse {
+    success: boolean,
+    protocolVersion: ProtocolVersion,
+    daemonVersion: DaemonVersion,
+    nodeId: NodeId,
+    isBootstrapNode: boolean,
+    webSocketAddress: Address | null,
+    publicUdpSocketAddress: Address | null,
+    channels: ChannelName[]
+};
+export const isDaemonApiProbeResponse = (x: any): x is PublicApiProbeResponse => {
+    return _validateObject(x, {
+        success: isBoolean,
+        protocolVersion: isProtocolVersion,
+        daemonVersion: isDaemonVersion,
+        nodeId: isNodeId,
+        isBootstrapNode: isBoolean,
+        webSocketAddress: isOneOf([isNull, isAddress]),
+        publicUdpSocketAddress: isOneOf([isNull, isAddress]),
+        channels: isArrayOf(isChannelName)
+    });
+}
 
 interface Req {
     body: any,
@@ -213,25 +236,27 @@ export const isFeedApiGetNumMessagesResponse = (x: any): x is FeedApiGetNumMessa
     });
 }
 
-export interface FeedApiGetLiveFeedInfoRequest {
+export interface FeedApiGetFeedInfoRequest {
     feedId: FeedId,
     timeoutMsec: DurationMsec
 }
-export const isFeedApiGetLiveFeedInfoRequest = (x: any): x is FeedApiGetLiveFeedInfoRequest => {
+export const isFeedApiGetFeedInfoRequest = (x: any): x is FeedApiGetFeedInfoRequest => {
     return _validateObject(x, {
         feedId: isFeedId,
         timeoutMsec: isDurationMsec
     });
 }
-export interface FeedApiGetLiveFeedInfoResponse {
+export interface FeedApiGetFeedInfoResponse {
     success: boolean,
-    liveFeedInfo: FindLiveFeedResult
+    isWriteable: boolean,
+    nodeId: NodeId
 }
-export const isFeedApiGetLiveFeedInfoResponse = (x: any): x is FeedApiGetLiveFeedInfoResponse => {
+export const isFeedApiGetFeedInfoResponse = (x: any): x is FeedApiGetFeedInfoResponse => {
     return _validateObject(x, {
         success: isBoolean,
-        liveFeedInfo: isFindLiveFeedResult
-    });
+        isWriteable: isBoolean,
+        nodeId: isNodeId
+    })
 }
 
 export interface FeedApiDeleteFeedRequest {
@@ -391,9 +416,9 @@ export default class DaemonApiServer {
             handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetNumMessages(reqData)}
         },
         {
-            // /feed/getLiveFeedInfo - get info for a feed - such as whether it is writeable
-            path: '/feed/getLiveFeedInfo',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetLiveFeedInfo(reqData)}
+            // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
+            path: '/feed/getFeedInfo',
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetFeedInfo(reqData)}
         },
         {
             // /feed/getAccessRules - get access rules for a local writeable subfeed
@@ -455,6 +480,7 @@ export default class DaemonApiServer {
                 /* istanbul ignore next */
                 await action(h.path, {context: 'Daemon API'}, async () => {
                     const reqData = req.body
+                    console.log('----------------- reqData', reqData)
                     if (!isJSONObject(reqData)) throw Error ('Not a JSONObject')
                     const response = await h.handler(reqData)
                     res.json(response)
@@ -531,14 +557,15 @@ export default class DaemonApiServer {
     // /probe - check whether the daemon is up and running and return info such as the node ID
     /* istanbul ignore next */
     async _handleProbe(): Promise<JSONObject> {
-        const response: ApiProbeResponse = {
+        const response: DaemonApiProbeResponse = {
             success: true,
             protocolVersion: protocolVersion(),
             daemonVersion: daemonVersion(),
             nodeId: this.#node.nodeId(),
             isBootstrapNode: this.#node.isBootstrapNode(),
             webSocketAddress: this.#node.webSocketAddress(),
-            publicUdpSocketAddress: this.#node.publicUdpSocketAddress()
+            publicUdpSocketAddress: this.#node.publicUdpSocketAddress(),
+            channels: this.#node.channelNames()
         }
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         return response
@@ -740,14 +767,14 @@ export default class DaemonApiServer {
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         return response
     }
-    // /feed/getLiveFeedInfo - get info for a feed - such as whether it is writeable
-    async _handleFeedApiGetLiveFeedInfo(reqData: JSONObject) {
-        if (!isFeedApiGetLiveFeedInfoRequest(reqData)) throw Error('Invalid request in _feedApiGetLiveFeedInfo');
+    // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
+    async _handleFeedApiGetFeedInfo(reqData: JSONObject) {
+        if (!isFeedApiGetFeedInfoRequest(reqData)) throw Error('Invalid request in _feedApiGetFeedInfo');
 
         const { feedId, timeoutMsec } = reqData;
         const liveFeedInfo = await this.#node.feedManager().getFeedInfo({feedId, timeoutMsec});
 
-        const response: FeedApiGetLiveFeedInfoResponse = {success: true, liveFeedInfo}
+        const response: FeedApiGetFeedInfoResponse = {success: true, isWriteable: liveFeedInfo.nodeId === this.#node.nodeId(), nodeId: liveFeedInfo.nodeId}
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         return response
     }

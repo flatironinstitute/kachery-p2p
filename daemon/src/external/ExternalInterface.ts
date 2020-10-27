@@ -43,7 +43,7 @@ export interface KacheryStorageManagerInterface {
     findFile: (fileKey: FileKey) => Promise<{found: boolean, size: ByteCount}>
     getFileReadStream: (fileKey: FileKey) => Promise<DataStreamy>
     storeFile: (sha1: Sha1Hash, data: Buffer) => Promise<void>
-    concatenateChunks: (sha1: Sha1Hash, chunkSha1s: Sha1Hash[]) => Promise<void>
+    concatenateChunksAndStoreResult: (sha1: Sha1Hash, chunkSha1s: Sha1Hash[]) => Promise<void>
 }
 
 export type CreateKacheryStorageManagerFunction = () => KacheryStorageManagerInterface

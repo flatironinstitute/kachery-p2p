@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
 import os
-from kachery_p2p._temporarydirectory import TemporaryDirectory
-from kachery_p2p import TestDaemon
 import time
+
+from kachery_p2p import TestDaemon
+from kachery_p2p._temporarydirectory import TemporaryDirectory
+
 
 def main():
     try:

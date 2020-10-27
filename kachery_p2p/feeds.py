@@ -1,13 +1,15 @@
+import hashlib
+import json
+import time
 from os import wait
 from os.path import basename
-import time
-import hashlib
-import kachery as ka
-import json
 from typing import Union
-from .core import _api_port, load_object
-from .core import _http_post_json
 from urllib.parse import quote, unquote
+
+import kachery as ka
+
+from .core import _api_port, _http_post_json, load_object
+
 
 class Feed:
     def __init__(self, uri, *, timeout_sec: Union[None, float]=None):
@@ -20,14 +22,14 @@ class Feed:
             if subfeed_name is not None:
                 raise Exception('Cannot specify subfeed name in URI when loading feed')
             self._feed_id = feed_id
-            self._feed_info = None
+            self._feed_node_id = None
             self._is_writeable = None
             self._is_snapshot = False
             self._initialize()
         elif uri.startswith('sha1://'):
             # snapshot
             self._feed_id = None
-            self._feed_info = None
+            self._feed_node_id = None
             self._is_writeable = False
             self._is_snapshot = True
             self._snapshot_object = load_object(uri)
@@ -39,16 +41,18 @@ class Feed:
         url = f'http://localhost:{port}/feed/getFeedInfo'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
-            timeoutMsec=self._timeout_sec * 1000 if self._timeout_sec is not None else None
+            timeoutMsec=(self._timeout_sec if self._timeout_sec is not None else 1) * 1000
         ))
 
         assert x['success'], f'Unable to initialize feed: {self._feed_id}. {x["error"]}'
-        self._feed_info = x['info']
-        self._is_writeable = x['info']['isWriteable']
+        self._feed_node_id = x['nodeId']
+        self._is_writeable = x['isWriteable']
     def is_writeable(self):
         return self._is_writeable
     def get_feed_id(self):
         return self._feed_id
+    def get_feed_node_id(self):
+        return self._feed_node_id
     def get_uri(self):
         return self._feed_uri
     def is_snapshot(self):
@@ -60,11 +64,10 @@ class Feed:
     def create_snapshot(self, subfeed_names: list):
         subfeeds = dict()
         for subfeed_name in subfeed_names:
-            subfeed_hash = _subfeed_hash(subfeed_name)
             subfeed = self.get_subfeed(subfeed_name)
             messages = subfeed.get_next_messages(wait_msec=0)
-            subfeeds[subfeed_hash] = dict(
-                subfeedName=subfeed_name,
+            subfeeds[subfeed.get_subfeed_hash()] = dict(
+                subfeedHash=subfeed.get_subfeed_hash(),
                 messages=messages
             )
         snapshot_uri = ka.store_object(dict(
@@ -119,6 +122,12 @@ class Subfeed:
 
     def get_position(self):
         return self._position
+    
+    def get_subfeed_name(self):
+        return self._subfeed_name
+    
+    def get_subfeed_hash(self):
+        return self._subfeed_hash
 
     def set_position(self, position):
         self._position = position
@@ -129,7 +138,7 @@ class Subfeed:
             url = f'http://localhost:{port}/feed/getNumMessages'
             x = _http_post_json(url, dict(
                 feedId=self._feed_id,
-                subfeedName=self._subfeed_name_str,
+                subfeedHash=self._subfeed_hash
             ))
             assert x['success'], f'Unable to get num. messages for subfeed: {self._feed_id} {self._subfeed_name_str}'
             return x['numMessages']
@@ -154,7 +163,7 @@ class Subfeed:
                 url = f'http://localhost:{port}/feed/getMessages'
             x = _http_post_json(url, dict(
                 feedId=self._feed_id,
-                subfeedName=self._subfeed_name_str,
+                subfeedHash=self._subfeed_hash,
                 position=self._position,
                 maxNumMessages=max_num_messages,
                 waitMsec=wait_msec
@@ -244,7 +253,7 @@ class Subfeed:
         url = f'http://localhost:{port}/feed/appendMessages'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
-            subfeedName=self._subfeed_name_str,
+            subfeedHash=self._subfeed_hash,
             messages=messages
         ))
         if not x['success']:
@@ -260,7 +269,7 @@ class Subfeed:
         url = f'http://localhost:{port}/feed/submitMessages'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
-            subfeedName=self._subfeed_name_str,
+            subfeedHash=self._subfeed_hash,
             messages=messages
         ))
         if not x['success']:
@@ -273,7 +282,7 @@ class Subfeed:
         url = f'http://localhost:{port}/feed/setAccessRules'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
-            subfeedName=self._subfeed_name_str,
+            subfeedHash=self._subfeed_hash,
             accessRules=access_rules
         ))
         if not x['success']:
@@ -286,7 +295,7 @@ class Subfeed:
         url = f'http://localhost:{port}/feed/getAccessRules'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
-            subfeedName=self._subfeed_name_str
+            subfeedHash=self._subfeed_hash
         ))
         if not x['success']:
             raise Exception('Unable to get access rules.')

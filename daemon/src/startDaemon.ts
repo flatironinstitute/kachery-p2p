@@ -1,11 +1,12 @@
 import ExternalInterface from './external/ExternalInterface';
 import { MockNodeDefects } from './external/mock/MockNodeDaemon';
-import { Address, ChannelName, HostName, KeyPair, Port, scaledDurationMsec } from './interfaces/core';
+import { Address, ChannelName, HostName, LocalFilePath, Port, scaledDurationMsec, unscaledDurationMsec } from './interfaces/core';
 import KacheryP2PNode from './KacheryP2PNode';
 import AnnounceService from './services/AnnounceService';
 import BootstrapService from './services/BootstrapService';
 import DaemonApiServer from './services/DaemonApiServer';
 import DiscoverService from './services/DiscoverService';
+import DisplayStateService from './services/DisplayStateService';
 import MulticastService from './services/MulticastService';
 import ProxyClientService from './services/ProxyClientService';
 import PublicApiServer from './services/PublicApiServer';
@@ -16,7 +17,7 @@ export interface StartDaemonOpts {
     bootstrapAddresses: Address[],
     isBootstrap: boolean,
     channelNames: ChannelName[],
-    multicastUdpAddress: string | null,
+    multicastUdpAddress: Address | null,
     udpSocketPort: Port | null,
     webSocketListenPort: Port | null,
     firewalled: boolean,
@@ -26,6 +27,7 @@ export interface StartDaemonOpts {
         bootstrap?: boolean,
         proxyClient?: boolean,
         multicast?: boolean,
+        display?: boolean,
         udpSocket?: boolean,
         webSocketServer?: boolean,
         httpServer?: boolean,
@@ -33,8 +35,23 @@ export interface StartDaemonOpts {
     }
 }
 
+export interface DaemonInterface {
+    daemonApiServer: DaemonApiServer,
+    publicApiServer: PublicApiServer,
+    publicWebSocketServer: PublicWebSocketServer | null,
+    publicUdpSocketServer: PublicUdpSocketServer | null,
+    announceService: AnnounceService | null,
+    discoverService: DiscoverService | null,
+    bootstrapService: BootstrapService | null,
+    proxyClientService: ProxyClientService | null,
+    multicastService: MulticastService | null,
+    displayService: DisplayStateService | null,
+    node: KacheryP2PNode,
+    stop: () => void
+}
+
 const startDaemon = async (args: {
-    keyPair: KeyPair,
+    configDir: LocalFilePath | null,
     verbose: number,
     hostName: HostName | null,
     daemonApiPort: Port | null,
@@ -43,9 +60,9 @@ const startDaemon = async (args: {
     externalInterface: ExternalInterface,
     getDefects: () => MockNodeDefects,
     opts: StartDaemonOpts
-}) => {
+}): Promise<DaemonInterface> => {
     const {
-        keyPair,
+        configDir,
         verbose,
         hostName,
         daemonApiPort,
@@ -55,7 +72,7 @@ const startDaemon = async (args: {
         opts
     } = args
     const kNode = new KacheryP2PNode({
-        keyPair,
+        configDir,
         verbose,
         hostName,
         httpListenPort,
@@ -132,6 +149,9 @@ const startDaemon = async (args: {
         intervalMsec: scaledDurationMsec(12000),
         multicastAddress: opts.multicastUdpAddress
     }) : null
+    let displayService = opts.services.display ? new DisplayStateService(kNode, {
+        intervalMsec: unscaledDurationMsec(5000)
+    }) : null
 
     const _stop = () => {
         announceService && announceService.stop()
@@ -161,6 +181,7 @@ const startDaemon = async (args: {
         bootstrapService,
         proxyClientService,
         multicastService,
+        displayService,
         node: kNode,
         stop: _stop
     }

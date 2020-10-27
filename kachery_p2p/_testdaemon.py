@@ -1,6 +1,8 @@
-import time
 import os
+import time
+
 from kachery_p2p._shellscript import ShellScript
+
 
 class KPEnv:
     def __init__(self, test_daemon):
@@ -22,13 +24,16 @@ class KPEnv:
             os.putenv('KACHERY_P2P_CONFIG_DIR', self._old_kachery_p2p_config_dir)
 
 class TestDaemon:
-    def __init__(self, *, channels, api_port, storage_dir, port=None, bootstraps=None):
+    def __init__(self, *, channels, api_port, storage_dir, port=None, websocket_port=None, bootstraps=None, isbootstrap=False, nomulticast=False):
         self._channels = channels
         self._storage_dir = storage_dir
         self._api_port = api_port
         self._script = None
         self._port = port
+        self._websocket_port = websocket_port
         self._bootstraps = bootstraps
+        self._isbootstrap = isbootstrap
+        self._nomulticast = nomulticast
     def testEnv(self):
         return KPEnv(test_daemon=self)
     def start(self):
@@ -38,8 +43,16 @@ class TestDaemon:
         if self._bootstraps is not None:
             for bs in self._bootstraps:
                 opts.append(f'--bootstrap {bs}')
+        else:
+            opts.append(f'--nobootstrap')
+        if self._isbootstrap:
+            opts.append(f'--isbootstrap')
+        if self._nomulticast:
+            opts.append(f'--nomulticast')
         if self._port is not None:
             opts.append(f'--port {self._port}')
+        if self._websocket_port is not None:
+            opts.append(f'--websocket-port {self._websocket_port}')
         print('Starting daemon')
         self._script = ShellScript(f'''
         #!/bin/bash
@@ -52,7 +65,9 @@ class TestDaemon:
         mkdir -p $KACHERY_STORAGE_DIR
         exec kachery-p2p-start-daemon --method dev {' '.join(opts)}
         ''')
+        print('---------------------- s1')
         self._script.start()
+        print('---------------------- s2')
         with KPEnv(self):
             import kachery_p2p as kp
             while True:
@@ -61,10 +76,11 @@ class TestDaemon:
                     channels = kp.get_channels()
                 except:
                     channels = None
+                print('-------------------------------- channels', channels)
                 if channels is not None:
                     okay = True
                     for ch in self._channels:
-                        if ch not in [ch['name'] for ch in channels]:
+                        if ch not in channels:
                             okay = False
                     if okay:
                         break

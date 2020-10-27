@@ -49,7 +49,7 @@ mocha.describe('Real external interface', () => {
                 const resp = await ri.httpPostJson(address, urlPath('/test'), req, {timeoutMsec: unscaledDurationMsec(500)})
                 expect(JSONStringifyDeterministic(resp)).equals(JSONStringifyDeterministic({echo: req}))
                 server.close()
-                done()
+                resolve()
             }, done)
         })
         it('httpGetDownload', (done) => {
@@ -77,11 +77,11 @@ mocha.describe('Real external interface', () => {
                     const b = Buffer.concat(chunks)
                     expect(b.length).equals(data.length)
                     server.close()
-                    done()
+                    resolve()
                 })
                 ds.onError((err: Error) => {
                     server.close()
-                    done(err)
+                    reject(err)
                 })
             }, done)
         })
@@ -110,7 +110,7 @@ mocha.describe('Real external interface', () => {
                     ws.close()
                     setTimeout(() => {
                         wss.close()
-                        done()
+                        resolve()
                     }, 3)
                 })
             }, done)

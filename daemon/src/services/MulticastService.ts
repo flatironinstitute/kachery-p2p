@@ -2,7 +2,7 @@ import { action } from "../common/action"
 import { getSignature, verifySignature } from "../common/crypto_util"
 import { sleepMsec } from "../common/util"
 import ExternalInterface from "../external/ExternalInterface"
-import { Address, ChannelName, ChannelNodeInfo, DurationMsec, hostName, isMulticastAnnounceMessage, JSONObject, KeyPair, minDuration, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, scaledDurationMsec, tryParseJsonObject } from "../interfaces/core"
+import { Address, ChannelName, ChannelNodeInfo, DurationMsec, hostName, isMulticastAnnounceMessage, JSONObject, KeyPair, minDuration, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, portToNumber, scaledDurationMsec, tryParseJsonObject } from "../interfaces/core"
 import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
 import { protocolVersion } from "../protocolVersion"
 
@@ -24,7 +24,7 @@ interface KacheryP2PNodeInterface {
 export default class MulticastService {
     #node: KacheryP2PNodeInterface
     #halted = false
-    constructor(node: KacheryP2PNodeInterface, private opts: {intervalMsec: DurationMsec, multicastAddress: string}) {
+    constructor(node: KacheryP2PNodeInterface, private opts: {intervalMsec: DurationMsec, multicastAddress: Address}) {
         this.#node = node
         this._start()
     }
@@ -36,10 +36,10 @@ export default class MulticastService {
         // to find nodes on the local network
         const multicastSocket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: true, nodeId: this.#node.nodeId(), firewalled: true })
         const multicastAddress = this.opts.multicastAddress
-        const multicastPort = 21010
-        multicastSocket.bind(multicastPort)
+        const multicastPort = multicastAddress.port
+        multicastSocket.bind(portToNumber(multicastAddress.port))
         multicastSocket.on('listening', function() {
-            multicastSocket.addMembership(multicastAddress)
+            multicastSocket.addMembership(multicastAddress.hostName.toString())
         })
         multicastSocket.on('message', (message, rinfo) => {
             let msg: JSONObject | null = tryParseJsonObject(message.toString())
@@ -95,8 +95,8 @@ export default class MulticastService {
                         Buffer.from(mJson),
                         0,
                         mJson.length,
-                        multicastPort,
-                        multicastAddress
+                        portToNumber(multicastAddress.port),
+                        multicastAddress.hostName.toString()
                     )
                 }, async () => {
                 })

@@ -32,13 +32,14 @@ def _experimental_config(*, nop2p: Union[None, bool]=None, file_server_urls: Uni
 def _api_port():
     return os.getenv('KACHERY_P2P_API_PORT', 20431)
 
-def get_channels():
+def get_channels() -> List[str]:
     port = _api_port()
-    url = f'http://localhost:{port}/getState'
+    url = f'http://localhost:{port}/probe'
     resp = _http_post_json(url, dict())
-    if not resp['success']:
-        raise Exception(resp['error'])
-    return resp['state']['channels']
+    print('----------------resp', resp)
+    # if not resp['success']:
+    #     raise Exception(resp['error'])
+    return resp['channels']
 
 def find_file(uri):
     if uri.startswith('sha1dir://'):
@@ -321,7 +322,19 @@ def _probe_daemon(api_port=None):
         return None
     return x
 
-def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verbose: int=0, host: str='', bootstrap: List[str], nobootstrap: bool=False, node_arg: List[str]=[]):
+def start_daemon(*,
+    http_port: int=0,
+    websocket_port: int=0,
+    method: str='npx',
+    channels: List[str]=[],
+    verbose: int=0,
+    host: str='',
+    bootstrap: List[str],
+    nobootstrap: bool=False,
+    isbootstrap: bool=False,
+    nomulticast: bool=False,
+    node_arg: List[str]=[]
+):
     from kachery_p2p import __version__
 
     if _probe_daemon() is not None:
@@ -337,10 +350,16 @@ def start_daemon(*, port: int=0, method: str='npx', channels: List[str]=[], verb
         start_args.append(f'--bootstrap {b}')
     if nobootstrap:
         start_args.append(f'--nobootstrap')
+    if isbootstrap:
+        start_args.append(f'--isbootstrap')
+    if nomulticast:
+        start_args.append(f'--nomulticast')
     start_args.append(f'--verbose {verbose}')
     if host:
         start_args.append(f'--host {host}')
-    start_args.append(f'--port {port}')
+    if websocket_port > 0:
+        start_args.append(f'--websocket-port {websocket_port}')
+    start_args.append(f'--http-port {http_port}')
 
     # Note that npx-latest/npm-latest uses the latest version of the daemon on npm, which may be desireable for some bootstrap nodes, but not adviseable if you want to be sure that kachery-p2p is constistent with the node daemon
     if (method == 'npx') or (method == 'npx-latest') or (method == 'npm') or (method == 'npm-latest'):
@@ -478,6 +497,8 @@ def _resolve_file_uri_from_dir_uri(dir_uri, p2p: bool=True):
                     if alg in dd['files'][name0]:
                         hash1 = dd['files'][name0][alg]
                         algorithm1 = alg
+                if hash1 is None:
+                    return None
                 return algorithm1 + '://' + hash1
             else:
                 return None

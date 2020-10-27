@@ -91,7 +91,7 @@ export const loadFile = (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode
             }
             const _concatenateChunks = async () => {
                 const chunkSha1s: Sha1Hash[] = manifest.chunks.map(c => c.sha1)
-                await node.kacheryStorageManager().concatenateChunks(manifest.sha1, chunkSha1s)
+                await node.kacheryStorageManager().concatenateChunksAndStoreResult(manifest.sha1, chunkSha1s)
                 ret.producer().end()
             }
         })().catch((err: Error) => {

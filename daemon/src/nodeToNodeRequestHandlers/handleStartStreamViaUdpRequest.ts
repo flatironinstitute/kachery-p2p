@@ -12,6 +12,13 @@ export const handleStartStreamViaUdpRequest = async (node: KacheryP2PNode, fromN
             errorMessage: errorMessage('Unable to find remote node')
         }
     }
+    if (!rn.getUdpAddressForRemoteNode()) {
+        return {
+            requestType: 'startStreamViaUdp',
+            success: false,
+            errorMessage: errorMessage('Cannot stream via udp when we do not have a udp address for the remote node')
+        }    
+    }
     try {
         await rn.startStreamViaUdpToRemoteNode(streamId)
     }

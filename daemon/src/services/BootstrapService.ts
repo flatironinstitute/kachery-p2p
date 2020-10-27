@@ -2,7 +2,7 @@ import { action } from "../common/action";
 import { sleepMsec, sleepMsecNum } from "../common/util";
 import { Address, DurationMsec, JSONObject, NodeId, scaledDurationMsec, urlPath, UrlPath } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
-import { isApiProbeResponse } from "../services/PublicApiServer";
+import { isPublicApiProbeResponse } from "../services/PublicApiServer";
 
 interface RemoteNodeManagerInterface {
     setBootstrapNode: (remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, publicUdpSocketAddress: Address | null) => void
@@ -33,7 +33,7 @@ export default class BootstrapService {
     }
     async _probeBootstrapNode(address: Address) {
         const response = await this.#node.externalInterface().httpPostJson(address, urlPath('/probe'), {}, {timeoutMsec: scaledDurationMsec(2000)});
-        if (!isApiProbeResponse(response)) {
+        if (!isPublicApiProbeResponse(response)) {
             throw Error('Invalid probe response from bootstrap node.')
         }
         const {nodeId: remoteNodeId, isBootstrapNode, webSocketAddress} = response

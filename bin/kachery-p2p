@@ -94,13 +94,28 @@ def log():
 @click.option('--channel', multiple=True, help='Channel to join')
 @click.option('--bootstrap', multiple=True, help='Override the default bootstrap node(s). Use --bootstrap ip:port')
 @click.option('--nobootstrap', is_flag=True, help='Do not use bootstrap nodes')
+@click.option('--isbootstrap', is_flag=True, help='This is a bootstrap node')
+@click.option('--nomulticast', is_flag=True, help='Do not use multicast udp')
 @click.option('--verbose', default=0, help='Verbosity level')
 @click.option('--method', default='npx', help='Method for starting daemon: npx (default), npx-latest, npm, npm-latest or dev')
 @click.option('--host', default='', help='IP for connecting to this daemon')
-@click.option('--port', default=0, help='Optional port to listen on (0 means do not listen)')
+@click.option('--http-port', default=0, help='Public http port to listen on')
+@click.option('--websocket-port', default=0, help='Port for websocket server')
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
-def start_daemon(method, channel, verbose, host, port, bootstrap, nobootstrap, node_arg):
-    kp.start_daemon(method=method, channels=channel, verbose=verbose, host=host, port=port, nobootstrap=nobootstrap, bootstrap=bootstrap, node_arg=node_arg)
+def start_daemon(method, channel, verbose, host, http_port, websocket_port, bootstrap, nobootstrap, isbootstrap, nomulticast, node_arg):
+    kp.start_daemon(
+        method=method,
+        channels=channel,
+        verbose=verbose,
+        host=host,
+        http_port=http_port,
+        websocket_port=websocket_port,
+        nobootstrap=nobootstrap,
+        isbootstrap=isbootstrap,
+        bootstrap=bootstrap,
+        nomulticast=nomulticast,
+        node_arg=node_arg
+    )
 
 @click.command(help="Stop the daemon.")
 def stop_daemon():

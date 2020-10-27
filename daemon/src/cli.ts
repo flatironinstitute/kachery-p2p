@@ -1,12 +1,11 @@
 #!/usr/bin/env ts-node
 
-import assert from 'assert';
 import fs from 'fs';
 import os from 'os';
 import yargs from 'yargs';
-import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util';
+import { parseBootstrapInfo } from './common/util';
 import realExternalInterface from './external/real/realExternalInterface';
-import { Address, isAddress, isChannelName, isHostName, isKeyPair, isPort, JSONObject, KeyPair, localFilePath, LocalFilePath, toPort } from './interfaces/core';
+import { HostName, isAddress, isChannelName, isHostName, isPort, LocalFilePath, localFilePath, toPort } from './interfaces/core';
 import startDaemon from './startDaemon';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
@@ -31,12 +30,6 @@ process.on('uncaughtException', function (err) {
 });
 
 class CLIError extends Error {
-  constructor(errorString: string) {
-    super(errorString);
-  }
-}
-
-class StringParseError extends Error {
   constructor(errorString: string) {
     super(errorString);
   }
@@ -68,8 +61,8 @@ function main() {
           type: 'string',
           default: os.hostname()
         })
-        y.option('port', {
-          describe: 'Override the default http port to listen on.',
+        y.option('http-port', {
+          describe: 'Override the default daemon http port to listen on.',
           type: 'string'
         })
         y.option('udp-port', {
@@ -82,14 +75,18 @@ function main() {
         })
         y.option('bootstrap', {
           describe: 'Override the default bootstrap nodes. Use --bootstrap <host-or-ip>:<port>',
-          type: 'array',
+          type: 'array'
         })
-        y.option('no-bootstrap', {
+        y.option('nobootstrap', {
           describe: 'Do not use bootstrap nodes',
           type: 'boolean'
         })
-        y.option('is-bootstrap', {
+        y.option('isbootstrap', {
           describe: 'Mark this node as a bootstrap node',
+          type: 'boolean'
+        })
+        y.option('nomulticast', {
+          describe: 'Do not use multicast udp',
           type: 'boolean'
         })
         return y
@@ -100,29 +97,30 @@ function main() {
           return ch;
         });
         
-        const bootstrapStrings = argv.bootstrap || null;
+        const bootstrapStrings: any[] | null = argv.bootstrap as (any[] | null) || null;
         let bootstrapAddresses = bootstrapStrings ? (
-          (bootstrapStrings as string[]).map(x => parseBootstrapInfo(x))
+          bootstrapStrings.filter((x: any) => (typeof(x) === 'string')).map((x: string) => parseBootstrapInfo(x))
         ): [];
-        const configDir = process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`;
-        if (!fs.existsSync(configDir)) {
-          fs.mkdirSync(configDir);
+        const configDir = (process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`) as any as LocalFilePath
+        if (!fs.existsSync(configDir.toString())) {
+          fs.mkdirSync(configDir.toString());
         }
         const hostName = argv.host || null;
-        const httpListenPort = argv.port ? Number(argv.port) || null : 14507;
-        const udpSocketPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort;
-        const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : 14508;
+        const httpListenPort = argv['http-port'] ? Number(argv['http-port']) || null : 14507
+        const udpSocketPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort || 14507
+        const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : null
         const daemonApiPort = Number(process.env.KACHERY_P2P_DAEMON_API_PORT || process.env.KACHERY_P2P_API_PORT || 20431)
         const label = argv.label as string;
-        const noBootstrap = argv['no-bootstrap'] ? true : false;
-        const isBootstrapNode = argv['is-bootstrap'] ? true : false;
+        const noBootstrap = argv['nobootstrap'] ? true : false;
+        const isBootstrapNode = argv['isbootstrap'] ? true : false;
+        const noMulticast = argv['nomulticast'] ? true : false;
         const verbose = Number(argv.verbose || 0);
 
         if ((!noBootstrap) && (bootstrapAddresses.length === 0)) {
           bootstrapAddresses = [
             // todo - set these properly
-            {hostName: '45.33.92.31', port: toPort(46002)}, // kachery-p2p-spikeforest
-            {hostName: '45.33.92.33', port: toPort(46002)} // kachery-p2p-flatiron1
+            {hostName: '45.33.92.31', port: toPort(46003)}, // kachery-p2p-spikeforest
+            {hostName: '45.33.92.33', port: toPort(46003)} // kachery-p2p-flatiron1
           ].map(bpi => {
               if (isAddress(bpi)) {
                   return bpi
@@ -164,17 +162,15 @@ function main() {
           }
         }
 
-        const keyPair = _loadKeypair(localFilePath(configDir))
-
         const storageDir = process.env['KACHERY_STORAGE_DIR']
         if (!storageDir) {
             throw Error('You must set the KACHERY_STORAGE_DIR environment variable.');
         }
 
-        const externalInterface = realExternalInterface(localFilePath(storageDir), localFilePath(configDir))
+        const externalInterface = realExternalInterface(localFilePath(storageDir), configDir)
 
         startDaemon({
-          keyPair,
+          configDir,
           verbose,
           hostName,
           daemonApiPort,
@@ -186,7 +182,7 @@ function main() {
             bootstrapAddresses: bootstrapAddresses,
             isBootstrap: isBootstrapNode,
             channelNames,
-            multicastUdpAddress: '237.0.0.0', // how to choose this?
+            multicastUdpAddress: {hostName: '237.0.0.0' as any as HostName, port: toPort(21010)}, // how to choose this?
             udpSocketPort,
             webSocketListenPort,
             firewalled: false,
@@ -195,14 +191,15 @@ function main() {
                 discover: true,
                 bootstrap: noBootstrap ? false : true,
                 proxyClient: true,
-                multicast: true,
-                udpSocket: udpSocketPort ? true : false,
+                multicast: noMulticast ? false : true,
+                display: true,
+                udpSocket: true,
                 webSocketServer: webSocketListenPort ? true : false,
                 httpServer: true,
                 daemonServer: true
             }
           }
-        });
+        })
       }
     })
     .demandCommand()
@@ -210,68 +207,6 @@ function main() {
     .help()
     .wrap(72)
     .argv
-}
-
-function parseBootstrapInfo(x: string): Address {
-  const a = x.split(':');
-  assert(a.length === 2, 'Improper bootstrap string')
-  const b = {
-    hostName: a[0],
-    port: Number(a[1])
-  };
-  if (!isAddress(b)) {
-    throw new StringParseError('Improper bootstrap info.');
-  }
-  return b;
-}
-
-const _loadKeypair = (configDir: LocalFilePath): KeyPair => {
-  if (!fs.existsSync(configDir.toString())) {
-      throw Error(`Config directory does not exist: ${configDir}`)
-  }
-  const publicKeyPath = `${configDir.toString()}/public.pem`
-  const privateKeyPath = `${configDir.toString()}/private.pem`
-  if (fs.existsSync(publicKeyPath)) {
-      if (!fs.existsSync(privateKeyPath)) {
-          throw Error(`Public key file exists, but secret key file does not.`)
-      }
-  }
-  else {
-      const {publicKey, privateKey} = createKeyPair()
-      fs.writeFileSync(publicKeyPath, publicKey.toString(), {encoding: 'utf-8'})
-      fs.writeFileSync(privateKeyPath, privateKey.toString(), {encoding: 'utf-8'})
-      fs.chmodSync(privateKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
-  }
-
-  const keyPair = {
-      publicKey: fs.readFileSync(publicKeyPath, {encoding: 'utf-8'}),
-      privateKey: fs.readFileSync(privateKeyPath, {encoding: 'utf-8'}),
-  }
-  if (!isKeyPair(keyPair)) {
-      throw Error('Invalid keyPair')
-  }
-  testKeyPair(keyPair)
-  return keyPair
-}
-
-const testKeyPair = (keyPair: KeyPair) => {
-  const signature = getSignature({test: 1}, keyPair)
-  if (!verifySignature({test: 1} as JSONObject, signature, keyPair.publicKey)) {
-      throw new Error('Problem testing public/private keys. Error verifying signature.')
-  }
-  if (hexToPublicKey(publicKeyToHex(keyPair.publicKey)) !== keyPair.publicKey) {
-      console.warn(hexToPublicKey(publicKeyToHex(keyPair.publicKey)))
-      console.warn(keyPair.publicKey)
-      throw new Error('Problem testing public/private keys. Error converting public key to/from hex.')
-  }
-  if (hexToPrivateKey(privateKeyToHex(keyPair.privateKey)) !== keyPair.privateKey) {
-      throw new Error('Problem testing public/private keys. Error converting private key to/from hex.')
-  }
-}
-
-export const readJsonFile = async (path: string) => {
-  const txt = await fs.promises.readFile(path, 'utf-8');
-  return JSON.parse(txt);
 }
 
 main();

@@ -48,7 +48,7 @@ export default class MockKacheryStorageManager {
             throw Error(`Unexpected hash for storing file: ${fileKey.sha1} <> ${sha1}`)
         }
     }
-    async concatenateChunks(sha1Concat: Sha1Hash, chunkSha1s: Sha1Hash[]): Promise<void> {
+    async concatenateChunksAndStoreResult(sha1Concat: Sha1Hash, chunkSha1s: Sha1Hash[]): Promise<void> {
         const chunks: Buffer[] = []
         chunkSha1s.forEach(sha1 => {
             const content = this.#mockFiles.get(sha1)

@@ -1,5 +1,6 @@
+import assert from 'assert';
 import bson from 'bson';
-import { DurationMsec, durationMsecToNumber, elapsedSince, FileKey, nowTimestamp, scaledDurationMsec, Sha1Hash, unscaledDurationMsec } from '../interfaces/core';
+import { Address, DurationMsec, durationMsecToNumber, elapsedSince, FileKey, isAddress, nowTimestamp, scaledDurationMsec, Sha1Hash, unscaledDurationMsec } from '../interfaces/core';
 
 export const randomString = (num_chars: number) => {
     var text = "";
@@ -31,7 +32,7 @@ export const randomHexString = (num_chars: number) => {
     return text;
 }
 
-export const sha1MatchesFileKey = ({sha1, fileKey}: {sha1: Sha1Hash, fileKey: FileKey}) => {
+export const sha1MatchesFileKey = ({ sha1, fileKey }: { sha1: Sha1Hash, fileKey: FileKey }) => {
     if (fileKey.sha1) {
         return fileKey.sha1 === sha1
     }
@@ -122,4 +123,23 @@ export const sleepMsecNum = async (msec: number, continueFunction: (() => boolea
             resolve()
         }, m)
     })
+}
+
+class StringParseError extends Error {
+    constructor(errorString: string) {
+        super(errorString);
+    }
+}
+
+export const parseBootstrapInfo = (x: string): Address => {
+    const a = x.split(':')
+    assert(a.length === 2, 'Improper bootstrap string')
+    const b = {
+        hostName: a[0],
+        port: Number(a[1])
+    };
+    if (!isAddress(b)) {
+        throw new StringParseError('Improper bootstrap info.');
+    }
+    return b
 }

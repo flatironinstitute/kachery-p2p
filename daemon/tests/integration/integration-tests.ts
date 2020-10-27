@@ -2,8 +2,8 @@ import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import { sleepMsec } from '../../src/common/util';
 import MockNodeDaemon, { MockNodeDaemonGroup, MockNodeDefects } from '../../src/external/mock/MockNodeDaemon';
-import { byteCount, ByteCount, byteCountToNumber, ChannelName, DurationMsec, durationMsecToNumber, FeedId, FeedName, JSONObject, MessageCount, messageCount, scaledDurationMsec, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, subfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toPort } from '../../src/interfaces/core';
-import { ApiLoadFileRequest, FeedApiAppendMessagesRequest, FeedApiCreateFeedRequest, FeedApiDeleteFeedRequest, FeedApiGetAccessRulesRequest, FeedApiGetFeedIdRequest, FeedApiGetLiveFeedInfoRequest, FeedApiGetMessagesRequest, FeedApiGetNumMessagesRequest, FeedApiGetSignedMessagesRequest, FeedApiSetAccessRulesRequest, FeedApiSubmitMessageRequest, FeedApiWatchForNewMessagesRequest, isFeedApiAppendMessagesResponse, isFeedApiCreateFeedResponse, isFeedApiDeleteFeedResponse, isFeedApiGetAccessRulesResponse, isFeedApiGetFeedIdResponse, isFeedApiGetLiveFeedInfoResponse, isFeedApiGetMessagesResponse, isFeedApiGetNumMessagesResponse, isFeedApiGetSignedMessagesResponse, isFeedApiSetAccessRulesResponse, isFeedApiSubmitMessageResponse, isFeedApiWatchForNewMessagesResponse } from '../../src/services/DaemonApiServer';
+import { byteCount, ByteCount, byteCountToNumber, ChannelName, DurationMsec, durationMsecToNumber, FeedId, FeedName, HostName, JSONObject, MessageCount, messageCount, scaledDurationMsec, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, subfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toPort } from '../../src/interfaces/core';
+import { ApiLoadFileRequest, FeedApiAppendMessagesRequest, FeedApiCreateFeedRequest, FeedApiDeleteFeedRequest, FeedApiGetAccessRulesRequest, FeedApiGetFeedIdRequest, FeedApiGetFeedInfoRequest, FeedApiGetMessagesRequest, FeedApiGetNumMessagesRequest, FeedApiGetSignedMessagesRequest, FeedApiSetAccessRulesRequest, FeedApiSubmitMessageRequest, FeedApiWatchForNewMessagesRequest, isFeedApiAppendMessagesResponse, isFeedApiCreateFeedResponse, isFeedApiDeleteFeedResponse, isFeedApiGetAccessRulesResponse, isFeedApiGetFeedIdResponse, isFeedApiGetFeedInfoResponse, isFeedApiGetMessagesResponse, isFeedApiGetNumMessagesResponse, isFeedApiGetSignedMessagesResponse, isFeedApiSetAccessRulesResponse, isFeedApiSubmitMessageResponse, isFeedApiWatchForNewMessagesResponse } from '../../src/services/DaemonApiServer';
 import { StartDaemonOpts } from '../../src/startDaemon';
 
 const mockChannelName = 'mock-channel' as any as ChannelName
@@ -39,6 +39,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     webSocketListenPort: null,
                     firewalled: false,
                     services: {
+                        display: true
                     }
                 }
                 const daemonOpts: StartDaemonOpts = {
@@ -52,7 +53,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     services: {
                         announce: true,
                         discover: true,
-                        bootstrap: true
+                        bootstrap: true,
+                        display: true
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -87,6 +89,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
         //             udpSocketPort: null,
         //             webSocketListenPort: null,
         //             services: {
+        //                 display: true
         //             }
         //         }
         //         const daemonOpts = {
@@ -100,7 +103,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
         //             services: {
         //                 announce: true,
         //                 discover: true,
-        //                 bootstrap: true
+        //                 bootstrap: true,
+        //                 display: true
         //             }
         //         }
         //         const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -134,7 +138,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
     describe('Test multicast udp discovery aaa89', () => {
         it('Create two nodes communicating through multicast sockets', (done) => {
             testContext(async (g, resolve, reject) => {
-                const multicastUdpAddress = 'local-mock-multicast-udp-address-1'
+                const multicastUdpAddress = {hostName: 'local-mock-multicast-udp-address-1' as any as HostName, port: toPort(21010)}
                 const daemonOpts = {
                     bootstrapAddresses: [],
                     isBootstrap: false,
@@ -147,7 +151,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         announce: true,
                         discover: true,
                         multicast: true,
-                        udpSocket: true
+                        udpSocket: true,
+                        display: true
                     }
                 }
                 const daemon1 = await g.createDaemon({...daemonOpts, udpSocketPort: randomMockPort()})
@@ -182,7 +187,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     webSocketListenPort: randomMockPort(),
                     firewalled: false,
                     services: {
-                        webSocketServer: true
+                        webSocketServer: true,
+                        display: true
                     }
                 }
                 const daemonOpts: StartDaemonOpts = {
@@ -197,7 +203,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         announce: true,
                         discover: true,
                         bootstrap: true,
-                        proxyClient: true
+                        proxyClient: true,
+                        display: true
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -237,7 +244,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     services: {
                         httpServer: true,
                         udpSocket: true,
-                        webSocketServer: true
+                        webSocketServer: true,
+                        display: true
                     }
                 }
                 const daemonOpts: StartDaemonOpts = {
@@ -253,7 +261,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         discover: true,
                         bootstrap: true,
                         udpSocket: true,
-                        proxyClient: true
+                        proxyClient: true,
+                        display: true
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -298,7 +307,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                     services: {
                         httpServer: true,
                         udpSocket: true,
-                        webSocketServer: true
+                        webSocketServer: true,
+                        display: true
                     }
                 }
                 const daemonOpts: StartDaemonOpts = {
@@ -314,7 +324,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         discover: true,
                         bootstrap: true,
                         udpSocket: true,
-                        proxyClient: true
+                        proxyClient: true,
+                        display: true
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -506,14 +517,17 @@ const getNumMessages = async (daemon: MockNodeDaemon, feedId: FeedId, subfeedHas
     return res.numMessages
 }
 
-const getLiveFeedInfo = async (daemon: MockNodeDaemon, feedId: FeedId, timeoutMsec: DurationMsec) => {
-    const req: FeedApiGetLiveFeedInfoRequest = {
+const getFeedInfo = async (daemon: MockNodeDaemon, feedId: FeedId, timeoutMsec: DurationMsec) => {
+    const req: FeedApiGetFeedInfoRequest = {
         feedId, timeoutMsec
     }
-    const res = await daemon.mockDaemonApiPost('/feed/getLiveFeedInfo', req as any as JSONObject)
-    if (!isFeedApiGetLiveFeedInfoResponse(res)) throw Error('Unexpected')
+    const res = await daemon.mockDaemonApiPost('/feed/getFeedInfo', req as any as JSONObject)
+    if (!isFeedApiGetFeedInfoResponse(res)) {
+        console.warn(res)
+        throw Error('Unexpected')
+    }
     if (!res.success) throw Error('Error getting live feed info')
-    return res.liveFeedInfo
+    return res
 }
 
 const getAccessRules = async (daemon: MockNodeDaemon, feedId: FeedId, subfeedHash: SubfeedHash) => {
@@ -577,9 +591,9 @@ const testSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaem
     expect(messages2[0].test).equals(42)
     expect(await getNumMessages(daemon2, feed1, sf1)).to.equal(2)
 
-    const fi = await getLiveFeedInfo(daemon2, feed1, scaledDurationMsec(5000))
+    const fi = await getFeedInfo(daemon2, feed1, scaledDurationMsec(5000))
     expect(fi.nodeId).equals(daemon1.nodeId())
-    const fi2 = await getLiveFeedInfo(daemon1, feed1, scaledDurationMsec(5000))
+    const fi2 = await getFeedInfo(daemon1, feed1, scaledDurationMsec(5000))
     expect(fi2.nodeId).equals(daemon1.nodeId())
 
     try {

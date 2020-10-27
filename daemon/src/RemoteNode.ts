@@ -249,6 +249,9 @@ class RemoteNode {
                 /* istanbul ignore next */
                 throw Error('unexpected')
             }
+            if (!responseData.success) {
+                throw Error(`Error starting stream via udp: ${responseData.errorMessage}`)
+            }
         }
         catch(err) {
             incomingDataStream.producer().error(err)

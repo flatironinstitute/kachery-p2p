@@ -20,10 +20,11 @@ interface Res {
     end: () => void,
     status: (s: number) => Res,
     send: (x: any) => Res,
-    writeHead: Function
+    writeHead: Function,
+    write: (x: Buffer) => void
 }
 
-export interface ApiProbeResponse {
+export interface PublicApiProbeResponse {
     success: boolean,
     protocolVersion: ProtocolVersion,
     daemonVersion: DaemonVersion,
@@ -32,7 +33,7 @@ export interface ApiProbeResponse {
     webSocketAddress: Address | null,
     publicUdpSocketAddress: Address | null
 };
-export const isApiProbeResponse = (x: any): x is ApiProbeResponse => {
+export const isPublicApiProbeResponse = (x: any): x is PublicApiProbeResponse => {
     return _validateObject(x, {
         success: isBoolean,
         protocolVersion: isProtocolVersion,
@@ -166,7 +167,7 @@ export default class PublicApiServer {
         }
     }
     async _probe(): Promise<JSONObject> {
-        const response: ApiProbeResponse = {
+        const response: PublicApiProbeResponse = {
             success: true,
             protocolVersion: protocolVersion(),
             daemonVersion: daemonVersion(),
@@ -206,7 +207,7 @@ export default class PublicApiServer {
         })
         
         ds.onData((data: Buffer) => {
-            res.send(data)
+            res.write(data)
         })
         ds.onFinished(() => {
             res.end()
