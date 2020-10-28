@@ -5,7 +5,7 @@ import os from 'os';
 import yargs from 'yargs';
 import { parseBootstrapInfo } from './common/util';
 import realExternalInterface from './external/real/realExternalInterface';
-import { HostName, isAddress, isChannelName, isHostName, isPort, LocalFilePath, localFilePath, toPort } from './interfaces/core';
+import { HostName, isAddress, isChannelName, isHostName, isPort, LocalFilePath, localFilePath, nodeLabel, toPort } from './interfaces/core';
 import startDaemon from './startDaemon';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
@@ -109,8 +109,8 @@ function main() {
         const httpListenPort = argv['http-port'] ? Number(argv['http-port']) || null : 14507
         const udpSocketPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort || 14507
         const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : null
-        const daemonApiPort = Number(process.env.KACHERY_P2P_DAEMON_API_PORT || process.env.KACHERY_P2P_API_PORT || 20431)
-        const label = argv.label as string;
+        const daemonApiPort = Number(process.env.KACHERY_P2P_API_PORT || 20431)
+        const label = nodeLabel(argv.label as string)
         const noBootstrap = argv['nobootstrap'] ? true : false;
         const isBootstrapNode = argv['isbootstrap'] ? true : false;
         const noMulticast = argv['nomulticast'] ? true : false;

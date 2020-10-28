@@ -131,6 +131,12 @@ class StringParseError extends Error {
     }
 }
 
+export class RequestTimeoutError extends Error {
+    constructor(errorString: string) {
+        super(errorString);
+    }
+}
+
 export const parseBootstrapInfo = (x: string): Address => {
     const a = x.split(':')
     assert(a.length === 2, 'Improper bootstrap string')

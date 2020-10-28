@@ -130,6 +130,9 @@ export class KacheryStorageManager {
             size: byteCount(stat0.size)
         }
     }
+    storageDir() {
+        return this.#storageDir
+    }
 }
 
 const createDataStreamForFile = (path: LocalFilePath, offset: ByteCount, size: ByteCount) => {

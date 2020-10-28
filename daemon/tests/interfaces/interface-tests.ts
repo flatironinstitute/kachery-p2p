@@ -29,6 +29,7 @@ const validFileKey: ut.FileKey = {
 export const validNodeInfoBody: ut.ChannelNodeInfoBody = {
     channelName: validChannelName,
     nodeId: validNodeId,
+    nodeLabel: ut.nodeLabel('label'),
     httpAddress: { hostName: validHostName, port: 80 as any as ut.Port },
     webSocketAddress: { hostName: validHostName, port: 212 as any as ut.Port },
     publicUdpSocketAddress: { hostName: validHostName, port: 443 as any as ut.Port },

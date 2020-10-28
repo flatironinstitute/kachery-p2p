@@ -5,6 +5,7 @@ import { action } from '../common/action';
 import { DataStreamyProgress } from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
+import { isGetStatsOpts, NodeStats } from '../getStats';
 import { Address, ChannelName, DaemonVersion, DurationMsec, durationMsecToNumber, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelName, isDaemonVersion, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isProtocolVersion, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
@@ -344,12 +345,12 @@ export default class DaemonApiServer {
     #server: HttpServerInterface | null = null
     #simpleGetHandlers: {
         path: string,
-        handler: () => Promise<JSONObject>,
+        handler: (query: JSONObject) => Promise<JSONObject>,
     }[] = [
         {
             // /probe - check whether the daemon is up and running and return info such as the node ID
             path: '/probe',
-            handler: async () => {
+            handler: async (query) => {
                 /* istanbul ignore next */
                 return await this._handleProbe()
             }
@@ -357,9 +358,15 @@ export default class DaemonApiServer {
         {
             // /halt - halt the kachery-p2p daemon (stops the server process)
             path: '/halt',
-            handler: async () => {
+            handler: async (query) => {
                 /* istanbul ignore next */
                 return await this._handleHalt()
+            }
+        },
+        {
+            path: '/stats',
+            handler: async (query) => {
+                return await this._handleStats(query)
             }
         }
     ]
@@ -465,8 +472,13 @@ export default class DaemonApiServer {
                 /////////////////////////////////////////////////////////////////////////
                 /* istanbul ignore next */
                 await action(h.path, {context: 'Daemon API'}, async () => {
-                    const response = await h.handler()
-                    res.json(response)
+                    const response = await h.handler(req.query as any as JSONObject)
+                    if (response.format === 'html') {
+                        res.end(response.html)
+                    }
+                    else {
+                        res.json(response)
+                    }
                 }, async (err: Error) => {
                     await this._errorResponse(req, res, 500, err.message);
                 });
@@ -480,7 +492,6 @@ export default class DaemonApiServer {
                 /* istanbul ignore next */
                 await action(h.path, {context: 'Daemon API'}, async () => {
                     const reqData = req.body
-                    console.log('----------------- reqData', reqData)
                     if (!isJSONObject(reqData)) throw Error ('Not a JSONObject')
                     const response = await h.handler(reqData)
                     res.json(response)
@@ -582,6 +593,30 @@ export default class DaemonApiServer {
         setTimeout(() => {
             process.exit()
         }, durationMsecToNumber(scaledDurationMsec(3000)))
+        return response
+    }
+    // /stats
+    async _handleStats(query: JSONObject): Promise<JSONObject> {
+        if (!isGetStatsOpts(query)) {
+            throw Error('Unexpected query.')
+        }
+        interface ApiStatsResponse {
+            success: boolean,
+            format: string,
+            html?: string,
+            stats: NodeStats
+        }
+        const stats = this.#node.getStats(query)
+        const response: ApiStatsResponse = {
+            success: true,
+            format: (query.format || 'json') as string,
+            html: stats.html,
+            stats
+        }
+        /* istanbul ignore next */
+        if (!isJSONObject(response)) {
+            throw Error('Unexpected')
+        }
         return response
     }
     // /findFile - find a file (or feed) in the remote nodes. May return more than one.
@@ -698,7 +733,10 @@ export default class DaemonApiServer {
     }
     // /feed/appendMessages - append messages to a local writeable subfeed
     async _handleFeedApiAppendMessages(reqData: JSONObject) {
-        if (!isFeedApiAppendMessagesRequest(reqData)) throw Error('Invalid request in _feedApiAppendMessages')
+        if (!isFeedApiAppendMessagesRequest(reqData)) {
+            console.warn(reqData)
+            throw Error('Invalid request in _feedApiAppendMessages')
+        }
         const { feedId, subfeedHash, messages } = reqData
 
         await this.#node.feedManager().appendMessages({

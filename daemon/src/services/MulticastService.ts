@@ -1,7 +1,7 @@
 import { action } from "../common/action"
 import { getSignature, verifySignature } from "../common/crypto_util"
 import { sleepMsec } from "../common/util"
-import ExternalInterface from "../external/ExternalInterface"
+import ExternalInterface, { DgramSocket } from "../external/ExternalInterface"
 import { Address, ChannelName, ChannelNodeInfo, DurationMsec, hostName, isMulticastAnnounceMessage, JSONObject, KeyPair, minDuration, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, portToNumber, scaledDurationMsec, tryParseJsonObject } from "../interfaces/core"
 import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
 import { protocolVersion } from "../protocolVersion"
@@ -24,24 +24,31 @@ interface KacheryP2PNodeInterface {
 export default class MulticastService {
     #node: KacheryP2PNodeInterface
     #halted = false
+    #multicastSocket: DgramSocket | null = null
     constructor(node: KacheryP2PNodeInterface, private opts: {intervalMsec: DurationMsec, multicastAddress: Address}) {
         this.#node = node
         this._start()
     }
     stop() {
+        if (this.#multicastSocket) {
+            this.#multicastSocket.close()
+            this.#multicastSocket = null
+        }
         this.#halted = true
     }
     async _start() {
         if (!this.#node.useMulticastUdp()) return
         // to find nodes on the local network
-        const multicastSocket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: true, nodeId: this.#node.nodeId(), firewalled: true })
+        this.#multicastSocket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: true, nodeId: this.#node.nodeId(), firewalled: true })
         const multicastAddress = this.opts.multicastAddress
         const multicastPort = multicastAddress.port
-        multicastSocket.bind(portToNumber(multicastAddress.port))
-        multicastSocket.on('listening', function() {
-            multicastSocket.addMembership(multicastAddress.hostName.toString())
+        this.#multicastSocket.bind(portToNumber(multicastAddress.port))
+        this.#multicastSocket.on('listening', () => {
+            if (this.#multicastSocket) {
+                this.#multicastSocket.addMembership(multicastAddress.hostName.toString())
+            }
         })
-        multicastSocket.on('message', (message, rinfo) => {
+        this.#multicastSocket.on('message', (message, rinfo) => {
             let msg: JSONObject | null = tryParseJsonObject(message.toString())
             if (isMulticastAnnounceMessage(msg)) {
                 const msg2: MulticastAnnounceMessage = msg
@@ -91,15 +98,19 @@ export default class MulticastService {
                 const mJson: string = JSON.stringify(m)
                 /////////////////////////////////////////////////////////////////////////
                 await action('sendMulticastAnnounceMessage', {}, async () => {
-                    multicastSocket.send(
-                        Buffer.from(mJson),
-                        0,
-                        mJson.length,
-                        portToNumber(multicastAddress.port),
-                        multicastAddress.hostName.toString()
-                    )
-                }, async () => {
-                })
+                    if (this.#multicastSocket) {
+                        this.#multicastSocket.send(
+                            Buffer.from(mJson),
+                            0,
+                            mJson.length,
+                            portToNumber(multicastAddress.port),
+                            multicastAddress.hostName.toString()
+                        )
+                    }
+                    else {
+                        throw Error('No multicast socket')
+                    }
+                }, null)
                 /////////////////////////////////////////////////////////////////////////
             }
             await sleepMsec(this.opts.intervalMsec, () => {return !this.#halted})

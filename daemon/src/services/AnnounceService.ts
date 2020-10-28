@@ -1,5 +1,6 @@
 import { action } from "../common/action"
-import { sleepMsec, sleepMsecNum } from "../common/util"
+import { RequestTimeoutError, sleepMsec, sleepMsecNum } from "../common/util"
+import { HttpPostJsonError } from "../external/real/httpRequests"
 import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core"
 import { AnnounceRequestData, isAnnounceResponseData } from "../interfaces/NodeToNodeRequest"
 import KacheryP2PNode from "../KacheryP2PNode"
@@ -68,7 +69,19 @@ export default class AnnounceService {
             channelNodeInfo: this.#node.getChannelNodeInfo(channelName)
         }
         let method: SendRequestMethod = 'prefer-udp' // we prefer to send via udp so that we can discover our own public udp address when we get the response
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: scaledDurationMsec(4000), method})
+        let responseData
+        try {
+            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: scaledDurationMsec(4000), method})
+        }
+        catch(err) {
+            if ((err instanceof HttpPostJsonError) || (err instanceof RequestTimeoutError)) {
+                // the node is probably not connected
+                return
+            }
+            else {
+                throw err
+            }
+        }
         if (!isAnnounceResponseData(responseData)) {
             throw Error('Unexpected.')
         }

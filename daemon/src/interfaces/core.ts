@@ -256,6 +256,24 @@ export const hostName = (x: string): HostName => {
     return x
 }
 
+export interface NodeLabel extends String {
+    __nodeLabel__: never
+}
+export const isNodeLabel = (x: any): x is NodeLabel => {
+    if (!isString(x)) return false
+    if (x.length > 20) return false
+    let result = true
+    x.split(".").forEach((element) => {
+        if (element.length === 0) result = false
+        if (!/^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?$/.test(element)) result = false
+    });
+    return result;
+}
+export const nodeLabel= (x: string): NodeLabel => {
+    if (!isNodeLabel(x)) throw Error('Not a valid node label')
+    return x
+}
+
 // Address
 export interface Address {
     hostName: HostName,
@@ -532,11 +550,18 @@ export const isChannelName = (x: any): x is ChannelName => {
     if (!isString(x)) return false;
     return (/^[0-9a-zA-Z_\-\.]{4,160}?$/.test(x));
 }
+export const channelName = (x: string) => {
+    if (!isChannelName(x)) {
+        throw Error(`Invalid channel name: ${x}`)
+    }
+    return x
+}
 
 // ChannelNodeInfo
 export interface ChannelNodeInfoBody {
     channelName: ChannelName,
     nodeId: NodeId,
+    nodeLabel: NodeLabel,
     httpAddress: Address | null,
     webSocketAddress: Address | null,
     publicUdpSocketAddress: Address | null,
@@ -552,6 +577,7 @@ export const isChannelNodeInfoBody = (x: any): x is ChannelNodeInfoBody => {
     return _validateObject(x, {
         channelName: isChannelName,
         nodeId: isNodeId,
+        nodeLabel: isNodeLabel,
         httpAddress: isOneOf([isNull, isAddress]),
         webSocketAddress: isOneOf([isNull, isAddress]),
         publicUdpSocketAddress: isOneOf([isNull, isAddress]),

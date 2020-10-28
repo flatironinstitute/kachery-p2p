@@ -8,7 +8,8 @@ import ExternalInterface, { KacheryStorageManagerInterface } from './external/Ex
 import { MockNodeDefects } from './external/mock/MockNodeDaemon'
 import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
-import { addDurations, Address, ChannelName, ChannelNodeInfo, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, MessageCount, NodeId, nodeIdToPublicKey, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage } from './interfaces/core'
+import { getStats, GetStatsOpts } from './getStats'
+import { addDurations, Address, ChannelName, ChannelNodeInfo, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, MessageCount, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage } from './interfaces/core'
 import { CheckForFileRequestData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, GetLiveFeedSignedMessagesRequestData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import { handleCheckForFileRequest } from './nodeToNodeRequestHandlers/handleCheckForFileRequest'
 import { handleCheckForLiveFeedRequest } from './nodeToNodeRequestHandlers/handleCheckForLiveFeedRequest'
@@ -53,7 +54,7 @@ class KacheryP2PNode {
         httpListenPort: Port | null,
         udpSocketPort: Port | null,
         webSocketListenPort: Port | null,
-        label: string,
+        label: NodeLabel,
         bootstrapAddresses: Address[],
         channelNames: ChannelName[],
         externalInterface: ExternalInterface,
@@ -283,6 +284,7 @@ class KacheryP2PNode {
         const body = {
             channelName,
             nodeId: this.#nodeId,
+            nodeLabel: this.p.label,
             httpAddress: this.httpAddress(),
             webSocketAddress: this.webSocketAddress(),
             publicUdpSocketAddress: this.#publicUdpSocketAddress,
@@ -496,6 +498,12 @@ class KacheryP2PNode {
             throw Error('Cannot receive fallback udp packet. No public udp socket server set.')
         }
         this.#publicUdpSocketServer.receiveFallbackUdpPacket(fromNodeId, packetId, packet)
+    }
+    getStats(o: GetStatsOpts) {
+        return getStats(this, o)
+    }
+    nodeLabel() {
+        return this.p.label
     }
 }
 

@@ -1,5 +1,5 @@
 import DataStreamy from "../common/DataStreamy"
-import { Address, ByteCount, DurationMsec, FeedId, FeedName, FileKey, JSONObject, NodeId, Port, PrivateKey, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, UrlPath } from "../interfaces/core"
+import { Address, ByteCount, DurationMsec, FeedId, FeedName, FileKey, JSONObject, LocalFilePath, NodeId, Port, PrivateKey, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, UrlPath } from "../interfaces/core"
 
 export type HttpPostJsonFunction = ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>)
 export type HttpGetDownloadFunction = ((address: Address, path: UrlPath) => Promise<DataStreamy>)
@@ -44,6 +44,7 @@ export interface KacheryStorageManagerInterface {
     getFileReadStream: (fileKey: FileKey) => Promise<DataStreamy>
     storeFile: (sha1: Sha1Hash, data: Buffer) => Promise<void>
     concatenateChunksAndStoreResult: (sha1: Sha1Hash, chunkSha1s: Sha1Hash[]) => Promise<void>
+    storageDir: () => LocalFilePath | null
 }
 
 export type CreateKacheryStorageManagerFunction = () => KacheryStorageManagerInterface

@@ -1,7 +1,7 @@
 import dgram from 'dgram';
 import { DgramSocket } from '../external/ExternalInterface';
 import { MockNodeDefects } from '../external/mock/MockNodeDaemon';
-import { tryParseJsonObject } from '../interfaces/core';
+import { addByteCount, byteCount, ByteCount, tryParseJsonObject } from '../interfaces/core';
 import { protocolVersion } from '../protocolVersion';
 import { isUdpPacketSenderHeader, PacketId, UdpPacketSenderHeader, UDP_PACKET_HEADER_SIZE } from './UdpPacketSender';
 
@@ -9,15 +9,17 @@ export default class UdpPacketReceiver {
     #socket: DgramSocket
     #onPacketCallbacks: ((packetId: PacketId, buffer: Buffer, remoteInfo: dgram.RemoteInfo) => void)[] = []
     #onConfirmationCallbacks: ((packetId: PacketId) => void)[] = []
-    #numMessagesReceived: number = 0
+    #numPacketsReceived: number = 0
+    #numBytesReceived: ByteCount = byteCount(0)
     constructor(socket: DgramSocket, private getDefects: () => MockNodeDefects) {
         this.#socket = socket
 
-        this.#socket.on('message', (message, remoteInfo) => {
-            this.#numMessagesReceived ++
+        this.#socket.on('message', (message: Buffer, remoteInfo) => {
+            this.#numBytesReceived = addByteCount(this.#numBytesReceived, byteCount(message.length))
+            this.#numPacketsReceived ++
             const udpPacketLossNum = this.getDefects().udpPacketLossNum || null
             if (udpPacketLossNum !== null) {
-                if (((this.#numMessagesReceived - 1) % udpPacketLossNum) === (udpPacketLossNum - 1)) {
+                if (((this.#numPacketsReceived - 1) % udpPacketLossNum) === (udpPacketLossNum - 1)) {
                     // lose this message
                     return
                 }
@@ -58,5 +60,11 @@ export default class UdpPacketReceiver {
     }
     socket() {
         return this.#socket
+    }
+    numBytesReceived() {
+        return this.#numBytesReceived
+    }
+    numPacketsReceived() {
+        return this.#numPacketsReceived
     }
 }

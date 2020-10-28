@@ -1,33 +1,17 @@
 import { action } from "../common/action";
 import { sleepMsec } from "../common/util";
-import { ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core";
-import { GetChannelInfoRequestData, isGetChannelInfoResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from "../interfaces/NodeToNodeRequest";
-import { SendRequestMethod } from "../RemoteNode";
-
-interface RemoteNodeManagerInterface {
-    onBootstrapNodeAdded: (callback: (bootstrapNodeId: NodeId) => void) => void
-    sendRequestToNode: (remoteNodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}) => Promise<NodeToNodeResponseData>,
-    setChannelNodeInfo: (channelNodeInfo: ChannelNodeInfo) => void
-    getBootstrapRemoteNodes: () => RemoteNodeInterface[]
-    getRemoteNodesInChannel: (channelName: ChannelName) => RemoteNodeInterface[]
-    canSendRequestToNode: (remoteNodeId: NodeId, method: SendRequestMethod) => boolean
-}
-
-interface RemoteNodeInterface {
-    remoteNodeId: () => NodeId
-}
-
-interface KacheryP2PNodeInterface {
-    nodeId: () => NodeId
-    remoteNodeManager: () => RemoteNodeManagerInterface,
-    channelNames: () => ChannelName[]
-}
+import { HttpPostJsonError } from "../external/real/httpRequests";
+import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core";
+import { GetChannelInfoRequestData, isGetChannelInfoResponseData } from "../interfaces/NodeToNodeRequest";
+import KacheryP2PNode from "../KacheryP2PNode";
+import RemoteNode from "../RemoteNode";
+import RemoteNodeManager from "../RemoteNodeManager";
 
 export default class DiscoverService {
-    #node: KacheryP2PNodeInterface
-    #remoteNodeManager: RemoteNodeManagerInterface
+    #node: KacheryP2PNode
+    #remoteNodeManager: RemoteNodeManager
     #halted = false
-    constructor(node: KacheryP2PNodeInterface, private opts: {discoverBootstrapIntervalMsec: DurationMsec, discoverRandomNodeIntervalMsec: DurationMsec}) {
+    constructor(node: KacheryP2PNode, private opts: {discoverBootstrapIntervalMsec: DurationMsec, discoverRandomNodeIntervalMsec: DurationMsec}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
 
@@ -59,7 +43,19 @@ export default class DiscoverService {
             requestType: 'getChannelInfo',
             channelName
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: scaledDurationMsec(4000), method: 'default'})
+        let responseData
+        try {
+            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: scaledDurationMsec(4000), method: 'default'})
+        }
+        catch(err) {
+            if (err instanceof HttpPostJsonError) {
+                // the node is probably not connected
+                return
+            }
+            else {
+                throw err
+            }
+        }
         if (!isGetChannelInfoResponseData(responseData)) {
             throw Error('Unexpected.');
         }
@@ -79,7 +75,7 @@ export default class DiscoverService {
             // periodically get channel info from bootstrap nodes
             const elapsedSinceLastBootstrapDiscover = elapsedSince(lastBootstrapDiscoverTimestamp);
             if (elapsedSinceLastBootstrapDiscover > durationMsecToNumber(this.opts.discoverBootstrapIntervalMsec)) {
-                const bootstrapNodes: RemoteNodeInterface[] = this.#remoteNodeManager.getBootstrapRemoteNodes();
+                const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes();
                 const channelNames = this.#node.channelNames();
                 for (let bootstrapNode of bootstrapNodes) {
                     for (let channelName of channelNames) {

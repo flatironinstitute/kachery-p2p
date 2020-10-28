@@ -4,12 +4,26 @@ import { Address, ByteCount, DurationMsec, durationMsecToNumber, JSONObject, Url
 
 export const _tests: {[key: string]: () => Promise<void>} = {}
 
+export class HttpPostJsonError extends Error {
+    constructor(errorString: string) {
+        super(errorString);
+    }
+}
+
 export const httpPostJson = async (address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}): Promise<JSONObject> => {
-    const res = await axios.post('http://' + address.hostName + ':' + address.port + path, data, {timeout: durationMsecToNumber(opts.timeoutMsec), responseType: 'json'})
+    const url = 'http://' + address.hostName + ':' + address.port + path
+    let res
+    try {
+        res = await axios.post(url, data, {timeout: durationMsecToNumber(opts.timeoutMsec), responseType: 'json'})
+    }
+    catch(err) {
+        throw new HttpPostJsonError(err.message)
+    }
     return res.data
 }
 export const httpGetDownload = async (address: Address, path: UrlPath): Promise<DataStreamy> => {
-    const res = await axios.get('http://' + address.hostName + ':' + address.port + path, {responseType: 'stream'})
+    const url = 'http://' + address.hostName + ':' + address.port + path
+    const res = await axios.get(url, {responseType: 'stream'})
     const size: ByteCount = res.headers['Content-Length']
     const ret = new DataStreamy()
     ret.producer().start(size)

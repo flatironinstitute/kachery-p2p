@@ -65,9 +65,7 @@ class TestDaemon:
         mkdir -p $KACHERY_STORAGE_DIR
         exec kachery-p2p-start-daemon --method dev {' '.join(opts)}
         ''')
-        print('---------------------- s1')
         self._script.start()
-        print('---------------------- s2')
         with KPEnv(self):
             import kachery_p2p as kp
             while True:
@@ -76,7 +74,6 @@ class TestDaemon:
                     channels = kp.get_channels()
                 except:
                     channels = None
-                print('-------------------------------- channels', channels)
                 if channels is not None:
                     okay = True
                     for ch in self._channels:

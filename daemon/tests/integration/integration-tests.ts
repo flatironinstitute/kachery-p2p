@@ -583,8 +583,8 @@ const testSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaem
     expect(messages[0].test).equals(42)
 
     // do this first line so that we can test the simultaneous loading of the same subfeed (code coverage)
-    const p1 = getMessages(daemon2, feed1, sf1, subfeedPosition(0), messageCount(10), scaledDurationMsec(1000))
-    const messages2 = await getMessages(daemon2, feed1, sf1, subfeedPosition(0), messageCount(10), scaledDurationMsec(1000))
+    const p1 = getMessages(daemon2, feed1, sf1, subfeedPosition(0), messageCount(10), scaledDurationMsec(5000))
+    const messages2 = await getMessages(daemon2, feed1, sf1, subfeedPosition(0), messageCount(10), scaledDurationMsec(5000))
     const messages2b = await p1
     expect(messages2.length).equals(2)
     expect(messages2b.length).equals(2)

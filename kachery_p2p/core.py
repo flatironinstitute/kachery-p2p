@@ -36,7 +36,6 @@ def get_channels() -> List[str]:
     port = _api_port()
     url = f'http://localhost:{port}/probe'
     resp = _http_post_json(url, dict())
-    print('----------------resp', resp)
     # if not resp['success']:
     #     raise Exception(resp['error'])
     return resp['channels']
@@ -323,7 +322,7 @@ def _probe_daemon(api_port=None):
     return x
 
 def start_daemon(*,
-    http_port: int=0,
+    port: int=0,
     websocket_port: int=0,
     method: str='npx',
     channels: List[str]=[],
@@ -359,7 +358,7 @@ def start_daemon(*,
         start_args.append(f'--host {host}')
     if websocket_port > 0:
         start_args.append(f'--websocket-port {websocket_port}')
-    start_args.append(f'--http-port {http_port}')
+    start_args.append(f'--http-port {port}')
 
     # Note that npx-latest/npm-latest uses the latest version of the daemon on npm, which may be desireable for some bootstrap nodes, but not adviseable if you want to be sure that kachery-p2p is constistent with the node daemon
     if (method == 'npx') or (method == 'npx-latest') or (method == 'npm') or (method == 'npm-latest'):

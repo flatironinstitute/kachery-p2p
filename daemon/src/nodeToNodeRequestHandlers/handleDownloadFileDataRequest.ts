@@ -28,6 +28,7 @@ export const handleDownloadFileDataRequest = async (node: KacheryP2PNode, fromNo
         }
     }
     if (size === null) {
+        /* istanbul ignore next */
         throw Error('Unexpected')
     }
     if (endByte === null) {

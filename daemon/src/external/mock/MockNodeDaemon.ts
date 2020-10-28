@@ -1,10 +1,8 @@
 import DataStreamy from "../../common/DataStreamy"
 import { randomAlphaString, sleepMsec } from "../../common/util"
-import { Address, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, scaledDurationMsec, toPort, UrlPath } from "../../interfaces/core"
-import KacheryP2PNode from "../../KacheryP2PNode"
-import DaemonApiServer, { ApiFindFileRequest } from "../../services/DaemonApiServer"
-import PublicApiServer from "../../services/PublicApiServer"
-import startDaemon, { StartDaemonOpts } from "../../startDaemon"
+import { Address, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, nodeLabel, scaledDurationMsec, toPort, UrlPath } from "../../interfaces/core"
+import { ApiFindFileRequest } from "../../services/DaemonApiServer"
+import startDaemon, { DaemonInterface, StartDaemonOpts } from "../../startDaemon"
 import mockExternalInterface from "./mockExternalInterface"
 import MockKacheryStorageManager from './MockKacheryStorageManager'
 
@@ -18,12 +16,7 @@ export interface MockNodeDefects {
 
 export default class MockNodeDaemon {
     #daemonGroup: MockNodeDaemonGroup
-    #d: {
-        publicApiServer: PublicApiServer,
-        daemonApiServer: DaemonApiServer,
-        stop: Function,
-        node: KacheryP2PNode
-    } | null = null
+    #d: DaemonInterface | null = null
     #defects: MockNodeDefects = {}
     constructor(daemonGroup: MockNodeDaemonGroup, private opts: StartDaemonOpts) {
         this.#daemonGroup = daemonGroup
@@ -53,7 +46,7 @@ export default class MockNodeDaemon {
             hostName: null,
             daemonApiPort: null,
             httpListenPort: null,
-            label: 'mock-daemon-' + randomAlphaString(5),
+            label: nodeLabel('mock-daemon-' + randomAlphaString(5)),
             externalInterface,
             getDefects: () => (this.#defects),
             opts: this.opts  
@@ -68,6 +61,10 @@ export default class MockNodeDaemon {
         if (!this.#d) {
             /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
+        }
+        if (!this.#d.node) {
+            /* istanbul ignore next */
+            throw Error('unexpected')
         }
         return this.#d.node
     }
@@ -88,12 +85,20 @@ export default class MockNodeDaemon {
             /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
+        if (!this.#d.publicApiServer) {
+            /* istanbul ignore next */
+            throw Error('unexpected')
+        }
         return await this.#d.publicApiServer.mockPostJson(path, data)
     }
     async mockPublicApiGetDownload(path: string): Promise<DataStreamy> {
         if (!this.#d) {
             /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
+        }
+        if (!this.#d.publicApiServer) {
+            /* istanbul ignore next */
+            throw Error('unexpected')
         }
         return await this.#d.publicApiServer.mockGetDownload(path)
     }
@@ -102,12 +107,20 @@ export default class MockNodeDaemon {
             /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
+        if (!this.#d.daemonApiServer) {
+            /* istanbul ignore next */
+            throw Error('unexpected')
+        }
         return await this.#d.daemonApiServer.mockPostJson(path, data)
     }
     mockDaemonApiServer() {
         if (!this.#d) {
             /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
+        }
+        if (!this.#d.daemonApiServer) {
+            /* istanbul ignore next */
+            throw Error('unexpected')
         }
         return this.#d.daemonApiServer
     }
@@ -119,6 +132,10 @@ export default class MockNodeDaemon {
         /* istanbul ignore next */
         if (!this.#d) {
             throw Error('mock daemon not yet initialized')
+        }
+        if (!this.#d.daemonApiServer) {
+            /* istanbul ignore next */
+            throw Error('unexpected')
         }
         return await this.#d.daemonApiServer.mockPostFindFile(reqData as any as JSONObject)
     }

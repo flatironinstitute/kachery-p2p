@@ -1,12 +1,28 @@
 import { getSignature, verifySignature } from "./common/crypto_util";
 import DataStreamy from "./common/DataStreamy";
-import { Address, ChannelName, ChannelNodeInfo, createRequestId, DurationMsec, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec, urlPath } from "./interfaces/core";
+import { addByteCount, Address, byteCount, ByteCount, ChannelName, ChannelNodeInfo, createRequestId, DurationMsec, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec, urlPath } from "./interfaces/core";
 import { DownloadFileDataRequestData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import { protocolVersion } from "./protocolVersion";
 import { nodeIdFallbackAddress } from './services/PublicUdpSocketServer';
 
-export type SendRequestMethod = 'default' | 'http' | 'udp' | 'prefer-udp' | 'prefer-http' | 'udp-fallback'
+export type SendRequestMethod = 'default' | 'http' | 'http-proxy' | 'udp' | 'prefer-udp' | 'prefer-http' | 'udp-fallback'
+
+export interface RemoteNodeStats {
+    remoteNodeId: NodeId
+    channelNodeInfos: ChannelNodeInfo[]
+    isBootstrap: boolean
+    bootstrapAddress: Address | null
+    bootstrapWebSocketAddress: Address | null
+    bootstrapUdpSocketAddress: Address | null
+    localUdpAddressForRemoteNode: Address | null
+    numUdpBytesSent: ByteCount
+    numUdpBytesLost: ByteCount
+    numHttpBytesSent: ByteCount
+    numRequestsSent: number
+    numResponsesReceived: number
+}
+
 
 class RemoteNode {
     #node: KacheryP2PNode
@@ -17,6 +33,12 @@ class RemoteNode {
     #bootstrapWebSocketAddress: Address | null
     #bootstrapUdpSocketAddress: Address | null
     #localUdpAddressForRemoteNode: Address | null = null
+    #numUdpBytesSent: ByteCount = byteCount(0)
+    #numUdpBytesLost: ByteCount = byteCount(0)
+    #numHttpBytesSent: ByteCount = byteCount(0)
+    #numRequestsSent: number = 0
+    #numResponsesReceived: number = 0
+    #isOnline: boolean = false
     constructor(node: KacheryP2PNode, remoteNodeId: NodeId, opts: {
         isBootstrap: boolean,
         bootstrapAddress: Address | null,
@@ -32,6 +54,10 @@ class RemoteNode {
     }
     remoteNodeId() {
         return this.#remoteNodeId;
+    }
+    remoteNodeLabel() {
+        const cni = this._getMostRecentChannelNodeInfo()
+        return cni ? cni.body.nodeLabel : null
     }
     isBootstrap() {
         return this.#isBootstrap
@@ -93,6 +119,27 @@ class RemoteNode {
     getUdpAddressForRemoteNode(): Address | null {
         return (this.#bootstrapUdpSocketAddress) || (this.getLocalUdpAddressForRemoteNode()) || (this.getPublicUdpAddressForRemoteNode())
     }
+    getStats() {
+        const channelNodeInfos: ChannelNodeInfo[] = []
+        this.#channelNodeInfoByChannel.forEach((cni) => {
+            channelNodeInfos.push(cni)
+        })
+        const s: RemoteNodeStats = {
+            remoteNodeId: this.#remoteNodeId,
+            channelNodeInfos,
+            isBootstrap: this.#isBootstrap,
+            bootstrapAddress: this.#bootstrapAddress,
+            bootstrapWebSocketAddress: this.#bootstrapWebSocketAddress,
+            bootstrapUdpSocketAddress: this.#bootstrapUdpSocketAddress,
+            localUdpAddressForRemoteNode: this.#localUdpAddressForRemoteNode,
+            numUdpBytesSent: this.#numUdpBytesSent,
+            numUdpBytesLost: this.#numUdpBytesLost,
+            numHttpBytesSent: this.#numHttpBytesSent,
+            numRequestsSent: this.#numRequestsSent,
+            numResponsesReceived: this.#numResponsesReceived
+        }
+        return s
+    }
     _formRequestFromRequestData(requestData: NodeToNodeRequestData): NodeToNodeRequest {
         const requestId = createRequestId()
         const requestBody = {
@@ -110,7 +157,6 @@ class RemoteNode {
         return request
     }
     _getRemoteNodeHttpAddress(): Address | null {
-        let address: Address | null = null
         if (this.#isBootstrap && this.#bootstrapAddress) {
             return this.#bootstrapAddress
         }
@@ -124,19 +170,30 @@ class RemoteNode {
                 return remoteInfo.httpAddress
             }
             else {
-                if (remoteInfo.proxyHttpAddresses.length > 0) {
-                    return remoteInfo.proxyHttpAddresses[0]
-                }
-                else {
-                    return null;
-                }
+                return null
             }
+        }
+    }
+    _getRemoteNodeHttpProxyAddress(): Address | null {
+        const channelNodeData = this._getMostRecentChannelNodeInfo();
+        if (channelNodeData === null) {
+            return null;
+        }
+        const remoteInfo = channelNodeData.body
+        if (remoteInfo.proxyHttpAddresses.length > 0) {
+            return remoteInfo.proxyHttpAddresses[0]
+        }
+        else {
+            return null;
         }
     }
     _determineSendRequestMethod(method: SendRequestMethod): SendRequestMethod | null {
         if (method === 'udp-fallback') {
             if (this._getRemoteNodeHttpAddress()) {
                 return 'http'
+            }
+            else if (this._getRemoteNodeHttpProxyAddress()) {
+                return 'http-proxy'
             }
             else {
                 return null
@@ -145,6 +202,9 @@ class RemoteNode {
         else if ((method === 'default') || (method === 'prefer-http')) {
             if (this._getRemoteNodeHttpAddress()) {
                 return 'http'
+            }
+            else if (this._getRemoteNodeHttpProxyAddress()) {
+                return 'http-proxy'
             }
             else if ((this.#node.publicUdpSocketServer()) && (this.getUdpAddressForRemoteNode())) {
                 return 'udp'
@@ -160,11 +220,14 @@ class RemoteNode {
             else if (this._getRemoteNodeHttpAddress()) {
                 return 'http'
             }
+            else if (this._getRemoteNodeHttpProxyAddress()) {
+                return 'http-proxy'
+            }
             else {
                 return null
             }
         }
-        else if ((method === 'http') || (method === 'udp')) {
+        else if ((method === 'http') || (method === 'udp') || (method === 'http-proxy')) {
             return method
         }
         else {
@@ -174,6 +237,9 @@ class RemoteNode {
     _determineDefaultDownloadFileDataMethod(): SendRequestMethod | null {
         if (this._getRemoteNodeHttpAddress()) {
             return 'http'
+        }
+        else if (this._getRemoteNodeHttpProxyAddress()) {
+            return 'http-proxy'
         }
         else if ((this.#node.publicUdpSocketServer()) && (this.getUdpAddressForRemoteNode())) {
             return 'udp'
@@ -186,7 +252,14 @@ class RemoteNode {
         let method2 = this._determineSendRequestMethod(method)
         if (method2 === null) return false
         if (method2 === 'http') {
-            const address = this._getRemoteNodeHttpAddress();
+            const address = this._getRemoteNodeHttpAddress()
+            if (!address) {
+                return false
+            }
+            return true
+        }
+        else if (method2 === 'http-proxy') {
+            const address = this._getRemoteNodeHttpProxyAddress()
             if (!address) {
                 return false
             }
@@ -219,6 +292,13 @@ class RemoteNode {
             const address = this._getRemoteNodeHttpAddress();
             if (!address) {
                 throw Error('Unable to download file data... no http address found.')
+            }
+            return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${streamId}`))
+        }
+        else if (method === 'http-proxy') {
+            const address = this._getRemoteNodeHttpProxyAddress();
+            if (!address) {
+                throw Error('Unable to download file data... no http-proxy address found.')
             }
             return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${streamId}`))
         }
@@ -281,6 +361,24 @@ class RemoteNode {
         udpS.setOutgoingDataStream(udpA, fallbackAddress, streamId, ds)
     }
     async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
+        try {
+            const ret = await this._trySendRequest(requestData, opts)
+            this._setOnline(true)
+            return ret
+        }
+        catch(err) {
+            this._setOnline(false)
+            throw err
+        }
+    }
+    _setOnline(val: boolean) {
+        if (val === this.#isOnline) return
+        this.#isOnline = val
+    }
+    isOnline() {
+        return this.#isOnline
+    }
+    async _trySendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
         const request = this._formRequestFromRequestData(requestData);
         const requestId = request.body.requestId;
 
@@ -289,17 +387,34 @@ class RemoteNode {
             throw Error(`Method not available for sending request ${requestData.requestType}: ${opts.method} (from ${this.#node.nodeId().slice(0, 6)} to ${this.#remoteNodeId.slice(0, 6)})`)
         }
 
+        const requestSize = byteCount(JSON.stringify(request).length)
+
         let response: NodeToNodeResponse
-        if (method2 === 'http') {
-            const address = this._getRemoteNodeHttpAddress();
-            if (!address) {
-                throw Error('Unable to send request... no http address found.')
+        if ((method2 === 'http') || (method2 === 'http-proxy')) {
+            let address: Address | null
+            if (method2 === 'http') {
+                address = this._getRemoteNodeHttpAddress()
+                if (!address) {
+                    throw Error('Unable to send request... no http address found.')
+                }
             }
+            else if (method2 === 'http-proxy') {
+                address = this._getRemoteNodeHttpProxyAddress()
+                if (!address) {
+                    throw Error('Unable to send request... no http-proxy address found.')
+                }
+            }
+            else {
+                throw Error('Unexpected')
+            }
+            this.#numHttpBytesSent = addByteCount(this.#numHttpBytesSent, requestSize)
+            this.#numRequestsSent ++
             const R = await this.#node.externalInterface().httpPostJson(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
             if (!isNodeToNodeResponse(R)) {
                 // ban the node?
                 throw Error('Invalid response from node.');
             }
+            this.#numResponsesReceived ++
             response = R
         }
         else if (method2 === 'udp') {
@@ -313,7 +428,10 @@ class RemoteNode {
                 /* istanbul ignore next */
                 throw Error('Cannot use udp method when there is no udp address')
             }
+            this.#numUdpBytesSent = addByteCount(this.#numUdpBytesSent, requestSize)
+            this.#numRequestsSent ++
             const R = await udpS.sendRequest(udpA, request, {timeoutMsec: opts.timeoutMsec})
+            this.#numResponsesReceived ++
             response = R.response
             const udpHeader = R.header
             if (this.#isBootstrap) {
@@ -352,6 +470,7 @@ class RemoteNode {
             // ban the node?
             throw Error('Invalid signature in response.');
         }
+        this._setOnline(true)
         return response.body.responseData;
     }
     _getMostRecentChannelNodeInfo(): ChannelNodeInfo | null {

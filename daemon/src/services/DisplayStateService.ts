@@ -1,6 +1,7 @@
 import { sleepMsec } from "../common/util";
-import { DurationMsec } from "../interfaces/core";
+import { durationGreaterThan, DurationMsec, elapsedSince, nowTimestamp, Port, unscaledDurationMsec } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
+import RemoteNode, { SendRequestMethod } from "../RemoteNode";
 import RemoteNodeManager from "../RemoteNodeManager";
 
 export default class DisplayStateService {
@@ -8,7 +9,8 @@ export default class DisplayStateService {
     #remoteNodeManager: RemoteNodeManager
     #halted = false
     #lastText = ''
-    constructor(node: KacheryP2PNode, private opts: {intervalMsec: DurationMsec}) {
+    #lastDisplayTimestamp = nowTimestamp()
+    constructor(node: KacheryP2PNode, private opts: {daemonApiPort: Port | null, intervalMsec: DurationMsec}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
 
@@ -33,21 +35,27 @@ export default class DisplayStateService {
     }
     _updateDisplay() {
         const lines: string[] = []
-        lines.push('=======================================================')
-        lines.push(`NODE ${this.#node.nodeId().slice(0, 6)}`)
+        lines.push('=======================================')
+        lines.push(`NODE ${this.#node.nodeId().slice(0, 6)} (${this.#node.nodeLabel()})`)
         this.#remoteNodeManager.getBootstrapRemoteNodes().forEach(rn => {
-            lines.push(`BOOTSTRAP ${rn.remoteNodeId().slice(0, 6)}`)
+            const connectionString = getConnectionString(rn)
+            lines.push(`BOOTSTRAP ${rn.remoteNodeId().slice(0, 6)} ${connectionString} (${rn.remoteNodeLabel() || ''})`)
         })
         this.#node.channelNames().forEach(channelName => {
             lines.push(`CHANNEL ${channelName}`)
             this.#remoteNodeManager.getRemoteNodesInChannel(channelName).forEach(rn => {
-                lines.push(`    REMOTE ${rn.remoteNodeId().slice(0, 6)}`)
+                const connectionString = getConnectionString(rn)
+                lines.push(`    ${rn.remoteNodeId().slice(0, 6)} ${connectionString} (${rn.remoteNodeLabel() || ''})`)
             })
         })
-        lines.push('=======================================================')
+        if (this.opts.daemonApiPort)
+            lines.push(`http://localhost:${this.opts.daemonApiPort}/stats?format=html`)
+        lines.push('=======================================')
         const txt = lines.join('\n')
-        if (txt !== this.#lastText) {
+        const elapsed = unscaledDurationMsec(elapsedSince(this.#lastDisplayTimestamp))
+        if ((txt !== this.#lastText) || (durationGreaterThan(elapsed, unscaledDurationMsec(30000)))) {
             this.#lastText = txt
+            this.#lastDisplayTimestamp = nowTimestamp()
             console.info(txt)
         }
     }
@@ -58,4 +66,12 @@ export default class DisplayStateService {
             await sleepMsec(this.opts.intervalMsec, () => {return !this.#halted})
         }
     }
+}
+
+const getConnectionString = (rn: RemoteNode) => {
+    const onlineString = rn.isOnline() ? '' : '[offline] '
+    const candidateMethods: SendRequestMethod[] = ['udp', 'http', 'http-proxy']
+    const methods: SendRequestMethod[] = candidateMethods.filter(method => (rn.canSendRequest(method)))
+    rn._determineSendRequestMethod('default')
+    return `${onlineString}${methods.join(' ')}`
 }

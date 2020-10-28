@@ -1,6 +1,6 @@
 import ExternalInterface from './external/ExternalInterface';
 import { MockNodeDefects } from './external/mock/MockNodeDaemon';
-import { Address, ChannelName, HostName, LocalFilePath, Port, scaledDurationMsec, unscaledDurationMsec } from './interfaces/core';
+import { Address, ChannelName, HostName, LocalFilePath, NodeLabel, Port, scaledDurationMsec, unscaledDurationMsec } from './interfaces/core';
 import KacheryP2PNode from './KacheryP2PNode';
 import AnnounceService from './services/AnnounceService';
 import BootstrapService from './services/BootstrapService';
@@ -36,8 +36,8 @@ export interface StartDaemonOpts {
 }
 
 export interface DaemonInterface {
-    daemonApiServer: DaemonApiServer,
-    publicApiServer: PublicApiServer,
+    daemonApiServer: DaemonApiServer | null,
+    publicApiServer: PublicApiServer | null,
     publicWebSocketServer: PublicWebSocketServer | null,
     publicUdpSocketServer: PublicUdpSocketServer | null,
     announceService: AnnounceService | null,
@@ -56,11 +56,12 @@ const startDaemon = async (args: {
     hostName: HostName | null,
     daemonApiPort: Port | null,
     httpListenPort: Port | null,
-    label: string,
+    label: NodeLabel,
     externalInterface: ExternalInterface,
     getDefects: () => MockNodeDefects,
     opts: StartDaemonOpts
 }): Promise<DaemonInterface> => {
+
     const {
         configDir,
         verbose,
@@ -101,16 +102,9 @@ const startDaemon = async (args: {
 
     // Start the daemon http server
     const daemonApiServer = new DaemonApiServer(kNode, { verbose });
-    if (opts.services.daemonServer && daemonApiPort) {
-        daemonApiServer.listen(daemonApiPort);
+    if (opts.services.daemonServer && (daemonApiPort !== null)) {
+        await daemonApiServer.listen(daemonApiPort);
         console.info(`Daemon http server listening on port ${daemonApiPort}`)
-    }
-    
-    // Start the public http server
-    const publicApiServer = new PublicApiServer(kNode, { verbose })
-    if (opts.services.httpServer && httpListenPort) {
-        publicApiServer.listen(httpListenPort);
-        console.info(`Public http server listening on port ${httpListenPort}`)
     }
 
     // Start the websocket server
@@ -150,8 +144,15 @@ const startDaemon = async (args: {
         multicastAddress: opts.multicastUdpAddress
     }) : null
     let displayService = opts.services.display ? new DisplayStateService(kNode, {
-        intervalMsec: unscaledDurationMsec(5000)
+        daemonApiPort, intervalMsec: unscaledDurationMsec(5000)
     }) : null
+
+    // Start the public http server
+    const publicApiServer = new PublicApiServer(kNode, { verbose })
+    if (opts.services.httpServer && httpListenPort) {
+        publicApiServer.listen(httpListenPort);
+        console.info(`Public http server listening on port ${httpListenPort}`)
+    }
 
     const _stop = () => {
         announceService && announceService.stop()
@@ -159,6 +160,7 @@ const startDaemon = async (args: {
         bootstrapService && bootstrapService.stop()
         proxyClientService && proxyClientService.stop()
         multicastService && multicastService.stop()
+        displayService && displayService.stop()
         // wait a bit after stopping services before cleaning up the rest (for clean exit of services)
         setTimeout(() => {
             daemonApiServer && daemonApiServer.stop()

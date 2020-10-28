@@ -1,7 +1,7 @@
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { DgramSocket } from '../external/ExternalInterface';
-import { Address, byteCount, DurationMsec, durationMsecToNumber, isBoolean, isProtocolVersion, isString, JSONObject, portToNumber, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
+import { addByteCount, Address, byteCount, DurationMsec, durationMsecToNumber, isBoolean, isProtocolVersion, isString, JSONObject, portToNumber, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
 import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { UdpTimeoutError } from './UdpCongestionManager';
 
@@ -45,6 +45,8 @@ export default class UdpPacketSender {
     #congestionManagers = new GarbageMap<Address, UdpCongestionManager>(scaledDurationMsec(5 * 60 * 1000))
     #unconfirmedOutgoingPackets = new GarbageMap<PacketId, OutgoingPacket>(scaledDurationMsec(5 * 60 * 1000))
     #debugId = randomAlphaString(4)
+    #numBytesSent = byteCount(0)
+    #numPacketsSent: number = 0
     constructor(socket: DgramSocket, private fallbackPacketSender: FallbackPacketSenderInterface) {
         this.#socket = socket
     }
@@ -57,10 +59,15 @@ export default class UdpPacketSender {
             this.#unconfirmedOutgoingPackets.set(pkt.packetId(), pkt)
             return pkt
         })
+        const promises: Promise<void>[] = outgoingPackets.map(pkt => {
+            this.#numPacketsSent ++
+            this.#numBytesSent = addByteCount(this.#numBytesSent, pkt.size())
+            return pkt.send()
+        }) // send the packets and await all the promises
         try {
-            await Promise.all(
-                outgoingPackets.map(pkt => (pkt.send())) // send the packets and await all the promises
-            )
+            for (let p of promises) {
+                await p
+            }
         }
         catch(err) {
             outgoingPackets.forEach(pkt => {pkt.cancel()})
@@ -83,8 +90,14 @@ export default class UdpPacketSender {
         this.#congestionManagers.set(address, c)
         return c
     }
+    numPacketsSent() {
+        return this.#numPacketsSent
+    }
+    numBytesSent() {
+        return this.#numBytesSent
+    }
     async _fallbackSendPacket(fallbackAddress: FallbackAddress, packetId: PacketId, buffer: Buffer): Promise<void> {
-        this.fallbackPacketSender.sendPacket(fallbackAddress, packetId, buffer)
+        await this.fallbackPacketSender.sendPacket(fallbackAddress, packetId, buffer)
     }
 }
 
@@ -127,6 +140,9 @@ class OutgoingPacket {
         catch(err) {
             await this.#packetSender._fallbackSendPacket(this.#fallbackAddress, this.#packetId, this.#buffer)
         }
+    }
+    size() {
+        return byteCount(this.#buffer.length)
     }
     async _trySend(timeoutMsec: DurationMsec) {
         const socket = this.#packetSender.socket()

@@ -99,16 +99,16 @@ def log():
 @click.option('--verbose', default=0, help='Verbosity level')
 @click.option('--method', default='npx', help='Method for starting daemon: npx (default), npx-latest, npm, npm-latest or dev')
 @click.option('--host', default='', help='IP for connecting to this daemon')
-@click.option('--http-port', default=0, help='Public http port to listen on')
+@click.option('--port', default=0, help='Public http port to listen on')
 @click.option('--websocket-port', default=0, help='Port for websocket server')
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
-def start_daemon(method, channel, verbose, host, http_port, websocket_port, bootstrap, nobootstrap, isbootstrap, nomulticast, node_arg):
+def start_daemon(method, channel, verbose, host, port, websocket_port, bootstrap, nobootstrap, isbootstrap, nomulticast, node_arg):
     kp.start_daemon(
         method=method,
         channels=channel,
         verbose=verbose,
         host=host,
-        http_port=http_port,
+        port=port,
         websocket_port=websocket_port,
         nobootstrap=nobootstrap,
         isbootstrap=isbootstrap,

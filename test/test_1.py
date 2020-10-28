@@ -9,7 +9,6 @@ def run_test(test_nodes, tmpdir):
     api_port = 30001
     try:
         # Start the daemons
-        print('----------------------------------------------')
         for tn in test_nodes:
             d = TestDaemon(
                 channels=tn['channels'],
@@ -26,7 +25,6 @@ def run_test(test_nodes, tmpdir):
             print(f'starting daemon: {tn["name"]}')
             d.start()
             api_port = api_port + 1
-        print('----------------------------------------------')
             
         # pause
         time.sleep(0.5)
