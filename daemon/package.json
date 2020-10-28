@@ -25,6 +25,7 @@
     "@types/json-socket": "^0.1.17",
     "@types/node": "^14.11.1",
     "@types/ws": "^7.2.7",
+    "@types/yargs": "^15.0.9",
     "ajv": "^6.12.4",
     "axios": "^0.19.2",
     "bson": "^4.1.0",
