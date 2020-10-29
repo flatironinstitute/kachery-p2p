@@ -1,42 +1,17 @@
 import { action } from "../common/action";
-import DataStreamy from "../common/DataStreamy";
 import GarbageMap from '../common/GarbageMap';
 import { sleepMsec } from "../common/util";
-import ExternalInterface from "../external/ExternalInterface";
-import { MockNodeDefects } from "../external/mock/MockNodeDaemon";
-import { Address, durationGreaterThan, DurationMsec, elapsedSince, KeyPair, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, unscaledDurationMsec, zeroTimestamp } from "../interfaces/core";
-import { NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
+import { durationGreaterThan, DurationMsec, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, unscaledDurationMsec, zeroTimestamp } from "../interfaces/core";
+import KacheryP2PNode from "../KacheryP2PNode";
 import { ProxyConnectionToServer } from "../proxyConnections/ProxyConnectionToServer";
-
-interface RemoteNodeManagerInterface {
-    onBootstrapNodeAdded: (callback: (bootstrapNodeId: NodeId) => void) => void
-    getAllRemoteNodes: () => RemoteNodeInterface[]
-    getRemoteNode: (remoteNodeId: NodeId) => RemoteNodeInterface | null
-}
-
-interface RemoteNodeInterface {
-    remoteNodeId: () => NodeId
-    getRemoteNodeWebSocketAddress: () => Address | null
-}
-
-interface KacheryP2PNodeInterface {
-    remoteNodeManager: () => RemoteNodeManagerInterface
-    nodeId: () => NodeId
-    keyPair: () => KeyPair
-    handleNodeToNodeRequest: (request: NodeToNodeRequest) => Promise<NodeToNodeResponse>
-    streamFileData: (nodeId: NodeId, streamId: StreamId) => DataStreamy
-    getProxyConnectionToServer: (remoteNodeId: NodeId) => ProxyConnectionToServer | null
-    setProxyConnectionToServer: (nodeId: NodeId, c: ProxyConnectionToServer) => void
-    externalInterface: () => ExternalInterface
-    getDefects: () => MockNodeDefects
-}
+import RemoteNodeManager from "../RemoteNodeManager";
 
 export default class ProxyClientService {
-    #node: KacheryP2PNodeInterface
-    #remoteNodeManager: RemoteNodeManagerInterface
+    #node: KacheryP2PNode
+    #remoteNodeManager: RemoteNodeManager
     #proxyClientManager: ProxyClientManager
     #halted = false
-    constructor(node: KacheryP2PNodeInterface, private opts: {intervalMsec: DurationMsec}) {
+    constructor(node: KacheryP2PNode, private opts: {intervalMsec: DurationMsec}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
         this.#proxyClientManager = new ProxyClientManager(this.#node)
@@ -84,10 +59,10 @@ export default class ProxyClientService {
 }
 
 class ProxyClientManager {
-    #node: KacheryP2PNodeInterface
+    #node: KacheryP2PNode
     // #outgoingConnections = new Map<NodeId, ProxyConnectionToServer>()
     #failedConnectionAttemptTimestamps = new GarbageMap<NodeId, Timestamp>(scaledDurationMsec(120 * 1000))
-    constructor(node: KacheryP2PNodeInterface) {
+    constructor(node: KacheryP2PNode) {
         this.#node = node
     }
     async tryConnection(remoteNodeId: NodeId, opts: {timeoutMsec: DurationMsec}) {
@@ -98,7 +73,7 @@ class ProxyClientManager {
             return;
         }
         try {
-            const c = new ProxyConnectionToServer(this.#node);
+            const c = new ProxyConnectionToServer(this.#node)
             await c.initialize(remoteNodeId, webSocketAddress, {timeoutMsec: opts.timeoutMsec});
             this.#node.setProxyConnectionToServer(remoteNodeId, c)
         }

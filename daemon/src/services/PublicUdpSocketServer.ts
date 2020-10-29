@@ -5,7 +5,7 @@ import DataStreamy from '../common/DataStreamy';
 import GarbageMap from "../common/GarbageMap";
 import { RequestTimeoutError } from '../common/util';
 import { DgramRemoteInfo, DgramSocket } from '../external/ExternalInterface';
-import { Address, byteCount, DurationMsec, durationMsecToNumber, errorMessage, ErrorMessage, hostName, isErrorMessage, isNodeId, isNumber, JSONObject, NodeId, nodeIdToPublicKey, Port, portToNumber, RequestId, scaledDurationMsec, toPort, tryParseJsonObject, _validateObject } from "../interfaces/core";
+import { Address, DurationMsec, durationMsecToNumber, errorMessage, ErrorMessage, hostName, isErrorMessage, isNodeId, isNumber, JSONObject, NodeId, nodeIdToPublicKey, Port, portToNumber, RequestId, scaledDurationMsec, toPort, tryParseJsonObject, _validateObject } from "../interfaces/core";
 import { FallbackUdpPacketRequestData, isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
 import { createUdpMessageId, isUdpHeader, numParts, NumParts, partIndex, PartIndex, UdpHeader, UdpMessageMetaData, udpMessageMetaData, UdpMessagePart, UdpMessageType, UDP_MESSAGE_HEADER_SIZE, UDP_PACKET_SIZE } from "../interfaces/UdpMessage";
 import KacheryP2PNode from "../KacheryP2PNode";
@@ -100,8 +100,8 @@ export default class PublicUdpSocketServer {
                         /* istanbul ignore next */
                         throw Error('Unexpected')
                     }
-                    this.#udpPacketSender = new UdpPacketSender(this.#socket, this.#fallbackPacketSender)
-                    this.#udpPacketReceiver = new UdpPacketReceiver(this.#socket, () => (this.#node.getDefects()))
+                    this.#udpPacketSender = new UdpPacketSender(this.#socket, this.#fallbackPacketSender, this.#node.stats(), {thisNodeId: this.#node.nodeId()})
+                    this.#udpPacketReceiver = new UdpPacketReceiver(this.#socket, () => (this.#node.getDefects()), this.#node.stats(), {thisNodeId: this.#node.nodeId()})
                     this.#udpPacketReceiver.onPacket((packetId: PacketId, packet: Buffer, remoteInfo: dgram.RemoteInfo) => {
                         this._receiveUdpPacket(packetId, packet, remoteInfo, null)
                     })
@@ -162,7 +162,7 @@ export default class PublicUdpSocketServer {
                 "NodeToNodeRequest",
                 request as any as JSONObject,
                 udpMessageMetaData({}),
-                {timeoutMsec: opts.timeoutMsec}
+                {timeoutMsec: opts.timeoutMsec, toNodeId: request.body.toNodeId}
             ).catch(err => {
                 _handleError(err)
             })
@@ -176,45 +176,33 @@ export default class PublicUdpSocketServer {
         this.#incomingDataStreams.set(streamId, ds)
         return ds
     }
-    setOutgoingDataStream(address: Address, fallbackAddress: FallbackAddress, streamId: StreamId, dataStream: DataStreamy) {
+    setOutgoingDataStream(address: Address, fallbackAddress: FallbackAddress, streamId: StreamId, dataStream: DataStreamy, opts: {toNodeId: NodeId}) {
         let dataChunkIndex = 0
         dataStream.onFinished(() => {
             const metaData: StreamDataEndMetaData = {
                 streamId,
                 numDataChunks: dataChunkIndex
             }
-            this._sendMessage(address, fallbackAddress, 'streamDataEnd', Buffer.alloc(0), udpMessageMetaData(metaData), {timeoutMsec: scaledDurationMsec(4000)})
+            this._sendMessage(address, fallbackAddress, 'streamDataEnd', Buffer.alloc(0), udpMessageMetaData(metaData), {timeoutMsec: scaledDurationMsec(4000), toNodeId: opts.toNodeId})
         })
         dataStream.onError((err: Error) => {
             const metaData: StreamDataErrorMetaData = {
                 streamId,
                 errorMessage: errorMessage(err.message)
             }
-            this._sendMessage(address, fallbackAddress, 'streamDataError', Buffer.alloc(0), udpMessageMetaData(metaData), {timeoutMsec: scaledDurationMsec(4000)})
+            this._sendMessage(address, fallbackAddress, 'streamDataError', Buffer.alloc(0), udpMessageMetaData(metaData), {timeoutMsec: scaledDurationMsec(4000), toNodeId: opts.toNodeId})
         })
         dataStream.onData((dataChunk: Buffer) => {
             const metaData: StreamDataChunkMetaData = {
                 streamId,
                 dataChunkIndex
             }
-            this._sendMessage(address, fallbackAddress, 'streamDataChunk', dataChunk, udpMessageMetaData(metaData), {timeoutMsec: scaledDurationMsec(4000)})
+            this._sendMessage(address, fallbackAddress, 'streamDataChunk', dataChunk, udpMessageMetaData(metaData), {timeoutMsec: scaledDurationMsec(4000), toNodeId: opts.toNodeId})
             dataChunkIndex ++
         })
     }
     receiveFallbackUdpPacket(fromNodeId: NodeId, packetId: PacketId, packet: Buffer): void {
         this._receiveUdpPacket(packetId, packet, null, fromNodeId)
-    }
-    numBytesSent() {
-        return this.#udpPacketSender ? this.#udpPacketSender.numBytesSent() : byteCount(0)
-    }
-    numPacketsSent() {
-        return this.#udpPacketSender ? this.#udpPacketSender.numPacketsSent() : 0
-    }
-    numBytesReceived() {
-        return this.#udpPacketReceiver ? this.#udpPacketReceiver.numBytesReceived() : byteCount(0)
-    }
-    numPacketsReceived() {
-        return this.#udpPacketReceiver ? this.#udpPacketReceiver.numPacketsReceived() : 0
     }
     _receiveUdpPacket(packetId: PacketId, packet: Buffer, remoteInfo: DgramRemoteInfo | null, checkFromNodeId: NodeId | null) {
         if (this.#receivedUdpPackets.has(packetId)) {
@@ -251,7 +239,7 @@ export default class PublicUdpSocketServer {
         })
         /////////////////////////////////////////////////////////////////////////
     }
-    async _sendMessage(address: Address | null, fallbackAddress: FallbackAddress, messageType: UdpMessageType, messageData: Buffer | JSONObject, metaData: UdpMessageMetaData, opts: {timeoutMsec: DurationMsec}): Promise<void> {
+    async _sendMessage(address: Address | null, fallbackAddress: FallbackAddress, messageType: UdpMessageType, messageData: Buffer | JSONObject, metaData: UdpMessageMetaData, opts: {timeoutMsec: DurationMsec, toNodeId: NodeId}): Promise<void> {
         if ((this.#socket === null) || (this.#udpPacketSender === null)) {
             throw Error("Cannot _sendMessage before calling startListening()")
         }
@@ -275,7 +263,7 @@ export default class PublicUdpSocketServer {
             packets.push(b)
         }
         try {
-            await this.#udpPacketSender.sendPackets(address, fallbackAddress, packets, {timeoutMsec: opts.timeoutMsec})
+            await this.#udpPacketSender.sendPackets(address, fallbackAddress, packets, {timeoutMsec: opts.timeoutMsec, toNodeId: opts.toNodeId})
         }
         catch(err) {
             if (this.#stopped) {
@@ -304,7 +292,7 @@ export default class PublicUdpSocketServer {
                 const response: NodeToNodeResponse = await this.#node.handleNodeToNodeRequest(req)
                 const fallbackAddress = nodeIdFallbackAddress(req.body.fromNodeId)
                 const remoteAddress = this.#messagePartManager.getRemoteAddressForNodeId(req.body.fromNodeId)
-                await this._sendMessage(remoteAddress, fallbackAddress, "NodeToNodeResponse", response as any as JSONObject, udpMessageMetaData({}), {timeoutMsec: scaledDurationMsec(5000)})
+                await this._sendMessage(remoteAddress, fallbackAddress, "NodeToNodeResponse", response as any as JSONObject, udpMessageMetaData({}), {timeoutMsec: scaledDurationMsec(5000), toNodeId: req.body.fromNodeId})
             }, async () => {
             })
             /////////////////////////////////////////////////////////////////////////

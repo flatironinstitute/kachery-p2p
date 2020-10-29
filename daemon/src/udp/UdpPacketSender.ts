@@ -1,11 +1,10 @@
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { DgramSocket } from '../external/ExternalInterface';
-import { addByteCount, Address, byteCount, DurationMsec, durationMsecToNumber, isBoolean, isProtocolVersion, isString, JSONObject, portToNumber, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
+import { Address, byteCount, DurationMsec, durationMsecToNumber, isBoolean, isNodeId, isProtocolVersion, isString, JSONObject, NodeId, portToNumber, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
+import NodeStats from '../NodeStats';
 import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { UdpTimeoutError } from './UdpCongestionManager';
-
-export const UDP_PACKET_HEADER_SIZE = 200
 
 export interface PacketId extends String {
     __packetId__: never // phantom type
@@ -23,14 +22,19 @@ export interface FallbackAddress extends JSONObject {
     __packetId__: never // phantom type
 }
 
+export const UDP_PACKET_HEADER_SIZE = 500
 export interface UdpPacketSenderHeader {
-    protocolVersion: ProtocolVersion,
-    packetId: PacketId,
-    isConfirmation: boolean
+    protocolVersion: ProtocolVersion, // 10
+    fromNodeId: NodeId, // 64
+    toNodeId: NodeId, // 64
+    packetId: PacketId, // 10
+    isConfirmation: boolean // 10
 }
 export const isUdpPacketSenderHeader = (x: any): x is UdpPacketSenderHeader => {
     return _validateObject(x, {
         protocolVersion: isProtocolVersion,
+        fromNodeId: isNodeId,
+        toNodeId: isNodeId,
         packetId: isPacketId,
         isConfirmation: isBoolean
     })
@@ -45,23 +49,20 @@ export default class UdpPacketSender {
     #congestionManagers = new GarbageMap<Address, UdpCongestionManager>(scaledDurationMsec(5 * 60 * 1000))
     #unconfirmedOutgoingPackets = new GarbageMap<PacketId, OutgoingPacket>(scaledDurationMsec(5 * 60 * 1000))
     #debugId = randomAlphaString(4)
-    #numBytesSent = byteCount(0)
-    #numPacketsSent: number = 0
-    constructor(socket: DgramSocket, private fallbackPacketSender: FallbackPacketSenderInterface) {
+    constructor(socket: DgramSocket, private fallbackPacketSender: FallbackPacketSenderInterface, private stats: NodeStats, private opts: {thisNodeId: NodeId}) {
         this.#socket = socket
     }
     socket() {
         return this.#socket
     }
-    async sendPackets(address: Address | null, fallbackAddress: FallbackAddress, packets: Buffer[], opts: {timeoutMsec: DurationMsec}): Promise<void> {
+    async sendPackets(address: Address | null, fallbackAddress: FallbackAddress, packets: Buffer[], opts: {timeoutMsec: DurationMsec, toNodeId: NodeId}): Promise<void> {
         const outgoingPackets = packets.map(p => {
-            const pkt = new OutgoingPacket(this, address, fallbackAddress, p, opts.timeoutMsec)
+            const pkt = new OutgoingPacket(this, address, fallbackAddress, p, opts.timeoutMsec, this.stats, {thisNodeId: this.opts.thisNodeId, toNodeId: opts.toNodeId})
             this.#unconfirmedOutgoingPackets.set(pkt.packetId(), pkt)
             return pkt
         })
         const promises: Promise<void>[] = outgoingPackets.map(pkt => {
-            this.#numPacketsSent ++
-            this.#numBytesSent = addByteCount(this.#numBytesSent, pkt.size())
+            this.stats.reportBytesSent('udp', opts.toNodeId, pkt.size())
             return pkt.send()
         }) // send the packets and await all the promises
         try {
@@ -90,12 +91,6 @@ export default class UdpPacketSender {
         this.#congestionManagers.set(address, c)
         return c
     }
-    numPacketsSent() {
-        return this.#numPacketsSent
-    }
-    numBytesSent() {
-        return this.#numBytesSent
-    }
     async _fallbackSendPacket(fallbackAddress: FallbackAddress, packetId: PacketId, buffer: Buffer): Promise<void> {
         await this.fallbackPacketSender.sendPacket(fallbackAddress, packetId, buffer)
     }
@@ -112,7 +107,7 @@ class OutgoingPacket {
     #confirmed = false
     #cancelled = false
     #timeoutMsec: DurationMsec
-    constructor(packetSender: UdpPacketSender, address: Address | null, fallbackAddress: FallbackAddress, buffer: Buffer, timeoutMsec: DurationMsec) {
+    constructor(packetSender: UdpPacketSender, address: Address | null, fallbackAddress: FallbackAddress, buffer: Buffer, timeoutMsec: DurationMsec, private stats: NodeStats, private opts: {thisNodeId: NodeId, toNodeId: NodeId}) {
         this.#packetSender = packetSender
         this.#address = address
         this.#fallbackAddress = fallbackAddress
@@ -172,6 +167,8 @@ class OutgoingPacket {
             const h: UdpPacketSenderHeader = {
                 protocolVersion: protocolVersion(),
                 packetId: this.#packetId,
+                fromNodeId: this.opts.thisNodeId,
+                toNodeId: this.opts.toNodeId,
                 isConfirmation: false
             }
             const b2 = Buffer.concat([
@@ -182,6 +179,7 @@ class OutgoingPacket {
             if (!this.#address) {
                 throw Error('unexpected')
             }
+            this.stats.reportBytesSent('udp', this.opts.toNodeId, byteCount(b2.length))
             socket.send(b2, 0, b2.length, portToNumber(this.#address.port), this.#address.hostName.toString(), (err, numBytesSent) => {
                 /* istanbul ignore next */
                 if (err) {

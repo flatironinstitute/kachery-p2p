@@ -1,31 +1,17 @@
 import { action } from "../common/action"
 import { getSignature, verifySignature } from "../common/crypto_util"
 import { sleepMsec } from "../common/util"
-import ExternalInterface, { DgramSocket } from "../external/ExternalInterface"
-import { Address, ChannelName, ChannelNodeInfo, DurationMsec, hostName, isMulticastAnnounceMessage, JSONObject, KeyPair, minDuration, MulticastAnnounceMessage, MulticastAnnounceMessageBody, NodeId, nodeIdToPublicKey, nowTimestamp, Port, portToNumber, scaledDurationMsec, tryParseJsonObject } from "../interfaces/core"
-import { AnnounceRequestData, AnnounceResponseData } from "../interfaces/NodeToNodeRequest"
+import { DgramSocket } from "../external/ExternalInterface"
+import { Address, byteCount, DurationMsec, hostName, isMulticastAnnounceMessage, JSONObject, minDuration, MulticastAnnounceMessage, MulticastAnnounceMessageBody, nodeIdToPublicKey, nowTimestamp, portToNumber, scaledDurationMsec, tryParseJsonObject } from "../interfaces/core"
+import { AnnounceRequestData } from "../interfaces/NodeToNodeRequest"
+import KacheryP2PNode from "../KacheryP2PNode"
 import { protocolVersion } from "../protocolVersion"
 
-interface RemoteNodeManagerInterface {
-    handleAnnounceRequest: (args: {fromNodeId: NodeId, requestData: AnnounceRequestData, localUdpAddress: Address | null}) => Promise<AnnounceResponseData>
-}
-
-interface KacheryP2PNodeInterface {
-    nodeId: () => NodeId
-    udpSocketPort: () => Port | null
-    keyPair: () => KeyPair
-    channelNames: () => ChannelName[]
-    getChannelNodeInfo: (channelName: ChannelName) => ChannelNodeInfo
-    externalInterface: () => ExternalInterface
-    useMulticastUdp: () => boolean
-    remoteNodeManager: () => RemoteNodeManagerInterface
-}
-
 export default class MulticastService {
-    #node: KacheryP2PNodeInterface
+    #node: KacheryP2PNode
     #halted = false
     #multicastSocket: DgramSocket | null = null
-    constructor(node: KacheryP2PNodeInterface, private opts: {intervalMsec: DurationMsec, multicastAddress: Address}) {
+    constructor(node: KacheryP2PNode, private opts: {intervalMsec: DurationMsec, multicastAddress: Address}) {
         this.#node = node
         this._start()
     }
@@ -99,6 +85,7 @@ export default class MulticastService {
                 /////////////////////////////////////////////////////////////////////////
                 await action('sendMulticastAnnounceMessage', {}, async () => {
                     if (this.#multicastSocket) {
+                        this.#node.stats().reportBytesSent('multicastUdp', null, byteCount(mJson.length))
                         this.#multicastSocket.send(
                             Buffer.from(mJson),
                             0,

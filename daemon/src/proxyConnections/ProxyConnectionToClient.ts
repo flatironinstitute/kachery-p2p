@@ -4,7 +4,7 @@ import DataStreamy from '../common/DataStreamy';
 import GarbageMap from '../common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString, sleepMsec } from '../common/util';
 import { WebSocketInterface } from '../external/ExternalInterface';
-import { ByteCount, DurationMsec, durationMsecToNumber, elapsedSince, ErrorMessage, isBuffer, isByteCount, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, minDuration, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, scaledDurationMsec, Signature, Timestamp, _validateObject } from "../interfaces/core";
+import { byteCount, ByteCount, DurationMsec, durationMsecToNumber, elapsedSince, ErrorMessage, isBuffer, isByteCount, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, minDuration, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, scaledDurationMsec, Signature, Timestamp, _validateObject } from "../interfaces/core";
 import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
 
@@ -261,7 +261,9 @@ export class ProxyConnectionToClient {
                             body: msgBody,
                             signature: getSignature(msgBody, this.#node.keyPair())
                         }
-                        this.#ws.send(kacheryP2PSerialize(msg));
+                        const messageSerialized = kacheryP2PSerialize(msg)
+                        this.#node.stats().reportBytesSent('webSocket', this.#remoteNodeId, byteCount(messageSerialized.length))
+                        this.#ws.send(messageSerialized)
                         this.#onInitializedCallbacks.forEach(cb => {cb()});
                     }
                     else {
@@ -365,7 +367,9 @@ export class ProxyConnectionToClient {
             throw Error('Cannot send message to client before initialized.');
         }
         if (this.#closed) return;
-        this.#ws.send(kacheryP2PSerialize(msg));
+        const messageSerialized = kacheryP2PSerialize(msg)
+        this.#node.stats().reportBytesSent('webSocket', this.#remoteNodeId, byteCount(messageSerialized.length))
+        this.#ws.send(messageSerialized)
     }
     async _waitForResponse(requestId: RequestId, {timeoutMsec}: {timeoutMsec: DurationMsec}): Promise<NodeToNodeResponse> {
         return new Promise((resolve, reject) => {

@@ -293,14 +293,14 @@ class RemoteNode {
             if (!address) {
                 throw Error('Unable to download file data... no http address found.')
             }
-            return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${streamId}`))
+            return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`))
         }
         else if (method === 'http-proxy') {
             const address = this._getRemoteNodeHttpProxyAddress();
             if (!address) {
                 throw Error('Unable to download file data... no http-proxy address found.')
             }
-            return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${streamId}`))
+            return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`))
         }
         else if (method === 'udp') {
             return await this._streamDataViaUdpFromRemoteNode(streamId)
@@ -358,7 +358,7 @@ class RemoteNode {
 
         const ds = await this.#node.kacheryStorageManager().getFileReadStream(r.fileKey)
         const fallbackAddress = nodeIdFallbackAddress(this.#remoteNodeId)
-        udpS.setOutgoingDataStream(udpA, fallbackAddress, streamId, ds)
+        udpS.setOutgoingDataStream(udpA, fallbackAddress, streamId, ds, {toNodeId: this.#remoteNodeId})
     }
     async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
         try {
@@ -409,6 +409,7 @@ class RemoteNode {
             }
             this.#numHttpBytesSent = addByteCount(this.#numHttpBytesSent, requestSize)
             this.#numRequestsSent ++
+            this.#node.stats().reportBytesSent('http', this.#remoteNodeId, byteCount(JSON.stringify(request).length))
             const R = await this.#node.externalInterface().httpPostJson(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
             if (!isNodeToNodeResponse(R)) {
                 // ban the node?

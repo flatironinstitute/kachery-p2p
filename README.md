@@ -207,7 +207,7 @@ In order for peers to find one another, they need to connect to a common bootstr
 ```bash
 # Start the daemon on a computer in the cloud with an accessible port
 # The port must be open to both tcp and udp connections
-kachery-p2p-start-daemon --host <ip> --http-port <port>
+kachery-p2p-start-daemon --host <ip> --port <port>
 ```
 
 ```bash

@@ -11,6 +11,7 @@ import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager
 import { getStats, GetStatsOpts } from './getStats'
 import { addDurations, Address, ChannelName, ChannelNodeInfo, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, MessageCount, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage } from './interfaces/core'
 import { CheckForFileRequestData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, GetLiveFeedSignedMessagesRequestData, isAnnounceRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
+import NodeStats from './NodeStats'
 import { handleCheckForFileRequest } from './nodeToNodeRequestHandlers/handleCheckForFileRequest'
 import { handleCheckForLiveFeedRequest } from './nodeToNodeRequestHandlers/handleCheckForLiveFeedRequest'
 import { handleDownloadFileDataRequest } from './nodeToNodeRequestHandlers/handleDownloadFileDataRequest'
@@ -47,6 +48,7 @@ class KacheryP2PNode {
     #publicUdpSocketServer: PublicUdpSocketServer | null = null
     #downloadOptimizer: DownloadOptimizer
     #onProxyConnectionToServerCallbacks: (() => void)[] = []
+    #stats = new NodeStats()
     constructor(private p: {
         configDir: LocalFilePath | null,
         verbose: number,
@@ -70,8 +72,6 @@ class KacheryP2PNode {
         this.#feedManager = new FeedManager(this, localFeedManager)
 
         this.#remoteNodeManager = new RemoteNodeManager(this)
-
-        let bootstrapAddresses = this.p.bootstrapAddresses
 
         const downloaderCreator = new DownloaderCreator(this, this.p.opts.getDefects)
         this.#downloadOptimizer = new DownloadOptimizer(downloaderCreator)
@@ -112,6 +112,9 @@ class KacheryP2PNode {
     }
     getDefects() {
         return this.p.opts.getDefects()
+    }
+    stats() {
+        return this.#stats
     }
     findFile(args: { fileKey: FileKey, timeoutMsec: DurationMsec, fromChannel: ChannelName | null }): {
         onFound: (callback: (result: FindFileResult) => void) => void,
@@ -452,12 +455,12 @@ class KacheryP2PNode {
             signature: getSignature(body, this.#keyPair)
         }
     }
-    streamFileData(nodeId: NodeId, streamId: StreamId): DataStreamy {
-        if (nodeId !== this.#nodeId) {
+    streamFileData(fromNodeId: NodeId, streamId: StreamId): DataStreamy {
+        if (fromNodeId !== this.#nodeId) {
             // redirect to a different node
-            const p = this.#proxyConnectionsToClients.get(nodeId)
+            const p = this.#proxyConnectionsToClients.get(fromNodeId)
             if (!p) {
-                throw Error(`No proxy connection to node: ${nodeId.slice(0, 6)} <> ${this.#nodeId.slice(0, 6)}`)
+                throw Error(`No proxy connection to node: ${fromNodeId.slice(0, 6)} <> ${this.#nodeId.slice(0, 6)}`)
             }
             return p.streamFileData(streamId)
         }

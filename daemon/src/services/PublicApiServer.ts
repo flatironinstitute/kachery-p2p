@@ -1,10 +1,11 @@
 import express, { Express } from 'express';
 import { Socket } from 'net';
 import { action } from '../common/action';
+import { JSONStringifyDeterministic } from '../common/crypto_util';
 import DataStreamy from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
-import { Address, ByteCount, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
+import { Address, byteCount, ByteCount, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
 import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -91,7 +92,7 @@ export default class PublicApiServer {
                 await this._errorResponse(req, res, 500, 'Invalid node-to-node request');
                 return;
             }
-            reqBody.body.fromNodeId
+            this.#node.stats().reportBytesReceived('http', reqBody.body.fromNodeId, byteCount(JSONStringifyDeterministic(reqBody).length))
             /////////////////////////////////////////////////////////////////////////
             await action('/nodeToNodeRequest', {
                 context: 'Public API',
@@ -105,22 +106,27 @@ export default class PublicApiServer {
             /////////////////////////////////////////////////////////////////////////
         });
         // /download
-        this.#app.get('/download/:nodeId/:streamId', async (req, res) => {
+        this.#app.get('/download/:fromNodeId/:toNodeId/:streamId', async (req, res) => {
             const streamId = req.params.streamId
-            const nodeId = req.params.nodeId
+            const fromNodeId = req.params.fromNodeId
+            const toNodeId = req.params.toNodeId
             /////////////////////////////////////////////////////////////////////////
             await action('/download', {
                 context: 'Public API',
-                nodeId,
+                fromNodeId,
+                toNodeId,
                 streamId
             }, async () => {
                 if (!isStreamId(streamId)) {
                     throw Error ('Invalid stream ID')
                 }
-                if (!isNodeId(nodeId)) {
-                    throw Error ('Invalid node ID')
+                if (!isNodeId(fromNodeId)) {
+                    throw Error ('Invalid fromNodeId')
                 }
-                this._apiDownload(nodeId, streamId, req, res)
+                if (!isNodeId(toNodeId)) {
+                    throw Error ('Invalid toNodeId')
+                }
+                this._apiDownload(fromNodeId, toNodeId, streamId, req, res)
             }, async (err: Error) => {
                 await this._errorResponse(req, res, 500, err.message);
             });
@@ -152,15 +158,19 @@ export default class PublicApiServer {
     async mockGetDownload(path: string): Promise<DataStreamy> {
         if (path.startsWith('/download/')) {
             const vals = path.split('/')
-            const nodeId = vals[2]
-            const streamId = vals[3]
-            if (!isNodeId(nodeId)) {
-                throw Error('Invalid node id in mock /download')
+            const fromNodeId = vals[2]
+            const toNodeId = vals[3]
+            const streamId = vals[4]
+            if (!isNodeId(fromNodeId)) {
+                throw Error('Invalid from node id in mock /download')
+            }
+            if (!isNodeId(toNodeId)) {
+                throw Error('Invalid to node id in mock /download')
             }
             if (!isStreamId(streamId)) {
                 throw Error('Invalid stream id in mock /download')
             }
-            return this.#node.streamFileData(nodeId, streamId)
+            return this.#node.streamFileData(fromNodeId, streamId)
         }
         else {
             throw Error(`mock get download unexpected path: ${path}`)
@@ -195,8 +205,8 @@ export default class PublicApiServer {
         res.json(response);
     }
     // /download
-    _apiDownload(nodeId: NodeId, streamId: StreamId, req: Req, res: Res) {
-        const ds = this.#node.streamFileData(nodeId, streamId)
+    _apiDownload(fromNodeId: NodeId, toNodeId: NodeId, streamId: StreamId, req: Req, res: Res) {
+        const ds = this.#node.streamFileData(fromNodeId, streamId)
         let started = false
         ds.onStarted((size: ByteCount) => {
             started = true
@@ -207,6 +217,7 @@ export default class PublicApiServer {
         })
         
         ds.onData((data: Buffer) => {
+            this.#node.stats().reportBytesSent('http', toNodeId, byteCount(data.length))
             res.write(data)
         })
         ds.onFinished(() => {

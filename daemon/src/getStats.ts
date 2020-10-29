@@ -1,15 +1,23 @@
-import { byteCount, ByteCount, ChannelName, isEqualTo, isOneOf, JSONObject, NodeId, optional, _validateObject } from "./interfaces/core";
+import { ByteCount, ChannelName, isEqualTo, isOneOf, JSONObject, NodeId, optional, _validateObject } from "./interfaces/core";
 import KacheryP2PNode from "./KacheryP2PNode";
 import { RemoteNodeStats } from './RemoteNode';
 
-export interface NodeStats {
+export interface NodeStatsInterface {
     nodeId: NodeId,
     channelNames: ChannelName[]
     remoteNodes: RemoteNodeStats[]
-    numUdpBytesSent: ByteCount
-    numUdpPacketsSent: number
-    numUdpBytesReceived: ByteCount
-    numUdpPacketsReceived: number
+    totalBytesSent: {
+        multicastUdp: ByteCount,
+        udp: ByteCount,
+        http: ByteCount,
+        webSocket: ByteCount
+    },
+    totalBytesReceived: {
+        multicastUdp: ByteCount,
+        udp: ByteCount,
+        http: ByteCount,
+        webSocket: ByteCount
+    },
     html?: string
 }
 
@@ -22,15 +30,13 @@ export const isGetStatsOpts = (x: any): x is GetStatsOpts => {
     })
 }
 
-export const getStats = (node: KacheryP2PNode, o: GetStatsOpts): NodeStats => {
+export const getStats = (node: KacheryP2PNode, o: GetStatsOpts): NodeStatsInterface => {
     const s = node.publicUdpSocketServer()
-    const ret: NodeStats = {
+    const ret: NodeStatsInterface = {
         nodeId: node.nodeId(),
         channelNames: node.channelNames(),
-        numUdpBytesSent: s ? s.numBytesSent() : byteCount(0),
-        numUdpPacketsSent: s ? s.numPacketsSent() : 0,
-        numUdpBytesReceived: s ? s.numBytesReceived() : byteCount(0),
-        numUdpPacketsReceived: s ? s.numPacketsReceived() : 0,
+        totalBytesSent: node.stats().totalBytesSent(),
+        totalBytesReceived: node.stats().totalBytesReceived(),
         remoteNodes: []
     }
     node.remoteNodeManager().getAllRemoteNodes().forEach(rn => {

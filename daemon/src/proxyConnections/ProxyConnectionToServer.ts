@@ -1,23 +1,15 @@
 import { action } from '../common/action';
 import { getSignature, verifySignature } from '../common/crypto_util';
-import DataStreamy from '../common/DataStreamy';
 import GarbageMap from '../common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize } from '../common/util';
-import ExternalInterface, { WebSocketInterface } from '../external/ExternalInterface';
-import { Address, DurationMsec, errorMessage, KeyPair, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec } from "../interfaces/core";
-import { isNodeToNodeRequest, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
+import { WebSocketInterface } from '../external/ExternalInterface';
+import { Address, byteCount, DurationMsec, errorMessage, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec } from "../interfaces/core";
+import { isNodeToNodeRequest } from "../interfaces/NodeToNodeRequest";
+import KacheryP2PNode from '../KacheryP2PNode';
 import { InitialMessageFromClient, InitialMessageFromClientBody, isInitialMessageFromServer, isMessageFromServer, isProxyStreamFileDataCancelRequest, isProxyStreamFileDataRequest, MessageFromClient, MessageFromServer, ProxyStreamFileDataCancelRequest, ProxyStreamFileDataRequest, ProxyStreamFileDataRequestId, ProxyStreamFileDataResponseDataMessage, ProxyStreamFileDataResponseErrorMessage, ProxyStreamFileDataResponseFinishedMessage, ProxyStreamFileDataResponseStartedMessage } from './ProxyConnectionToClient';
 
-interface KacheryP2PNodeInterface {
-    nodeId: () => NodeId
-    keyPair: () => KeyPair
-    handleNodeToNodeRequest: (request: NodeToNodeRequest) => Promise<NodeToNodeResponse>
-    streamFileData: (nodeId: NodeId, streamId: StreamId) => DataStreamy
-    externalInterface: () => ExternalInterface
-}
-
 export class ProxyConnectionToServer {
-    #node: KacheryP2PNodeInterface
+    #node: KacheryP2PNode
     #remoteNodeId: NodeId | null = null
     #ws: WebSocketInterface
     #initialized = false
@@ -25,7 +17,7 @@ export class ProxyConnectionToServer {
     #onClosedCallbacks: ((reason: any) => void)[] = []
     #onInitializedCallbacks: (() => void)[] = []
     #proxyStreamFileDataCancelCallbacks = new GarbageMap<ProxyStreamFileDataRequestId, () => void>(scaledDurationMsec(30 * 60 * 1000))
-    constructor(node: KacheryP2PNodeInterface) {
+    constructor(node: KacheryP2PNode) {
         this.#node = node
     }
     async initialize(remoteNodeId: NodeId, address: Address, opts: {timeoutMsec: DurationMsec}) {
@@ -62,7 +54,9 @@ export class ProxyConnectionToServer {
                 signature: getSignature(msgBody, this.#node.keyPair())
             }
             this.#ws.onOpen(() => {
-                this.#ws.send(kacheryP2PSerialize(msg));
+                const messageSerialized = kacheryP2PSerialize(msg)
+                this.#node.stats().reportBytesSent('webSocket', this.#remoteNodeId, byteCount(messageSerialized.length))
+                this.#ws.send(messageSerialized);
             })
             this.#ws.onMessage(messageBuffer => {
                 if (this.#closed) return;
@@ -153,7 +147,8 @@ export class ProxyConnectionToServer {
         }
     }
     _handleProxyStreamFileDataRequest(request: ProxyStreamFileDataRequest) {
-        const streamId = request.streamId
+        // the server is requesting to stream file data up from the client
+        const {streamId} = request
         const s = this.#node.streamFileData(this.#node.nodeId(), streamId)
         s.onStarted(size => {
             if (size === null) {
@@ -202,6 +197,8 @@ export class ProxyConnectionToServer {
             throw Error('Cannot send message to server before initialized.');
         }
         if (this.#closed) return;
-        this.#ws.send(kacheryP2PSerialize(msg));
+        const messageSerialized = kacheryP2PSerialize(msg)
+        this.#node.stats().reportBytesSent('webSocket', this.#remoteNodeId, byteCount(messageSerialized.length))
+        this.#ws.send(messageSerialized)
     }
 }

@@ -5,7 +5,7 @@ import { action } from '../common/action';
 import { DataStreamyProgress } from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
-import { isGetStatsOpts, NodeStats } from '../getStats';
+import { isGetStatsOpts, NodeStatsInterface } from '../getStats';
 import { Address, ChannelName, DaemonVersion, DurationMsec, durationMsecToNumber, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelName, isDaemonVersion, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isProtocolVersion, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
@@ -604,7 +604,7 @@ export default class DaemonApiServer {
             success: boolean,
             format: string,
             html?: string,
-            stats: NodeStats
+            stats: NodeStatsInterface
         }
         const stats = this.#node.getStats(query)
         const response: ApiStatsResponse = {
