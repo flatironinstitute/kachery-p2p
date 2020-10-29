@@ -235,14 +235,15 @@ class RemoteNode {
         }
     }
     _determineDefaultDownloadFileDataMethod(): SendRequestMethod | null {
-        if (this._getRemoteNodeHttpAddress()) {
+        if ((this.#node.publicUdpSocketServer()) && (this.getUdpAddressForRemoteNode())) {
+            // todo: figure this out
+            return 'udp'
+        }
+        else if (this._getRemoteNodeHttpAddress()) {
             return 'http'
         }
         else if (this._getRemoteNodeHttpProxyAddress()) {
             return 'http-proxy'
-        }
-        else if ((this.#node.publicUdpSocketServer()) && (this.getUdpAddressForRemoteNode())) {
-            return 'udp'
         }
         else {
             return null
