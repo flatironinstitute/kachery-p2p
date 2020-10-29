@@ -1,6 +1,7 @@
 import DataStreamy from "../../common/DataStreamy"
 import { randomAlphaString, sleepMsec } from "../../common/util"
 import { Address, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, nodeLabel, scaledDurationMsec, toPort, UrlPath } from "../../interfaces/core"
+import NodeStats from "../../NodeStats"
 import { ApiFindFileRequest } from "../../services/DaemonApiServer"
 import startDaemon, { DaemonInterface, StartDaemonOpts } from "../../startDaemon"
 import mockExternalInterface from "./mockExternalInterface"
@@ -180,7 +181,7 @@ export class MockNodeDaemonGroup {
         /* istanbul ignore next */
         throw Error('mock - unable to process http post json')
     }
-    async mockHttpGetDownload(address: Address, path: UrlPath): Promise<DataStreamy> {
+    async mockHttpGetDownload(address: Address, path: UrlPath, stats: NodeStats, opts: {fromNodeId: NodeId}): Promise<DataStreamy> {
         const nodeId = address.hostName.toString()
         if (isNodeId(nodeId)) {
             const daemon = this.getDaemon(nodeId)

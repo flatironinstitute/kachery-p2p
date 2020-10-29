@@ -220,6 +220,7 @@ export class ProxyConnectionToClient {
                     if (!isBuffer(messageBuffer)) {
                         throw Error('Unexpected')
                     }
+                    this.#node.stats().reportBytesReceived('webSocket', this.#remoteNodeId, byteCount(messageBuffer.length))
                     let messageParsed: Object;
                     try {
                         messageParsed = kacheryP2PDeserialize(messageBuffer);

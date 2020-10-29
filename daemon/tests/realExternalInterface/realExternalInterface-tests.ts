@@ -9,6 +9,7 @@ import { randomAlphaString } from '../../src/common/util';
 import ExternalInterface from '../../src/external/ExternalInterface';
 import realExternalInterface from '../../src/external/real/realExternalInterface';
 import { Address, byteCount, feedIdToPublicKeyHex, FeedName, FileKey, hostName, localFilePath, NodeId, nowTimestamp, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, toPort, unscaledDurationMsec, urlPath } from '../../src/interfaces/core';
+import NodeStats from '../../src/NodeStats';
 
 const testContext = (testFunction: (externalInterface: ExternalInterface, resolve: () => void, reject: (err: Error) => void) => Promise<void>, done: (err?: Error) => void) => {
     const tempPath = `${os.tmpdir()}/kachery-p2p-test-${randomAlphaString(10)}.tmp`
@@ -66,9 +67,10 @@ mocha.describe('Real external interface', () => {
                         res.end()
                     }, 5)
                 });
+                const stats = new NodeStats()
                 const server = await ri.startHttpServer(app, port)
                 const address: Address = {hostName: hostName('localhost'), port}
-                const ds = await ri.httpGetDownload(address, urlPath('/test'))
+                const ds = await ri.httpGetDownload(address, urlPath('/test'), stats, {fromNodeId: null})
                 const chunks: Buffer[] = []
                 ds.onData(chunk => {
                     chunks.push(chunk)

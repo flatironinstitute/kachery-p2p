@@ -5,7 +5,7 @@ import DataStreamy from '../common/DataStreamy';
 import GarbageMap from "../common/GarbageMap";
 import { RequestTimeoutError } from '../common/util';
 import { DgramRemoteInfo, DgramSocket } from '../external/ExternalInterface';
-import { Address, DurationMsec, durationMsecToNumber, errorMessage, ErrorMessage, hostName, isErrorMessage, isNodeId, isNumber, JSONObject, NodeId, nodeIdToPublicKey, Port, portToNumber, RequestId, scaledDurationMsec, toPort, tryParseJsonObject, _validateObject } from "../interfaces/core";
+import { Address, byteCount, DurationMsec, durationMsecToNumber, errorMessage, ErrorMessage, hostName, isErrorMessage, isNodeId, isNumber, JSONObject, NodeId, nodeIdToPublicKey, Port, portToNumber, RequestId, scaledDurationMsec, toPort, tryParseJsonObject, _validateObject } from "../interfaces/core";
 import { FallbackUdpPacketRequestData, isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
 import { createUdpMessageId, isUdpHeader, numParts, NumParts, partIndex, PartIndex, UdpHeader, UdpMessageMetaData, udpMessageMetaData, UdpMessagePart, UdpMessageType, UDP_MESSAGE_HEADER_SIZE, UDP_PACKET_SIZE } from "../interfaces/UdpMessage";
 import KacheryP2PNode from "../KacheryP2PNode";
@@ -230,6 +230,10 @@ export default class PublicUdpSocketServer {
                 console.warn('fromNodeId does not match in udp packet')
                 return
             }
+        }
+
+        if (remoteInfo !== null) {
+            this.#node.stats().reportBytesReceived('udp', header.body.fromNodeId, byteCount(packet.length))
         }
         
         /////////////////////////////////////////////////////////////////////////

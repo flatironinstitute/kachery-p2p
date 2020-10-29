@@ -1,4 +1,5 @@
 import { Address, DurationMsec, JSONObject, NodeId, Port, UrlPath } from '../../interfaces/core'
+import NodeStats from '../../NodeStats'
 import ExternalInterface, { ExpressInterface, HttpServerInterface, LocalFeedManagerInterface } from '../ExternalInterface'
 import mockDgramCreateSocket from './mockDgramCreateSocket'
 import MockKacheryStorageManager from './MockKacheryStorageManager'
@@ -15,8 +16,8 @@ const mockExternalInterface = (daemonGroup: MockNodeDaemonGroup, getDefects: () 
     const httpPostJson = (address: Address, path: UrlPath, data: JSONObject, opts: { timeoutMsec: DurationMsec }) => {
         return daemonGroup.mockHttpPostJson(address, path, data, opts)
     }
-    const httpGetDownload = (address: Address, path: UrlPath) => {
-        return daemonGroup.mockHttpGetDownload(address, path)
+    const httpGetDownload = (address: Address, path: UrlPath, stats: NodeStats, opts: {fromNodeId: NodeId}) => {
+        return daemonGroup.mockHttpGetDownload(address, path, stats, opts)
     }
 
     const createLocalFeedManager = (): LocalFeedManagerInterface => {

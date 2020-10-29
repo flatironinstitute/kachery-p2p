@@ -60,6 +60,7 @@ export class ProxyConnectionToServer {
             })
             this.#ws.onMessage(messageBuffer => {
                 if (this.#closed) return;
+                this.#node.stats().reportBytesReceived('webSocket', this.#remoteNodeId, byteCount(messageBuffer.length))
                 /////////////////////////////////////////////////////////////////////////
                 action('proxyConnectionToServerMessage', {context: "ProxyConnectionToServer", remoteNodeId: this.#remoteNodeId}, async () => {
                     let messageParsed: Object;

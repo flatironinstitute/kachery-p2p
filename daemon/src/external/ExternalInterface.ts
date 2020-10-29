@@ -1,8 +1,9 @@
 import DataStreamy from "../common/DataStreamy"
 import { Address, ByteCount, DurationMsec, FeedId, FeedName, FileKey, JSONObject, LocalFilePath, NodeId, Port, PrivateKey, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, UrlPath } from "../interfaces/core"
+import NodeStats from "../NodeStats"
 
 export type HttpPostJsonFunction = ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>)
-export type HttpGetDownloadFunction = ((address: Address, path: UrlPath) => Promise<DataStreamy>)
+export type HttpGetDownloadFunction = ((address: Address, path: UrlPath, stats: NodeStats, opts: {fromNodeId: NodeId | null}) => Promise<DataStreamy>)
 
 export interface DgramSocket {
     bind: (port: number) => void,

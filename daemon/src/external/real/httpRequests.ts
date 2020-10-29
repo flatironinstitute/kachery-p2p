@@ -1,6 +1,7 @@
 import axios from 'axios';
 import DataStreamy from '../../common/DataStreamy';
-import { Address, ByteCount, DurationMsec, durationMsecToNumber, JSONObject, UrlPath } from '../../interfaces/core';
+import { Address, byteCount, ByteCount, DurationMsec, durationMsecToNumber, JSONObject, NodeId, UrlPath } from '../../interfaces/core';
+import NodeStats from '../../NodeStats';
 
 export const _tests: {[key: string]: () => Promise<void>} = {}
 
@@ -21,7 +22,7 @@ export const httpPostJson = async (address: Address, path: UrlPath, data: Object
     }
     return res.data
 }
-export const httpGetDownload = async (address: Address, path: UrlPath): Promise<DataStreamy> => {
+export const httpGetDownload = async (address: Address, path: UrlPath, stats: NodeStats, opts: {fromNodeId: NodeId}): Promise<DataStreamy> => {
     const url = 'http://' + address.hostName + ':' + address.port + path
     const res = await axios.get(url, {responseType: 'stream'})
     const size: ByteCount = res.headers['Content-Length']
@@ -32,6 +33,7 @@ export const httpGetDownload = async (address: Address, path: UrlPath): Promise<
         res.data.close()
     })
     res.data.on('data', (data: Buffer) => {
+        stats.reportBytesReceived('http', opts.fromNodeId, byteCount(data.length))
         ret.producer().data(data)
     })
     res.data.on('error', (err: Error) => {

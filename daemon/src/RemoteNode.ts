@@ -293,14 +293,14 @@ class RemoteNode {
             if (!address) {
                 throw Error('Unable to download file data... no http address found.')
             }
-            return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`))
+            return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`), this.#node.stats(), {fromNodeId: this.#remoteNodeId})
         }
         else if (method === 'http-proxy') {
             const address = this._getRemoteNodeHttpProxyAddress();
             if (!address) {
                 throw Error('Unable to download file data... no http-proxy address found.')
             }
-            return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`))
+            return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`), this.#node.stats(), {fromNodeId: null})
         }
         else if (method === 'udp') {
             return await this._streamDataViaUdpFromRemoteNode(streamId)

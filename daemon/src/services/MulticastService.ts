@@ -37,6 +37,7 @@ export default class MulticastService {
         this.#multicastSocket.on('message', (message, rinfo) => {
             let msg: JSONObject | null = tryParseJsonObject(message.toString())
             if (isMulticastAnnounceMessage(msg)) {
+                this.#node.stats().reportBytesReceived('multicastUdp', msg.body.fromNodeId, byteCount(message.length))
                 const msg2: MulticastAnnounceMessage = msg
                 /////////////////////////////////////////////////////////////////////////
                 action('handleMulticastAnnounceMessage', {fromNodeId: msg.body.fromNodeId}, async () => {
