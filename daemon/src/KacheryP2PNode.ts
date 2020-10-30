@@ -278,7 +278,7 @@ class KacheryP2PNode {
         this.#proxyConnectionsToServers.forEach((c, remoteNodeId) => {
             const remoteNode = this.#remoteNodeManager.getRemoteNode(remoteNodeId)
             if (remoteNode) {
-                const httpAddress = remoteNode._getRemoteNodeHttpAddress()
+                const httpAddress = remoteNode.getRemoteNodeHttpAddress()
                 if (httpAddress) {
                     proxyHttpAddresses.push(httpAddress)
                 }
@@ -398,7 +398,7 @@ class KacheryP2PNode {
             if (!p) {
                 throw Error('No proxy connection to node.')
             }
-            return await p.sendRequest(request)
+            return await p.sendRequest(request, {timeoutMsec: addDurations(request.body.timeoutMsec, scaledDurationMsec(1000))})
         }
 
         let responseData: NodeToNodeResponseData
@@ -438,9 +438,10 @@ class KacheryP2PNode {
         }
         else {
             /* istanbul ignore next */
-            console.warn(requestData)
-            /* istanbul ignore next */
-            throw Error('Unexpected error: unrecognized request data.')
+            {
+                console.warn(requestData)
+                throw Error('Unexpected error: unrecognized request data.')
+            }
         }
         const body = {
             protocolVersion: protocolVersion(),
@@ -522,11 +523,13 @@ class DownloadStreamManager {
 
 const _loadKeypair = (configDir: LocalFilePath): KeyPair => {
     if (!fs.existsSync(configDir.toString())) {
+        /* istanbul ignore next */
         throw Error(`Config directory does not exist: ${configDir}`)
     }
     const publicKeyPath = `${configDir.toString()}/public.pem`
     const privateKeyPath = `${configDir.toString()}/private.pem`
     if (fs.existsSync(publicKeyPath)) {
+        /* istanbul ignore next */
         if (!fs.existsSync(privateKeyPath)) {
             throw Error(`Public key file exists, but secret key file does not.`)
         }
@@ -543,6 +546,7 @@ const _loadKeypair = (configDir: LocalFilePath): KeyPair => {
         privateKey: fs.readFileSync(privateKeyPath, { encoding: 'utf-8' }),
     }
     if (!isKeyPair(keyPair)) {
+        /* istanbul ignore next */
         throw Error('Invalid keyPair')
     }
     testKeyPair(keyPair)
@@ -552,21 +556,17 @@ const _loadKeypair = (configDir: LocalFilePath): KeyPair => {
 const testKeyPair = (keyPair: KeyPair) => {
     const signature = getSignature({ test: 1 }, keyPair)
     if (!verifySignature({ test: 1 } as JSONObject, signature, keyPair.publicKey)) {
+        /* istanbul ignore next */
         throw new Error('Problem testing public/private keys. Error verifying signature.')
     }
     if (hexToPublicKey(publicKeyToHex(keyPair.publicKey)) !== keyPair.publicKey) {
-        console.warn(hexToPublicKey(publicKeyToHex(keyPair.publicKey)))
-        console.warn(keyPair.publicKey)
+        /* istanbul ignore next */
         throw new Error('Problem testing public/private keys. Error converting public key to/from hex.')
     }
     if (hexToPrivateKey(privateKeyToHex(keyPair.privateKey)) !== keyPair.privateKey) {
+        /* istanbul ignore next */
         throw new Error('Problem testing public/private keys. Error converting private key to/from hex.')
     }
-}
-
-export const readJsonFile = async (path: string) => {
-    const txt = await fs.promises.readFile(path, 'utf-8');
-    return JSON.parse(txt);
 }
 
 export default KacheryP2PNode

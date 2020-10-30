@@ -1,4 +1,5 @@
 import { action } from "../common/action"
+import { TIMEOUTS } from "../common/constants"
 import { RequestTimeoutError, sleepMsec, sleepMsecNum } from "../common/util"
 import { HttpPostJsonError } from "../external/real/httpRequests"
 import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core"
@@ -71,7 +72,7 @@ export default class AnnounceService {
         let method: SendRequestMethod = 'prefer-udp' // we prefer to send via udp so that we can discover our own public udp address when we get the response
         let responseData
         try {
-            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: scaledDurationMsec(4000), method})
+            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method})
         }
         catch(err) {
             if ((err instanceof HttpPostJsonError) || (err instanceof RequestTimeoutError)) {

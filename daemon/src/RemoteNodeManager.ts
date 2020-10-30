@@ -161,19 +161,19 @@ class RemoteNodeManager {
                 }
             })
             if ((okay) && (this.canSendRequestToNode(n.remoteNodeId(), 'default'))) {
-                const promise = this.sendRequestToNode(n.remoteNodeId(), requestData, {timeoutMsec: opts.timeoutMsec, method: 'default'});
+                const promise = this.sendRequestToNode(n.remoteNodeId(), requestData, {timeoutMsec: opts.timeoutMsec, method: 'default'})
                 numTotal ++
                 promise.then(responseData => {
                     if (finished) return;
                     _onResponseCallbacks.forEach(cb => {
-                        cb(n.remoteNodeId(), responseData);
+                        cb(n.remoteNodeId(), responseData)
                     });
                     numComplete ++
                     _checkComplete()
                 })
                 promise.catch((reason) => {
                     _onErrorResponseCallbacks.forEach(cb => {
-                        cb(n.remoteNodeId(), reason);
+                        cb(n.remoteNodeId(), reason)
                     });
                     numComplete ++
                     _checkComplete()

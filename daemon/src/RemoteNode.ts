@@ -1,8 +1,11 @@
+import { TIMEOUTS } from "./common/constants";
 import { getSignature, verifySignature } from "./common/crypto_util";
 import DataStreamy from "./common/DataStreamy";
-import { addByteCount, Address, byteCount, ByteCount, ChannelName, ChannelNodeInfo, createRequestId, DurationMsec, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec, urlPath } from "./interfaces/core";
+import { addByteCount, Address, byteCount, ByteCount, ChannelName, ChannelNodeInfo, createRequestId, DurationMsec, NodeId, nodeIdToPublicKey, nowTimestamp, urlPath } from "./interfaces/core";
 import { DownloadFileDataRequestData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
+import DownloadFileDataMethodOptimizer, { DownloadFileDataMethod } from "./methodOptimizers/DownloadFileDataMethodOptimizer";
+import SendMessageMethodOptimizer from './methodOptimizers/SendMessageMethodOptimizer';
 import { protocolVersion } from "./protocolVersion";
 import { nodeIdFallbackAddress } from './services/PublicUdpSocketServer';
 
@@ -39,6 +42,8 @@ class RemoteNode {
     #numRequestsSent: number = 0
     #numResponsesReceived: number = 0
     #isOnline: boolean = false
+    #sendMessageMethodOptimizer: SendMessageMethodOptimizer
+    #downloadFileDataMethodOptimizer: DownloadFileDataMethodOptimizer
     constructor(node: KacheryP2PNode, remoteNodeId: NodeId, opts: {
         isBootstrap: boolean,
         bootstrapAddress: Address | null,
@@ -51,6 +56,8 @@ class RemoteNode {
         this.#bootstrapAddress = opts.bootstrapAddress
         this.#bootstrapWebSocketAddress = opts.bootstrapWebSocketAddress
         this.#bootstrapUdpSocketAddress = opts.bootstrapUdpSocketAddress
+        this.#sendMessageMethodOptimizer = new SendMessageMethodOptimizer(this.#node, this)
+        this.#downloadFileDataMethodOptimizer = new DownloadFileDataMethodOptimizer(this.#node, this)
     }
     remoteNodeId() {
         return this.#remoteNodeId;
@@ -140,7 +147,7 @@ class RemoteNode {
         }
         return s
     }
-    _formRequestFromRequestData(requestData: NodeToNodeRequestData): NodeToNodeRequest {
+    _formRequestFromRequestData(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec}): NodeToNodeRequest {
         const requestId = createRequestId()
         const requestBody = {
             protocolVersion: protocolVersion(),
@@ -148,6 +155,7 @@ class RemoteNode {
             fromNodeId: this.#node.nodeId(),
             toNodeId: this.#remoteNodeId,
             timestamp: nowTimestamp(),
+            timeoutMsec: opts.timeoutMsec,
             requestData
         }
         const request: NodeToNodeRequest = {
@@ -156,14 +164,14 @@ class RemoteNode {
         }
         return request
     }
-    _getRemoteNodeHttpAddress(): Address | null {
+    getRemoteNodeHttpAddress(): Address | null {
         if (this.#isBootstrap && this.#bootstrapAddress) {
             return this.#bootstrapAddress
         }
         else {
-            const channelNodeData = this._getMostRecentChannelNodeInfo();
+            const channelNodeData = this._getMostRecentChannelNodeInfo()
             if (channelNodeData === null) {
-                return null;
+                return null
             }
             const remoteInfo = channelNodeData.body
             if (remoteInfo.httpAddress) {
@@ -174,7 +182,7 @@ class RemoteNode {
             }
         }
     }
-    _getRemoteNodeHttpProxyAddress(): Address | null {
+    getRemoteNodeHttpProxyAddress(): Address | null {
         const channelNodeData = this._getMostRecentChannelNodeInfo();
         if (channelNodeData === null) {
             return null;
@@ -187,119 +195,27 @@ class RemoteNode {
             return null;
         }
     }
-    _determineSendRequestMethod(method: SendRequestMethod): SendRequestMethod | null {
-        if (method === 'udp-fallback') {
-            if (this._getRemoteNodeHttpAddress()) {
-                return 'http'
-            }
-            else if (this._getRemoteNodeHttpProxyAddress()) {
-                return 'http-proxy'
-            }
-            else {
-                return null
-            }
-        }
-        else if ((method === 'default') || (method === 'prefer-http')) {
-            if (this._getRemoteNodeHttpAddress()) {
-                return 'http'
-            }
-            else if (this._getRemoteNodeHttpProxyAddress()) {
-                return 'http-proxy'
-            }
-            else if ((this.#node.publicUdpSocketServer()) && (this.getUdpAddressForRemoteNode())) {
-                return 'udp'
-            }
-            else {
-                return null
-            }
-        }
-        else if (method === 'prefer-udp') {
-            if ((this.#node.publicUdpSocketServer()) && (this.getUdpAddressForRemoteNode())) {
-                return 'udp'
-            }
-            else if (this._getRemoteNodeHttpAddress()) {
-                return 'http'
-            }
-            else if (this._getRemoteNodeHttpProxyAddress()) {
-                return 'http-proxy'
-            }
-            else {
-                return null
-            }
-        }
-        else if ((method === 'http') || (method === 'udp') || (method === 'http-proxy')) {
-            return method
-        }
-        else {
-            return null
-        }
-    }
-    _determineDefaultDownloadFileDataMethod(): SendRequestMethod | null {
-        if ((this.#node.publicUdpSocketServer()) && (this.getUdpAddressForRemoteNode())) {
-            // todo: figure this out
-            return 'udp'
-        }
-        else if (this._getRemoteNodeHttpAddress()) {
-            return 'http'
-        }
-        else if (this._getRemoteNodeHttpProxyAddress()) {
-            return 'http-proxy'
-        }
-        else {
-            return null
-        }
-    }
     canSendRequest(method: SendRequestMethod): boolean {
-        let method2 = this._determineSendRequestMethod(method)
-        if (method2 === null) return false
-        if (method2 === 'http') {
-            const address = this._getRemoteNodeHttpAddress()
-            if (!address) {
-                return false
-            }
-            return true
-        }
-        else if (method2 === 'http-proxy') {
-            const address = this._getRemoteNodeHttpProxyAddress()
-            if (!address) {
-                return false
-            }
-            return true
-        }
-        else if (method2 === 'udp') {
-            const udpS = this.#node.publicUdpSocketServer()
-            const udpA = this.getUdpAddressForRemoteNode()
-            if (!udpS) {
-                return false
-            }
-            if (!udpA) {
-                return false
-            }
-            return true
-        }
-        else {
-            return false
-        }
+        let method2 = this.#sendMessageMethodOptimizer.determineSendRequestMethod(method)
+        return method2 === null ? false : true
     }
-    async downloadFileData(streamId: StreamId, opts: {method: SendRequestMethod}): Promise<DataStreamy> {
-        let method: SendRequestMethod | null = opts.method
-        if (method === 'default') {
-            method = this._determineDefaultDownloadFileDataMethod()
-            if (!method) {
-                throw Error('No method available to download stream')
-            }
+    async downloadFileData(streamId: StreamId, opts: {method: DownloadFileDataMethod}): Promise<DataStreamy> {
+        const method = this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(opts.method)
+        if (method === null) {
+            throw Error('No method available to download stream')
         }
         if (method === 'http') {
-            const address = this._getRemoteNodeHttpAddress();
+            const address = this.getRemoteNodeHttpAddress();
             if (!address) {
                 throw Error('Unable to download file data... no http address found.')
             }
             return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`), this.#node.stats(), {fromNodeId: this.#remoteNodeId})
         }
         else if (method === 'http-proxy') {
-            const address = this._getRemoteNodeHttpProxyAddress();
+            const address = this.getRemoteNodeHttpProxyAddress();
             if (!address) {
-                throw Error('Unable to download file data... no http-proxy address found.')
+                /* istanbul ignore next */
+                throw Error('Unexpected. Unable to download file data... no http-proxy address found.')
             }
             return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`), this.#node.stats(), {fromNodeId: null})
         }
@@ -323,7 +239,7 @@ class RemoteNode {
         }
         const incomingDataStream = udpS.getIncomingDataStream(streamId)
         try {
-            const responseData = await this.sendRequest(requestData, {timeoutMsec: scaledDurationMsec(5000), method: 'default'})
+            const responseData = await this.sendRequest(requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
             if (!isStartStreamViaUdpResponseData(responseData)) {
                 /* istanbul ignore next */
                 console.warn(responseData)
@@ -331,6 +247,7 @@ class RemoteNode {
                 throw Error('unexpected')
             }
             if (!responseData.success) {
+                /* istanbul ignore next */
                 throw Error(`Error starting stream via udp: ${responseData.errorMessage}`)
             }
         }
@@ -380,32 +297,36 @@ class RemoteNode {
         return this.#isOnline
     }
     async _trySendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
-        const request = this._formRequestFromRequestData(requestData);
+        const request = this._formRequestFromRequestData(requestData, {timeoutMsec: opts.timeoutMsec});
         const requestId = request.body.requestId;
 
-        let method2 = this._determineSendRequestMethod(opts.method)
-        if (method2 === null) {
+        const method = this.#sendMessageMethodOptimizer.determineSendRequestMethod(opts.method)
+        if (method === null) {
+            /* istanbul ignore next */
             throw Error(`Method not available for sending request ${requestData.requestType}: ${opts.method} (from ${this.#node.nodeId().slice(0, 6)} to ${this.#remoteNodeId.slice(0, 6)})`)
         }
-
         const requestSize = byteCount(JSON.stringify(request).length)
+        this.#sendMessageMethodOptimizer.reportSendRequestStart(request.body.requestId, method, opts.timeoutMsec)
 
         let response: NodeToNodeResponse
-        if ((method2 === 'http') || (method2 === 'http-proxy')) {
+        if ((method === 'http') || (method === 'http-proxy')) {
             let address: Address | null
-            if (method2 === 'http') {
-                address = this._getRemoteNodeHttpAddress()
+            if (method === 'http') {
+                address = this.getRemoteNodeHttpAddress()
                 if (!address) {
-                    throw Error('Unable to send request... no http address found.')
+                    /* istanbul ignore next */
+                    throw Error('Unexpected. Unable to send request... no http address found.')
                 }
             }
-            else if (method2 === 'http-proxy') {
-                address = this._getRemoteNodeHttpProxyAddress()
+            else if (method === 'http-proxy') {
+                address = this.getRemoteNodeHttpProxyAddress()
                 if (!address) {
-                    throw Error('Unable to send request... no http-proxy address found.')
+                    /* istanbul ignore next */
+                    throw Error('Unexpected. Unable to send request... no http-proxy address found.')
                 }
             }
             else {
+                /* istanbul ignore next */
                 throw Error('Unexpected')
             }
             this.#numHttpBytesSent = addByteCount(this.#numHttpBytesSent, requestSize)
@@ -414,12 +335,13 @@ class RemoteNode {
             const R = await this.#node.externalInterface().httpPostJson(address, urlPath('/NodeToNodeRequest'), request, {timeoutMsec: opts.timeoutMsec});
             if (!isNodeToNodeResponse(R)) {
                 // ban the node?
+                /* istanbul ignore next */
                 throw Error('Invalid response from node.');
             }
             this.#numResponsesReceived ++
             response = R
         }
-        else if (method2 === 'udp') {
+        else if (method === 'udp') {
             const udpS = this.#node.publicUdpSocketServer()
             const udpA = this.getUdpAddressForRemoteNode()
             if (!udpS) {
@@ -448,6 +370,7 @@ class RemoteNode {
             /* istanbul ignore next */
             throw Error ('Unexpected')
         }
+        this.#sendMessageMethodOptimizer.reportSendRequestEnd(request.body.requestId, method)
         if (response.body.responseData.requestType !== request.body.requestData.requestType) {
             /* istanbul ignore next */
             throw Error('Unexpected requestType in response.')
@@ -470,6 +393,7 @@ class RemoteNode {
         }
         if (!verifySignature(response.body, response.signature, nodeIdToPublicKey(this.#remoteNodeId))) {
             // ban the node?
+            /* istanbul ignore next */
             throw Error('Invalid signature in response.');
         }
         this._setOnline(true)

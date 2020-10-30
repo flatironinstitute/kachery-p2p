@@ -840,6 +840,9 @@ export const addDurations = (a: DurationMsec, b: DurationMsec) => {
 export const minDuration = (a: DurationMsec, b: DurationMsec) => {
     return Math.min(a as any as number, b as any as number) as any as DurationMsec
 }
+export const maxDuration = (a: DurationMsec, b: DurationMsec) => {
+    return Math.max(a as any as number, b as any as number) as any as DurationMsec
+}
 export const scaleDurationBy = (a: DurationMsec, factor: number) => {
     return (a as any as number) * factor as any as DurationMsec
 }

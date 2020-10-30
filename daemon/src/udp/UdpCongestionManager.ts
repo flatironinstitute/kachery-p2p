@@ -90,18 +90,25 @@ export default class UdpCongestionManager {
     }
     _sendPacket(p: QueuedPacket) {
         const timer = nowTimestamp()
+        let complete = false
         const _onConfirmed = () => {
+            if (complete) return
+            complete = true
             const elapsedMsec = unscaledDurationMsec(elapsedSince(timer))
             this.#currentTrialData.reportConfirmed(p.internalId, p.packetSize, elapsedMsec)
             p.onFinished()
             this._handleNextPackets()
         }
         const _onTimedOut = () => {
+            if (complete) return
+            complete = true
             this.#currentTrialData.reportTimedOut(p.internalId, p.packetSize)
             this._handleNextPackets()
             p.onError(new UdpTimeoutError('Timeout while waiting for udp confirmation'))
         }
         const _onError = (err: Error) => {
+            if (complete) return
+            complete = true
             this.#currentTrialData.reportError(p.internalId, p.packetSize)
             this._handleNextPackets()
             p.onError(err)

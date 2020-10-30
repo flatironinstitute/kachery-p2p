@@ -118,7 +118,6 @@ function main() {
 
         if ((!noBootstrap) && (bootstrapAddresses.length === 0)) {
           bootstrapAddresses = [
-            // todo - set these properly
             {hostName: '45.33.92.31', port: toPort(46003)}, // kachery-p2p-spikeforest
             {hostName: '45.33.92.33', port: toPort(46003)} // kachery-p2p-flatiron1
           ].map(bpi => {

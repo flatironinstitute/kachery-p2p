@@ -7,12 +7,14 @@ export interface NodeStatsInterface {
     channelNames: ChannelName[]
     remoteNodes: RemoteNodeStats[]
     totalBytesSent: {
+        total: ByteCount,
         multicastUdp: ByteCount,
         udp: ByteCount,
         http: ByteCount,
         webSocket: ByteCount
     },
     totalBytesReceived: {
+        total: ByteCount,
         multicastUdp: ByteCount,
         udp: ByteCount,
         http: ByteCount,

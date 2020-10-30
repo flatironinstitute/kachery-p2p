@@ -10,12 +10,15 @@ export const action = async (
 ) => {
     try {
         if (_globalData.verbose > 0) {
+            /* istanbul ignore next */
             console.info(`${actionName} ${JSON.stringify(actionData)}`);
         }
         await operation()
     }
     catch(err) {
+        /* istanbul ignore next */
         console.warn(`@@@@@@@@@@@@@@@@@@ Error in ${actionName}: ${err.message}`)
+        /* istanbul ignore next */
         if (onError) {
             await onError(err);
         }

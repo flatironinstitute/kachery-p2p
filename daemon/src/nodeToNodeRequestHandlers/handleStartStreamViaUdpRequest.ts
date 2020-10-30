@@ -6,6 +6,7 @@ export const handleStartStreamViaUdpRequest = async (node: KacheryP2PNode, fromN
     let { streamId } = requestData
     const rn = node.remoteNodeManager().getRemoteNode(fromNodeId)
     if (!rn) {
+        /* istanbul ignore next */
         return {
             requestType: 'startStreamViaUdp',
             success: false,
@@ -13,6 +14,7 @@ export const handleStartStreamViaUdpRequest = async (node: KacheryP2PNode, fromN
         }
     }
     if (!rn.getUdpAddressForRemoteNode()) {
+        /* istanbul ignore next */
         return {
             requestType: 'startStreamViaUdp',
             success: false,
@@ -23,6 +25,7 @@ export const handleStartStreamViaUdpRequest = async (node: KacheryP2PNode, fromN
         await rn.startStreamViaUdpToRemoteNode(streamId)
     }
     catch(err) {
+        /* istanbul ignore next */
         return {
             requestType: 'startStreamViaUdp',
             success: false,

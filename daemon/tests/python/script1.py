@@ -9,9 +9,11 @@ def main():
     test1()
 
     f = kp.load_feed('feed://' + os.environ['FEED_ID'])
-    a = kp.store_npy(np.meshgrid(np.arange(1000), np.arange(1000))[0])
+    N1 = 10000
+    N2 = 1000
+    a = kp.store_npy(np.meshgrid(np.arange(N1), np.arange(N2))[0])
     sf = f.get_subfeed('sf1')
-    sf.append_messages([{'a': a}])
+    sf.append_messages([{'a': a, 'N1': N1, 'N2': N2}])
 
 def test1():
     f = kp.create_feed('f1')

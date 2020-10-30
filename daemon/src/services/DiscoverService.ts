@@ -1,4 +1,5 @@
 import { action } from "../common/action";
+import { TIMEOUTS } from "../common/constants";
 import { sleepMsec } from "../common/util";
 import { HttpPostJsonError } from "../external/real/httpRequests";
 import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core";
@@ -45,7 +46,7 @@ export default class DiscoverService {
         }
         let responseData
         try {
-            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: scaledDurationMsec(4000), method: 'default'})
+            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
         }
         catch(err) {
             if (err instanceof HttpPostJsonError) {

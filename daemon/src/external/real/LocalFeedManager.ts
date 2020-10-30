@@ -111,7 +111,7 @@ export default class LocalFeedManager {
         }
         this.#storageDir = storageDir
         this.#configDir = configDir
-        this.#feedsConfigManager = new FeedsConfigManager(this.#configDir, {useMemoryCache: false}) // todo: how to turn this on?
+        this.#feedsConfigManager = new FeedsConfigManager(this.#configDir, {useMemoryCache: true}) // todo: need to test this for both false and true
     }
     async createFeed(feedName: FeedName | null): Promise<FeedId> {
         // Create a new writeable feed on this node and return the ID of the new feed

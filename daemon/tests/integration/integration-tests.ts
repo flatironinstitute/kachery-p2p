@@ -7,6 +7,7 @@ import { ApiLoadFileRequest, FeedApiAppendMessagesRequest, FeedApiCreateFeedRequ
 import { StartDaemonOpts } from '../../src/startDaemon';
 
 const mockChannelName = 'mock-channel' as any as ChannelName
+const mockChannelName2 = 'mock-channel-2' as any as ChannelName
 
 
 const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void, reject: (err: Error) => void) => Promise<void>, done: (err?: Error) => void) => {
@@ -89,7 +90,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
         //             udpSocketPort: null,
         //             webSocketListenPort: null,
         //             services: {
-        //                 display: true
+        //                 display: false
         //             }
         //         }
         //         const daemonOpts = {
@@ -104,7 +105,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
         //                 announce: true,
         //                 discover: true,
         //                 bootstrap: true,
-        //                 display: true
+        //                 display: false
         //             }
         //         }
         //         const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -152,7 +153,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         discover: true,
                         multicast: true,
                         udpSocket: true,
-                        display: true
+                        display: false
                     }
                 }
                 const daemon1 = await g.createDaemon({...daemonOpts, udpSocketPort: randomMockPort()})
@@ -181,20 +182,20 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const bootstrapOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
                     isBootstrap: true,
-                    channelNames: [],
+                    channelNames: [mockChannelName2],
                     multicastUdpAddress: null,
                     udpSocketPort: null,
                     webSocketListenPort: randomMockPort(),
                     firewalled: false,
                     services: {
                         webSocketServer: true,
-                        display: true
+                        display: false
                     }
                 }
                 const daemonOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
                     isBootstrap: false,
-                    channelNames: [mockChannelName],
+                    channelNames: [mockChannelName, mockChannelName2],
                     multicastUdpAddress: null,
                     udpSocketPort: null,
                     webSocketListenPort: null,
@@ -204,7 +205,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         discover: true,
                         bootstrap: true,
                         proxyClient: true,
-                        display: true
+                        display: false
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -222,7 +223,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 expect(daemon2.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
 
                 await testFindFile(daemon1, daemon2)
-                await testLoadFile(daemon1, daemon2)
+                await testLoadFile(daemon1, daemon2, byteCount(21000), byteCount(12000))
+                await testLoadFile(bootstrapDaemon, daemon1, byteCount(20000), byteCount(12000))
                 await testLoadFileWithDefects(daemon1, daemon2)
                 await testSubfeedMessage(daemon1, daemon2)
 
@@ -245,7 +247,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         httpServer: true,
                         udpSocket: true,
                         webSocketServer: true,
-                        display: true
+                        display: false
                     }
                 }
                 const daemonOpts: StartDaemonOpts = {
@@ -262,7 +264,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         bootstrap: true,
                         udpSocket: true,
                         proxyClient: true,
-                        display: true
+                        display: false
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -308,7 +310,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         httpServer: true,
                         udpSocket: true,
                         webSocketServer: true,
-                        display: true
+                        display: false
                     }
                 }
                 const daemonOpts: StartDaemonOpts = {
@@ -325,7 +327,7 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         bootstrap: true,
                         udpSocket: true,
                         proxyClient: true,
-                        display: true
+                        display: false
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -389,6 +391,12 @@ const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fi
     })
     const f = await daemon2.mockKacheryStorageManager().findFile(f1Key)
     expect(f.found).is.true
+
+    daemon1.node().getStats({format: 'html'}) // for coverage
+    const stats1 = daemon1.node().getStats({format: 'json'})
+    const stats2 = daemon1.node().getStats({format: 'json'})
+    expect(byteCountToNumber(stats1.totalBytesSent.total)).is.gte(byteCountToNumber(fileSize))
+    expect(byteCountToNumber(stats2.totalBytesReceived.total)).is.gte(byteCountToNumber(fileSize))
 }
 
 const testLoadFileWithDefects = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fileSize: ByteCount = byteCount(20000), chunkSize: ByteCount = byteCount(1200)) => {

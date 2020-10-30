@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { elapsedSince, FeedId, JSONObject, KeyPair, PrivateKey, PrivateKeyHex, PublicKey, PublicKeyHex, Sha1Hash, Signature, Timestamp } from '../interfaces/core';
+import { elapsedSince, FeedId, JSONObject, KeyPair, PrivateKey, PrivateKeyHex, PublicKey, PublicKeyHex, Signature, Timestamp } from '../interfaces/core';
 import { kacheryP2PSerialize } from './util';
 
 const ed25519PubKeyPrefix = "302a300506032b6570032100";
@@ -10,8 +10,7 @@ export const getSignature = (obj: Object, keyPair: KeyPair): Signature => {
         return crypto.sign(null, kacheryP2PSerialize(obj), keyPair.privateKey.toString()).toString('hex') as any as Signature;
     }
     catch(err) {
-        console.warn(obj);
-        console.warn(err);
+        /* istanbul ignore next */
         throw Error('Exception when creating signature.');
     }
 }
@@ -21,13 +20,13 @@ export const getSignatureJson = (obj: JSONObject, keyPair: KeyPair): Signature =
         return crypto.sign(null, Buffer.from(JSONStringifyDeterministic(obj)), keyPair.privateKey.toString()).toString('hex') as any as Signature;
     }
     catch(err) {
-        console.warn(obj);
-        console.warn(err);
+        /* istanbul ignore next */
         throw Error('Exception when creating signature Json.');
     }
 }
 
 export const verifySignatureJson = (obj: JSONObject & {timestamp?: Timestamp}, signature: Signature, publicKey: PublicKey, opts: {checkTimestamp: boolean}={checkTimestamp: false}) => {
+    /* istanbul ignore next */
     if (opts.checkTimestamp) {
         if (!obj.timestamp) {
             return false;
@@ -43,13 +42,13 @@ export const verifySignatureJson = (obj: JSONObject & {timestamp?: Timestamp}, s
         return crypto.verify(null, Buffer.from(JSONStringifyDeterministic(obj)), publicKey.toString(), Buffer.from(signature.toString(), 'hex'));
     }
     catch(err) {
-        console.warn(err);
-        console.warn('Exception when verifying signature.');
+        /* istanbul ignore next */
         return false;
     }
 }
 
 export const verifySignature = (obj: Object & {timestamp?: Timestamp}, signature: Signature, publicKey: PublicKey, opts={checkTimestamp: false}): boolean => {
+    /* istanbul ignore next */
     if (opts.checkTimestamp) {
         if (!obj.timestamp) {
             return false;
@@ -65,27 +64,23 @@ export const verifySignature = (obj: Object & {timestamp?: Timestamp}, signature
         return crypto.verify(null, kacheryP2PSerialize(obj), publicKey.toString(), Buffer.from(signature.toString(), 'hex'));
     }
     catch(err) {
-        console.warn(err);
-        console.warn('Exception when verifying signature.');
+        /* istanbul ignore next */
         return false;
     }
 }
 
-export const sha1sum = (txt: string): Sha1Hash => {
-    var shasum = crypto.createHash('sha1')
-    shasum.update(txt)
-    return shasum.digest('hex') as any as Sha1Hash;
-}
-
 export const publicKeyToHex = (publicKey: PublicKey): PublicKeyHex => {
     const x = publicKey.split('\n');
+    /* istanbul ignore next */
     if (x[0] !== '-----BEGIN PUBLIC KEY-----') {
         throw Error('Problem in public key format.');
     }
+    /* istanbul ignore next */
     if (x[2] !== '-----END PUBLIC KEY-----') {
         throw Error('Problem in public key format.');
     }
     const ret = Buffer.from(x[1], 'base64').toString('hex');
+    /* istanbul ignore next */
     if (!ret.startsWith(ed25519PubKeyPrefix)) {
         throw Error('Problem in public key format.');
     }
@@ -98,13 +93,17 @@ export const publicKeyHexToFeedId = (publicKeyHex: PublicKeyHex): FeedId => {
 
 export const privateKeyToHex = (privateKey: PrivateKey): PrivateKeyHex => {
     const x = privateKey.split('\n');
+    /* istanbul ignore next */
     if (x[0] !== '-----BEGIN PRIVATE KEY-----') {
         throw Error('Problem in private key format.');
     }
+    /* istanbul ignore next */
     if (x[2] !== '-----END PRIVATE KEY-----') {
+        /* istanbul ignore next */
         throw Error('Problem in private key format.');
     }
     const ret = Buffer.from(x[1], 'base64').toString('hex');
+    /* istanbul ignore next */
     if (!ret.startsWith(ed25519PrivateKeyPrefix)) {
         throw Error('Problem in private key format.');
     }
@@ -112,6 +111,7 @@ export const privateKeyToHex = (privateKey: PrivateKey): PrivateKeyHex => {
 }
 
 export const hexToPublicKey = (x: PublicKeyHex): PublicKey => {
+    /* istanbul ignore next */
     if (!x) {
         throw Error('Error in hexToPublicKey. Input is empty.');
     }
@@ -119,6 +119,7 @@ export const hexToPublicKey = (x: PublicKeyHex): PublicKey => {
 }
 
 export const hexToPrivateKey = (x: PrivateKeyHex): PrivateKey => {
+    /* istanbul ignore next */
     if (!x) {
         throw Error('Error in hexToPrivateKey. Input is empty.');
     }

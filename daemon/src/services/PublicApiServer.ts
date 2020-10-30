@@ -118,16 +118,20 @@ export default class PublicApiServer {
                 streamId
             }, async () => {
                 if (!isStreamId(streamId)) {
+                    /* istanbul ignore next */
                     throw Error ('Invalid stream ID')
                 }
                 if (!isNodeId(fromNodeId)) {
+                    /* istanbul ignore next */
                     throw Error ('Invalid fromNodeId')
                 }
                 if (!isNodeId(toNodeId)) {
+                    /* istanbul ignore next */
                     throw Error ('Invalid toNodeId')
                 }
                 this._apiDownload(fromNodeId, toNodeId, streamId, req, res)
             }, async (err: Error) => {
+                /* istanbul ignore next */
                 await this._errorResponse(req, res, 500, err.message);
             });
             /////////////////////////////////////////////////////////////////////////
@@ -145,13 +149,16 @@ export default class PublicApiServer {
         }
         else if (path === '/NodeToNodeRequest') {
             if (!isNodeToNodeRequest(data)) {
+                /* istanbul ignore next */
                 console.warn(JSON.stringify(data, null, 4))
+                /* istanbul ignore next */
                 throw Error('Invalid data for node to node request')
             }
             const ret = await this._nodeToNodeRequest(data)
             return ret
         }
         else {
+            /* istanbul ignore next */
             throw Error(`mock unexpected path: ${path}`)
         }
     }
@@ -162,17 +169,21 @@ export default class PublicApiServer {
             const toNodeId = vals[3]
             const streamId = vals[4]
             if (!isNodeId(fromNodeId)) {
+                /* istanbul ignore next */
                 throw Error('Invalid from node id in mock /download')
             }
             if (!isNodeId(toNodeId)) {
+                /* istanbul ignore next */
                 throw Error('Invalid to node id in mock /download')
             }
             if (!isStreamId(streamId)) {
+                /* istanbul ignore next */
                 throw Error('Invalid stream id in mock /download')
             }
             return this.#node.streamFileData(fromNodeId, streamId)
         }
         else {
+            /* istanbul ignore next */
             throw Error(`mock get download unexpected path: ${path}`)
         }
     }

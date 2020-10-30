@@ -1,6 +1,7 @@
+import { TIMEOUTS } from "../common/constants"
 import DataStreamy from "../common/DataStreamy"
 import { MockNodeDefects } from "../external/mock/MockNodeDaemon"
-import { ByteCount, byteCount, FileKey, NodeId, scaledDurationMsec } from "../interfaces/core"
+import { ByteCount, byteCount, FileKey, NodeId } from "../interfaces/core"
 import { DownloadFileDataRequestData, isDownloadFileDataResponseData } from "../interfaces/NodeToNodeRequest"
 import KacheryP2PNode from "../KacheryP2PNode"
 
@@ -36,7 +37,7 @@ export default class DownloaderCreator {
                     endByte: null
                 }
             }
-            const responseData = await n.sendRequest(requestData, {timeoutMsec: scaledDurationMsec(5000), method: 'default'})
+            const responseData = await n.sendRequest(requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
             /* istanbul ignore next */
             if (!isDownloadFileDataResponseData(responseData)) {
                 ret.producer().error(Error('Unexpected response data for downloadFileData request'))

@@ -40,8 +40,11 @@ export class KacheryStorageManager {
         const destPathTmp = `${destPath}.${randomAlphaString(5)}.tmp`
         await fs.promises.writeFile(destPathTmp, data)
         if (fs.existsSync(destPath)) {
-            fs.unlinkSync(destPathTmp)
-            return
+            /* istanbul ignore next */
+            {
+                fs.unlinkSync(destPathTmp)
+                return
+            }
         }
         fs.renameSync(destPathTmp, destPath)
     }
@@ -51,6 +54,7 @@ export class KacheryStorageManager {
         const destPath = `${destParentPath}/${s}`
         if (fs.existsSync(destPath)) {
             // already exists
+            /* istanbul ignore next */
             return
         }
 
@@ -58,6 +62,7 @@ export class KacheryStorageManager {
         for (let chunkSha1 of chunkSha1s) {
             const f = await this.findFile({sha1: chunkSha1})
             if (!f.found) {
+                /* istanbul ignore next */
                 throw Error(`Cannot concatenate chunk. Missing chunk: ${chunkSha1}`)
             }
         }
@@ -75,7 +80,7 @@ export class KacheryStorageManager {
                 readStream.onError(err => {
                     reject(err)
                 })
-                readStream.onComplete(() => {
+                readStream.onFinished(() => {
                     resolve()
                 })
             })
@@ -84,16 +89,25 @@ export class KacheryStorageManager {
             writeStream.end(() => {
                 const sha1Computed = shasum.digest('hex') as any as Sha1Hash
                 if (sha1Computed !== sha1) {
-                    reject(Error('Did not get the expected SHA-1 sum for concatenated file'))
-                    return
+                    /* istanbul ignore next */
+                    {
+                        /* istanbul ignore next */
+                        {
+                            reject(Error('Did not get the expected SHA-1 sum for concatenated file'))
+                            return
+                        }
+                    }
                 }
                 resolve()
             })
         })
         if (fs.existsSync(destPath)) {
             // already exists
-            fs.unlinkSync(tmpPath)
-            return
+            /* istanbul ignore next */
+            {
+                fs.unlinkSync(tmpPath)
+                return
+            }
         }
         fs.mkdirSync(destParentPath, {recursive: true});
         fs.renameSync(tmpPath, destPath)
@@ -155,26 +169,13 @@ const createDataStreamForFile = (path: LocalFilePath, offset: ByteCount, size: B
     return ret
 }
 
-const _getTemporaryDirectory = () => {
-    const ret = process.env['KACHERY_STORAGE_DIR'] + '/tmp'
-    mkdirIfNeeded(localFilePath(ret))
+const _getKacheryStorageDir = () => {
+    const ret = process.env['KACHERY_STORAGE_DIR']
     return ret
 }
 
-const mkdirIfNeeded = (path: LocalFilePath) => {
-    if (!fs.existsSync(path.toString())) {
-        try {
-            fs.mkdirSync(path.toString())
-        }
-        catch(err) {
-            if (!fs.existsSync(path.toString())) {
-                fs.mkdirSync(path.toString())
-            }
-        }
-    }
-}
-
 export const createTemporaryFilePath = (args: {prefix: string}) => {
-    const dirPath = _getTemporaryDirectory()
+    const dirPath = _getKacheryStorageDir() + '/tmp'
+    fs.mkdirSync(dirPath, {recursive: true})
     return `${dirPath}/${args.prefix}-${randomAlphaString(10)}`
 }

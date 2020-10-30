@@ -231,24 +231,36 @@ export class ProxyConnectionToClient {
                     }
                     if (!this.#initialized) {
                         if (!isInitialMessageFromClient(messageParsed)) {
-                            console.warn(`Invalid initial websocket message from client. Closing.`);
-                            this.#ws.close();
-                            return;
+                            /* istanbul ignore next */
+                            {
+                                console.warn(`Invalid initial websocket message from client. Closing.`)
+                                this.#ws.close()
+                                return
+                            }
                         }
                         if (messageParsed.body.toNodeId !== this.#node.nodeId()) {
-                            console.warn(`Invalid initial websocket message from client (wrong toNodeId). Closing.`);
-                            this.#ws.close();
-                            return;
+                            /* istanbul ignore next */
+                            {
+                                console.warn(`Invalid initial websocket message from client (wrong toNodeId). Closing.`)
+                                this.#ws.close()
+                                return
+                            }
                         }
                         if (messageParsed.body.fromNodeId === this.#node.nodeId()) {
-                            console.warn(`Invalid initial websocket message from client (invalid fromNodeId). Closing.`);
-                            this.#ws.close();
-                            return;
+                            /* istanbul ignore next */
+                            {
+                                console.warn(`Invalid initial websocket message from client (invalid fromNodeId). Closing.`)
+                                this.#ws.close()
+                                return
+                            }
                         }
                         if (!verifySignature(messageParsed.body, messageParsed.signature, nodeIdToPublicKey(messageParsed.body.fromNodeId))) {
-                            console.warn(`Invalid initial websocket message from client (invalid signature). Closing.`);
-                            this.#ws.close();
-                            return;
+                            /* istanbul ignore next */
+                            {
+                                console.warn(`Invalid initial websocket message from client (invalid signature). Closing.`)
+                                this.#ws.close()
+                                return
+                            }
                         }
                         this.#initialized = true;
                         this.#remoteNodeId = messageParsed.body.fromNodeId
@@ -270,9 +282,12 @@ export class ProxyConnectionToClient {
                     else {
                         if (!this.#remoteNodeId) throw Error('Unexpected.');
                         if (!isMessageFromClient(messageParsed)) {
-                            console.warn(`Invalid websocket message from client. Closing.`);
-                            this.#ws.close();
-                            return;
+                            /* istanbul ignore next */
+                            {
+                                console.warn(`Invalid websocket message from client. Closing.`)
+                                this.#ws.close()
+                                return
+                            }
                         }
                         this._handleMessageFromClient(messageParsed);
                     }
@@ -281,9 +296,9 @@ export class ProxyConnectionToClient {
             });
         });
     }
-    async sendRequest(request: NodeToNodeRequest): Promise<NodeToNodeResponse> {
+    async sendRequest(request: NodeToNodeRequest, opts: {timeoutMsec: DurationMsec}): Promise<NodeToNodeResponse> {
         this._sendMessageToClient(request);
-        return await this._waitForResponse(request.body.requestId, {timeoutMsec: scaledDurationMsec(10000)});
+        return await this._waitForResponse(request.body.requestId, {timeoutMsec: opts.timeoutMsec, requestType: request.body.requestData.requestType});
     }
     streamFileData(streamId: StreamId): DataStreamy {
         const ret = new DataStreamy()
@@ -372,7 +387,7 @@ export class ProxyConnectionToClient {
         this.#node.stats().reportBytesSent('webSocket', this.#remoteNodeId, byteCount(messageSerialized.length))
         this.#ws.send(messageSerialized)
     }
-    async _waitForResponse(requestId: RequestId, {timeoutMsec}: {timeoutMsec: DurationMsec}): Promise<NodeToNodeResponse> {
+    async _waitForResponse(requestId: RequestId, {timeoutMsec, requestType}: {timeoutMsec: DurationMsec, requestType: string}): Promise<NodeToNodeResponse> {
         return new Promise((resolve, reject) => {
             let completed = false;
             this.#responseListeners.set(requestId, (response: NodeToNodeResponse) => {
@@ -387,12 +402,15 @@ export class ProxyConnectionToClient {
                 while (true) {
                     if (completed) return
                     if (this.#closed) {
-                        reject(Error('Websocket closed while waiting for response'))
-                        return
+                        /* istanbul ignore next */
+                        {
+                            reject(Error('Websocket closed while waiting for response'))
+                            return
+                        }
                     }
                     const elapsed = elapsedSince(timer)
                     if (elapsed >= durationMsecToNumber(timeoutMsec)) {
-                        reject(Error('Timeout while waiting for response.'))
+                        reject(Error(`Timeout while waiting for ${requestType} response in proxy connection to client.`))
                         return
                     }
                     await sleepMsec(minDuration(scaledDurationMsec(800), timeoutMsec))

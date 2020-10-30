@@ -100,10 +100,12 @@ export default class MockWebSocket {
         }
     }
     send(buf: Buffer) {
+        /* istanbul ignore next */
         if (!this.#open) {
             this._handleError(Error('Cannot send, websocket is closed'))
             return
         }
+        /* istanbul ignore next */
         if (!this.#companion) {
             this._handleError(Error('Cannot send, no websocket companion'))
             return

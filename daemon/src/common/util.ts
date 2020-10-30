@@ -2,31 +2,13 @@ import assert from 'assert';
 import bson from 'bson';
 import { Address, DurationMsec, durationMsecToNumber, elapsedSince, FileKey, isAddress, nowTimestamp, scaledDurationMsec, Sha1Hash, unscaledDurationMsec } from '../interfaces/core';
 
-export const randomString = (num_chars: number) => {
-    var text = "";
-    var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    for (var i = 0; i < num_chars; i++)
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    return text;
-}
-
 export const randomAlphaString = (num_chars: number) => {
     if (!num_chars) {
+        /* istanbul ignore next */
         throw Error('randomAlphaString: num_chars needs to be a positive integer.')
     }
     var text = "";
     var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    for (var i = 0; i < num_chars; i++)
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    return text;
-}
-
-export const randomHexString = (num_chars: number) => {
-    if (!num_chars) {
-        throw Error('randomHexString: num_chars needs to be a positive integer.')
-    }
-    var text = "";
-    var possible = "0123456789abcdef";
     for (var i = 0; i < num_chars; i++)
         text += possible.charAt(Math.floor(Math.random() * possible.length));
     return text;
@@ -78,7 +60,9 @@ const convertBinaryToBufferInObject = (x: any): any => {
             return ret
         }
         else {
+            /* istanbul ignore next */
             console.warn(ret)
+            /* istanbul ignore next */
             throw Error(`Problem in convertBinaryToBufferInObject`)
         }
     }
@@ -145,6 +129,7 @@ export const parseBootstrapInfo = (x: string): Address => {
         port: Number(a[1])
     };
     if (!isAddress(b)) {
+        /* istanbul ignore next */
         throw new StringParseError('Improper bootstrap info.');
     }
     return b

@@ -28,6 +28,7 @@ export interface NodeToNodeRequest {
         toNodeId: NodeId,
         timestamp: Timestamp,
         requestData: NodeToNodeRequestData,
+        timeoutMsec: DurationMsec
     },
     signature: Signature
 }
@@ -38,7 +39,8 @@ export const isNodeToNodeRequestBody = (x: any): boolean => {
         fromNodeId: isNodeId,
         toNodeId: isNodeId,
         timestamp: isTimestamp,
-        requestData: isNodeToNodeRequestData
+        requestData: isNodeToNodeRequestData,
+        timeoutMsec: isDurationMsec
     })
 }
 export const isNodeToNodeRequest = (x: any): x is NodeToNodeRequest => {

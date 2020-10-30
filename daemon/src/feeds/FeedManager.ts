@@ -6,8 +6,6 @@ import { LocalFeedManagerInterface } from '../external/ExternalInterface';
 import { DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, JSONObject, messageCount, MessageCount, messageCountToNumber, nowTimestamp, PrivateKey, PublicKey, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubfeedPosition, subfeedPositionToNumber, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 
-// todo fix feeds config on disk (too many in one .json file)
-
 class FeedManager {
     // Manages the local feeds and access to the remote feeds in the p2p network
     _node: KacheryP2PNode // The kachery-p2p daemon

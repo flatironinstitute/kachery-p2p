@@ -1,4 +1,5 @@
 import { action } from "../common/action";
+import { TIMEOUTS } from "../common/constants";
 import GarbageMap from '../common/GarbageMap';
 import { sleepMsec } from "../common/util";
 import { durationGreaterThan, DurationMsec, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, unscaledDurationMsec, zeroTimestamp } from "../interfaces/core";
@@ -21,7 +22,7 @@ export default class ProxyClientService {
             if ((rn) && (rn.getRemoteNodeWebSocketAddress())) {
                 /////////////////////////////////////////////////////////////////////////
                 action('tryOutgoingProxyConnectionForNewBootstrapNode', {context: 'ProxyClientService', bootstrapNodeId}, async () => {
-                    await this.#proxyClientManager.tryConnection(bootstrapNodeId, {timeoutMsec: scaledDurationMsec(3000)});
+                    await this.#proxyClientManager.tryConnection(bootstrapNodeId, {timeoutMsec: TIMEOUTS.websocketConnect});
                 }, null)
                 /////////////////////////////////////////////////////////////////////////
             }
@@ -46,7 +47,7 @@ export default class ProxyClientService {
                         if (durationGreaterThan(elapsedMsec, scaledDurationMsec(15000))) {
                             /////////////////////////////////////////////////////////////////////////
                             await action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
-                                await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: scaledDurationMsec(3000)});
+                                await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: TIMEOUTS.websocketConnect});
                             }, null)
                             /////////////////////////////////////////////////////////////////////////
                         }

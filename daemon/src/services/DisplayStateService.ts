@@ -72,6 +72,5 @@ const getConnectionString = (rn: RemoteNode) => {
     const onlineString = rn.isOnline() ? '' : '[offline] '
     const candidateMethods: SendRequestMethod[] = ['udp', 'http', 'http-proxy']
     const methods: SendRequestMethod[] = candidateMethods.filter(method => (rn.canSendRequest(method)))
-    rn._determineSendRequestMethod('default')
     return `${onlineString}${methods.join(' ')}`
 }

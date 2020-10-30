@@ -73,24 +73,36 @@ export class ProxyConnectionToServer {
                     }
                     if (!this.#initialized) {
                         if (!isInitialMessageFromServer(messageParsed)) {
-                            console.warn(`Invalid initial websocket message from server. Closing.`);
-                            this.#ws.close();
-                            return;
+                            /* istanbul ignore next */
+                            console.warn(`Invalid initial websocket message from server. Closing.`)
+                            /* istanbul ignore next */
+                            this.#ws.close()
+                            /* istanbul ignore next */
+                            return
                         }
                         if (messageParsed.body.toNodeId !== this.#node.nodeId()) {
-                            console.warn(`Invalid initial websocket message from server (wrong toNodeId). Closing.`);
-                            this.#ws.close();
-                            return;
+                            /* istanbul ignore next */
+                            console.warn(`Invalid initial websocket message from server (wrong toNodeId). Closing.`)
+                            /* istanbul ignore next */
+                            this.#ws.close()
+                            /* istanbul ignore next */
+                            return
                         }
                         if (messageParsed.body.fromNodeId === this.#node.nodeId()) {
-                            console.warn(`Invalid initial websocket message from server (invalid fromNodeId). Closing.`);
-                            this.#ws.close();
-                            return;
+                            /* istanbul ignore next */
+                            console.warn(`Invalid initial websocket message from server (invalid fromNodeId). Closing.`)
+                            /* istanbul ignore next */
+                            this.#ws.close()
+                            /* istanbul ignore next */
+                            return
                         }
                         if (!verifySignature(messageParsed.body, messageParsed.signature, nodeIdToPublicKey(messageParsed.body.fromNodeId))) {
-                            console.warn(`Invalid initial websocket message from server (invalid signature). Closing.`);
-                            this.#ws.close();
-                            return;
+                            /* istanbul ignore next */
+                            console.warn(`Invalid initial websocket message from server (invalid signature). Closing.`)
+                            /* istanbul ignore next */
+                            this.#ws.close()
+                            /* istanbul ignore next */
+                            return
                         }
                         this.#initialized = true;
                         this.#onInitializedCallbacks.forEach(cb => {cb()});
@@ -103,7 +115,9 @@ export class ProxyConnectionToServer {
                         if (!isMessageFromServer(messageParsed)) {
                             /* istanbul ignore next */
                             console.warn(`Invalid websocket message from server. Closing.`);
+                            /* istanbul ignore next */
                             this.#ws.close();
+                            /* istanbul ignore next */
                             return;
                         }
                         this._handleMessageFromServer(messageParsed);

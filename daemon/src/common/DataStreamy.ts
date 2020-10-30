@@ -133,7 +133,10 @@ export default class DataStreamy {
     }
     onFinished(callback: (() => void)) {
         if (this.#finished) {
-            callback()
+            // important to use onTimeout here because we want to get data before finished (if both are already available)
+            setTimeout(() => {
+                callback()
+            }, 10)
         }
         this.#onFinishedCallbacks.push(callback)
     }
@@ -142,12 +145,6 @@ export default class DataStreamy {
             callback(this.#error)
         }
         this.#onErrorCallbacks.push(callback)
-    }
-    onComplete(callback: (() => void)) {
-        if ((this.#completed)) {
-            callback()
-        }
-        this.#onCompleteCallbacks.push(callback)
     }
     onProgress(callback: (progress: DataStreamyProgress) => void) {
         if ((byteCountToNumber(this.#bytesLoaded) > 0) && (this.#size)) {
@@ -169,10 +166,9 @@ export default class DataStreamy {
     }
     _producer_error(err: Error) {
         if (this.#completed) return
-        this.#completed = true
+        this._handle_complete()
         this.#error = err
         this.#onErrorCallbacks.forEach(cb => {cb(err)})
-        this._handle_complete()
     }
     _producer_start(size: ByteCount | null) {
         if (this.#completed) return
@@ -185,12 +181,12 @@ export default class DataStreamy {
     }
     _producer_end() {
         if (this.#completed) return
-        this.#completed = true
+        this._handle_complete()
         this.#finished = true
         this.#onFinishedCallbacks.forEach(cb => {cb()})
-        this._handle_complete()
     }
     _handle_complete() {
+        this.#completed = true
         this.#onCompleteCallbacks.forEach(cb => {cb()})
         if (this.#pendingDataChunks.length > 0) {
             setTimeout(() => {
