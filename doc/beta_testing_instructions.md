@@ -27,13 +27,13 @@ kachery-p2p version
 
 By running a daemon on your computer you are creating a node on the kachery-p2p network.
 
-In a new terminal (activate the conda environment), start the daemon and join the flatiron1 channel:
+In a new terminal (activate the conda environment), start the daemon and join the flatiron2 channel:
 
 ```
-kachery-p2p-start-daemon --channel flatiron1
+kachery-p2p-start-daemon --channel flatiron2
 ```
 
-Keep this program running in a terminal (you may want to use [tmux](https://github.com/tmux/tmux/wiki) or screen). While this daemon is running, other members of the flatiron1 channel have access to any file that you store in your local kachery database (provided they know the SHA-1 hash).
+Keep this program running in a terminal (you may want to use [tmux](https://github.com/tmux/tmux/wiki) or screen). While this daemon is running, other members of the flatiron2 channel have access to any file that you store in your local kachery database (provided they know the SHA-1 hash).
 
 If you are able to do so, pleaes keep this daemon open even after you have run the tests, so that testing may continue by others with your node on the system. Note that if files are downloaded by others from your computer, you will experience outgoing network traffic on your computer.
 
@@ -45,7 +45,7 @@ In a new terminal (activate the conda environment), run:
 kachery-p2p-load sha1://18330303c3861bb286dabb94dd5f0bb81d04107f/example1.txt --dest /tmp/example1.txt
 ```
 
-This will download a small text file from the kachery-p2p network on the flatiron1 channel. Verify that the content of the file starts with `"This is an example text file..."`
+This will download a small text file from the kachery-p2p network on the flatiron2 channel. Verify that the content of the file starts with `"This is an example text file..."`
 
 ```
 cat /tmp/example1.txt
@@ -111,9 +111,9 @@ kachery-store tmp.txt
 
 Copy the URI that is printed it will have the form `sha1://.../tmp.txt`
 
-Now anyone with that URI (on the flatiron1 channel) will be able to download that file directly from your computer (or from another computer if it was downloaded elsewhere).
+Now anyone with that URI (on the flatiron2 channel) will be able to download that file directly from your computer (or from another computer if it was downloaded elsewhere).
 
-To test that this worked, you will need to install kachery-p2p on a different computer, and email/slack yourself the URI. From the other computer (with a running daemon on the flatiron1 channel) try:
+To test that this worked, you will need to install kachery-p2p on a different computer, and email/slack yourself the URI. From the other computer (with a running daemon on the flatiron2 channel) try:
 
 ```bash
 kachery-p2p-cat sha1://.../tmp.txt
@@ -139,11 +139,11 @@ uri_npy = kp.store_npy(A)
 print(uri_npy)
 ```
 
-Try to load those files from another computer (on the flatiron1 channel), or send the URIs to the authors.
+Try to load those files from another computer (on the flatiron2 channel), or send the URIs to the authors.
 
 ## Reading feeds
 
-It is also possible to share live feeds (collections of append-only logs) that can update in real time. Here's an example feed on the flatiron1 channel that you can read. Do this in Python:
+It is also possible to share live feeds (collections of append-only logs) that can update in real time. Here's an example feed on the flatiron2 channel that you can read. Do this in Python:
 
 ```python
 import kachery_p2p as kp
@@ -185,7 +185,7 @@ sf.append_message('another-test-message ###')
 
 If you run that command, you should see the messages appear in real time in the terminal you left open.
 
-Now try running the `kachery-p2p-print-messages` command on a different computer (that has a running daemon on the flatiron1 channel). You should be able to see the live-updating messages from there.
+Now try running the `kachery-p2p-print-messages` command on a different computer (that has a running daemon on the flatiron2 channel). You should be able to see the live-updating messages from there.
 
 
 
