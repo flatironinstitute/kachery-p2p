@@ -91,7 +91,7 @@ def log():
 # Note that npx-latest/npm-latest uses the latest version of the daemon on npm, which may be desireable for some bootstrap nodes, but not adviseable if you want to be sure that kachery-p2p is constistent with the node daemon
 
 @click.command(help="Start the daemon.")
-@click.option('--label', multiple=True, help='Label for this node')
+@click.option('--label', default='', help='Label for this node')
 @click.option('--channel', multiple=True, help='Channel to join')
 @click.option('--bootstrap', multiple=True, help='Override the default bootstrap node(s). Use --bootstrap ip:port')
 @click.option('--nobootstrap', is_flag=True, help='Do not use bootstrap nodes')
@@ -105,7 +105,7 @@ def log():
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
 def start_daemon(label, method, channel, verbose, host, port, websocket_port, bootstrap, nobootstrap, isbootstrap, nomulticast, node_arg):
     kp.start_daemon(
-        label=label,
+        label=label if label else None,
         method=method,
         channels=channel,
         verbose=verbose,
