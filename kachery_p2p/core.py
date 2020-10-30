@@ -324,6 +324,7 @@ def _probe_daemon(api_port=None):
 def start_daemon(*,
     port: int=0,
     websocket_port: int=0,
+    label: Union[str, None]=None,
     method: str='npx',
     channels: List[str]=[],
     verbose: int=0,
@@ -358,6 +359,8 @@ def start_daemon(*,
         start_args.append(f'--host {host}')
     if websocket_port > 0:
         start_args.append(f'--websocket-port {websocket_port}')
+    if label is not None:
+        start_args.append(f'--label {label}')
     start_args.append(f'--http-port {port}')
 
     # Note that npx-latest/npm-latest uses the latest version of the daemon on npm, which may be desireable for some bootstrap nodes, but not adviseable if you want to be sure that kachery-p2p is constistent with the node daemon
