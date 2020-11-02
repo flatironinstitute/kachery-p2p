@@ -12,7 +12,7 @@ export const handleDownloadFileDataRequest = async (node: KacheryP2PNode, fromNo
             endByte: endByte === null ? byteCount(0): endByte,
             success: false,
             streamId: null,
-            errorMessage: errorMessage('Invalid start/end bytes')
+            errorMessage: errorMessage(`Invalid start/end bytes: ${startByte}/${endByte}`)
         }
     }
     const {found, size} = await node.kacheryStorageManager().findFile(fileKey)

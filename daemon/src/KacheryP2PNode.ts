@@ -121,35 +121,41 @@ class KacheryP2PNode {
         onFinished: (callback: () => void) => void,
         cancel: () => void
     } {
-        const requestData: CheckForFileRequestData = {
-            requestType: 'checkForFile',
-            fileKey: args.fileKey
-        }
-        const channelNames = args.fromChannel ? [args.fromChannel] : this.p.channelNames
-        const { onResponse, onFinished, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec: args.timeoutMsec, channelNames })
-        const onFoundCallbacks: ((result: FindFileResult) => void)[] = []
-        const onFinishedCallbacks: (() => void)[] = []
-        onResponse((nodeId: NodeId, responseData: NodeToNodeResponseData) => {
-            if (!isCheckForFileResponseData(responseData)) {
-                /* istanbul ignore next */
-                throw Error(`Unexpected response type: ${responseData.requestType} <> 'checkForFile'`)
+        let onFoundCallbacks: ((result: FindFileResult) => void)[] = []
+        let onFinishedCallbacks: (() => void)[] = []
+        let cancelled = false
+        let handleCancel: (() => void) | null = null
+        setTimeout(() => { // hmmmm
+            if (cancelled) return
+            const requestData: CheckForFileRequestData = {
+                requestType: 'checkForFile',
+                fileKey: args.fileKey
             }
-            const { found, size } = responseData
-            if ((found) && (size !== null)) {
-                onFoundCallbacks.forEach(cb => {
-                    cb({
-                        nodeId,
-                        fileKey: args.fileKey,
-                        fileSize: size
+            const channelNames = args.fromChannel ? [args.fromChannel] : this.p.channelNames
+            const { onResponse, onFinished, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec: args.timeoutMsec, channelNames })
+            handleCancel = cancel
+            onResponse((nodeId: NodeId, responseData: NodeToNodeResponseData) => {
+                if (!isCheckForFileResponseData(responseData)) {
+                    /* istanbul ignore next */
+                    throw Error(`Unexpected response type: ${responseData.requestType} <> 'checkForFile'`)
+                }
+                const { found, size } = responseData
+                if ((found) && (size !== null)) {
+                    onFoundCallbacks.forEach(cb => {
+                        cb({
+                            nodeId,
+                            fileKey: args.fileKey,
+                            fileSize: size
+                        })
                     })
-                })
-            }
-        })
-        onFinished(() => {
-            onFinishedCallbacks.forEach(cb => {
-                cb()
+                }
             })
-        })
+            onFinished(() => {
+                onFinishedCallbacks.forEach(cb => {
+                    cb()
+                })
+            })
+        }, 10)
         return {
             onFound: (cb) => {
                 onFoundCallbacks.push(cb)
@@ -158,7 +164,8 @@ class KacheryP2PNode {
                 onFinishedCallbacks.push(cb)
             },
             cancel: () => {
-                cancel()
+                if (cancelled) return
+                handleCancel && handleCancel()
             }
         }
     }
@@ -456,7 +463,7 @@ class KacheryP2PNode {
             signature: getSignature(body, this.#keyPair)
         }
     }
-    streamFileData(fromNodeId: NodeId, streamId: StreamId): DataStreamy {
+    async streamFileData(fromNodeId: NodeId, streamId: StreamId): Promise<DataStreamy> {
         if (fromNodeId !== this.#nodeId) {
             // redirect to a different node
             const p = this.#proxyConnectionsToClients.get(fromNodeId)
@@ -477,23 +484,19 @@ class KacheryP2PNode {
             throw Error('Unexpected')
         }
         const ret = new DataStreamy();
-        (async () => {
-            if (ret.isComplete()) return
-            const dataStream = await this.#kacheryStorageManager.getFileReadStream(s.fileKey)
-            try {
-                if (ret.isComplete()) return
-                dataStream.onStarted(size => { ret.producer().start(size) })
-                ret.producer().onCancelled(() => {
-                    dataStream.cancel()
-                })
-                dataStream.onData(b => { ret.producer().data(b) })
-                dataStream.onFinished(() => { ret.producer().end() })
-                dataStream.onError(err => { ret.producer().error(err) })
-            }
-            catch (err) {
-                ret.producer().error(err)
-            }
-        })()
+        const dataStream = await this.#kacheryStorageManager.getFileReadStream(s.fileKey)
+        ret.producer().onCancelled(() => {
+            dataStream.cancel()
+        })
+        try {
+            dataStream.onStarted(size => { ret.producer().start(size) })
+            dataStream.onData(b => { ret.producer().data(b) })
+            dataStream.onFinished(() => { ret.producer().end() })
+            dataStream.onError(err => { ret.producer().error(err) })
+        }
+        catch (err) {
+            ret.producer().error(err)
+        }
         return ret
     }
     receiveFallbackUdpPacket(fromNodeId: NodeId, packetId: PacketId, packet: Buffer): void {

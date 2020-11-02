@@ -4,7 +4,7 @@ import DownloadOptimizerJob from "./DownloadOptimizerJob";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
 
 interface DownloaderCreatorInterface {
-    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId}) => DataStreamy
+    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId}) => Promise<DataStreamy>
 }
 
 export default class DownloadOptimizer {
@@ -52,13 +52,19 @@ export default class DownloadOptimizer {
         this.#updateScheduled = true
         setTimeout(() => {
             this.#updateScheduled = false
-            this._update()
+            this._update().then(() => {
+            }).catch((err: Error) => {
+                console.error(`Unexpected error updating download optimizer: ${err.message}`)
+            })
         }, 1);
     }
-    _update() {
+    async _update() {
         let numActiveFileDownloads = Array.from(this.#jobs.values()).filter(file => (file.isDownloading())).length;
         if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
-            this.#jobs.forEach((job, fileKey) => {
+            for (let k of this.#jobs.keys()) {
+                const fileKey = k as any as FileKey
+                const job = this.#jobs.get(fileKey)
+                if (!job) throw Error('Unexpected')
                 if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
                     if ((!job.isDownloading()) && (job.numPointers() > 0)) {
                         const providerNodeCandidates: DownloadOptimizerProviderNode[] = []
@@ -73,14 +79,14 @@ export default class DownloadOptimizer {
                         }
                         const providerNode = chooseFastestProviderNode(providerNodeCandidates);
                         if (providerNode) {
-                            const downloader = this.#downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId() });
+                            const downloader = await this.#downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId() });
                             job.setDownloader(downloader)
                             providerNode.setDownloader(downloader)
                             numActiveFileDownloads++;
                         }
                     }
                 }
-            })
+            }
         }
     }
 }

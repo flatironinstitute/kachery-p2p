@@ -2,7 +2,7 @@ import express, { Express } from 'express';
 import JsonSocket from 'json-socket';
 import { Socket } from 'net';
 import { action } from '../common/action';
-import { DataStreamyProgress } from '../common/DataStreamy';
+import DataStreamy from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
 import { isGetStatsOpts, NodeStatsInterface } from '../getStats';
@@ -548,14 +548,9 @@ export default class DaemonApiServer {
         /* istanbul ignore next */
         throw Error(`Unexpected path in mockPostJson: ${path}`)
     }
-    mockPostLoadFile(data: JSONObject): {
-        onFinished: (callback: () => void) => void,
-        onProgress: (callback: (progress: DataStreamyProgress) => void) => void,
-        onError: (callback: (err: Error) => void) => void,
-        cancel: () => void
-    } {
+    async mockPostLoadFile(data: JSONObject): Promise<DataStreamy> {
         if (!isApiLoadFileRequest(data)) throw Error('Unexpected data in mockPostLoadFile')
-        return this._loadFile(data)
+        return await this._loadFile(data)
     }
     async mockPostFindFile(reqData: JSONObject): Promise<{
         onFound: (callback: (result: FindFileResult) => void) => void;
@@ -655,7 +650,7 @@ export default class DaemonApiServer {
     // /loadFile - load a file from remote kachery node(s) and store in kachery storage
     /* istanbul ignore next */
     async _apiLoadFile(req: Req, res: Res) {
-        const x = this._loadFile(req.body)
+        const x = await this._loadFile(req.body)
         const jsonSocket = new JsonSocket(res as any as Socket)
         let isDone = false
         x.onFinished(() => {
@@ -684,11 +679,11 @@ export default class DaemonApiServer {
             x.cancel()
         });
     }
-    _loadFile(reqData: ApiLoadFileRequest) {
+    async _loadFile(reqData: ApiLoadFileRequest) {
         if (!isApiLoadFileRequest(reqData)) throw Error('Invalid request in _apiLoadFile');
 
         const { fileKey, fromNode, fromChannel } = reqData;
-        const x = loadFile(
+        const x = await loadFile(
             this.#node,
             fileKey,
             {fromNode, fromChannel}

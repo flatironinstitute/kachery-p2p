@@ -14,14 +14,7 @@ def cli():
 
 @click.command(help="Show the channels that this node belongs to.")
 def get_channels():
-    channels = kp.get_channels()
-    for channel in channels:
-        num_peers = channel["numPeers"]
-        if num_peers == 1:
-            num_peers_str = '1 peer'
-        else:
-            num_peers_str = f'{num_peers} peers'
-        print(f'{channel["name"]}: {num_peers_str}')
+    return kp.get_channels()
 
 @click.command(help="Find a file.")
 @click.argument('uri')

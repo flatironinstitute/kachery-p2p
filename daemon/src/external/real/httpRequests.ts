@@ -29,7 +29,7 @@ export const httpGetDownload = async (address: Address, path: UrlPath, stats: No
     const ret = new DataStreamy()
     ret.producer().start(size)
     ret.producer().onCancelled(() => {
-        // is this the right way to close it?
+        // todo: is this the right way to close it?
         res.data.close()
     })
     res.data.on('data', (data: Buffer) => {

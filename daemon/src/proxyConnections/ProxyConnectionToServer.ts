@@ -152,19 +152,19 @@ export class ProxyConnectionToServer {
             this._sendMessageToServer(response);
         }
         else if (isProxyStreamFileDataRequest(message)) {
-            this._handleProxyStreamFileDataRequest(message)
+            await this._handleProxyStreamFileDataRequest(message)
         }
         else if (isProxyStreamFileDataCancelRequest(message)) {
-            this._handleProxyStreamFileDataCancelRequest(message)
+            await this._handleProxyStreamFileDataCancelRequest(message)
         }
         else {
             throw Error('Unexpected message from server')
         }
     }
-    _handleProxyStreamFileDataRequest(request: ProxyStreamFileDataRequest) {
+    async _handleProxyStreamFileDataRequest(request: ProxyStreamFileDataRequest) {
         // the server is requesting to stream file data up from the client
         const {streamId} = request
-        const s = this.#node.streamFileData(this.#node.nodeId(), streamId)
+        const s = await this.#node.streamFileData(this.#node.nodeId(), streamId)
         s.onStarted(size => {
             if (size === null) {
                 /* istanbul ignore next */
@@ -202,7 +202,7 @@ export class ProxyConnectionToServer {
         })
         this.#proxyStreamFileDataCancelCallbacks.set(request.proxyStreamFileDataRequestId, () => {s.cancel()})
     }
-    _handleProxyStreamFileDataCancelRequest(request: ProxyStreamFileDataCancelRequest) {
+    async _handleProxyStreamFileDataCancelRequest(request: ProxyStreamFileDataCancelRequest) {
         const cb = this.#proxyStreamFileDataCancelCallbacks.get(request.proxyStreamFileDataRequestId)
         if (cb) cb()
     }

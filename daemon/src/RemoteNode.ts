@@ -2,7 +2,7 @@ import { TIMEOUTS } from "./common/constants";
 import { getSignature, verifySignature } from "./common/crypto_util";
 import DataStreamy from "./common/DataStreamy";
 import { addByteCount, Address, byteCount, ByteCount, ChannelName, ChannelNodeInfo, createRequestId, DurationMsec, NodeId, nodeIdToPublicKey, nowTimestamp, urlPath } from "./interfaces/core";
-import { DownloadFileDataRequestData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
+import { DownloadFileDataRequestData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, isStopStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StopStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import DownloadFileDataMethodOptimizer, { DownloadFileDataMethod } from "./methodOptimizers/DownloadFileDataMethodOptimizer";
 import SendMessageMethodOptimizer from './methodOptimizers/SendMessageMethodOptimizer';
@@ -238,6 +238,20 @@ class RemoteNode {
             streamId
         }
         const incomingDataStream = udpS.getIncomingDataStream(streamId)
+        incomingDataStream.producer().onCancelled(() => {
+            const stopReqData: StopStreamViaUdpRequestData = {
+                requestType: "stopStreamViaUdp",
+                streamId
+            }
+            this.sendRequest(stopReqData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'}).then(stopResponseData => {
+                if (!isStopStreamViaUdpResponseData(stopResponseData)) {
+                    throw Error('Unexpected')
+                }
+                // okay
+            }).catch(err => {
+                throw Error(`Error sending request to stop stream via udp: ${err.message}`)
+            })
+        })
         try {
             const responseData = await this.sendRequest(requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
             if (!isStartStreamViaUdpResponseData(responseData)) {

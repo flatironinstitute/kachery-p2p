@@ -129,7 +129,7 @@ export default class PublicApiServer {
                     /* istanbul ignore next */
                     throw Error ('Invalid toNodeId')
                 }
-                this._apiDownload(fromNodeId, toNodeId, streamId, req, res)
+                await this._apiDownload(fromNodeId, toNodeId, streamId, req, res)
             }, async (err: Error) => {
                 /* istanbul ignore next */
                 await this._errorResponse(req, res, 500, err.message);
@@ -216,8 +216,8 @@ export default class PublicApiServer {
         res.json(response);
     }
     // /download
-    _apiDownload(fromNodeId: NodeId, toNodeId: NodeId, streamId: StreamId, req: Req, res: Res) {
-        const ds = this.#node.streamFileData(fromNodeId, streamId)
+    async _apiDownload(fromNodeId: NodeId, toNodeId: NodeId, streamId: StreamId, req: Req, res: Res) {
+        const ds = await this.#node.streamFileData(fromNodeId, streamId)
         let started = false
         ds.onStarted((size: ByteCount) => {
             started = true

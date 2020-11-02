@@ -185,6 +185,9 @@ export default class PublicUdpSocketServer {
         }
         const ds = new DataStreamy()
         this.#incomingDataStreams.set(streamId, ds)
+        ds.producer().onCancelled(() => {
+            this._cancelIncomingDataStream(streamId)
+        })
         return ds
     }
     setOutgoingDataStream(address: Address, fallbackAddress: FallbackAddress, streamId: StreamId, dataStream: DataStreamy, opts: {toNodeId: NodeId}) {
@@ -214,6 +217,10 @@ export default class PublicUdpSocketServer {
     }
     receiveFallbackUdpPacket(fromNodeId: NodeId, packetId: PacketId, packet: Buffer): void {
         this._receiveUdpPacket(packetId, packet, null, fromNodeId)
+    }
+    _cancelIncomingDataStream(streamId: StreamId) {
+        const ds = this.#incomingDataStreams.get(streamId)
+        if (!ds) return
     }
     _receiveUdpPacket(packetId: PacketId, packet: Buffer, remoteInfo: DgramRemoteInfo | null, checkFromNodeId: NodeId | null) {
         if (this.#receivedUdpPackets.has(packetId)) {

@@ -35,7 +35,7 @@ kachery-p2p-start-daemon --channel flatiron2
 
 Keep this program running in a terminal (you may want to use [tmux](https://github.com/tmux/tmux/wiki) or screen). While this daemon is running, other members of the flatiron2 channel have access to any file that you store in your local kachery database (provided they know the SHA-1 hash).
 
-If you are able to do so, pleaes keep this daemon open even after you have run the tests, so that testing may continue by others with your node on the system. Note that if files are downloaded by others from your computer, you will experience outgoing network traffic on your computer.
+If you are able to do so, please keep this daemon open even after you have run the tests, so that testing may continue by others with your node on the system. Note that if files are downloaded by others from your computer, you will experience outgoing network traffic on your computer.
 
 ## Downloading files
 

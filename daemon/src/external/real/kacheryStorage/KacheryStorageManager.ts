@@ -166,6 +166,9 @@ const createDataStreamForFile = (path: LocalFilePath, offset: ByteCount, size: B
     readStream.on('error', (err: Error) => {
         ret.producer().error(err)
     })
+    ret.producer().onCancelled(() => {
+        readStream.close()
+    })
     return ret
 }
 

@@ -90,6 +90,7 @@ export type NodeToNodeRequestData = (
     GetLiveFeedSignedMessagesRequestData |
     DownloadFileDataRequestData |
     StartStreamViaUdpRequestData |
+    StopStreamViaUdpRequestData |
     FallbackUdpPacketRequestData
 )
 export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
@@ -103,6 +104,7 @@ export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
         isGetLiveFeedSignedMessagesRequestData,
         isDownloadFileDataRequestData,
         isStartStreamViaUdpRequestData,
+        isStopStreamViaUdpRequestData,
         isFallbackUdpPacketRequestData
     ]) ? true : false;
 }
@@ -117,6 +119,7 @@ export type NodeToNodeResponseData = (
     GetLiveFeedSignedMessagesResponseData |
     DownloadFileDataResponseData |
     StartStreamViaUdpResponseData |
+    StopStreamViaUdpResponseData |
     FallbackUdpPacketResponseData
 )
 export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData => {
@@ -130,6 +133,7 @@ export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData =>
         isGetLiveFeedSignedMessagesResponseData,
         isDownloadFileDataResponseData,
         isStartStreamViaUdpResponseData,
+        isStopStreamViaUdpResponseData,
         isFallbackUdpPacketResponseData
     ]) ? true : false;
 }
@@ -384,6 +388,29 @@ export interface StartStreamViaUdpResponseData {
 export const isStartStreamViaUdpResponseData = (x: any): x is DownloadFileDataResponseData => {
     return _validateObject(x, {
         requestType: isEqualTo('startStreamViaUdp'),
+        success: isBoolean,
+        errorMessage: isOneOf([isNull, isErrorMessage])
+    })
+}
+
+export interface StopStreamViaUdpRequestData {
+    requestType: 'stopStreamViaUdp',
+    streamId: StreamId
+}
+export const isStopStreamViaUdpRequestData = (x: any): x is DownloadFileDataRequestData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('stopStreamViaUdp'),
+        streamId: isStreamId
+    })
+}
+export interface StopStreamViaUdpResponseData {
+    requestType: 'stopStreamViaUdp',
+    success: boolean,
+    errorMessage: ErrorMessage | null
+}
+export const isStopStreamViaUdpResponseData = (x: any): x is DownloadFileDataResponseData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('stopStreamViaUdp'),
         success: isBoolean,
         errorMessage: isOneOf([isNull, isErrorMessage])
     })

@@ -19,6 +19,9 @@ class DataStreamyProducer {
         }
         this.#onCancelledCallbacks.push(cb)
     }
+    isCancelled() {
+        return this.#cancelled
+    }
     error(err: Error) {
         if (this.#cancelled) return
         this.dataStream._producer_error(err)
@@ -133,7 +136,7 @@ export default class DataStreamy {
     }
     onFinished(callback: (() => void)) {
         if (this.#finished) {
-            // important to use onTimeout here because we want to get data before finished (if both are already available)
+            // important to use setTimeout here because we want to get data before finished (if both are already available)
             setTimeout(() => {
                 callback()
             }, 10)
@@ -142,7 +145,11 @@ export default class DataStreamy {
     }
     onError(callback: ((err: Error) => void)) {
         if (this.#error) {
-            callback(this.#error)
+            // I think it is important to use setTimeout here
+            setTimeout(() => {
+                if (!this.#error) throw Error('error')
+                callback(this.#error)
+            }, 10)
         }
         this.#onErrorCallbacks.push(callback)
     }
@@ -156,6 +163,7 @@ export default class DataStreamy {
         return this.#bytesLoaded
     }
     cancel() {
+        if (this.#completed) return
         this.#producer._cancel()
     }
     isComplete() {

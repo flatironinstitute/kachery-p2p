@@ -375,13 +375,13 @@ const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fi
     const f1Content = Buffer.alloc(byteCountToNumber(fileSize), 'a')
     const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize})
 
+    const reqData: ApiLoadFileRequest = {
+        fileKey: f1Key,
+        fromChannel: null,
+        fromNode: null
+    }
+    const x = await daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
     await new Promise((resolve, reject) => {
-        const reqData: ApiLoadFileRequest = {
-            fileKey: f1Key,
-            fromChannel: null,
-            fromNode: null
-        }
-        const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
         x.onError(err => {
             reject(err)
         })
@@ -409,54 +409,58 @@ const testLoadFileWithDefects = async (daemon1: MockNodeDaemon, daemon2: MockNod
         fileReadDefect: true
     })
 
-    try {
-        await new Promise((resolve, reject) => {
-            const reqData: ApiLoadFileRequest = {
-                fileKey: f1Key,
-                fromChannel: null,
-                fromNode: null
+    {
+        const reqData: ApiLoadFileRequest = {
+            fileKey: f1Key,
+            fromChannel: null,
+            fromNode: null
+        }
+        const x = await daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
+        try {
+            await new Promise((resolve, reject) => {
+                x.onError(err => {
+                    reject(err)
+                })
+                x.onFinished(() => {
+                    resolve()
+                })
+            })
+            throw Error('Did not get fileReadDefect error')
+        }
+        catch(err) {
+            if (err.message !== 'fileReadDefect') {
+                throw(err)
             }
-            const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
-            x.onError(err => {
-                reject(err)
-            })
-            x.onFinished(() => {
-                resolve()
-            })
-        })
-        throw Error('Did not get fileReadDefect error')
-    }
-    catch(err) {
-        if (err.message !== 'fileReadDefect') {
-            throw(err)
         }
     }
 
-    daemon1.clearDefects()
-    daemon2.setDefects({
-        badDownloadFileDataRequest: true
-    })
-
-    try {
-        await new Promise((resolve, reject) => {
-            const reqData: ApiLoadFileRequest = {
-                fileKey: f2Key,
-                fromChannel: null,
-                fromNode: null
-            }
-            const x = daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
-            x.onError(err => {
-                reject(err)
-            })
-            x.onFinished(() => {
-                resolve()
-            })
+    {
+        daemon1.clearDefects()
+        daemon2.setDefects({
+            badDownloadFileDataRequest: true
         })
-        throw Error('Did not get expected error')
-    }
-    catch(err) {
-        if (err.message !== 'Unable to stream file data') {
-            throw err
+
+        const reqData: ApiLoadFileRequest = {
+            fileKey: f2Key,
+            fromChannel: null,
+            fromNode: null
+        }
+        const x = await daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
+        try {
+            await new Promise((resolve, reject) => {
+                x.onError(err => {
+                    reject(err)
+                })
+                x.onFinished(() => {
+                    resolve()
+                })
+            })
+            throw Error('Did not get expected error')
+        }
+        catch(err) {
+            if (!err.message.startsWith('Unable to stream file data')) {
+                throw err
+            }
         }
     }
 
