@@ -11,7 +11,7 @@ export const action = async (
     try {
         if (_globalData.verbose > 0) {
             /* istanbul ignore next */
-            console.info(`${actionName} ${JSON.stringify(actionData)}`);
+            console.info(`${actionName}`);
         }
         await operation()
     }

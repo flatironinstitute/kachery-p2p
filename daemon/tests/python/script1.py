@@ -1,5 +1,6 @@
 import os
 
+import kachery as ka
 import kachery_p2p as kp
 import numpy as np
 from kachery_p2p import exceptions
@@ -13,7 +14,13 @@ def main():
     N2 = 1000
     a = kp.store_npy(np.meshgrid(np.arange(N1), np.arange(N2))[0])
     sf = f.get_subfeed('sf1')
-    sf.append_messages([{'a': a, 'N1': N1, 'N2': N2}])
+    sf.append_message({'a': a, 'N1': N1, 'N2': N2})
+
+    # test invalid manifest
+    b = kp.store_npy(np.meshgrid(np.arange(N1 + 1), np.arange(N2))[0])
+    invalid_manifest = kp.store_object({'invalid': True})
+    b_invalid_manifest = b.split('?')[0] + '?manifest=' + ka.get_file_hash(invalid_manifest)
+    sf.append_message({'b_invalid_manifest': b_invalid_manifest})
 
 def test1():
     f = kp.create_feed('f1')

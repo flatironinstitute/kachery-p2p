@@ -30,14 +30,19 @@ export default class SendMessageMethodOptimizer {
         }
     }
     determineSendRequestMethod(method: SendRequestMethod): SendRequestMethod | null {
+        const websocketAvailable = (this.node.getProxyConnectionToClient(this.remoteNode.remoteNodeId()) || this.node.getProxyConnectionToServer(this.remoteNode.remoteNodeId())) ? true : false
         const availableMethods = {
             'http': this.remoteNode.getRemoteNodeHttpAddress() ? true : false,
             'http-proxy': this.remoteNode.getRemoteNodeHttpProxyAddress() ? true : false,
-            'udp': ((this.node.publicUdpSocketServer()) && (this.remoteNode.getUdpAddressForRemoteNode()))
+            'udp': ((this.node.publicUdpSocketServer()) && (this.remoteNode.getUdpAddressForRemoteNode())),
+            'websocket': websocketAvailable
         }
         if (method === 'udp-fallback') {
             if (availableMethods['http']) {
                 return 'http'
+            }
+            else if (availableMethods['websocket']) {
+                return 'websocket'
             }
             else if (availableMethods['http-proxy']) {
                 return 'http-proxy'
@@ -52,6 +57,9 @@ export default class SendMessageMethodOptimizer {
         else if (method === 'prefer-http') {
             if (availableMethods['http']) {
                 return 'http'
+            }
+            else if (availableMethods['websocket']) {
+                return 'websocket'
             }
             else {
                 if ((availableMethods['udp']) && (availableMethods['http-proxy'])) {
@@ -78,17 +86,11 @@ export default class SendMessageMethodOptimizer {
             if (availableMethods['udp']) {
                 return 'udp'
             }
-            else if (availableMethods['http']) {
-                return 'http'
-            }
-            else if (availableMethods['http-proxy']) {
-                return 'http-proxy'
-            }
             else {
-                return null
+                return this.determineSendRequestMethod('prefer-http')
             }
         }
-        else if ((method === 'http') || (method === 'udp') || (method === 'http-proxy')) {
+        else if ((method === 'http') || (method === 'websocket') || (method === 'udp') || (method === 'http-proxy')) {
             if (availableMethods[method])
                 return method
             else

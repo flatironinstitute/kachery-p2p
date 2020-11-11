@@ -1,7 +1,7 @@
 import { TIMEOUTS } from "./common/constants";
 import { getSignature, verifySignature } from "./common/crypto_util";
 import DataStreamy from "./common/DataStreamy";
-import { addByteCount, Address, byteCount, ByteCount, ChannelName, ChannelNodeInfo, createRequestId, DurationMsec, NodeId, nodeIdToPublicKey, nowTimestamp, urlPath } from "./interfaces/core";
+import { addByteCount, Address, byteCount, ByteCount, ChannelName, ChannelNodeInfo, createRequestId, durationGreaterThan, DurationMsec, elapsedSince, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec, unscaledDurationMsec, urlPath } from "./interfaces/core";
 import { DownloadFileDataRequestData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, isStopStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StopStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import DownloadFileDataMethodOptimizer, { DownloadFileDataMethod } from "./methodOptimizers/DownloadFileDataMethodOptimizer";
@@ -9,7 +9,7 @@ import SendMessageMethodOptimizer from './methodOptimizers/SendMessageMethodOpti
 import { protocolVersion } from "./protocolVersion";
 import { nodeIdFallbackAddress } from './services/PublicUdpSocketServer';
 
-export type SendRequestMethod = 'default' | 'http' | 'http-proxy' | 'udp' | 'prefer-udp' | 'prefer-http' | 'udp-fallback'
+export type SendRequestMethod = 'default' | 'http' | 'http-proxy' | 'udp' | 'websocket' | 'prefer-udp' | 'prefer-http' | 'udp-fallback'
 
 export interface RemoteNodeStats {
     remoteNodeId: NodeId
@@ -87,6 +87,7 @@ class RemoteNode {
         this.#channelNodeInfoByChannel.set(channelName, channelNodeInfo)
     }
     getChannelNames() {
+
         let ret: ChannelName[] = [];
         this.#channelNodeInfoByChannel.forEach((channelNodeInfo, channelName) => {
             ret.push(channelName);
@@ -146,6 +147,23 @@ class RemoteNode {
             numResponsesReceived: this.#numResponsesReceived
         }
         return s
+    }
+    ageOfChannelNodeInfo(channelName: ChannelName): DurationMsec | null {
+        const cni = this.#channelNodeInfoByChannel.get(channelName)
+        if (!cni) return null
+        return unscaledDurationMsec(elapsedSince(cni.body.timestamp))
+    }
+    pruneChannelNodeInfos() {
+        const channelNames = this.#channelNodeInfoByChannel.keys()
+        for (let channelName of channelNames) {
+            const cni = this.#channelNodeInfoByChannel.get(channelName)
+            /* istanbul ignore next */
+            if (!cni) throw Error('Unexpected')
+            const elapsed = unscaledDurationMsec(elapsedSince(cni.body.timestamp))
+            if (durationGreaterThan(elapsed, scaledDurationMsec(120000))) {
+                this.#channelNodeInfoByChannel.delete(channelName)
+            }
+        }
     }
     _formRequestFromRequestData(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec}): NodeToNodeRequest {
         const requestId = createRequestId()
@@ -212,7 +230,7 @@ class RemoteNode {
             return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`), this.#node.stats(), {fromNodeId: this.#remoteNodeId})
         }
         else if (method === 'http-proxy') {
-            const address = this.getRemoteNodeHttpProxyAddress();
+            const address = this.getRemoteNodeHttpProxyAddress()
             if (!address) {
                 /* istanbul ignore next */
                 throw Error('Unexpected. Unable to download file data... no http-proxy address found.')
@@ -244,9 +262,8 @@ class RemoteNode {
                 streamId
             }
             this.sendRequest(stopReqData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'}).then(stopResponseData => {
-                if (!isStopStreamViaUdpResponseData(stopResponseData)) {
-                    throw Error('Unexpected')
-                }
+                /* istanbul ignore next */
+                if (!isStopStreamViaUdpResponseData(stopResponseData)) throw Error('Unexpected')
                 // okay
             }).catch(err => {
                 throw Error(`Error sending request to stop stream via udp: ${err.message}`)
@@ -254,16 +271,10 @@ class RemoteNode {
         })
         try {
             const responseData = await this.sendRequest(requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
-            if (!isStartStreamViaUdpResponseData(responseData)) {
-                /* istanbul ignore next */
-                console.warn(responseData)
-                /* istanbul ignore next */
-                throw Error('unexpected')
-            }
-            if (!responseData.success) {
-                /* istanbul ignore next */
-                throw Error(`Error starting stream via udp: ${responseData.errorMessage}`)
-            }
+            /* istanbul ignore next */
+            if (!isStartStreamViaUdpResponseData(responseData)) throw Error('unexpected')
+            /* istanbul ignore next */
+            if (!responseData.success) throw Error(`Error starting stream via udp: ${responseData.errorMessage}`)
         }
         catch(err) {
             incomingDataStream.producer().error(err)
@@ -279,14 +290,10 @@ class RemoteNode {
 
         const udpS = this.#node.publicUdpSocketServer()
         const udpA = this.getUdpAddressForRemoteNode()
-        if (!udpS) {
-            /* istanbul ignore next */
-            throw Error('Cannot use stream via udp when there is no udp socket server')
-        }
-        if (!udpA) {
-            /* istanbul ignore next */
-            throw Error('Cannot stream via udp when there is no udp address')
-        }
+        /* istanbul ignore next */
+        if (!udpS) throw Error('Cannot use stream via udp when there is no udp socket server')
+        /* istanbul ignore next */
+        if (!udpA) throw Error('Cannot stream via udp when there is no udp address')
 
         const ds = await this.#node.kacheryStorageManager().getFileReadStream(r.fileKey)
         const fallbackAddress = nodeIdFallbackAddress(this.#remoteNodeId)
@@ -378,6 +385,19 @@ class RemoteNode {
                 if (publicUdpAddress) {
                     this.#node.setPublicUdpSocketAddress(publicUdpAddress)
                 }
+            }
+        }
+        else if (method === 'websocket') {
+            const c1 = this.#node.getProxyConnectionToServer(this.#remoteNodeId)
+            const c2 = this.#node.getProxyConnectionToClient(this.#remoteNodeId)
+            if (c1) {
+                response = await c1.sendRequest(request, {timeoutMsec: opts.timeoutMsec})
+            }
+            else if (c2) {
+                response = await c2.sendRequest(request, {timeoutMsec: opts.timeoutMsec})
+            }
+            else {
+                throw Error('Unexpected: no websocket proxy connection')
             }
         }
         else {

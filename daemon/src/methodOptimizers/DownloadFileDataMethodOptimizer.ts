@@ -1,6 +1,7 @@
 import KacheryP2PNode from "../KacheryP2PNode"
 import RemoteNode from "../RemoteNode"
 
+// don't use websocket here because that is a single-channel stream
 export type DownloadFileDataMethod = 'default' | 'udp' | 'http' | 'http-proxy'
 
 export default class DownloadFileDataMethodOptimizer {

@@ -1,5 +1,5 @@
 import { verifySignature } from './common/crypto_util';
-import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey } from './interfaces/core';
+import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, durationGreaterThan, DurationMsec, durationMsecToNumber, elapsedSince, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec, unscaledDurationMsec } from './interfaces/core';
 import { AnnounceRequestData, AnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest';
 import KacheryP2PNode from './KacheryP2PNode';
 import RemoteNode, { SendRequestMethod } from './RemoteNode';
@@ -9,6 +9,7 @@ class RemoteNodeManager {
     #remoteNodes = new Map<NodeId, RemoteNode>()
     #onNodeChannelAddedCallbacks: ((remoteNodeId: NodeId, channelName: ChannelName) => void)[] = []
     #onBootstrapNodeAddedCallbacks: ((bootstrapNodeId: NodeId) => void)[] = []
+    #lastPrune = nowTimestamp()
     constructor(node: KacheryP2PNode) {
         this.#node = node;
     }
@@ -46,15 +47,16 @@ class RemoteNodeManager {
             throw Error('Cannot set channel node info for self')
         }
         if (!this.#remoteNodes.has(body.nodeId)) {
-            this.#remoteNodes.set(body.nodeId, new RemoteNode(this.#node, body.nodeId));
+            this.#remoteNodes.set(body.nodeId, new RemoteNode(this.#node, body.nodeId))
         }
-        const n = this.#remoteNodes.get(body.nodeId);
-        if (!n) throw Error('Unexpected');
-        const newChannel = (!n.getChannelNames().includes(channelNodeInfo.body.channelName));
-        n.setChannelNodeInfoIfMoreRecent(channelNodeInfo.body.channelName, channelNodeInfo);
+        const n = this.#remoteNodes.get(body.nodeId)
+        /* istanbul ignore next */
+        if (!n) throw Error('Unexpected')
+        const newChannel = (!n.getChannelNames().includes(channelNodeInfo.body.channelName))
+        n.setChannelNodeInfoIfMoreRecent(channelNodeInfo.body.channelName, channelNodeInfo)
         if (newChannel) {
             this.#onNodeChannelAddedCallbacks.forEach(cb => {
-                cb(n.remoteNodeId(), channelNodeInfo.body.channelName);
+                cb(n.remoteNodeId(), channelNodeInfo.body.channelName)
             })
         }
     }
@@ -62,7 +64,7 @@ class RemoteNodeManager {
         const n = this.#remoteNodes.get(remoteNodeId)
         if (n) {
             if ((!n.isBootstrap()) || (!jsonObjectsMatch(n.bootstrapAddress(), address))) {
-                this.#remoteNodes.delete(remoteNodeId);
+                this.#remoteNodes.delete(remoteNodeId)
             }
         }
         if (!this.#remoteNodes.has(remoteNodeId)) {
@@ -104,6 +106,10 @@ class RemoteNodeManager {
         }
         return remoteNode.canSendRequest(method)
     }
+    canReceiveMessagesFromNode(nodeId: NodeId): boolean {
+        const n = this.getRemoteNode(nodeId)
+        return n ? true : false
+    }
     async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}): Promise<NodeToNodeResponseData> {
         const remoteNode = this.#remoteNodes.get(nodeId)
         if (!remoteNode) {
@@ -118,6 +124,7 @@ class RemoteNodeManager {
         this.#onBootstrapNodeAddedCallbacks.push(callback)
     }
     getRemoteNodesInChannel(channelName: ChannelName): RemoteNode[] {
+        this._pruneRemoteNodes()
         const ret: RemoteNode[] = []
         this.#remoteNodes.forEach((n, nodeId) => {
             if (n.getChannelNames().includes(channelName)) {
@@ -127,6 +134,7 @@ class RemoteNodeManager {
         return ret
     }
     getBootstrapRemoteNodes(): RemoteNode[] {
+        this._pruneRemoteNodes()
         const ret: RemoteNode[] = []
         this.#remoteNodes.forEach((n, nodeId) => {
             if (n.isBootstrap() && (n.bootstrapAddress() !== null)) {
@@ -136,6 +144,7 @@ class RemoteNodeManager {
         return ret
     }
     getAllRemoteNodes(): RemoteNode[] {
+        this._pruneRemoteNodes()
         const ret: RemoteNode[] = []
         this.#remoteNodes.forEach((n, nodeId) => {
             ret.push(n)
@@ -215,6 +224,23 @@ class RemoteNodeManager {
             onErrorResponse,
             onFinished,
             cancel: _cancel
+        }
+    }
+    _pruneRemoteNodes() {
+        const elapsed = elapsedSince(this.#lastPrune)
+        if (durationGreaterThan(unscaledDurationMsec(elapsed), scaledDurationMsec(30000))) {
+            this.#lastPrune = nowTimestamp()
+            const remoteNodeIds = this.#remoteNodes.keys()
+            for (let nodeId of remoteNodeIds) {
+                const rn = this.#remoteNodes.get(nodeId)
+                if (!rn) throw Error('Unexpected')
+                rn.pruneChannelNodeInfos()
+                if (!rn.isBootstrap()) {
+                    if (rn.getChannelNames().length === 0) {
+                        this.#remoteNodes.delete(nodeId)
+                    }
+                }
+            }
         }
     }
 }

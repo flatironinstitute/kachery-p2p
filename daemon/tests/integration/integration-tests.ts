@@ -9,7 +9,6 @@ import { StartDaemonOpts } from '../../src/startDaemon';
 const mockChannelName = 'mock-channel' as any as ChannelName
 const mockChannelName2 = 'mock-channel-2' as any as ChannelName
 
-
 const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void, reject: (err: Error) => void) => Promise<void>, done: (err?: Error) => void) => {
     const g = new MockNodeDaemonGroup()
     const resolve = () => {

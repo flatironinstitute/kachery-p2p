@@ -4,7 +4,7 @@ import GarbageMap from '../common/GarbageMap';
 import { sleepMsec } from "../common/util";
 import { durationGreaterThan, DurationMsec, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, unscaledDurationMsec, zeroTimestamp } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
-import { ProxyConnectionToServer } from "../proxyConnections/ProxyConnectionToServer";
+import { ProxyWebsocketConnection } from "../proxyConnections/ProxyWebsocketConnection";
 import RemoteNodeManager from "../RemoteNodeManager";
 
 export default class ProxyClientService {
@@ -74,8 +74,8 @@ class ProxyClientManager {
             return;
         }
         try {
-            const c = new ProxyConnectionToServer(this.#node)
-            await c.initialize(remoteNodeId, webSocketAddress, {timeoutMsec: opts.timeoutMsec});
+            const c = new ProxyWebsocketConnection(this.#node, 'connectionToServer')
+            await c.initializeConnectionToServer(remoteNodeId, webSocketAddress, {timeoutMsec: opts.timeoutMsec});
             this.#node.setProxyConnectionToServer(remoteNodeId, c)
         }
         catch(err) {
@@ -87,7 +87,7 @@ class ProxyClientManager {
         const timestamp: Timestamp = this.#failedConnectionAttemptTimestamps.get(remoteNodeId) || zeroTimestamp()
         return unscaledDurationMsec(elapsedSince(timestamp))
     }
-    getConnection(remoteNodeId: NodeId): ProxyConnectionToServer | null {
+    getConnection(remoteNodeId: NodeId): ProxyWebsocketConnection | null {
         return this.#node.getProxyConnectionToServer(remoteNodeId)
     }
 }

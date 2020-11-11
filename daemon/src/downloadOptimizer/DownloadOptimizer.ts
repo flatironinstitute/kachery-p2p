@@ -4,7 +4,7 @@ import DownloadOptimizerJob from "./DownloadOptimizerJob";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
 
 interface DownloaderCreatorInterface {
-    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId}) => Promise<DataStreamy>
+    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId}) => {start: () => Promise<DataStreamy>}
 }
 
 export default class DownloadOptimizer {
@@ -64,6 +64,7 @@ export default class DownloadOptimizer {
             for (let k of this.#jobs.keys()) {
                 const fileKey = k as any as FileKey
                 const job = this.#jobs.get(fileKey)
+                /* istanbul ignore next */
                 if (!job) throw Error('Unexpected')
                 if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
                     if ((!job.isDownloading()) && (job.numPointers() > 0)) {
@@ -79,9 +80,10 @@ export default class DownloadOptimizer {
                         }
                         const providerNode = chooseFastestProviderNode(providerNodeCandidates);
                         if (providerNode) {
-                            const downloader = await this.#downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId() });
+                            const downloader = this.#downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId() });
+                            // todo: why would this be called 8 times?
                             job.setDownloader(downloader)
-                            providerNode.setDownloader(downloader)
+                            providerNode.setDownloaderProgress(job.getProgressStream())
                             numActiveFileDownloads++;
                         }
                     }

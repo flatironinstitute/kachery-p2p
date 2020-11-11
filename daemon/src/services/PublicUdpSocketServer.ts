@@ -97,10 +97,8 @@ export default class PublicUdpSocketServer {
                 this.#socket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: false, nodeId: this.#node.nodeId(), firewalled: this.firewalled })
                 this.#socket.bind(portToNumber(listenPort))
                 this.#socket.on("listening", () => {
-                    if (this.#socket === null) {
-                        /* istanbul ignore next */
-                        throw Error('Unexpected')
-                    }
+                    /* istanbul ignore next */
+                    if (this.#socket === null) throw Error('Unexpected')
                     this.#udpPacketSender = new UdpPacketSender(this.#socket, this.#fallbackPacketSender, this.#node.stats(), {thisNodeId: this.#node.nodeId()})
                     this.#udpPacketReceiver = new UdpPacketReceiver(this.#socket, () => (this.#node.getDefects()), this.#node.stats(), {thisNodeId: this.#node.nodeId()})
                     this.#udpPacketReceiver.onPacket((packetId: PacketId, packet: Buffer, remoteInfo: dgram.RemoteInfo) => {
@@ -109,10 +107,8 @@ export default class PublicUdpSocketServer {
                     this.#udpPacketReceiver.onConfirmation((packetId) => {
                         /////////////////////////////////////////////////////////////////////////
                         action('confirmUdpPacket', {packetId}, async () => {
-                            if (this.#udpPacketSender === null) {
-                                /* istanbul ignore next */
-                                throw Error('Unexpected')
-                            }
+                            /* istanbul ignore next */
+                            if (this.#udpPacketSender === null) throw Error('Unexpected')
                             this.#udpPacketSender.receivePacketConfirmation(packetId)
                         }, async () => {
                         })

@@ -3,7 +3,7 @@ import { sleepMsec } from '../common/util';
 import { WebSocketInterface, WebSocketServerInterface } from '../external/ExternalInterface';
 import { Port, scaledDurationMsec } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
-import { ProxyConnectionToClient } from '../proxyConnections/ProxyConnectionToClient';
+import { ProxyWebsocketConnection } from '../proxyConnections/ProxyWebsocketConnection';
 
 class PublicWebSocketServer {
     #node: KacheryP2PNode
@@ -22,8 +22,8 @@ class PublicWebSocketServer {
         this.#webSocketServer.onConnection((ws: WebSocketInterface) => {
             /////////////////////////////////////////////////////////////////////////
             action('newProxyConnectionToClient', {context: 'PublicWebSocketServer'}, async () => {
-                const X = new ProxyConnectionToClient(this.#node);
-                await X.initialize(ws);
+                const X = new ProxyWebsocketConnection(this.#node, 'connectionToClient');
+                await X.initializeConnectionToClient(ws);
                 this.#node.setProxyConnectionToClient(X.remoteNodeId(), X);
 
                 // TEST DEFECT ////////////////////////////////////////////////

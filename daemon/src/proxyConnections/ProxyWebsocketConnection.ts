@@ -4,8 +4,8 @@ import DataStreamy from '../common/DataStreamy';
 import GarbageMap from '../common/GarbageMap';
 import { kacheryP2PDeserialize, kacheryP2PSerialize, randomAlphaString, sleepMsec } from '../common/util';
 import { WebSocketInterface } from '../external/ExternalInterface';
-import { byteCount, ByteCount, DurationMsec, durationMsecToNumber, elapsedSince, ErrorMessage, isBuffer, isByteCount, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, minDuration, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, scaledDurationMsec, Signature, Timestamp, _validateObject } from "../interfaces/core";
-import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
+import { Address, byteCount, ByteCount, DurationMsec, durationMsecToNumber, elapsedSince, ErrorMessage, errorMessage, isBuffer, isByteCount, isEqualTo, isErrorMessage, isNodeId, isSignature, isString, isTimestamp, minDuration, NodeId, nodeIdToPublicKey, nowTimestamp, RequestId, scaledDurationMsec, Signature, Timestamp, _validateObject } from "../interfaces/core";
+import { isNodeToNodeRequest, isNodeToNodeResponse, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from "../interfaces/NodeToNodeRequest";
 import KacheryP2PNode from '../KacheryP2PNode';
 
 export interface InitialMessageFromClientBody {
@@ -154,13 +154,13 @@ export const isInitialMessageFromServer = (x: any): x is InitialMessageFromServe
     })
 }
 
-export type MessageFromClient = NodeToNodeResponse | ProxyStreamFileDataResponseMessage
+export type MessageFromClient = NodeToNodeRequest | NodeToNodeResponse | ProxyStreamFileDataResponseMessage
 export const isMessageFromClient = (x: any): x is MessageFromClient => {
-    return isNodeToNodeResponse(x) || isProxyStreamFileDataResponseMessage(x)
+    return isNodeToNodeRequest(x) || isNodeToNodeResponse(x) || isProxyStreamFileDataResponseMessage(x)
 }
-export type MessageFromServer = NodeToNodeRequest | ProxyStreamFileDataRequest | ProxyStreamFileDataCancelRequest // | others...
+export type MessageFromServer = NodeToNodeRequest | NodeToNodeResponse | ProxyStreamFileDataRequest | ProxyStreamFileDataCancelRequest // | others...
 export const isMessageFromServer = (x: any): x is MessageFromServer => {
-    return isNodeToNodeRequest(x) || isProxyStreamFileDataRequest(x) || isProxyStreamFileDataCancelRequest(x)
+    return isNodeToNodeRequest(x) || isNodeToNodeResponse(x) || isProxyStreamFileDataRequest(x) || isProxyStreamFileDataCancelRequest(x)
 }
 
 export interface ProxyStreamFileDataRequestId extends String {
@@ -174,7 +174,7 @@ const createProxyStreamFileDataRequestId = () => {
     return randomAlphaString(10) as any as ProxyStreamFileDataRequestId
 }
 
-export class ProxyConnectionToClient {
+export class ProxyWebsocketConnection {
     #node: KacheryP2PNode
     #remoteNodeId: NodeId | null = null
     #ws: WebSocketInterface
@@ -182,12 +182,128 @@ export class ProxyConnectionToClient {
     #closed = false
     #onClosedCallbacks: ((reason: any) => void)[] = []
     #onInitializedCallbacks: (() => void)[] = []
+    #proxyStreamFileDataCancelCallbacks = new GarbageMap<ProxyStreamFileDataRequestId, () => void>(scaledDurationMsec(30 * 60 * 1000))
     #responseListeners = new GarbageMap<RequestId, ((response: NodeToNodeResponse) => void)>(scaledDurationMsec(5 * 60 * 1000))
     #proxyStreamFileDataResponseMessageListeners = new GarbageMap<ProxyStreamFileDataRequestId, (msg: ProxyStreamFileDataResponseMessage) => void>(scaledDurationMsec(30 * 60 * 1000))
-    constructor(node: KacheryP2PNode) {
+    constructor(node: KacheryP2PNode, private type: 'connectionToClient' | 'connectionToServer') {
         this.#node = node
     }
-    async initialize(ws: WebSocketInterface) {
+    async initializeConnectionToServer(remoteNodeId: NodeId, address: Address, opts: {timeoutMsec: DurationMsec}) {
+        if (this.type !== 'connectionToServer') {
+            throw Error('Unexpected')
+        }
+        this.#remoteNodeId = remoteNodeId;
+        return new Promise((resolve, reject) => {
+            const url = `ws://${address.hostName}:${address.port}`;
+            this.#ws = this.#node.externalInterface().createWebSocket(url, {timeoutMsec: opts.timeoutMsec})
+            this.#ws.onClose((code, reason) => {
+                this.#closed = true;
+                this.#onClosedCallbacks.forEach(cb => cb(reason));
+            })
+            this.#ws.onError(err => {
+                /* istanbul ignore next */
+                console.warn(err)
+                // this is important so we don't throw an exception
+                // question: do we need to do something here? will 'close' be called also?
+            });
+            this.onInitialized(() => {
+                resolve();
+            });
+            this.onClosed((reason) => {
+                if (!this.#initialized) {
+                    reject(reason);
+                }
+            })
+            const msgBody: InitialMessageFromClientBody = {
+                type: 'proxyConnectionInitialMessageFromClient',
+                fromNodeId: this.#node.nodeId(),
+                toNodeId: remoteNodeId,
+                timestamp: nowTimestamp()
+            }
+            const msg: InitialMessageFromClient = {
+                body: msgBody,
+                signature: getSignature(msgBody, this.#node.keyPair())
+            }
+            this.#ws.onOpen(() => {
+                const messageSerialized = kacheryP2PSerialize(msg)
+                this.#node.stats().reportBytesSent('webSocket', this.#remoteNodeId, byteCount(messageSerialized.length))
+                this.#ws.send(messageSerialized);
+            })
+            this.#ws.onMessage(messageBuffer => {
+                if (this.#closed) return;
+                this.#node.stats().reportBytesReceived('webSocket', this.#remoteNodeId, byteCount(messageBuffer.length))
+                /////////////////////////////////////////////////////////////////////////
+                action('proxyConnectionToServerMessage', {context: "ProxyConnectionToServer", remoteNodeId: this.#remoteNodeId}, async () => {
+                    let messageParsed: Object;
+                    try {
+                        messageParsed = kacheryP2PDeserialize(messageBuffer);
+                    }
+                    catch(err) {
+                        this.#ws.close();
+                        return;
+                    }
+                    if (!this.#initialized) {
+                        if (!isInitialMessageFromServer(messageParsed)) {
+                            /* istanbul ignore next */
+                            console.warn(`Invalid initial websocket message from server. Closing.`)
+                            /* istanbul ignore next */
+                            this.#ws.close()
+                            /* istanbul ignore next */
+                            return
+                        }
+                        if (messageParsed.body.toNodeId !== this.#node.nodeId()) {
+                            /* istanbul ignore next */
+                            console.warn(`Invalid initial websocket message from server (wrong toNodeId). Closing.`)
+                            /* istanbul ignore next */
+                            this.#ws.close()
+                            /* istanbul ignore next */
+                            return
+                        }
+                        if (messageParsed.body.fromNodeId === this.#node.nodeId()) {
+                            /* istanbul ignore next */
+                            console.warn(`Invalid initial websocket message from server (invalid fromNodeId). Closing.`)
+                            /* istanbul ignore next */
+                            this.#ws.close()
+                            /* istanbul ignore next */
+                            return
+                        }
+                        if (!verifySignature(messageParsed.body, messageParsed.signature, nodeIdToPublicKey(messageParsed.body.fromNodeId))) {
+                            /* istanbul ignore next */
+                            console.warn(`Invalid initial websocket message from server (invalid signature). Closing.`)
+                            /* istanbul ignore next */
+                            this.#ws.close()
+                            /* istanbul ignore next */
+                            return
+                        }
+                        this.#initialized = true;
+                        this.#onInitializedCallbacks.forEach(cb => {cb()});
+                    }
+                    else {
+                        if (!this.#remoteNodeId) {
+                            /* istanbul ignore next */
+                            throw Error('Unexpected.')
+                        }
+                        if (!isMessageFromServer(messageParsed)) {
+                            /* istanbul ignore next */
+                            console.warn(`Invalid websocket message from server. Closing.`);
+                            /* istanbul ignore next */
+                            this.#ws.close();
+                            /* istanbul ignore next */
+                            return;
+                        }
+                        this._handleMessageFromServer(messageParsed);
+                    }
+                }, async () => {
+                    //
+                })
+                /////////////////////////////////////////////////////////////////////////
+            });
+        });
+    }
+    async initializeConnectionToClient(ws: WebSocketInterface) {
+        if (this.type !== 'connectionToClient') {
+            throw Error('Unexpected')
+        }
         return new Promise((resolve, reject) => {
             this.#ws = ws
             this.#ws.onClose((code, reason) => {
@@ -217,9 +333,8 @@ export class ProxyConnectionToClient {
                 if (this.#closed) return;
                 /////////////////////////////////////////////////////////////////////////
                 action('proxyConnectionToClientMessage', {context: "ProxyConnectionToClient", remoteNodeId: this.#remoteNodeId}, async () => {
-                    if (!isBuffer(messageBuffer)) {
-                        throw Error('Unexpected')
-                    }
+                    /* istanbul ignore next */
+                    if (!isBuffer(messageBuffer)) throw Error('Unexpected')
                     this.#node.stats().reportBytesReceived('webSocket', this.#remoteNodeId, byteCount(messageBuffer.length))
                     let messageParsed: Object;
                     try {
@@ -296,11 +411,10 @@ export class ProxyConnectionToClient {
             });
         });
     }
-    async sendRequest(request: NodeToNodeRequest, opts: {timeoutMsec: DurationMsec}): Promise<NodeToNodeResponse> {
-        this._sendMessageToClient(request);
-        return await this._waitForResponse(request.body.requestId, {timeoutMsec: opts.timeoutMsec, requestType: request.body.requestData.requestType});
-    }
     streamFileData(streamId: StreamId): DataStreamy {
+        if (this.type !== 'connectionToClient') {
+            throw Error('Unexpected')
+        }
         const ret = new DataStreamy()
 
         const _handleResponseMessageFromServer = (msg: ProxyStreamFileDataResponseMessage) => {
@@ -330,13 +444,13 @@ export class ProxyConnectionToClient {
         this.#proxyStreamFileDataResponseMessageListeners.set(proxyStreamFileDataRequestId, (msg) => {
             _handleResponseMessageFromServer(msg)
         })
-        this._sendMessageToClient(request)
+        this._sendMessageToRemote(request)
         ret.producer().onCancelled(() => {
             const cancelRequest: ProxyStreamFileDataCancelRequest = {
                 messageType: 'proxyStreamFileDataCancelRequest',
                 proxyStreamFileDataRequestId
             }
-            this._sendMessageToClient(cancelRequest)
+            this._sendMessageToRemote(cancelRequest)
         })
         return ret
     }
@@ -349,6 +463,10 @@ export class ProxyConnectionToClient {
     onClosed(callback: (reason: any) => void) {
         this.#onClosedCallbacks.push(callback);
     }
+    async sendRequest(request: NodeToNodeRequest, opts: {timeoutMsec: DurationMsec}): Promise<NodeToNodeResponse> {
+        this._sendMessageToRemote(request);
+        return await this._waitForResponse(request.body.requestId, {timeoutMsec: opts.timeoutMsec, requestType: request.body.requestData.requestType});
+    }
     remoteNodeId(): NodeId {
         if (!this.#remoteNodeId) {
             /* istanbul ignore next */
@@ -356,9 +474,39 @@ export class ProxyConnectionToClient {
         }
         return this.#remoteNodeId
     }
-    async _handleMessageFromClient(message: MessageFromClient) {
+    async _handleMessageFromServer(message: MessageFromServer) {
+        if (this.type !== 'connectionToServer') throw Error('Unexpected')
         if (this.#closed) return;
-        if (isNodeToNodeResponse(message)) {
+        if (isNodeToNodeRequest(message)) {
+            const response = await this.#node.handleNodeToNodeRequest(message);
+            this._sendMessageToRemote(response);
+        }
+        else if (isNodeToNodeResponse(message)) {
+            const callback = this.#responseListeners.get(message.body.requestId);
+            if (!callback) {
+                // must have timed out
+                return;
+            }
+            callback(message);
+        }
+        else if (isProxyStreamFileDataRequest(message)) {
+            await this._handleProxyStreamFileDataRequest(message)
+        }
+        else if (isProxyStreamFileDataCancelRequest(message)) {
+            await this._handleProxyStreamFileDataCancelRequest(message)
+        }
+        else {
+            throw Error('Unexpected message from server')
+        }
+    }
+    async _handleMessageFromClient(message: MessageFromClient) {
+        if (this.type !== 'connectionToClient') throw Error('Unexpected')
+        if (this.#closed) return;
+        if (isNodeToNodeRequest(message)) {
+            const response = await this.#node.handleNodeToNodeRequest(message);
+            this._sendMessageToRemote(response);
+        }
+        else if (isNodeToNodeResponse(message)) {
             const callback = this.#responseListeners.get(message.body.requestId);
             if (!callback) {
                 // must have timed out
@@ -377,10 +525,57 @@ export class ProxyConnectionToClient {
             throw Error('Unexpected message from client')
         }
     }
-    _sendMessageToClient(msg: MessageFromServer) {
+    async _handleProxyStreamFileDataRequest(request: ProxyStreamFileDataRequest) {
+        if (this.type !== 'connectionToServer') throw Error('Unexpected')
+        // the server is requesting to stream file data up from the client
+        const {streamId} = request
+        const s = await this.#node.streamFileData(this.#node.nodeId(), streamId)
+        s.onStarted(size => {
+            if (size === null) {
+                /* istanbul ignore next */
+                throw Error('unexpected.')
+            }
+            const response: ProxyStreamFileDataResponseStartedMessage = {
+                messageType: 'started',
+                proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId,
+                size
+            }
+            this._sendMessageToRemote(response)
+        })
+        s.onData(data => {
+            const response: ProxyStreamFileDataResponseDataMessage = {
+                messageType: 'data',
+                proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId,
+                data
+            }
+            this._sendMessageToRemote(response)
+        })
+        s.onFinished(() => {
+            const response: ProxyStreamFileDataResponseFinishedMessage = {
+                messageType: 'finished',
+                proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId
+            }
+            this._sendMessageToRemote(response)
+        })
+        s.onError((err: Error) => {
+            const response: ProxyStreamFileDataResponseErrorMessage = {
+                messageType: 'error',
+                proxyStreamFileDataRequestId: request.proxyStreamFileDataRequestId,
+                errorMessage: errorMessage(err.message)
+            }
+            this._sendMessageToRemote(response)
+        })
+        this.#proxyStreamFileDataCancelCallbacks.set(request.proxyStreamFileDataRequestId, () => {s.cancel()})
+    }
+    async _handleProxyStreamFileDataCancelRequest(request: ProxyStreamFileDataCancelRequest) {
+        if (this.type !== 'connectionToServer') throw Error('Unexpected')
+        const cb = this.#proxyStreamFileDataCancelCallbacks.get(request.proxyStreamFileDataRequestId)
+        if (cb) cb()
+    }
+    _sendMessageToRemote(msg: MessageFromClient | MessageFromServer) {
         if (!this.#initialized) {
             /* istanbul ignore next */
-            throw Error('Cannot send message to client before initialized.');
+            throw Error('Cannot send message over websocket before initialized.')
         }
         if (this.#closed) return;
         const messageSerialized = kacheryP2PSerialize(msg)

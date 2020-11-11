@@ -131,7 +131,7 @@ const startDaemon = async (args: {
     }) : null
     const discoverService = opts.services.discover ? new DiscoverService(kNode, {
         discoverBootstrapIntervalMsec: scaledDurationMsec(30000),
-        discoverRandomNodeIntervalMsec: scaledDurationMsec(1500)
+        discoverIndividualNodeIntervalMsec: scaledDurationMsec(1500)
     }) : null
     const bootstrapService = opts.services.bootstrap ? new BootstrapService(kNode, {
         probeIntervalMsec: scaledDurationMsec(15000)

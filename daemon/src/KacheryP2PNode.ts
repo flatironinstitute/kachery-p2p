@@ -22,8 +22,7 @@ import { handleSetLiveFeedSubscriptionsRequest } from './nodeToNodeRequestHandle
 import { handleStartStreamViaUdpRequest } from './nodeToNodeRequestHandlers/handleStartStreamViaUdpRequest'
 import { handleSubmitMessageToLiveFeedRequest } from './nodeToNodeRequestHandlers/handleSubmitMessageToLiveFeedRequest'
 import { protocolVersion } from './protocolVersion'
-import { ProxyConnectionToClient } from './proxyConnections/ProxyConnectionToClient'
-import { ProxyConnectionToServer } from './proxyConnections/ProxyConnectionToServer'
+import { ProxyWebsocketConnection } from './proxyConnections/ProxyWebsocketConnection'
 import RemoteNodeManager from './RemoteNodeManager'
 import PublicUdpSocketServer from './services/PublicUdpSocketServer'
 import { PacketId } from './udp/UdpPacketSender'
@@ -41,8 +40,8 @@ class KacheryP2PNode {
     #remoteNodeManager: RemoteNodeManager
     #kacheryStorageManager: KacheryStorageManagerInterface
     #liveFeedSubscriptionManager: LiveFeedSubscriptionManager // not used right now
-    #proxyConnectionsToClients = new Map<NodeId, ProxyConnectionToClient>()
-    #proxyConnectionsToServers = new Map<NodeId, ProxyConnectionToServer>()
+    #proxyConnectionsToClients = new Map<NodeId, ProxyWebsocketConnection>()
+    #proxyConnectionsToServers = new Map<NodeId, ProxyWebsocketConnection>()
     #downloadStreamManager = new DownloadStreamManager
     #publicUdpSocketAddress: Address | null = null
     #publicUdpSocketServer: PublicUdpSocketServer | null = null
@@ -185,7 +184,7 @@ class KacheryP2PNode {
     feedManager() {
         return this.#feedManager
     }
-    setProxyConnectionToClient(nodeId: NodeId, c: ProxyConnectionToClient) {
+    setProxyConnectionToClient(nodeId: NodeId, c: ProxyWebsocketConnection) {
         if (this.#proxyConnectionsToClients.has(nodeId)) {
             // we already have this connection
             c.close()
@@ -198,7 +197,7 @@ class KacheryP2PNode {
             }
         })
     }
-    setProxyConnectionToServer(nodeId: NodeId, c: ProxyConnectionToServer) {
+    setProxyConnectionToServer(nodeId: NodeId, c: ProxyWebsocketConnection) {
         if (this.#proxyConnectionsToServers.has(nodeId)) {
             // we already have this connection
             c.close()
@@ -217,6 +216,9 @@ class KacheryP2PNode {
     }
     getProxyConnectionToServer(nodeId: NodeId) {
         return this.#proxyConnectionsToServers.get(nodeId) || null
+    }
+    getProxyConnectionToClient(nodeId: NodeId) {
+        return this.#proxyConnectionsToClients.get(nodeId) || null
     }
     // getChannelInfo(channelName: ChannelName): ChannelInfo {
     //     const remoteNodesInChannel: RemoteNode[] = this.#remoteNodeManager.getRemoteNodesInChannel(channelName)
@@ -397,6 +399,7 @@ class KacheryP2PNode {
         const { requestId, fromNodeId, toNodeId, timestamp, requestData } = request.body
         if (!verifySignature(request.body, request.signature, nodeIdToPublicKey(fromNodeId))) {
             // think about banning the node here
+            /* istanbul ignore next */
             throw Error('Invalid signature in node-to-node request')
         }
         if (toNodeId !== this.#nodeId) {
@@ -468,6 +471,7 @@ class KacheryP2PNode {
             // redirect to a different node
             const p = this.#proxyConnectionsToClients.get(fromNodeId)
             if (!p) {
+                /* istanbul ignore next */
                 throw Error(`No proxy connection to node: ${fromNodeId.slice(0, 6)} <> ${this.#nodeId.slice(0, 6)}`)
             }
             return p.streamFileData(streamId)
@@ -479,10 +483,8 @@ class KacheryP2PNode {
             throw Error(`Unable to find download info for stream: ${streamId}: (node: ${this.#nodeId.slice(0, 6)})`)
         }
         const { startByte, endByte } = s
-        if (endByte === null) {
-            /* istanbul ignore next */
-            throw Error('Unexpected')
-        }
+        /* istanbul ignore next */
+        if (endByte === null) throw Error('Unexpected')
         const ret = new DataStreamy();
         const dataStream = await this.#kacheryStorageManager.getFileReadStream(s.fileKey)
         ret.producer().onCancelled(() => {

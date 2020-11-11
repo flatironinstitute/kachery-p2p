@@ -27,10 +27,8 @@ export const handleDownloadFileDataRequest = async (node: KacheryP2PNode, fromNo
             errorMessage: errorMessage('Unable to find file')
         }
     }
-    if (size === null) {
-        /* istanbul ignore next */
-        throw Error('Unexpected')
-    }
+    /* istanbul ignore next */
+    if (size === null) throw Error('Unexpected')
     if (endByte === null) {
         endByte = size
     }

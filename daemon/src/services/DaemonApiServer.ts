@@ -609,9 +609,7 @@ export default class DaemonApiServer {
             stats
         }
         /* istanbul ignore next */
-        if (!isJSONObject(response)) {
-            throw Error('Unexpected')
-        }
+        if (!isJSONObject(response)) throw Error('Unexpected')
         return response
     }
     // /findFile - find a file (or feed) in the remote nodes. May return more than one.
@@ -650,8 +648,16 @@ export default class DaemonApiServer {
     // /loadFile - load a file from remote kachery node(s) and store in kachery storage
     /* istanbul ignore next */
     async _apiLoadFile(req: Req, res: Res) {
-        const x = await this._loadFile(req.body)
         const jsonSocket = new JsonSocket(res as any as Socket)
+        let x: DataStreamy
+        try {
+            x = await this._loadFile(req.body)
+        }
+        catch(err) {
+            jsonSocket.sendMessage({type: 'error', error: err.message}, () => {})
+            res.end()
+            return
+        }
         let isDone = false
         x.onFinished(() => {
             if (isDone) return

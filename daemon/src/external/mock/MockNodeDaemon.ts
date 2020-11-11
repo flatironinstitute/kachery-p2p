@@ -63,10 +63,8 @@ export default class MockNodeDaemon {
             /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
-        if (!this.#d.node) {
-            /* istanbul ignore next */
-            throw Error('unexpected')
-        }
+        /* istanbul ignore next */
+        if (!this.#d.node) throw Error('unexpected')
         return this.#d.node
     }
     remoteNodeManager() {
@@ -86,10 +84,8 @@ export default class MockNodeDaemon {
             /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
-        if (!this.#d.publicApiServer) {
-            /* istanbul ignore next */
-            throw Error('unexpected')
-        }
+        /* istanbul ignore next */
+        if (!this.#d.publicApiServer) throw Error('unexpected')
         return await this.#d.publicApiServer.mockPostJson(path, data)
     }
     async mockPublicApiGetDownload(path: string): Promise<DataStreamy> {
@@ -97,10 +93,8 @@ export default class MockNodeDaemon {
             /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
-        if (!this.#d.publicApiServer) {
-            /* istanbul ignore next */
-            throw Error('unexpected')
-        }
+        /* istanbul ignore next */
+        if (!this.#d.publicApiServer) throw Error('unexpected')
         return await this.#d.publicApiServer.mockGetDownload(path)
     }
     async mockDaemonApiPost(path: string, data: JSONObject): Promise<JSONObject> {
@@ -108,10 +102,8 @@ export default class MockNodeDaemon {
             /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
-        if (!this.#d.daemonApiServer) {
-            /* istanbul ignore next */
-            throw Error('unexpected')
-        }
+        /* istanbul ignore next */
+        if (!this.#d.daemonApiServer) throw Error('unexpected')
         return await this.#d.daemonApiServer.mockPostJson(path, data)
     }
     mockDaemonApiServer() {
@@ -119,10 +111,8 @@ export default class MockNodeDaemon {
             /* istanbul ignore next */
             throw Error('mock daemon not yet initialized')
         }
-        if (!this.#d.daemonApiServer) {
-            /* istanbul ignore next */
-            throw Error('unexpected')
-        }
+        /* istanbul ignore next */
+        if (!this.#d.daemonApiServer) throw Error('unexpected')
         return this.#d.daemonApiServer
     }
     async mockDaemonPostFindFile(reqData: ApiFindFileRequest): Promise<{
@@ -131,13 +121,9 @@ export default class MockNodeDaemon {
         cancel: () => void;
     }> {
         /* istanbul ignore next */
-        if (!this.#d) {
-            throw Error('mock daemon not yet initialized')
-        }
-        if (!this.#d.daemonApiServer) {
-            /* istanbul ignore next */
-            throw Error('unexpected')
-        }
+        if (!this.#d) throw Error('Unexpected. Mock daemon not yet initialized')
+        /* istanbul ignore next */
+        if (!this.#d.daemonApiServer) throw Error('unexpected')
         return await this.#d.daemonApiServer.mockPostFindFile(reqData as any as JSONObject)
     }
 }

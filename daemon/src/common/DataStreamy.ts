@@ -43,10 +43,8 @@ class DataStreamyProducer {
         while (this.#unorderedDataChunksByIndex.has(this.#lastUnorderedDataIndex + 1)) {
             this.#lastUnorderedDataIndex ++
             const buf = this.#unorderedDataChunksByIndex.get(this.#lastUnorderedDataIndex)
-            if (!buf) {
-                /* istanbul ignore next */
-                throw Error('unexpected')
-            }
+            /* istanbul ignore next */
+            if (!buf) throw Error('unexpected')
             this.#unorderedDataChunksByIndex.delete(this.#lastUnorderedDataIndex)
             this.data(buf)
             if (this.#unorderedEndNumDataChunks !== null) {
@@ -74,6 +72,9 @@ class DataStreamyProducer {
     reportBytesLoaded(numBytes: ByteCount) {
         if (this.#cancelled) return
         this.dataStream._producer_reportBytesLoaded(numBytes)
+    }
+    setProgress(progress: DataStreamyProgress) {
+        this.dataStream._producer_setProgress(progress)
     }
     _cancel() {
         if (this.#cancelled) return
@@ -228,6 +229,12 @@ export default class DataStreamy {
             this.#onProgressCallbacks.forEach(cb => {
                 cb({bytesLoaded: this.#bytesLoaded, bytesTotal: s})
             })
+        }
+    }
+    _producer_setProgress(progress: DataStreamyProgress) {
+        this.#bytesLoaded = progress.bytesTotal
+        if (progress.bytesTotal) {
+            this.#size = progress.bytesTotal
         }
     }
 }

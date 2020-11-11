@@ -4,7 +4,7 @@ import RateEstimator from "./RateEstimator";
 
 class DownloadOptimizerProviderNode {
     #nodeId: NodeId
-    #currentDownloader: DataStreamy | null = null
+    #currentDownloaderProgress: DataStreamy | null = null
     #numBytesDownloadedInCurrentDownloader: ByteCount = byteCount(0)
     #rateEstimator = new RateEstimator();
     constructor(nodeId: NodeId) {
@@ -17,29 +17,29 @@ class DownloadOptimizerProviderNode {
         return this.#rateEstimator.estimatedRateBps()
     }
     isDownloading() {
-        return this.#currentDownloader ? true : false;
+        return this.#currentDownloaderProgress ? true : false;
     }
-    setDownloader(j: DataStreamy) {
-        if (this.#currentDownloader !== null) {
+    setDownloaderProgress(dp: DataStreamy) {
+        if (this.#currentDownloaderProgress !== null) {
             /* istanbul ignore next */
             throw Error('Unexpected: provider node already has a file downloader')
         }
-        this.#currentDownloader = j
+        this.#currentDownloaderProgress = dp
         this.#numBytesDownloadedInCurrentDownloader = byteCount(0)
         this.#rateEstimator.reportStart();
-        j.onProgress((progress: DataStreamyProgress) => {
+        dp.onProgress((progress: DataStreamyProgress) => {
             const deltaBytes = byteCount(byteCountToNumber(progress.bytesLoaded) - byteCountToNumber(this.#numBytesDownloadedInCurrentDownloader))
             this.#numBytesDownloadedInCurrentDownloader = progress.bytesLoaded
             this.#rateEstimator.reportBytes(deltaBytes)
         });
         const _handleComplete = () => {
             this.#rateEstimator.reportStop()
-            this.#currentDownloader = null
+            this.#currentDownloaderProgress = null
         }
-        j.onError((err: Error) => {
+        dp.onError((err: Error) => {
             _handleComplete()
         });
-        j.onFinished(() => {
+        dp.onFinished(() => {
             _handleComplete();
         });
     }

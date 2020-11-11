@@ -12,7 +12,7 @@ export default class DiscoverService {
     #node: KacheryP2PNode
     #remoteNodeManager: RemoteNodeManager
     #halted = false
-    constructor(node: KacheryP2PNode, private opts: {discoverBootstrapIntervalMsec: DurationMsec, discoverRandomNodeIntervalMsec: DurationMsec}) {
+    constructor(node: KacheryP2PNode, private opts: {discoverBootstrapIntervalMsec: DurationMsec, discoverIndividualNodeIntervalMsec: DurationMsec}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
 
@@ -70,7 +70,7 @@ export default class DiscoverService {
     async _start() {
         // Get channel info from other nodes in our channels
         let lastBootstrapDiscoverTimestamp: Timestamp = zeroTimestamp()
-        let lastRandomNodeDiscoverTimestamp: Timestamp = zeroTimestamp()
+        let lastIndividualNodeDiscoverTimestamp: Timestamp = zeroTimestamp()
         while (true) {
             if (this.#halted) return
             // periodically get channel info from bootstrap nodes
@@ -82,7 +82,7 @@ export default class DiscoverService {
                     for (let channelName of channelNames) {
                         /////////////////////////////////////////////////////////////////////////
                         await action('discoverFromBootstrapNode', {context: 'DiscoverService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
-                            await this._getChannelInfoFromNode(bootstrapNode.remoteNodeId(), channelName);
+                            await this._getChannelInfoFromNode(bootstrapNode.remoteNodeId(), channelName)
                         }, null);
                         /////////////////////////////////////////////////////////////////////////
                     }
@@ -90,22 +90,22 @@ export default class DiscoverService {
                 lastBootstrapDiscoverTimestamp = nowTimestamp();
             }
             
-            const elapsedSinceLastRandomNodeDiscover = elapsedSince(lastRandomNodeDiscoverTimestamp)
-            if (elapsedSinceLastRandomNodeDiscover > durationMsecToNumber(this.opts.discoverRandomNodeIntervalMsec)) {
-                // for each channel, choose a random node and get the channel info from that node
+            const elapsedSinceLastIndividualNodeDiscover = elapsedSince(lastIndividualNodeDiscoverTimestamp)
+            if (elapsedSinceLastIndividualNodeDiscover > durationMsecToNumber(this.opts.discoverIndividualNodeIntervalMsec)) {
+                // for each channel, choose node with longest elapsed time of their channel node info and get the channel info from that node
                 const channelNames = this.#node.channelNames();
                 for (let channelName of channelNames) {
-                    let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName);
+                    let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName).filter(rn => (rn.isOnline()))
                     if (nodes.length > 0) {
-                        var randomNode = nodes[randomIndex(nodes.length)];
+                        var selectedNode = selectNode(nodes, channelName)
                         /////////////////////////////////////////////////////////////////////////
-                        await action('discoverFromRandomNode', {context: 'DiscoverService', remoteNodeId: randomNode.remoteNodeId(), channelName}, async () => {
-                            await this._getChannelInfoFromNode(randomNode.remoteNodeId(), channelName);
+                        await action('discoverFromRandomNode', {context: 'DiscoverService', remoteNodeId: selectedNode.remoteNodeId(), channelName}, async () => {
+                            await this._getChannelInfoFromNode(selectedNode.remoteNodeId(), channelName)
                         }, null);
                         /////////////////////////////////////////////////////////////////////////
                     }
                 }
-                lastRandomNodeDiscoverTimestamp = nowTimestamp()
+                lastIndividualNodeDiscoverTimestamp = nowTimestamp()
             }
 
             await sleepMsec(scaledDurationMsec(500), () => {return !this.#halted})
@@ -113,6 +113,19 @@ export default class DiscoverService {
     }
 }
 
-const randomIndex = (n: number): number => {
-    return Math.floor(Math.random() * n);
+const selectNode = (nodes: RemoteNode[], channelName: ChannelName) => {
+    /* istanbul ignore next */
+    if (nodes.length === 0) throw Error('Unexpected')
+    let ret = nodes[0]
+    let age = ret.ageOfChannelNodeInfo(channelName)
+    /* istanbul ignore next */
+    if (age === null) throw Error('Unexpected')
+    for (let node of nodes) {
+        const ageMsec = node.ageOfChannelNodeInfo(channelName)
+        if ((ageMsec !== null) && (ageMsec < age)) {
+            age = ageMsec
+            ret = node
+        }
+    }
+    return ret
 }
