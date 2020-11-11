@@ -217,7 +217,7 @@ class RemoteNode {
         let method2 = this.#sendMessageMethodOptimizer.determineSendRequestMethod(method)
         return method2 === null ? false : true
     }
-    async downloadFileData(streamId: StreamId, opts: {method: DownloadFileDataMethod}): Promise<DataStreamy> {
+    async downloadFileData(streamId: StreamId, opts: {method: DownloadFileDataMethod}): Promise<{dataStream: DataStreamy, method: DownloadFileDataMethod}> {
         const method = this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(opts.method)
         if (method === null) {
             throw Error('No method available to download stream')
@@ -227,7 +227,11 @@ class RemoteNode {
             if (!address) {
                 throw Error('Unable to download file data... no http address found.')
             }
-            return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`), this.#node.stats(), {fromNodeId: this.#remoteNodeId})
+            const ds = await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`), this.#node.stats(), {fromNodeId: this.#remoteNodeId})
+            return {
+                method,
+                dataStream: ds
+            }
         }
         else if (method === 'http-proxy') {
             const address = this.getRemoteNodeHttpProxyAddress()
@@ -235,10 +239,18 @@ class RemoteNode {
                 /* istanbul ignore next */
                 throw Error('Unexpected. Unable to download file data... no http-proxy address found.')
             }
-            return await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`), this.#node.stats(), {fromNodeId: null})
+            const ds = await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`), this.#node.stats(), {fromNodeId: null})
+            return {
+                method,
+                dataStream: ds
+            }
         }
         else if (method === 'udp') {
-            return await this._streamDataViaUdpFromRemoteNode(streamId)
+            const ds = await this._streamDataViaUdpFromRemoteNode(streamId)
+            return {
+                method,
+                dataStream: ds
+            }
         }
         else {
             /* istanbul ignore next */

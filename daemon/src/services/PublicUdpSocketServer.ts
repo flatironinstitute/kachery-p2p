@@ -193,21 +193,27 @@ export default class PublicUdpSocketServer {
                 streamId,
                 numDataChunks: dataChunkIndex
             }
-            this._sendMessage(address, fallbackAddress, 'streamDataEnd', Buffer.alloc(0), udpMessageMetaData(metaData), {timeoutMsec: TIMEOUTS.defaultRequest, toNodeId: opts.toNodeId})
+            this._sendMessage(address, fallbackAddress, 'streamDataEnd', Buffer.alloc(0), udpMessageMetaData(metaData), {timeoutMsec: TIMEOUTS.defaultRequest, toNodeId: opts.toNodeId}).catch((err: Error) => {
+                // todo
+            })
         })
         dataStream.onError((err: Error) => {
             const metaData: StreamDataErrorMetaData = {
                 streamId,
                 errorMessage: errorMessage(err.message)
             }
-            this._sendMessage(address, fallbackAddress, 'streamDataError', Buffer.alloc(0), udpMessageMetaData(metaData), {timeoutMsec: TIMEOUTS.defaultRequest, toNodeId: opts.toNodeId})
+            this._sendMessage(address, fallbackAddress, 'streamDataError', Buffer.alloc(0), udpMessageMetaData(metaData), {timeoutMsec: TIMEOUTS.defaultRequest, toNodeId: opts.toNodeId}).catch((err: Error) => {
+                // todo
+            })
         })
         dataStream.onData((dataChunk: Buffer) => {
             const metaData: StreamDataChunkMetaData = {
                 streamId,
                 dataChunkIndex
             }
-            this._sendMessage(address, fallbackAddress, 'streamDataChunk', dataChunk, udpMessageMetaData(metaData), {timeoutMsec: TIMEOUTS.defaultRequest, toNodeId: opts.toNodeId})
+            this._sendMessage(address, fallbackAddress, 'streamDataChunk', dataChunk, udpMessageMetaData(metaData), {timeoutMsec: TIMEOUTS.defaultRequest, toNodeId: opts.toNodeId}).catch((err: Error) => {
+                // todo
+            })
             dataChunkIndex ++
         })
     }

@@ -61,34 +61,36 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
         let numComplete = 0
         let chunkDataStreams: DataStreamy[] = []
         for (let chunk of manifest.chunks) {
-            const chunkFileKey: FileKey = {
-                sha1: chunk.sha1,
-                chunkOf: {
-                    fileKey: {
-                        sha1: manifest.sha1
-                    },
-                    startByte: chunk.start,
-                    endByte: chunk.end
+            await (async () => { // do it this way so that we have function closure
+                const chunkFileKey: FileKey = {
+                    sha1: chunk.sha1,
+                    chunkOf: {
+                        fileKey: {
+                            sha1: manifest.sha1
+                        },
+                        startByte: chunk.start,
+                        endByte: chunk.end
+                    }
                 }
-            }
-            const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel})
-            ds.onError(err => {
-                ret.producer().error(err)
-            })
-            ds.onProgress((progress: DataStreamyProgress) => {
-                _updateProgressForManifestLoad()
-            })
-            ds.onFinished(() => {
-                numComplete ++
-                if (numComplete === manifest.chunks.length) {
-                    _concatenateChunks().then(() => {
-                        ret.producer().end()
-                    }).catch((err: Error) => {
-                        ret.producer().error(err)
-                    })
-                }
-            })
-            chunkDataStreams.push(ds)
+                const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel})
+                ds.onError(err => {
+                    ret.producer().error(err)
+                })
+                ds.onProgress((progress: DataStreamyProgress) => {
+                    _updateProgressForManifestLoad()
+                })
+                ds.onFinished(() => {
+                    numComplete ++
+                    if (numComplete === manifest.chunks.length) {
+                        _concatenateChunks().then(() => {
+                            ret.producer().end()
+                        }).catch((err: Error) => {
+                            ret.producer().error(err)
+                        })
+                    }
+                })
+                chunkDataStreams.push(ds)
+            })()
         }
         const _updateProgressForManifestLoad = () => {
             // this can be made more efficient - don't need to loop through all in-progress files every time
@@ -118,22 +120,19 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
     else {
         const ret = new DataStreamy()
         let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null
-        const f = node.downloadOptimizer().addFile(fileKey, fileSize)
-        f.incrementNumPointers()
-        f.onError(err => {
-            f.decrementNumPointers()
+        const task = node.downloadOptimizer().createTask(fileKey, fileSize)
+        task.onError(err => {
             ret.producer().error(err)
         })
-        f.onProgress((progress: DataStreamyProgress) => {
+        task.onProgress((progress: DataStreamyProgress) => {
             ret.producer().reportBytesLoaded(progress.bytesLoaded)
         })
-        f.onFinished(() => {
-            f.decrementNumPointers()
+        task.onFinished(() => {
             ret.producer().end()
         })
         ret.onError(() => {
             // this gets called on cancel or on any other error
-            f.decrementNumPointers() // cancel the download
+            task.cancel() // cancel the download
         })
         if (opts.fromNode) {
             node.downloadOptimizer().setProviderNodeForFile({fileKey, nodeId: opts.fromNode})

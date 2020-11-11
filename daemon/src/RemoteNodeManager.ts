@@ -170,23 +170,27 @@ class RemoteNodeManager {
                 }
             })
             if ((okay) && (this.canSendRequestToNode(n.remoteNodeId(), 'default'))) {
-                const promise = this.sendRequestToNode(n.remoteNodeId(), requestData, {timeoutMsec: opts.timeoutMsec, method: 'default'})
                 numTotal ++
-                promise.then(responseData => {
+                (async () => {
+                    let responseData: NodeToNodeResponseData
+                    try {
+                        responseData = await this.sendRequestToNode(n.remoteNodeId(), requestData, {timeoutMsec: opts.timeoutMsec, method: 'default'})
+                    }
+                    catch(err) {
+                        _onErrorResponseCallbacks.forEach(cb => {
+                            cb(n.remoteNodeId(), err)
+                        });
+                        numComplete ++
+                        _checkComplete()
+                        return
+                    }
                     if (finished) return;
                     _onResponseCallbacks.forEach(cb => {
                         cb(n.remoteNodeId(), responseData)
                     });
                     numComplete ++
                     _checkComplete()
-                })
-                promise.catch((reason) => {
-                    _onErrorResponseCallbacks.forEach(cb => {
-                        cb(n.remoteNodeId(), reason)
-                    });
-                    numComplete ++
-                    _checkComplete()
-                })
+                })()
             }
         });
         const _finalize = () => {
@@ -202,7 +206,7 @@ class RemoteNodeManager {
         const onResponse = (callback: (nodeId: NodeId, responseData: NodeToNodeResponseData) => void) => {
             _onResponseCallbacks.push(callback)
         }
-        const onErrorResponse = (callback: (nodeId: NodeId, reason: any) => void) => {
+        const onErrorResponse = (callback: (nodeId: NodeId, error: Error) => void) => {
             _onErrorResponseCallbacks.push(callback)
         }
         const onFinished = (callback: () => void) => {

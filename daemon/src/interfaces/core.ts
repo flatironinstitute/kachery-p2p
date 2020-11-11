@@ -1,4 +1,5 @@
 import assert from 'assert';
+import crypto from 'crypto';
 import { hexToPublicKey, JSONStringifyDeterministic } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
 import { AnnounceRequestData, isAnnounceRequestData } from "./NodeToNodeRequest";
@@ -486,6 +487,24 @@ export const isFileKey = (x: any): x is FileKey => {
             endByte: isByteCount
         })
     });
+}
+
+export interface FileKeyHash extends String {
+    __fileKeyHash__: never // phantom
+}
+export const isFileKeyHash = (x: any): x is FileKeyHash => {
+    return isSha1Hash(x) ? true : false
+}
+export const fileKeyHash = (fileKey: FileKey) => {
+    return sha1OfObject(fileKey as any as JSONObject) as any as FileKeyHash
+}
+export const sha1OfObject = (x: JSONObject): Sha1Hash => {
+    return sha1OfString(JSONStringifyDeterministic(x))
+}
+export const sha1OfString = (x: string): Sha1Hash => {
+    const sha1sum = crypto.createHash('sha1')
+    sha1sum.update(x)
+    return sha1sum.digest('hex') as any as Sha1Hash
 }
 
 // Conversion between types

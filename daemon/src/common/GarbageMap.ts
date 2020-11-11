@@ -10,11 +10,21 @@ export default class GarbageMap<Key, Value> {
     get(key: Key): Value | undefined {
         this._checkGarbageCollection()
         const x = this.#map.get(key)
-        if (x) {
-            return x.value
+        if (x === undefined) {
+            return undefined
         }
         else {
-            return undefined
+            return x.value
+        }
+    }
+    getWithDefault(key: Key, defaultValue: Value): Value {
+        this._checkGarbageCollection()
+        const x = this.#map.get(key)
+        if (x === undefined) {
+            return defaultValue
+        }
+        else {
+            return x.value
         }
     }
     set(key: Key, value: Value) {

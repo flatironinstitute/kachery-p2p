@@ -1,48 +1,96 @@
-import DataStreamy from "../common/DataStreamy";
-import { ByteCount, FileKey, NodeId } from "../interfaces/core";
+import DataStreamy, { DataStreamyProgress } from "../common/DataStreamy";
+import { randomAlphaString } from "../common/util";
+import { ByteCount, FileKey, fileKeyHash, FileKeyHash, NodeId } from "../interfaces/core";
 import DownloadOptimizerJob from "./DownloadOptimizerJob";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
 
 interface DownloaderCreatorInterface {
-    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId}) => {start: () => Promise<DataStreamy>}
+    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId}) => {start: () => Promise<DataStreamy>, stop: () => void}
+}
+
+interface DownloadOptimizerTask {
+    taskId: string,
+    fileKey: FileKey,
+    fileSize: ByteCount | null,
+    progressStream: DataStreamy
 }
 
 export default class DownloadOptimizer {
-    #jobs = new Map<FileKey, DownloadOptimizerJob>()
+    #jobs = new Map<FileKeyHash, DownloadOptimizerJob>()
+    #tasks = new Map<FileKeyHash, Map<string, DownloadOptimizerTask>>()
     #providerNodes = new Map<NodeId, DownloadOptimizerProviderNode>()
-    #providerNodesForFiles = new Map<FileKey, Set<NodeId>>()
+    #providerNodesForFiles = new Map<FileKeyHash, Set<NodeId>>()
     #downloaderCreator: DownloaderCreatorInterface
     #maxNumSimultaneousFileDownloads = 5
     #updateScheduled = false
     constructor(downloaderCreator: DownloaderCreatorInterface) {
         this.#downloaderCreator = downloaderCreator
     }
-    addFile(fileKey: FileKey, fileSize: ByteCount | null): DownloadOptimizerJob {
-        let j = this.#jobs.get(fileKey)
+    createTask(fileKey: FileKey, fileSize: ByteCount | null): DataStreamy {
+        const taskId = randomAlphaString(10)
+        const fkh = fileKeyHash(fileKey)
+        const t: DownloadOptimizerTask = {
+            taskId,
+            fileKey,
+            fileSize,
+            progressStream: new DataStreamy()
+        }
+        let j = this.#jobs.get(fkh)
         if (!j) {
             j = new DownloadOptimizerJob(fileKey, fileSize)
-            this.#jobs.set(fileKey, j)
+            this.#jobs.set(fkh, j)
         }
-        j.onError(() => {
-            this.#jobs.delete(fileKey)
-            this._scheduleUpdate()
-        });
-        j.onFinished(() => {
-            this.#jobs.delete(fileKey)
-            this._scheduleUpdate()
-        });
+        j.getProgressStream().onStarted((byteCount: ByteCount) => {
+            t.progressStream.producer().start(byteCount)
+        })
+        j.getProgressStream().onProgress((progress: DataStreamyProgress) => {
+            t.progressStream.producer().setProgress(progress)
+        })
+        j.getProgressStream().onError((err: Error) => {
+            t.progressStream.producer().error(err)
+            this._deleteTask(fkh, taskId)
+        })
+        j.getProgressStream().onFinished(() => {
+            t.progressStream.producer().end()
+            this._deleteTask(fkh, taskId)
+        })
+        t.progressStream.producer().onCancelled(() => {
+            this._deleteTask(fkh, taskId)
+        })
+        let tasks0 = this.#tasks.get(fkh)
+        if (!tasks0) {
+            tasks0 = new Map<string, DownloadOptimizerTask>()
+            this.#tasks.set(fkh, tasks0)
+        }
+        tasks0.set(t.taskId, t)
         this._scheduleUpdate()
-        return j
+        return t.progressStream
+    }
+    _deleteTask(fileKeyHash: FileKeyHash, taskId: string) {
+        const tasks = this.#tasks.get(fileKeyHash)
+        if (!tasks) return
+        const t = tasks.get(taskId)
+        if (!t) return
+        tasks.delete(taskId)
+        if (tasks.size === 0) {
+            const j = this.#jobs.get(fileKeyHash)
+            if (j) {
+                j.cancel()
+                this.#jobs.delete(fileKeyHash)
+            }
+        }
+        this._scheduleUpdate()
     }
     setProviderNodeForFile({ fileKey, nodeId }: {fileKey: FileKey, nodeId: NodeId}) {
         if (!this.#providerNodes.has(nodeId)) {
             const p = new DownloadOptimizerProviderNode(nodeId)
             this.#providerNodes.set(nodeId, p)
         }
-        let s: Set<NodeId> | null = this.#providerNodesForFiles.get(fileKey) || null
+        const fkh = fileKeyHash(fileKey)
+        let s: Set<NodeId> | null = this.#providerNodesForFiles.get(fkh) || null
         if (s == null) {
             s = new Set<NodeId>()
-            this.#providerNodesForFiles.set(fileKey, s)
+            this.#providerNodesForFiles.set(fkh, s)
         }
         s.add(nodeId)
         this._scheduleUpdate()
@@ -61,15 +109,14 @@ export default class DownloadOptimizer {
     async _update() {
         let numActiveFileDownloads = Array.from(this.#jobs.values()).filter(file => (file.isDownloading())).length;
         if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
-            for (let k of this.#jobs.keys()) {
-                const fileKey = k as any as FileKey
-                const job = this.#jobs.get(fileKey)
+            for (let fkh of this.#jobs.keys()) {
+                const job = this.#jobs.get(fkh)
                 /* istanbul ignore next */
                 if (!job) throw Error('Unexpected')
                 if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
-                    if ((!job.isDownloading()) && (job.numPointers() > 0)) {
+                    if (!job.isDownloading()) {
                         const providerNodeCandidates: DownloadOptimizerProviderNode[] = []
-                        let providerNodeIds = this.#providerNodesForFiles.get(fileKey)
+                        let providerNodeIds = this.#providerNodesForFiles.get(fkh)
                         if (providerNodeIds) {
                             providerNodeIds.forEach(providerNodeId => {
                                 const providerNode = this.#providerNodes.get(providerNodeId)

@@ -549,6 +549,7 @@ export default class DaemonApiServer {
         throw Error(`Unexpected path in mockPostJson: ${path}`)
     }
     async mockPostLoadFile(data: JSONObject): Promise<DataStreamy> {
+        /* istanbul ignore next */
         if (!isApiLoadFileRequest(data)) throw Error('Unexpected data in mockPostLoadFile')
         return await this._loadFile(data)
     }
@@ -557,6 +558,7 @@ export default class DaemonApiServer {
         onFinished: (callback: () => void) => void;
         cancel: () => void;
     }> {
+        /* istanbul ignore next */
         if (!isApiFindFileRequest(reqData)) throw Error('Unexpected data in mockPostFindFile')
         return await this._findFile(reqData)
     }
@@ -573,6 +575,7 @@ export default class DaemonApiServer {
             publicUdpSocketAddress: this.#node.publicUdpSocketAddress(),
             channels: this.#node.channelNames()
         }
+        /* istanbul ignore next */
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         return response
     }
@@ -592,9 +595,8 @@ export default class DaemonApiServer {
     }
     // /stats
     async _handleStats(query: JSONObject): Promise<JSONObject> {
-        if (!isGetStatsOpts(query)) {
-            throw Error('Unexpected query.')
-        }
+        /* istanbul ignore next */
+        if (!isGetStatsOpts(query)) throw Error('Unexpected query.')
         interface ApiStatsResponse {
             success: boolean,
             format: string,
@@ -616,6 +618,7 @@ export default class DaemonApiServer {
     /* istanbul ignore next */
     async _apiFindFile(req: Req, res: Res) {
         const reqData = req.body
+        /* istanbul ignore next */
         if (!isApiFindFileRequest(reqData)) throw Error('Invalid request in _apiFindFile')
         
         const x = await this._findFile(reqData)
@@ -686,6 +689,7 @@ export default class DaemonApiServer {
         });
     }
     async _loadFile(reqData: ApiLoadFileRequest) {
+        /* istanbul ignore next */
         if (!isApiLoadFileRequest(reqData)) throw Error('Invalid request in _apiLoadFile');
 
         const { fileKey, fromNode, fromChannel } = reqData;
@@ -698,6 +702,7 @@ export default class DaemonApiServer {
     }
     // /feed/createFeed - create a new writeable feed on this node
     async _handleFeedApiCreateFeed(reqData: any) {
+        /* istanbul ignore next */
         if (!isFeedApiCreateFeedRequest(reqData)) throw Error('Invalid request in _feedApiCreateFeed');
 
         const feedName = reqData.feedName || null;
@@ -708,6 +713,7 @@ export default class DaemonApiServer {
     }
     // /feed/deleteFeed - delete feed on this node
     async _handleFeedApiDeleteFeed(reqData: JSONObject) {
+        /* istanbul ignore next */
         if (!isFeedApiDeleteFeedRequest(reqData)) throw Error('Invalid request in _feedApiDeleteFeed');
 
         const { feedId } = reqData;
@@ -719,6 +725,7 @@ export default class DaemonApiServer {
     }
     // /feed/getFeedId - lookup the ID of a local feed based on its name
     async _handleFeedApiGetFeedId(reqData: JSONObject) {
+        /* istanbul ignore next */
         if (!isFeedApiGetFeedIdRequest(reqData)) throw Error('Invalid request in _feedApiGetFeedId');
         const { feedName } = reqData;
         const feedId = await this.#node.feedManager().getFeedId({feedName});
@@ -734,10 +741,8 @@ export default class DaemonApiServer {
     }
     // /feed/appendMessages - append messages to a local writeable subfeed
     async _handleFeedApiAppendMessages(reqData: JSONObject) {
-        if (!isFeedApiAppendMessagesRequest(reqData)) {
-            console.warn(reqData)
-            throw Error('Invalid request in _feedApiAppendMessages')
-        }
+        /* istanbul ignore next */
+        if (!isFeedApiAppendMessagesRequest(reqData)) throw Error('Invalid request in _feedApiAppendMessages')
         const { feedId, subfeedHash, messages } = reqData
 
         await this.#node.feedManager().appendMessages({
@@ -750,6 +755,7 @@ export default class DaemonApiServer {
     }
     // /feed/submitMessage - submit message to a remote live subfeed (must have permission)
     async _handleFeedApiSubmitMessage(reqData: JSONObject) {
+        /* istanbul ignore next */
         if (!isFeedApiSubmitMessageRequest(reqData)) throw Error('Invalid request in _feedApiSubmitMessage');
 
         const { feedId, subfeedHash, message, timeoutMsec } = reqData;
@@ -762,6 +768,7 @@ export default class DaemonApiServer {
     }
     // /feed/getMessages - get messages from a local or remote subfeed
     async _handleFeedApiGetMessages(reqData: JSONObject) {
+        /* istanbul ignore next */
         if (!isFeedApiGetMessagesRequest(reqData)) throw Error('Invalid request in _feedApiGetMessages');
 
         const response = await this._getMessages(reqData)
@@ -780,6 +787,7 @@ export default class DaemonApiServer {
     }
     // /feed/getSignedMessages - get signed messages from a local or remote subfeed
     async _handleFeedApiGetSignedMessages(reqData: JSONObject) {
+        /* istanbul ignore next */
         if (!isFeedApiGetSignedMessagesRequest(reqData)) throw Error('Invalid request in _feedApiGetSignedMessages');
 
         const { feedId, subfeedHash, position, maxNumMessages, waitMsec } = reqData;
@@ -794,6 +802,7 @@ export default class DaemonApiServer {
     }
     // /feed/getNumMessages - get number of messages in a subfeed
     async _handleFeedApiGetNumMessages(reqData: JSONObject) {
+        /* istanbul ignore next */
         if (!isFeedApiGetNumMessagesRequest(reqData)) throw Error('Invalid request in _feedApiGetNumMessages');
 
         const { feedId, subfeedHash } = reqData;
@@ -808,6 +817,7 @@ export default class DaemonApiServer {
     }
     // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
     async _handleFeedApiGetFeedInfo(reqData: JSONObject) {
+        /* istanbul ignore next */
         if (!isFeedApiGetFeedInfoRequest(reqData)) throw Error('Invalid request in _feedApiGetFeedInfo');
 
         const { feedId, timeoutMsec } = reqData;
@@ -819,6 +829,7 @@ export default class DaemonApiServer {
     }
     // /feed/getAccessRules - get access rules for a local writeable subfeed
     async _handleFeedApiGetAccessRules(reqData: JSONObject) {
+        /* istanbul ignore next */
         if (!isFeedApiGetAccessRulesRequest(reqData)) throw Error('Invalid request in _feedApiGetAccessRules');
 
         const { feedId, subfeedHash } = reqData;
@@ -836,6 +847,7 @@ export default class DaemonApiServer {
     }
     // /feed/setAccessRules - set access rules for a local writeable subfeed
     async _handleFeedApiSetAccessRules(reqData: JSONObject) {
+        /* istanbul ignore next */
         if (!isFeedApiSetAccessRulesRequest(reqData)) throw Error('Invalid request in _feedApiSetAccessRules');
 
         const { feedId, subfeedHash, accessRules } = reqData;
@@ -848,6 +860,7 @@ export default class DaemonApiServer {
     }
     // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
     async _handleFeedApiWatchForNewMessages(reqData: JSONObject) {
+        /* istanbul ignore next */
         if (!isFeedApiWatchForNewMessagesRequest(reqData)) throw Error('Invalid request in _feedApiWatchForNewMessages')
 
         const { subfeedWatches, waitMsec, maxNumMessages } = reqData

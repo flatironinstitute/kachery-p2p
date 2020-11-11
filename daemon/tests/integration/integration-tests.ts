@@ -399,14 +399,15 @@ const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fi
 }
 
 const testLoadFileWithDefects = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fileSize: ByteCount = byteCount(20000), chunkSize: ByteCount = byteCount(1200)) => {
-    const f1Content = Buffer.alloc(byteCountToNumber(fileSize), 'a')
-    const f2Content = Buffer.alloc(byteCountToNumber(fileSize), 'b')
-    const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize})
-    const f2Key = daemon1.mockKacheryStorageManager().addMockFile(f2Content, {chunkSize})
+    const f1Content = Buffer.alloc(byteCountToNumber(fileSize), 'c')
+    const f2Content = Buffer.alloc(byteCountToNumber(fileSize), 'd')
 
     daemon1.setDefects({
         fileReadDefect: true
     })
+
+    const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize})
+    const f2Key = daemon1.mockKacheryStorageManager().addMockFile(f2Content, {chunkSize})
 
     {
         const reqData: ApiLoadFileRequest = {

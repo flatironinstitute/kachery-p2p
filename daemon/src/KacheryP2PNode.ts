@@ -131,7 +131,7 @@ class KacheryP2PNode {
                 fileKey: args.fileKey
             }
             const channelNames = args.fromChannel ? [args.fromChannel] : this.p.channelNames
-            const { onResponse, onFinished, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec: args.timeoutMsec, channelNames })
+            const { onResponse, onFinished, onErrorResponse, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec: args.timeoutMsec, channelNames })
             handleCancel = cancel
             onResponse((nodeId: NodeId, responseData: NodeToNodeResponseData) => {
                 if (!isCheckForFileResponseData(responseData)) {
@@ -153,6 +153,9 @@ class KacheryP2PNode {
                 onFinishedCallbacks.forEach(cb => {
                     cb()
                 })
+            })
+            onErrorResponse((nodeId: NodeId, err: Error) => {
+                // todo
             })
         }, 10)
         return {
@@ -373,7 +376,7 @@ class KacheryP2PNode {
                 requestType: 'checkForLiveFeed',
                 feedId
             }
-            const { onResponse, onFinished, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec, channelNames: this.p.channelNames })
+            const { onResponse, onFinished, onErrorResponse, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec, channelNames: this.p.channelNames })
             let found = false
             onResponse((nodeId, responseData) => {
                 if (found) return
@@ -392,6 +395,9 @@ class KacheryP2PNode {
                 if (!found) {
                     resolve(null)
                 }
+            })
+            onErrorResponse((nodeId: NodeId, error: Error) => {
+                // todo
             })
         })
     }

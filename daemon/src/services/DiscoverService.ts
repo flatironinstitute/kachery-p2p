@@ -1,5 +1,6 @@
 import { action } from "../common/action";
 import { TIMEOUTS } from "../common/constants";
+import GarbageMap from "../common/GarbageMap";
 import { sleepMsec } from "../common/util";
 import { HttpPostJsonError } from "../external/real/httpRequests";
 import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core";
@@ -12,6 +13,7 @@ export default class DiscoverService {
     #node: KacheryP2PNode
     #remoteNodeManager: RemoteNodeManager
     #halted = false
+    #discoverHistoryTimestamps = new GarbageMap<NodeId, Timestamp>(scaledDurationMsec(30 * 60 * 1000))
     constructor(node: KacheryP2PNode, private opts: {discoverBootstrapIntervalMsec: DurationMsec, discoverIndividualNodeIntervalMsec: DurationMsec}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
@@ -97,10 +99,12 @@ export default class DiscoverService {
                 for (let channelName of channelNames) {
                     let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName).filter(rn => (rn.isOnline()))
                     if (nodes.length > 0) {
-                        var selectedNode = selectNode(nodes, channelName)
+                        var individualNode = selectNode(nodes, this.#discoverHistoryTimestamps)
+                        this.#discoverHistoryTimestamps.set(individualNode.remoteNodeId(), nowTimestamp())
+
                         /////////////////////////////////////////////////////////////////////////
-                        await action('discoverFromRandomNode', {context: 'DiscoverService', remoteNodeId: selectedNode.remoteNodeId(), channelName}, async () => {
-                            await this._getChannelInfoFromNode(selectedNode.remoteNodeId(), channelName)
+                        await action('discoverFromIndividualNode', {context: 'DiscoverService', remoteNodeId: individualNode.remoteNodeId(), channelName}, async () => {
+                            await this._getChannelInfoFromNode(individualNode.remoteNodeId(), channelName)
                         }, null);
                         /////////////////////////////////////////////////////////////////////////
                     }
@@ -113,19 +117,17 @@ export default class DiscoverService {
     }
 }
 
-const selectNode = (nodes: RemoteNode[], channelName: ChannelName) => {
-    /* istanbul ignore next */
-    if (nodes.length === 0) throw Error('Unexpected')
-    let ret = nodes[0]
-    let age = ret.ageOfChannelNodeInfo(channelName)
-    /* istanbul ignore next */
-    if (age === null) throw Error('Unexpected')
-    for (let node of nodes) {
-        const ageMsec = node.ageOfChannelNodeInfo(channelName)
-        if ((ageMsec !== null) && (ageMsec < age)) {
-            age = ageMsec
-            ret = node
-        }
-    }
-    return ret
+// thanks: https://gist.github.com/engelen/fbce4476c9e68c52ff7e5c2da5c24a28
+function argMax(array: number[]) {
+    if (array.length === 0) throw Error('Unexpected')
+    return array.map((x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
+}
+
+const selectNode = (nodes: RemoteNode[], historyTimestamps: GarbageMap<NodeId, Timestamp>): RemoteNode => {
+    const n = nodes[0]
+    if (!n) throw Error('Unexpected')
+    const timestamps: Timestamp[] = nodes.map(n => (historyTimestamps.getWithDefault(n.remoteNodeId(), zeroTimestamp())))
+    const elapsedTimes = timestamps.map(ts => (elapsedSince(ts)))
+    const ind = argMax(elapsedTimes)
+    return nodes[ind]
 }
