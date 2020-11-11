@@ -57,6 +57,7 @@ export default class DisplayStateService {
             this.#lastText = txt
             this.#lastDisplayTimestamp = nowTimestamp()
             console.info(txt)
+            console.info(`Memory used: ${formatMB(process.memoryUsage().heapUsed)} (heap); ${formatMB(process.memoryUsage().external)} (external); ${formatMB(process.memoryUsage().arrayBuffers)} (arrayBuffers)`)
         }
     }
     async _start() {
@@ -73,4 +74,9 @@ const getConnectionString = (rn: RemoteNode) => {
     const candidateMethods: SendRequestMethod[] = ['udp', 'http', 'http-proxy']
     const methods: SendRequestMethod[] = candidateMethods.filter(method => (rn.canSendRequest(method)))
     return `${onlineString}${methods.join(' ')}`
+}
+
+const formatMB = (numBytes: number) => {
+    const a = numBytes / (1024 * 1024)
+    return `${a.toFixed(1)} MB`
 }

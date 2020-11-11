@@ -445,7 +445,8 @@ def start_daemon(*,
         export KACHERY_P2P_API_PORT="{api_port}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
         cd {thisdir}/../daemon
-        exec node_modules/ts-node/dist/bin.js {' '.join(node_arg)} ./src/cli.ts start {' '.join(start_args)}
+        # exec node_modules/ts-node/dist/bin.js {' '.join(node_arg)} ./src/cli.ts start {' '.join(start_args)}
+        exec node {' '.join(node_arg)} -r ts-node/register ./src/cli.ts start {' '.join(start_args)}
         ''')
         ss.start()
         try:

@@ -74,7 +74,7 @@ export default class DownloaderCreator {
                 if (!o) throw Error('Unexpected')
                 const bytesLoaded = ret.bytesLoaded()
                 const elapsedSec = elapsedSince(timestamp) / 1000
-                console.log(`Error downloading file data. Downloaded ${ret.bytesLoaded()} bytes in ${elapsedSec} sec from ${args.nodeId.slice(0, 6)} using ${o.method}`)
+                console.log(`Error downloading file data. Downloaded ${formatByteCount(ret.bytesLoaded())} bytes in ${elapsedSec} sec from ${args.nodeId.slice(0, 6)} using ${o.method}`)
                 ret.producer().error(err)
             })
             o.dataStream.onFinished(() => {
@@ -82,7 +82,7 @@ export default class DownloaderCreator {
                 const bytesLoaded = ret.bytesLoaded()
                 const elapsedSec = elapsedSince(timestamp) / 1000
                 const rate = (byteCountToNumber(bytesLoaded) / 1e6) / elapsedSec
-                console.log(`Downloaded ${ret.bytesLoaded()} bytes in ${elapsedSec} sec [${rate} MiB/sec] from ${args.nodeId.slice(0, 6)} using ${o.method}`)
+                console.info(`Downloaded ${formatByteCount(ret.bytesLoaded())} in ${elapsedSec} sec [${rate.toFixed(3)} MiB/sec] from ${args.nodeId.slice(0, 6)} using ${o.method}`)
                 const data = Buffer.concat(_data)
                 this.#node.kacheryStorageManager().storeFile(args.fileKey.sha1, data).then(() => {
                     ret.producer().end()
@@ -112,5 +112,21 @@ export default class DownloaderCreator {
             start: _start,
             stop: _stop
         }
+    }
+}
+
+const formatByteCount = (n: ByteCount) => {
+    const a = byteCountToNumber(n)
+    if (a < 10000) {
+        return `${a} bytes`
+    }
+    else if (a < 100 * 1000) {
+        return `${(a / 1000).toFixed(1)} KiB`
+    }
+    else if (a < 100 * 1000 * 1000) {
+        return `${(a / (1000 * 1000)).toFixed(1)} MiB`
+    }
+    else {
+        return `${(a / (1000 * 1000)).toFixed(0)} MiB`
     }
 }

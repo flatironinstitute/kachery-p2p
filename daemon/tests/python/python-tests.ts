@@ -56,6 +56,7 @@ const daemonContext = async (o: DaemonContextOpts[], testFunction: (daemons: Dae
             ): []
             const opts: StartDaemonOpts = {
                 bootstrapAddresses,
+                trustedNodeIds: [],
                 isBootstrap: oo.isBootstrap || false,
                 channelNames: oo.channelNames,
                 multicastUdpAddress: {hostName: '237.0.0.1' as any as HostName, port: toPort(21011)},

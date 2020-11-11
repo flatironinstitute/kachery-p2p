@@ -5,6 +5,8 @@ export interface DataStreamyProgress {
     bytesTotal: ByteCount
 }
 
+const memoryLeakTest = []
+
 class DataStreamyProducer {
     #cancelled = false
     #onCancelledCallbacks: (() => void)[] = []
@@ -36,6 +38,7 @@ class DataStreamyProducer {
     }
     data(buf: Buffer) {
         if (this.#cancelled) return
+        // memoryLeakTest.push(buf)
         this.dataStream._producer_data(buf)
     }
     unorderedData(index: number, buf: Buffer) {
