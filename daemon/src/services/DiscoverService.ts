@@ -60,7 +60,7 @@ export default class DiscoverService {
             }
         }
         if (!isGetChannelInfoResponseData(responseData)) {
-            throw Error('Unexpected.');
+            throw Error(`Unexpected GetChannelInfoResponseData from node: ${remoteNodeId.slice(0, 6)}`);
         }
         const { channelInfo } = responseData;
         channelInfo.nodes.forEach(channelNodeInfo => {
