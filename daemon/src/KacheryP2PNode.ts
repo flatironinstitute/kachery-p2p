@@ -74,7 +74,7 @@ class KacheryP2PNode {
         this.#remoteNodeManager = new RemoteNodeManager(this)
 
         const downloaderCreator = new DownloaderCreator(this, this.p.opts.getDefects)
-        this.#downloadOptimizer = new DownloadOptimizer(downloaderCreator)
+        this.#downloadOptimizer = new DownloadOptimizer(downloaderCreator, this.#remoteNodeManager)
     }
     nodeId() {
         return this.#nodeId
