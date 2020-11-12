@@ -1,6 +1,6 @@
 import ExternalInterface from './external/ExternalInterface';
 import { MockNodeDefects } from './external/mock/MockNodeDaemon';
-import { Address, ChannelName, HostName, LocalFilePath, NodeId, NodeLabel, Port, scaledDurationMsec, unscaledDurationMsec } from './interfaces/core';
+import { Address, ChannelName, HostName, LocalFilePath, NodeLabel, Port, scaledDurationMsec, unscaledDurationMsec } from './interfaces/core';
 import KacheryP2PNode from './KacheryP2PNode';
 import AnnounceService from './services/AnnounceService';
 import BootstrapService from './services/BootstrapService';
@@ -21,7 +21,6 @@ export interface StartDaemonOpts {
     udpSocketPort: Port | null,
     webSocketListenPort: Port | null,
     firewalled: boolean,
-    trustedNodeIds: NodeId[],
     services: {
         announce?: boolean,
         discover?: boolean,
@@ -82,7 +81,6 @@ const startDaemon = async (args: {
         udpSocketPort: opts.udpSocketPort,
         label,
         bootstrapAddresses: opts.bootstrapAddresses,
-        trustedNodeIds: opts.trustedNodeIds,
         channelNames: opts.channelNames,
         externalInterface,
         opts: {

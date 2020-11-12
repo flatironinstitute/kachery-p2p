@@ -585,15 +585,12 @@ export interface ChannelNodeInfoBody {
     webSocketAddress: Address | null,
     publicUdpSocketAddress: Address | null,
     proxyHttpAddresses: Address[],
-    trustedNodeIds: NodeId[],
     timestamp: Timestamp
 }
 export interface ChannelNodeInfo {
     body: ChannelNodeInfoBody,
     signature: Signature
 }
-
-const MAX_NUM_TRUSTED_NODE_IDS = 10
 
 export const isChannelNodeInfoBody = (x: any): x is ChannelNodeInfoBody => {
     if (!_validateObject(x, {
@@ -604,10 +601,8 @@ export const isChannelNodeInfoBody = (x: any): x is ChannelNodeInfoBody => {
         webSocketAddress: isOneOf([isNull, isAddress]),
         publicUdpSocketAddress: isOneOf([isNull, isAddress]),
         proxyHttpAddresses: isArrayOf(isAddress),
-        trustedNodeIds: isArrayOf(isNodeId),
         timestamp: isTimestamp
     })) return false
-    if (x.trustedNodeIds.length > MAX_NUM_TRUSTED_NODE_IDS) return false
     return true
 }
 export const isChannelNodeInfo = (x: any): x is ChannelNodeInfo => {

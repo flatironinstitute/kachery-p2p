@@ -235,9 +235,15 @@ export default class DataStreamy {
         }
     }
     _producer_setProgress(progress: DataStreamyProgress) {
-        this.#bytesLoaded = progress.bytesTotal
+        this.#bytesLoaded = progress.bytesLoaded
         if (progress.bytesTotal) {
             this.#size = progress.bytesTotal
+        }
+        const s = this.#size
+        if (s !== null) {
+            this.#onProgressCallbacks.forEach(cb => {
+                cb({bytesLoaded: this.#bytesLoaded, bytesTotal: s})
+            })
         }
     }
 }

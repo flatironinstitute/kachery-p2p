@@ -57,7 +57,6 @@ class KacheryP2PNode {
         webSocketListenPort: Port | null,
         label: NodeLabel,
         bootstrapAddresses: Address[],
-        trustedNodeIds: NodeId[],
         channelNames: ChannelName[],
         externalInterface: ExternalInterface,
         opts: KacheryP2PNodeOpts
@@ -305,7 +304,6 @@ class KacheryP2PNode {
             webSocketAddress: this.webSocketAddress(),
             publicUdpSocketAddress: this.#publicUdpSocketAddress,
             proxyHttpAddresses,
-            trustedNodeIds: this.p.trustedNodeIds,
             timestamp: nowTimestamp()
         }
         return {

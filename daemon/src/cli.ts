@@ -179,7 +179,6 @@ function main() {
           getDefects: () => {return {}}, // no defects
           opts: {
             bootstrapAddresses: bootstrapAddresses,
-            trustedNodeIds: [],
             isBootstrap: isBootstrapNode,
             channelNames,
             multicastUdpAddress: {hostName: '237.0.0.0' as any as HostName, port: toPort(21010)}, // how to choose this?

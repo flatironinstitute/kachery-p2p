@@ -89,6 +89,7 @@ export default class PublicApiServer {
         this.#app.post('/nodeToNodeRequest', async (req, res) => {
             const reqBody = req.body;
             if (!isNodeToNodeRequest(reqBody)) {
+                console.warn(reqBody)
                 await this._errorResponse(req, res, 500, 'Invalid node-to-node request');
                 return;
             }

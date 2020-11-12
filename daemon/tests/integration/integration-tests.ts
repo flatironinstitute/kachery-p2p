@@ -32,7 +32,6 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
             testContext(async (g, resolve, reject) => {
                 const bootstrapOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    trustedNodeIds: [],
                     isBootstrap: true,
                     channelNames: [],
                     multicastUdpAddress: null,
@@ -45,7 +44,6 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 }
                 const daemonOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    trustedNodeIds: [],
                     isBootstrap: false,
                     channelNames: [mockChannelName],
                     multicastUdpAddress: null,
@@ -143,7 +141,6 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const multicastUdpAddress = {hostName: 'local-mock-multicast-udp-address-1' as any as HostName, port: toPort(21010)}
                 const daemonOpts = {
                     bootstrapAddresses: [],
-                    trustedNodeIds: [],
                     isBootstrap: false,
                     channelNames: [mockChannelName],
                     multicastUdpAddress,
@@ -183,7 +180,6 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
             testContext(async (g, resolve, reject) => {
                 const bootstrapOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    trustedNodeIds: [],
                     isBootstrap: true,
                     channelNames: [mockChannelName2],
                     multicastUdpAddress: null,
@@ -197,7 +193,6 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 }
                 const daemonOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    trustedNodeIds: [],
                     isBootstrap: false,
                     channelNames: [mockChannelName, mockChannelName2],
                     multicastUdpAddress: null,
@@ -241,7 +236,6 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
             testContext(async (g, resolve, reject) => {
                 const bootstrapOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    trustedNodeIds: [],
                     isBootstrap: true,
                     channelNames: [],
                     multicastUdpAddress: null,
@@ -257,7 +251,6 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 }
                 const daemonOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    trustedNodeIds: [],
                     isBootstrap: false,
                     channelNames: [mockChannelName],
                     multicastUdpAddress: null,
@@ -306,7 +299,6 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
             testContext(async (g, resolve, reject) => {
                 const bootstrapOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    trustedNodeIds: [],
                     isBootstrap: true,
                     channelNames: [],
                     multicastUdpAddress: null,
@@ -322,7 +314,6 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 }
                 const daemonOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    trustedNodeIds: [],
                     isBootstrap: false,
                     channelNames: [mockChannelName],
                     multicastUdpAddress: null,

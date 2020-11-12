@@ -37,7 +37,6 @@ export const validNodeInfoBody: ut.ChannelNodeInfoBody = {
         { hostName: validHostName, port: 80 as any as ut.Port },
         { hostName: validHostName, port: 80 as any as ut.Port }, 
         { hostName: validHostName, port: 80 as any as ut.Port }],
-    trustedNodeIds: [],
     timestamp: ut.nowTimestamp()
 }
 const validChannelNodeInfo: ut.ChannelNodeInfo = {

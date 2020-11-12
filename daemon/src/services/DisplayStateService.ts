@@ -1,5 +1,6 @@
 import { sleepMsec } from "../common/util";
-import { durationGreaterThan, DurationMsec, elapsedSince, nowTimestamp, Port, unscaledDurationMsec } from "../interfaces/core";
+import { formatByteCount } from "../downloadOptimizer/DownloaderCreator";
+import { byteCount, durationGreaterThan, DurationMsec, elapsedSince, nowTimestamp, Port, unscaledDurationMsec } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import RemoteNode, { SendRequestMethod } from "../RemoteNode";
 import RemoteNodeManager from "../RemoteNodeManager";
@@ -57,7 +58,8 @@ export default class DisplayStateService {
             this.#lastText = txt
             this.#lastDisplayTimestamp = nowTimestamp()
             console.info(txt)
-            console.info(`Memory used: ${formatMB(process.memoryUsage().heapUsed)} (heap); ${formatMB(process.memoryUsage().external)} (external); ${formatMB(process.memoryUsage().arrayBuffers)} (arrayBuffers)`)
+            console.info(`Downloaded: ${formatByteCount(this.#node.getStats({format: 'json'}).totalBytesReceived.total)}; Uploaded: ${formatByteCount(this.#node.getStats({format: 'json'}).totalBytesSent.total)};`)
+            console.info(`Memory used: ${formatByteCount(byteCount(process.memoryUsage().heapUsed))} (heap); ${formatByteCount(byteCount(process.memoryUsage().external))} (external); ${formatByteCount(byteCount(process.memoryUsage().arrayBuffers))} (arrayBuffers);`)
         }
     }
     async _start() {
