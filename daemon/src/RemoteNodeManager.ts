@@ -51,7 +51,7 @@ class RemoteNodeManager {
         }
         const n = this.#remoteNodes.get(body.nodeId)
         /* istanbul ignore next */
-        if (!n) throw Error('Unexpected')
+        if (!n) throw Error('Unexpected in setChannelNodeInfo')
         const newChannel = (!n.getChannelNames().includes(channelNodeInfo.body.channelName))
         n.setChannelNodeInfoIfMoreRecent(channelNodeInfo.body.channelName, channelNodeInfo)
         if (newChannel) {
@@ -230,6 +230,10 @@ class RemoteNodeManager {
             cancel: _cancel
         }
     }
+    remoteNodeIsOnline(nodeId: NodeId) {
+        const rn = this.#remoteNodes.get(nodeId)
+        return (rn && rn.isOnline())
+    }
     _pruneRemoteNodes() {
         const elapsed = elapsedSince(this.#lastPrune)
         if (durationGreaterThan(unscaledDurationMsec(elapsed), scaledDurationMsec(30000))) {
@@ -237,7 +241,7 @@ class RemoteNodeManager {
             const remoteNodeIds = this.#remoteNodes.keys()
             for (let nodeId of remoteNodeIds) {
                 const rn = this.#remoteNodes.get(nodeId)
-                if (!rn) throw Error('Unexpected')
+                if (!rn) throw Error('Unexpected in _pruneRemoteNodes')
                 rn.pruneChannelNodeInfos()
                 if (!rn.isBootstrap()) {
                     if (rn.getChannelNames().length === 0) {

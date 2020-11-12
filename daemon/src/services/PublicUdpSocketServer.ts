@@ -98,7 +98,7 @@ export default class PublicUdpSocketServer {
                 this.#socket.bind(portToNumber(listenPort))
                 this.#socket.on("listening", () => {
                     /* istanbul ignore next */
-                    if (this.#socket === null) throw Error('Unexpected')
+                    if (this.#socket === null) throw Error('Unexpected null socket in startListening')
                     this.#udpPacketSender = new UdpPacketSender(this.#socket, this.#fallbackPacketSender, this.#node.stats(), {thisNodeId: this.#node.nodeId()})
                     this.#udpPacketReceiver = new UdpPacketReceiver(this.#socket, () => (this.#node.getDefects()), this.#node.stats(), {thisNodeId: this.#node.nodeId()})
                     this.#udpPacketReceiver.onPacket((packetId: PacketId, packet: Buffer, remoteInfo: dgram.RemoteInfo) => {
@@ -108,7 +108,7 @@ export default class PublicUdpSocketServer {
                         /////////////////////////////////////////////////////////////////////////
                         action('confirmUdpPacket', {packetId}, async () => {
                             /* istanbul ignore next */
-                            if (this.#udpPacketSender === null) throw Error('Unexpected')
+                            if (this.#udpPacketSender === null) throw Error('Unexpected null udpPacketSender in startListening')
                             this.#udpPacketSender.receivePacketConfirmation(packetId)
                         }, async () => {
                         })

@@ -17,7 +17,7 @@ export default class SendMessageMethodOptimizer {
         }
         else {
             /* istanbul ignore next */
-            throw Error('Unexpected')
+            throw Error('Unexpected in reportSendRequestStart')
         }
     }
     reportSendRequestEnd(requestId: RequestId, method: SendRequestMethod) {
@@ -26,7 +26,7 @@ export default class SendMessageMethodOptimizer {
         }
         else {
             /* istanbul ignore next */
-            throw Error('Unexpected')
+            throw Error('Unexpected in reportSendRequestEnd')
         }
     }
     determineSendRequestMethod(method: SendRequestMethod): SendRequestMethod | null {

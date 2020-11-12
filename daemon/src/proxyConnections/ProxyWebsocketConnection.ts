@@ -190,7 +190,7 @@ export class ProxyWebsocketConnection {
     }
     async initializeConnectionToServer(remoteNodeId: NodeId, address: Address, opts: {timeoutMsec: DurationMsec}) {
         if (this.type !== 'connectionToServer') {
-            throw Error('Unexpected')
+            throw Error('Unexpected in initializeConnectionToServer')
         }
         this.#remoteNodeId = remoteNodeId;
         return new Promise((resolve, reject) => {
@@ -302,7 +302,7 @@ export class ProxyWebsocketConnection {
     }
     async initializeConnectionToClient(ws: WebSocketInterface) {
         if (this.type !== 'connectionToClient') {
-            throw Error('Unexpected')
+            throw Error('Unexpected type in initializeConnectionToClient')
         }
         return new Promise((resolve, reject) => {
             this.#ws = ws
@@ -334,7 +334,7 @@ export class ProxyWebsocketConnection {
                 /////////////////////////////////////////////////////////////////////////
                 action('proxyConnectionToClientMessage', {context: "ProxyConnectionToClient", remoteNodeId: this.#remoteNodeId}, async () => {
                     /* istanbul ignore next */
-                    if (!isBuffer(messageBuffer)) throw Error('Unexpected')
+                    if (!isBuffer(messageBuffer)) throw Error('Unexpected message buffer in proxyConnectionToClientMessage')
                     this.#node.stats().reportBytesReceived('webSocket', this.#remoteNodeId, byteCount(messageBuffer.length))
                     let messageParsed: Object;
                     try {
@@ -413,7 +413,7 @@ export class ProxyWebsocketConnection {
     }
     streamFileData(streamId: StreamId): DataStreamy {
         if (this.type !== 'connectionToClient') {
-            throw Error('Unexpected')
+            throw Error('Unexpected type in streamFileData')
         }
         const ret = new DataStreamy()
 
@@ -432,7 +432,7 @@ export class ProxyWebsocketConnection {
             }
             else {
                 /* istanbul ignore next */
-                throw Error('Unexpected')
+                throw Error('Unexpected in _handleResponseMessageFromServer')
             }
         }
         const proxyStreamFileDataRequestId = createProxyStreamFileDataRequestId()
@@ -475,7 +475,7 @@ export class ProxyWebsocketConnection {
         return this.#remoteNodeId
     }
     async _handleMessageFromServer(message: MessageFromServer) {
-        if (this.type !== 'connectionToServer') throw Error('Unexpected')
+        if (this.type !== 'connectionToServer') throw Error('Unexpected type in _handleMessageFromServer')
         if (this.#closed) return;
         if (isNodeToNodeRequest(message)) {
             const response = await this.#node.handleNodeToNodeRequest(message);
@@ -500,7 +500,7 @@ export class ProxyWebsocketConnection {
         }
     }
     async _handleMessageFromClient(message: MessageFromClient) {
-        if (this.type !== 'connectionToClient') throw Error('Unexpected')
+        if (this.type !== 'connectionToClient') throw Error('Unexpected type in _handleMessageFromClient')
         if (this.#closed) return;
         if (isNodeToNodeRequest(message)) {
             const response = await this.#node.handleNodeToNodeRequest(message);
@@ -526,7 +526,7 @@ export class ProxyWebsocketConnection {
         }
     }
     async _handleProxyStreamFileDataRequest(request: ProxyStreamFileDataRequest) {
-        if (this.type !== 'connectionToServer') throw Error('Unexpected')
+        if (this.type !== 'connectionToServer') throw Error('Unexpected type in _handleProxyStreamFileDataRequest')
         // the server is requesting to stream file data up from the client
         const {streamId} = request
         const s = await this.#node.streamFileData(this.#node.nodeId(), streamId)
@@ -568,7 +568,7 @@ export class ProxyWebsocketConnection {
         this.#proxyStreamFileDataCancelCallbacks.set(request.proxyStreamFileDataRequestId, () => {s.cancel()})
     }
     async _handleProxyStreamFileDataCancelRequest(request: ProxyStreamFileDataCancelRequest) {
-        if (this.type !== 'connectionToServer') throw Error('Unexpected')
+        if (this.type !== 'connectionToServer') throw Error('Unexpected type in _handleProxyStreamFileDataCancelRequest')
         const cb = this.#proxyStreamFileDataCancelCallbacks.get(request.proxyStreamFileDataRequestId)
         if (cb) cb()
     }

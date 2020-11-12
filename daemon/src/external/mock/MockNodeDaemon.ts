@@ -64,7 +64,7 @@ export default class MockNodeDaemon {
             throw Error('mock daemon not yet initialized')
         }
         /* istanbul ignore next */
-        if (!this.#d.node) throw Error('unexpected')
+        if (!this.#d.node) throw Error('Unexpected')
         return this.#d.node
     }
     remoteNodeManager() {

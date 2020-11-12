@@ -158,7 +158,7 @@ class RemoteNode {
         for (let channelName of channelNames) {
             const cni = this.#channelNodeInfoByChannel.get(channelName)
             /* istanbul ignore next */
-            if (!cni) throw Error('Unexpected')
+            if (!cni) throw Error('Unexpected in pruneChannelNodeInfos')
             const elapsed = unscaledDurationMsec(elapsedSince(cni.body.timestamp))
             if (durationGreaterThan(elapsed, scaledDurationMsec(120000))) {
                 this.#channelNodeInfoByChannel.delete(channelName)
@@ -275,7 +275,7 @@ class RemoteNode {
             }
             this.sendRequest(stopReqData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'}).then(stopResponseData => {
                 /* istanbul ignore next */
-                if (!isStopStreamViaUdpResponseData(stopResponseData)) throw Error('Unexpected')
+                if (!isStopStreamViaUdpResponseData(stopResponseData)) throw Error('Unexpected in _streamDataViaUdpFromRemoteNode')
                 // okay
             }).catch(err => {
                 throw Error(`Error sending request to stop stream via udp: ${err.message}`)
@@ -284,7 +284,7 @@ class RemoteNode {
         try {
             const responseData = await this.sendRequest(requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
             /* istanbul ignore next */
-            if (!isStartStreamViaUdpResponseData(responseData)) throw Error('unexpected')
+            if (!isStartStreamViaUdpResponseData(responseData)) throw Error('Unexpected in _streamDataViaUdpFromRemoteNode')
             /* istanbul ignore next */
             if (!responseData.success) throw Error(`Error starting stream via udp: ${responseData.errorMessage}`)
         }
@@ -360,7 +360,7 @@ class RemoteNode {
             }
             else {
                 /* istanbul ignore next */
-                throw Error('Unexpected')
+                throw Error('Unexpected method in _trySendRequest')
             }
             this.#numHttpBytesSent = addByteCount(this.#numHttpBytesSent, requestSize)
             this.#numRequestsSent ++

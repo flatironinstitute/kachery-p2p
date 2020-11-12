@@ -1,6 +1,7 @@
 import DataStreamy, { DataStreamyProgress } from "../common/DataStreamy";
 import { randomAlphaString } from "../common/util";
 import { ByteCount, FileKey, fileKeyHash, FileKeyHash, NodeId } from "../interfaces/core";
+import RemoteNodeManager from "../RemoteNodeManager";
 import DownloadOptimizerJob from "./DownloadOptimizerJob";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
 
@@ -20,11 +21,9 @@ export default class DownloadOptimizer {
     #tasks = new Map<FileKeyHash, Map<string, DownloadOptimizerTask>>()
     #providerNodes = new Map<NodeId, DownloadOptimizerProviderNode>()
     #providerNodesForFiles = new Map<FileKeyHash, Set<NodeId>>()
-    #downloaderCreator: DownloaderCreatorInterface
     #maxNumSimultaneousFileDownloads = 5
     #updateScheduled = false
-    constructor(downloaderCreator: DownloaderCreatorInterface) {
-        this.#downloaderCreator = downloaderCreator
+    constructor(private downloaderCreator: DownloaderCreatorInterface, private remoteNodeManager: RemoteNodeManager) {
     }
     createTask(fileKey: FileKey, fileSize: ByteCount | null): DataStreamy {
         const taskId = randomAlphaString(10)
@@ -112,7 +111,7 @@ export default class DownloadOptimizer {
             for (let fkh of this.#jobs.keys()) {
                 const job = this.#jobs.get(fkh)
                 /* istanbul ignore next */
-                if (!job) throw Error('Unexpected')
+                if (!job) throw Error('Unexpected in _update')
                 if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
                     if (!job.isDownloading()) {
                         const providerNodeCandidates: DownloadOptimizerProviderNode[] = []
@@ -120,15 +119,17 @@ export default class DownloadOptimizer {
                         if (providerNodeIds) {
                             providerNodeIds.forEach(providerNodeId => {
                                 const providerNode = this.#providerNodes.get(providerNodeId)
-                                if ((providerNode) && (!providerNode.isDownloading())) {
-                                    providerNodeCandidates.push(providerNode);
+                                if (providerNode) {
+                                    if ((!providerNode.isDownloading()) && (this.remoteNodeManager.remoteNodeIsOnline(providerNode.nodeId()))) {
+                                        providerNodeCandidates.push(providerNode);
+                                    }
                                 }
+                                
                             })
                         }
                         const providerNode = chooseFastestProviderNode(providerNodeCandidates);
                         if (providerNode) {
-                            const downloader = this.#downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId() });
-                            // todo: why would this be called 8 times?
+                            const downloader = this.downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId() });
                             job.setDownloader(downloader)
                             providerNode.setDownloaderProgress(job.getProgressStream())
                             numActiveFileDownloads++;

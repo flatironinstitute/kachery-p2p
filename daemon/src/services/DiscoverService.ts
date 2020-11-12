@@ -119,13 +119,13 @@ export default class DiscoverService {
 
 // thanks: https://gist.github.com/engelen/fbce4476c9e68c52ff7e5c2da5c24a28
 function argMax(array: number[]) {
-    if (array.length === 0) throw Error('Unexpected')
+    if (array.length === 0) throw Error('Unexpected in argMax')
     return array.map((x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
 }
 
 const selectNode = (nodes: RemoteNode[], historyTimestamps: GarbageMap<NodeId, Timestamp>): RemoteNode => {
     const n = nodes[0]
-    if (!n) throw Error('Unexpected')
+    if (!n) throw Error('Unexpected in selectNode')
     const timestamps: Timestamp[] = nodes.map(n => (historyTimestamps.getWithDefault(n.remoteNodeId(), zeroTimestamp())))
     const elapsedTimes = timestamps.map(ts => (elapsedSince(ts)))
     const ind = argMax(elapsedTimes)

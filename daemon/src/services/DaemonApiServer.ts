@@ -611,7 +611,7 @@ export default class DaemonApiServer {
             stats
         }
         /* istanbul ignore next */
-        if (!isJSONObject(response)) throw Error('Unexpected')
+        if (!isJSONObject(response)) throw Error('Unexpected json object in _handleStats')
         return response
     }
     // /findFile - find a file (or feed) in the remote nodes. May return more than one.

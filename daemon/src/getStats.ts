@@ -56,7 +56,7 @@ export const getStats = (node: KacheryP2PNode, o: GetStatsOpts): NodeStatsInterf
     }
     else {
         /* istanbul ignore next */
-        throw Error('Unexpected')
+        throw Error('Unexpected in getStats')
     }
 }
 

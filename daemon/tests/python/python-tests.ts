@@ -138,7 +138,7 @@ mocha.describe('Python tests', () => {
                 const storageDir1 = d1.node.kacheryStorageManager().storageDir()
                 const storageDir2 = d2.node.kacheryStorageManager().storageDir()
                 if ((storageDir1 === null) || (storageDir2 === null)) {
-                    throw Error('unexpected')
+                    throw Error('Unexpected')
                 }
                 runPythonScript(o1.daemonApiPort, storageDir1, pythonScript1, {FEED_ID: feedId})
                 await runPythonScript(o2.daemonApiPort, storageDir2, pythonScript2, {FEED_ID: feedId})

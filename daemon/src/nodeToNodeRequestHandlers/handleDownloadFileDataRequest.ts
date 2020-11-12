@@ -28,7 +28,7 @@ export const handleDownloadFileDataRequest = async (node: KacheryP2PNode, fromNo
         }
     }
     /* istanbul ignore next */
-    if (size === null) throw Error('Unexpected')
+    if (size === null) throw Error('Unexpected null size in handleDownloadFileDataRequest')
     if (endByte === null) {
         endByte = size
     }

@@ -47,7 +47,7 @@ class DataStreamyProducer {
             this.#lastUnorderedDataIndex ++
             const buf = this.#unorderedDataChunksByIndex.get(this.#lastUnorderedDataIndex)
             /* istanbul ignore next */
-            if (!buf) throw Error('unexpected')
+            if (!buf) throw Error('Unexpected no buf in unorderedData')
             this.#unorderedDataChunksByIndex.delete(this.#lastUnorderedDataIndex)
             this.data(buf)
             if (this.#unorderedEndNumDataChunks !== null) {

@@ -71,14 +71,14 @@ export default class DownloaderCreator {
             }        
             o = await n.downloadFileData(responseData.streamId, {method: 'default'})
             o.dataStream.onError(err => {
-                if (!o) throw Error('Unexpected')
+                if (!o) throw Error('Unexpected in onError of createDownloader')
                 const bytesLoaded = ret.bytesLoaded()
                 const elapsedSec = elapsedSince(timestamp) / 1000
                 console.log(`Error downloading file data. Downloaded ${formatByteCount(ret.bytesLoaded())} bytes in ${elapsedSec} sec from ${args.nodeId.slice(0, 6)} using ${o.method}`)
                 ret.producer().error(err)
             })
             o.dataStream.onFinished(() => {
-                if (!o) throw Error('Unexpected')
+                if (!o) throw Error('Unexpected in onFinished of createDownloader')
                 const bytesLoaded = ret.bytesLoaded()
                 const elapsedSec = elapsedSince(timestamp) / 1000
                 const rate = (byteCountToNumber(bytesLoaded) / 1e6) / elapsedSec
@@ -99,7 +99,7 @@ export default class DownloaderCreator {
                 ret.producer().data(buf)
             })
             ret.producer().onCancelled(() => {
-                if (!o) throw Error('Unexpected')
+                if (!o) throw Error('Unexpected in onCancelled of createDownloader')
                 o.dataStream.cancel()
             })
             return ret

@@ -414,7 +414,7 @@ class KacheryP2PNode {
             // redirect request to a different node
             const p = this.#proxyConnectionsToClients.get(toNodeId)
             if (!p) {
-                throw Error('No proxy connection to node.')
+                throw Error(`No proxy connection to node: ${fromNodeId.slice(0, 6)} -> ${toNodeId.slice(0, 6)}`)
             }
             return await p.sendRequest(request, {timeoutMsec: addDurations(request.body.timeoutMsec, scaledDurationMsec(1000))})
         }
@@ -492,7 +492,7 @@ class KacheryP2PNode {
         }
         const { startByte, endByte } = s
         /* istanbul ignore next */
-        if (endByte === null) throw Error('Unexpected')
+        if (endByte === null) throw Error('Unexpected in streamFileData')
         const ret = new DataStreamy();
         const dataStream = await this.#kacheryStorageManager.getFileReadStream(s.fileKey)
         ret.producer().onCancelled(() => {
