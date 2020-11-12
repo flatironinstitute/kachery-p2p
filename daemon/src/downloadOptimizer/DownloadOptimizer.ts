@@ -6,7 +6,7 @@ import DownloadOptimizerJob from "./DownloadOptimizerJob";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
 
 interface DownloaderCreatorInterface {
-    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId}) => {start: () => Promise<DataStreamy>, stop: () => void}
+    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId, label: string}) => {start: () => Promise<DataStreamy>, stop: () => void}
 }
 
 interface DownloadOptimizerTask {
@@ -23,9 +23,22 @@ export default class DownloadOptimizer {
     #providerNodesForFiles = new Map<FileKeyHash, Set<NodeId>>()
     #maxNumSimultaneousFileDownloads = 5
     #updateScheduled = false
+    #onReadyListeners = new Map<string, () => void>()
     constructor(private downloaderCreator: DownloaderCreatorInterface, private remoteNodeManager: RemoteNodeManager) {
     }
-    createTask(fileKey: FileKey, fileSize: ByteCount | null): DataStreamy {
+    async waitForReady() {
+        let numActiveFileDownloads = Array.from(this.#jobs.values()).filter(file => (file.isDownloading())).length
+        if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) return
+        return new Promise((resolve) => {
+            const id = randomAlphaString(10)
+            this.#onReadyListeners.set(id, () => {
+                // self-destruct
+                this.#onReadyListeners.delete(id)
+                resolve()
+            })
+        })
+    }
+    createTask(fileKey: FileKey, fileSize: ByteCount | null, label: string): DataStreamy {
         const taskId = randomAlphaString(10)
         const fkh = fileKeyHash(fileKey)
         const t: DownloadOptimizerTask = {
@@ -36,7 +49,7 @@ export default class DownloadOptimizer {
         }
         let j = this.#jobs.get(fkh)
         if (!j) {
-            j = new DownloadOptimizerJob(fileKey, fileSize)
+            j = new DownloadOptimizerJob(fileKey, fileSize, label)
             this.#jobs.set(fkh, j)
         }
         j.getProgressStream().onStarted((byteCount: ByteCount) => {
@@ -108,6 +121,10 @@ export default class DownloadOptimizer {
     async _update() {
         let numActiveFileDownloads = Array.from(this.#jobs.values()).filter(file => (file.isDownloading())).length;
         if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
+            this.#onReadyListeners.forEach(listener => {
+                // will self-destruct
+                listener()
+            })
             for (let fkh of this.#jobs.keys()) {
                 const job = this.#jobs.get(fkh)
                 /* istanbul ignore next */
@@ -129,7 +146,7 @@ export default class DownloadOptimizer {
                         }
                         const providerNode = chooseFastestProviderNode(providerNodeCandidates);
                         if (providerNode) {
-                            const downloader = this.downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId() });
+                            const downloader = this.downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId(), label: job.label() });
                             job.setDownloader(downloader)
                             providerNode.setDownloaderProgress(job.getProgressStream())
                             numActiveFileDownloads++;

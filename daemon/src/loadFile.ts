@@ -1,11 +1,12 @@
 import { TIMEOUTS } from './common/constants'
 import DataStreamy, { DataStreamyProgress } from './common/DataStreamy'
 import { sha1MatchesFileKey } from './common/util'
-import { byteCount, ByteCount, byteCountToNumber, ChannelName, FileKey, isFileManifest, NodeId, Sha1Hash } from './interfaces/core'
+import { formatByteCount } from './downloadOptimizer/DownloaderCreator'
+import { byteCount, ByteCount, byteCountToNumber, ChannelName, elapsedSince, FileKey, isFileManifest, NodeId, nowTimestamp, Sha1Hash } from './interfaces/core'
 import KacheryP2PNode from './KacheryP2PNode'
 
 
-const loadFileAsync = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}): Promise<{found: boolean, size: ByteCount}> => {
+const loadFileAsync = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null, label: string}): Promise<{found: boolean, size: ByteCount}> => {
     const r = await node.kacheryStorageManager().findFile(fileKey)
     if (r.found) {
         return r
@@ -29,15 +30,16 @@ const loadFileAsync = async (node: KacheryP2PNode, fileKey: FileKey, opts: {from
         })
     })
 }
-export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}): Promise<DataStreamy> => {
+export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null, label: string}): Promise<DataStreamy> => {
     const { fromNode, fromChannel } = opts
     const manifestSha1 = fileKey.manifestSha1
     if (manifestSha1) {
+        const entireFileTimestamp = nowTimestamp()
         const ret = new DataStreamy()
         const manifestFileKey = {sha1: manifestSha1}
         let manifestR
         try {
-            manifestR = await loadFileAsync(node, manifestFileKey, {fromNode, fromChannel})
+            manifestR = await loadFileAsync(node, manifestFileKey, {fromNode, fromChannel, label: `${opts.label} manifest`})
         }
         catch(err) {
             ret.producer().error(err)
@@ -60,8 +62,10 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
         ret.producer().start(manifest.size)
         let numComplete = 0
         let chunkDataStreams: DataStreamy[] = []
-        for (let chunk of manifest.chunks) {
-            await (async () => { // do it this way so that we have function closure
+        for (let chunkIndex = 0; chunkIndex > manifest.chunks.length; chunkIndex ++) {
+            await (async (chunkIndex: number) => { // do it this way so that we have function closure
+                await node.downloadOptimizer().waitForReady()
+                const chunk = manifest.chunks[chunkIndex]
                 const chunkFileKey: FileKey = {
                     sha1: chunk.sha1,
                     chunkOf: {
@@ -72,7 +76,8 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
                         endByte: chunk.end
                     }
                 }
-                const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel})
+                console.info(`${opts.label}: Loading chunk ${chunkIndex} of ${manifest.chunks.length}`)
+                const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel, label: `${opts.label} ch ${chunkIndex}`})
                 ds.onError(err => {
                     ret.producer().error(err)
                 })
@@ -82,6 +87,11 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
                 ds.onFinished(() => {
                     numComplete ++
                     if (numComplete === manifest.chunks.length) {
+                        const bytesLoaded = _calculateTotalBytesLoaded()
+                        const elapsedSec = elapsedSince(entireFileTimestamp) / 1000
+                        const rate = (byteCountToNumber(bytesLoaded) / 1e6) / elapsedSec
+                        console.info(`${opts.label}: Downloaded ${formatByteCount(ret.bytesLoaded())} in ${elapsedSec} sec [${rate.toFixed(3)} MiB/sec]`)
+                        console.info(`${opts.label}: Concatenating chunks`)
                         _concatenateChunks().then(() => {
                             ret.producer().end()
                         }).catch((err: Error) => {
@@ -90,15 +100,19 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
                     }
                 })
                 chunkDataStreams.push(ds)
-            })()
+            })(chunkIndex)
         }
-        const _updateProgressForManifestLoad = () => {
-            // this can be made more efficient - don't need to loop through all in-progress files every time
+        const _calculateTotalBytesLoaded = () => {
             let bytesLoaded = 0
             chunkDataStreams.forEach(ds => {
                 bytesLoaded += byteCountToNumber(ds.bytesLoaded())
             })
-            ret.producer().reportBytesLoaded(byteCount(bytesLoaded))
+            return byteCount(bytesLoaded)
+        }
+        const _updateProgressForManifestLoad = () => {
+            // this can be made more efficient - don't need to loop through all in-progress files every time
+            const bytesLoaded = _calculateTotalBytesLoaded()
+            ret.producer().reportBytesLoaded(bytesLoaded)
         }
         const _concatenateChunks = async () => {
             const chunkSha1s: Sha1Hash[] = manifest.chunks.map(c => c.sha1)
@@ -120,7 +134,7 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
     else {
         const ret = new DataStreamy()
         let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null
-        const task = node.downloadOptimizer().createTask(fileKey, fileSize)
+        const task = node.downloadOptimizer().createTask(fileKey, fileSize, opts.label)
         task.onError(err => {
             ret.producer().error(err)
         })

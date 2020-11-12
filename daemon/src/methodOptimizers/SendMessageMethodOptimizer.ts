@@ -7,26 +7,27 @@ export default class SendMessageMethodOptimizer {
     #methodHealths = {
         'udp': new MethodHealth(),
         'http': new MethodHealth(),
-        'http-proxy': new MethodHealth()
+        'http-proxy': new MethodHealth(),
+        'websocket': new MethodHealth()
     }
     constructor(private node: KacheryP2PNode, private remoteNode: RemoteNode) {
     }
     reportSendRequestStart(requestId: RequestId, method: SendRequestMethod, timeoutMsec: DurationMsec) {
-        if ((method === 'udp') || (method === 'http') || (method === 'http-proxy')) {
+        if ((method === 'udp') || (method === 'http') || (method === 'http-proxy') || (method === 'websocket')) {
             this.#methodHealths[method].reportSendRequestStart(requestId, timeoutMsec)
         }
         else {
             /* istanbul ignore next */
-            throw Error('Unexpected in reportSendRequestStart')
+            throw Error(`Unexpected method ${method} in reportSendRequestStart`)
         }
     }
     reportSendRequestEnd(requestId: RequestId, method: SendRequestMethod) {
-        if ((method === 'udp') || (method === 'http') || (method === 'http-proxy')) {
+        if ((method === 'udp') || (method === 'http') || (method === 'http-proxy') || (method === 'websocket')) {
             this.#methodHealths[method].reportSendRequestEnd(requestId)
         }
         else {
             /* istanbul ignore next */
-            throw Error('Unexpected in reportSendRequestEnd')
+            throw Error('Unexpected method ${method} in reportSendRequestEnd')
         }
     }
     determineSendRequestMethod(method: SendRequestMethod): SendRequestMethod | null {

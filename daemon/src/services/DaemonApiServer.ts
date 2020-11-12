@@ -693,10 +693,16 @@ export default class DaemonApiServer {
         if (!isApiLoadFileRequest(reqData)) throw Error('Invalid request in _apiLoadFile');
 
         const { fileKey, fromNode, fromChannel } = reqData;
+        if (fileKey.manifestSha1) {
+            console.info(`Loading file: sha1://${fileKey.sha1}?manifest=${fileKey.manifestSha1}`)
+        }
+        else {
+            console.info(`Loading file: sha1://${fileKey.sha1}`)
+        }        
         const x = await loadFile(
             this.#node,
             fileKey,
-            {fromNode, fromChannel}
+            {fromNode, fromChannel, label: fileKey.sha1.toString().slice(0, 5)}
         )
         return x
     }

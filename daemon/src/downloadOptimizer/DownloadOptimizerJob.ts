@@ -2,20 +2,19 @@ import DataStreamy, { DataStreamyProgress } from "../common/DataStreamy";
 import { ByteCount, byteCount, FileKey } from "../interfaces/core";
 
 export default class DownloadOptimizerJob {
-    #fileKey: FileKey
     #currentDownloader: {start: () => Promise<DataStreamy>, stop: () => void} | null = null
     #bytesLoaded = byteCount(0)
-    #fileSize: ByteCount | null
     #progressStream: DataStreamy = new DataStreamy()
-    constructor(fileKey: FileKey, fileSize: ByteCount | null) {
-        this.#fileKey = fileKey
-        this.#fileSize = fileSize
+    constructor(private fileKey_: FileKey, private fileSize_: ByteCount | null, private label_: string) {
     }
     fileKey() {
-        return this.#fileKey
+        return this.fileKey_
     }
     fileSize() {
-        return this.#fileSize
+        return this.fileSize_
+    }
+    label() {
+        return this.label_
     }
     isDownloading() {
         return this.#currentDownloader ? true : false;

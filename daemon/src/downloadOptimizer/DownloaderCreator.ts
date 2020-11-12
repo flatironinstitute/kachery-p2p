@@ -11,7 +11,7 @@ export default class DownloaderCreator {
     constructor(node: KacheryP2PNode, private getDefects: () => MockNodeDefects) {
         this.#node = node
     }
-    createDownloader(args: {fileKey: FileKey, nodeId: NodeId, fileSize: ByteCount}): {start: () => Promise<DataStreamy>, stop: () => void} {
+    createDownloader(args: {fileKey: FileKey, nodeId: NodeId, fileSize: ByteCount, label: string}): {start: () => Promise<DataStreamy>, stop: () => void} {
         let _cancelled = false
         let o: {dataStream: DataStreamy, method: DownloadFileDataMethod} | null = null
         const _start = async () => {
@@ -82,7 +82,7 @@ export default class DownloaderCreator {
                 const bytesLoaded = ret.bytesLoaded()
                 const elapsedSec = elapsedSince(timestamp) / 1000
                 const rate = (byteCountToNumber(bytesLoaded) / 1e6) / elapsedSec
-                console.info(`Downloaded ${formatByteCount(ret.bytesLoaded())} in ${elapsedSec} sec [${rate.toFixed(3)} MiB/sec] from ${args.nodeId.slice(0, 6)} using ${o.method}`)
+                console.info(`${args.label}: Downloaded ${formatByteCount(ret.bytesLoaded())} in ${elapsedSec} sec [${rate.toFixed(3)} MiB/sec] from ${args.nodeId.slice(0, 6)} using ${o.method}`)
                 const data = Buffer.concat(_data)
                 this.#node.kacheryStorageManager().storeFile(args.fileKey.sha1, data).then(() => {
                     ret.producer().end()
@@ -115,7 +115,7 @@ export default class DownloaderCreator {
     }
 }
 
-const formatByteCount = (n: ByteCount) => {
+export const formatByteCount = (n: ByteCount) => {
     const a = byteCountToNumber(n)
     if (a < 10000) {
         return `${a} bytes`
