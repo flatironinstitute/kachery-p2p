@@ -333,6 +333,8 @@ def start_daemon(*,
     bootstrap: List[str],
     nobootstrap: bool=False,
     isbootstrap: bool=False,
+    ismessageproxy: bool=False,
+    isdataproxy: bool=False,
     nomulticast: bool=False,
     node_arg: List[str]=[]
 ):
@@ -355,6 +357,10 @@ def start_daemon(*,
         start_args.append(f'--nobootstrap')
     if isbootstrap:
         start_args.append(f'--isbootstrap')
+    if ismessageproxy:
+        start_args.append(f'--ismessageproxy')
+    if isdataproxy:
+        start_args.append(f'--isdataproxy')
     if nomulticast:
         start_args.append(f'--nomulticast')
     start_args.append(f'--verbose {verbose}')

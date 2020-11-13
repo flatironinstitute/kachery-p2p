@@ -165,6 +165,7 @@ function main() {
         if (argv.config) {
           const c = await loadConfig(argv.config as any as string)
           if (!isYamlConfig(c)) {
+            console.warn(c)
             throw Error('Invalid .yaml configuration')
           }
           yamlConfig = c
