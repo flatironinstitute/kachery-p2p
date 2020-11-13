@@ -77,7 +77,6 @@ class ProxyClientManager {
         }
         try {
             const c = new ProxyWebsocketConnection(this.#node, 'connectionToServer')
-            console.log('------------------- initializing websocket connection to server', remoteNodeId.slice(0, 6), webSocketAddress)
             await c.initializeConnectionToServer(remoteNodeId, webSocketAddress, {timeoutMsec: opts.timeoutMsec});
             this.#node.setProxyConnectionToServer(remoteNodeId, c)
         }
