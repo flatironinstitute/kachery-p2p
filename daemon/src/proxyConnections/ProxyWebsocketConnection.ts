@@ -356,7 +356,7 @@ export class ProxyWebsocketConnection {
                         if (messageParsed.body.toNodeId !== this.#node.nodeId()) {
                             /* istanbul ignore next */
                             {
-                                console.warn(`Invalid initial websocket message from client (wrong toNodeId). Closing.`)
+                                console.warn(`Invalid initial websocket message from client (wrong toNodeId) (${messageParsed.body.toNodeId} <> ${this.#node.nodeId()}). Closing.`)
                                 this.#ws.close()
                                 return
                             }
