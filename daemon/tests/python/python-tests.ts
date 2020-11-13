@@ -134,7 +134,7 @@ mocha.describe('Python tests', () => {
                 const d1 = daemons[0]
                 const d2 = daemons[1]
                 await sleepMsec(scaledDurationMsec(60000))
-                if (d1.node.remoteNodeManager().getAllRemoteNodes().length !== 1) {
+                if (d1.node.remoteNodeManager().getAllRemoteNodes({includeOffline: false}).length !== 1) {
                     throw Error('Unexpected.')
                 }
 

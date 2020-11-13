@@ -1,7 +1,7 @@
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { DgramSocket } from '../external/ExternalInterface';
-import { Address, byteCount, ChannelName, DurationMsec, durationMsecToNumber, isBoolean, isNodeId, isProtocolVersion, isString, JSONObject, NodeId, portToNumber, ProtocolVersion, scaledDurationMsec, sha1OfObject, _validateObject } from '../interfaces/core';
+import { Address, byteCount, ChannelName, DurationMsec, durationMsecToNumber, isBoolean, isEqualTo, isNodeId, isString, JSONObject, NodeId, portToNumber, ProtocolVersion, scaledDurationMsec, sha1OfObject, _validateObject } from '../interfaces/core';
 import NodeStats from '../NodeStats';
 import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { UdpTimeoutError } from './UdpCongestionManager';
@@ -32,7 +32,7 @@ export interface UdpPacketSenderHeader {
 }
 export const isUdpPacketSenderHeader = (x: any): x is UdpPacketSenderHeader => {
     return _validateObject(x, {
-        protocolVersion: isProtocolVersion,
+        protocolVersion: isEqualTo(protocolVersion()),
         fromNodeId: isNodeId,
         toNodeId: isNodeId,
         packetId: isPacketId,

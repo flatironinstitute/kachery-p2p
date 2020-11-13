@@ -3,6 +3,7 @@ import { TIMEOUTS } from "../common/constants";
 import { sleepMsec, sleepMsecNum } from "../common/util";
 import { Address, DurationMsec, JSONObject, urlPath, UrlPath } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
+import { protocolVersion } from "../protocolVersion";
 import RemoteNodeManager from "../RemoteNodeManager";
 import { isPublicApiProbeResponse } from "../services/PublicApiServer";
 
@@ -23,6 +24,13 @@ export default class BootstrapService {
     async _probeBootstrapNode(address: Address) {
         const response = await this.#node.externalInterface().httpPostJson(address, urlPath('/probe'), {}, {timeoutMsec: TIMEOUTS.defaultRequest});
         if (!isPublicApiProbeResponse(response)) {
+            if ((response.protocolVersion) && (response.protocolVersion !== protocolVersion().toString())) {
+                console.warn('############################')
+                console.warn(`Protocol version does not match with bootstrap node ${address.hostName}:${address.port}: ${protocolVersion()} <> ${response.protocolVersion}`)
+                console.warn('You may need to update one or both of these nodes to the latest version of kachery-p2p')
+                console.warn('')
+                return
+            }
             throw Error('Invalid probe response from bootstrap node.')
         }
         const {nodeId: remoteNodeId, isBootstrapNode, isMessageProxy, isDataProxy, webSocketAddress} = response
@@ -42,7 +50,9 @@ export default class BootstrapService {
                 /////////////////////////////////////////////////////////////////////////
                 await action('probeBootstrapNode', {context: 'BootstrapService', address}, async () => {
                     await this._probeBootstrapNode(address)
-                }, null)
+                }, async (err: Error) => {
+                    console.warn(`Problem probing bootstrap node ${address} (${err.message})`)
+                })
                 /////////////////////////////////////////////////////////////////////////
                 
             }

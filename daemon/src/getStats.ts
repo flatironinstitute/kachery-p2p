@@ -41,7 +41,7 @@ export const getStats = (node: KacheryP2PNode, o: GetStatsOpts): NodeStatsInterf
         totalBytesReceived: node.stats().totalBytesReceived(),
         remoteNodes: []
     }
-    node.remoteNodeManager().getAllRemoteNodes().forEach(rn => {
+    node.remoteNodeManager().getAllRemoteNodes({includeOffline: true}).forEach(rn => {
         ret.remoteNodes.push(rn.getStats())
     })
     const format = o.format || 'json'

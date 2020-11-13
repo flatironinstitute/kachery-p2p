@@ -17,10 +17,12 @@ export const action = async (
     }
     catch(err) {
         /* istanbul ignore next */
-        console.warn(`@@@@@@@@@@@@@@@@@@ Error in ${actionName}: ${err.message}`)
-        /* istanbul ignore next */
         if (onError) {
-            await onError(err);
+            await onError(err)
+        }
+        else {
+            /* istanbul ignore next */
+            console.warn(`@@@@@@@@@@@@@@@@@@ Error in ${actionName}: ${err.message}`)
         }
     }
 }

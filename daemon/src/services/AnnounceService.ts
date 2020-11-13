@@ -94,17 +94,19 @@ export default class AnnounceService {
         }
     }
     async _announceToAllBootstrapNodes() {
-        const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes()
+        const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes({includeOffline: false})
         const channelNames = this.#node.channelNames()
         for (let bootstrapNode of bootstrapNodes) {
             for (let channelName of channelNames) {
-
-                /////////////////////////////////////////////////////////////////////////
-                await action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
-                    await this._announceToNode(bootstrapNode.remoteNodeId(), channelName)
-                }, null);
-                /////////////////////////////////////////////////////////////////////////
-
+                if (bootstrapNode.isOnline()) {
+                    /////////////////////////////////////////////////////////////////////////
+                    await action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
+                        await this._announceToNode(bootstrapNode.remoteNodeId(), channelName)
+                    }, async (err: Error) => {
+                        console.warn(`Problem announcing to bootstrap node ${bootstrapNode.remoteNodeId().slice(0, 6)} (${err.message})`)
+                    });
+                    /////////////////////////////////////////////////////////////////////////
+                }
             }
         }
     }
@@ -128,7 +130,7 @@ export default class AnnounceService {
                 // for each channel, choose a node and announce to that node
                 const channelNames = this.#node.channelNames()
                 for (let channelName of channelNames) {
-                    let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName)
+                    let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName, {includeOffline: false})
                     if (nodes.length > 0) {
                         var individualNode = selectNode(nodes, this.#announceHistoryTimestamps)
                         this.#announceHistoryTimestamps.set(individualNode.remoteNodeId(), nowTimestamp())
@@ -136,7 +138,9 @@ export default class AnnounceService {
                         /////////////////////////////////////////////////////////////////////////
                         await action('announceToIndividualNode', {context: 'AnnounceService', remoteNodeId: individualNode.remoteNodeId(), channelName}, async () => {
                             await this._announceToNode(individualNode.remoteNodeId(), channelName)
-                        }, null)
+                        }, async (err: Error) => {
+                            console.warn(`Problem announcing to individual node ${individualNode.remoteNodeId().slice(0, 6)} (${err.message})`)
+                        })
                         /////////////////////////////////////////////////////////////////////////
 
                     }

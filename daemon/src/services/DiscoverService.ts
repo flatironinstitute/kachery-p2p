@@ -78,14 +78,16 @@ export default class DiscoverService {
             // periodically get channel info from bootstrap nodes
             const elapsedSinceLastBootstrapDiscover = elapsedSince(lastBootstrapDiscoverTimestamp);
             if (elapsedSinceLastBootstrapDiscover > durationMsecToNumber(this.opts.discoverBootstrapIntervalMsec)) {
-                const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes();
+                const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes({includeOffline: false});
                 const channelNames = this.#node.channelNames();
                 for (let bootstrapNode of bootstrapNodes) {
                     for (let channelName of channelNames) {
                         /////////////////////////////////////////////////////////////////////////
                         await action('discoverFromBootstrapNode', {context: 'DiscoverService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
                             await this._getChannelInfoFromNode(bootstrapNode.remoteNodeId(), channelName)
-                        }, null);
+                        }, async (err: Error) => {
+                            console.warn(`Problem discovering from bootstrap node ${bootstrapNode.remoteNodeId().slice(0, 6)} (${err.message})`)
+                        });
                         /////////////////////////////////////////////////////////////////////////
                     }
                 }
@@ -97,7 +99,7 @@ export default class DiscoverService {
                 // for each channel, choose node with longest elapsed time of their channel node info and get the channel info from that node
                 const channelNames = this.#node.channelNames();
                 for (let channelName of channelNames) {
-                    let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName).filter(rn => (rn.isOnline()))
+                    let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName, {includeOffline: false})
                     if (nodes.length > 0) {
                         var individualNode = selectNode(nodes, this.#discoverHistoryTimestamps)
                         this.#discoverHistoryTimestamps.set(individualNode.remoteNodeId(), nowTimestamp())
@@ -105,7 +107,9 @@ export default class DiscoverService {
                         /////////////////////////////////////////////////////////////////////////
                         await action('discoverFromIndividualNode', {context: 'DiscoverService', remoteNodeId: individualNode.remoteNodeId(), channelName}, async () => {
                             await this._getChannelInfoFromNode(individualNode.remoteNodeId(), channelName)
-                        }, null);
+                        }, async (err: Error) => {
+                            console.warn(`Problem discovering from individual node ${individualNode.remoteNodeId().slice(0, 6)} (${err.message})`)
+                        });
                         /////////////////////////////////////////////////////////////////////////
                     }
                 }

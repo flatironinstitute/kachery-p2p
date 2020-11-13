@@ -57,7 +57,7 @@ mocha.describe('Real external interface', () => {
             testContext(async (ri, resolve, reject) => {
                 const port = toPort(8060)
 
-                const data = Buffer.alloc(1000 * 20, 'b')
+                const data = Buffer.from(randomAlphaString(1000 * 20), 'utf-8')
 
                 const app = express()
                 app.get('/test', async (req, res) => {
@@ -162,7 +162,7 @@ mocha.describe('Real external interface', () => {
             testContext(async (ri, resolve, reject) => {
                 const ksm = ri.createKacheryStorageManager()
 
-                const buf = Buffer.alloc(104, 'c')
+                const buf = Buffer.from(randomAlphaString(104), 'utf-8')
                 const shasum = crypto.createHash('sha1')
                 shasum.update(buf)
                 const sha1 = shasum.digest('hex') as any as Sha1Hash

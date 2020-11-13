@@ -5,7 +5,7 @@ import { JSONStringifyDeterministic } from '../common/crypto_util';
 import DataStreamy from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
-import { Address, byteCount, ByteCount, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isJSONObject, isNodeId, isNull, isOneOf, isProtocolVersion, JSONObject, NodeId, Port, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
+import { Address, byteCount, ByteCount, DaemonVersion, isAddress, isBoolean, isDaemonVersion, isEqualTo, isJSONObject, isNodeId, isNull, isOneOf, JSONObject, NodeId, Port, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
 import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse, StreamId } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -39,7 +39,7 @@ export interface PublicApiProbeResponse {
 export const isPublicApiProbeResponse = (x: any): x is PublicApiProbeResponse => {
     return _validateObject(x, {
         success: isBoolean,
-        protocolVersion: isProtocolVersion,
+        protocolVersion: isEqualTo(protocolVersion()),
         daemonVersion: isDaemonVersion,
         nodeId: isNodeId,
         isBootstrapNode: isBoolean,
@@ -187,7 +187,11 @@ export default class PublicApiServer {
                 /* istanbul ignore next */
                 throw Error('Invalid stream id in mock /download')
             }
-            return this.#node.streamFileData(fromNodeId, streamId)
+            const ds = await this.#node.streamFileData(fromNodeId, streamId)
+            ds.onData(d => {
+                this.#node.stats().reportBytesSent('http', fromNodeId, byteCount(d.length))
+            })
+            return ds
         }
         else {
             /* istanbul ignore next */

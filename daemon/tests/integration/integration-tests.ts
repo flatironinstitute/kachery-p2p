@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import GarbageMap from '../../src/common/GarbageMap';
-import { sleepMsec } from '../../src/common/util';
+import { randomAlphaString, sleepMsec } from '../../src/common/util';
 import MockNodeDaemon, { MockNodeDaemonGroup, MockNodeDefects } from '../../src/external/mock/MockNodeDaemon';
 import { byteCount, ByteCount, byteCountToNumber, ChannelName, DurationMsec, durationMsecToNumber, FeedId, FeedName, HostName, JSONObject, MessageCount, messageCount, NodeId, scaledDurationMsec, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, subfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toPort } from '../../src/interfaces/core';
 import { ApiLoadFileRequest, FeedApiAppendMessagesRequest, FeedApiCreateFeedRequest, FeedApiDeleteFeedRequest, FeedApiGetAccessRulesRequest, FeedApiGetFeedIdRequest, FeedApiGetFeedInfoRequest, FeedApiGetMessagesRequest, FeedApiGetNumMessagesRequest, FeedApiGetSignedMessagesRequest, FeedApiSetAccessRulesRequest, FeedApiSubmitMessageRequest, FeedApiWatchForNewMessagesRequest, isFeedApiAppendMessagesResponse, isFeedApiCreateFeedResponse, isFeedApiDeleteFeedResponse, isFeedApiGetAccessRulesResponse, isFeedApiGetFeedIdResponse, isFeedApiGetFeedInfoResponse, isFeedApiGetMessagesResponse, isFeedApiGetNumMessagesResponse, isFeedApiGetSignedMessagesResponse, isFeedApiSetAccessRulesResponse, isFeedApiSubmitMessageResponse, isFeedApiWatchForNewMessagesResponse } from '../../src/services/DaemonApiServer';
@@ -71,15 +71,15 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 await sleepMsec(scaledDurationMsec(60000))
 
                 // we expect to have one bootstrap node
-                expect(daemon1.remoteNodeManager().getBootstrapRemoteNodes().length).equals(1)
-                const remoteBootstrapNode = daemon1.remoteNodeManager().getBootstrapRemoteNodes()[0]
+                expect(daemon1.remoteNodeManager().getBootstrapRemoteNodes({includeOffline: true}).length).equals(1)
+                const remoteBootstrapNode = daemon1.remoteNodeManager().getBootstrapRemoteNodes({includeOffline: true})[0]
 
                 // Check that the node ID matches
                 expect(remoteBootstrapNode.remoteNodeId()).equals(bootstrapDaemon.nodeId())
 
                 // Check that the bootstrap node is aware of this node
-                expect(bootstrapDaemon.remoteNodeManager().getAllRemoteNodes().length).equals(1)
-                const remoteThisNode = bootstrapDaemon.remoteNodeManager().getAllRemoteNodes()[0]
+                expect(bootstrapDaemon.remoteNodeManager().getAllRemoteNodes({includeOffline: true}).length).equals(1)
+                const remoteThisNode = bootstrapDaemon.remoteNodeManager().getAllRemoteNodes({includeOffline: true})[0]
                 expect(remoteThisNode.remoteNodeId()).equals(daemon1.nodeId())
                 expect(remoteThisNode.getChannelNames().includes(mockChannelName)).is.true
 
@@ -172,8 +172,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 await sleepMsec(scaledDurationMsec(60000))
 
                 // // we expect to have one remote node now
-                expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
-                expect(daemon2.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
+                expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName, {includeOffline: true}).length).equals(1)
+                expect(daemon2.remoteNodeManager().getRemoteNodesInChannel(mockChannelName, {includeOffline: true}).length).equals(1)
 
                 await testFindFile(daemon1, daemon2)
                 await testLoadFile(daemon1, daemon2)
@@ -234,12 +234,12 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 await sleepMsec(scaledDurationMsec(60000))
 
                 // // we expect to have one remote node now
-                expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
-                expect(daemon2.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
+                expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName, {includeOffline: true}).length).equals(1)
+                expect(daemon2.remoteNodeManager().getRemoteNodesInChannel(mockChannelName, {includeOffline: true}).length).equals(1)
 
                 await testFindFile(daemon1, daemon2)
-                await testLoadFile(daemon1, daemon2, byteCount(21000), byteCount(12000))
-                await testLoadFile(bootstrapDaemon, daemon1, byteCount(20000), byteCount(12000))
+                await testLoadFile(daemon1, daemon2, byteCount(121000), byteCount(12000))
+                await testLoadFile(bootstrapDaemon, daemon1, byteCount(120000), byteCount(12000))
                 await testLoadFileWithDefects(daemon1, daemon2)
                 await testSubfeedMessage(daemon1, daemon2)
 
@@ -296,8 +296,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 await sleepMsec(scaledDurationMsec(60000))
 
                 // // we expect to have one remote node now
-                expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
-                expect(daemon2.remoteNodeManager().getRemoteNodesInChannel(mockChannelName).length).equals(1)
+                expect(daemon1.remoteNodeManager().getRemoteNodesInChannel(mockChannelName, {includeOffline: true}).length).equals(1)
+                expect(daemon2.remoteNodeManager().getRemoteNodesInChannel(mockChannelName, {includeOffline: true}).length).equals(1)
 
                 daemon1.setDefects({
                     udpPacketLossNum: 5
@@ -399,8 +399,11 @@ const testFindFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) =>
 }
 
 const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fileSize: ByteCount = byteCount(20000), chunkSize: ByteCount = byteCount(1200)) => {
-    const f1Content = Buffer.alloc(byteCountToNumber(fileSize), 'a')
+    const f1Content = Buffer.from(randomAlphaString(byteCountToNumber(fileSize)))
     const f1Key = daemon1.mockKacheryStorageManager().addMockFile(f1Content, {chunkSize})
+
+    const initialStats1 = daemon1.node().getStats({format: 'json'})
+    const initialStats2 = daemon2.node().getStats({format: 'json'})
 
     const reqData: ApiLoadFileRequest = {
         fileKey: f1Key,
@@ -418,17 +421,20 @@ const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fi
     })
     const f = await daemon2.mockKacheryStorageManager().findFile(f1Key)
     expect(f.found).is.true
+    const fds = await daemon2.mockKacheryStorageManager().getFileReadStream(f1Key)
+    const fbuf = await fds.allData()
+    expect(fbuf.toString('utf-8')).equals(f1Content.toString('utf-8'))
 
     daemon1.node().getStats({format: 'html'}) // for coverage
     const stats1 = daemon1.node().getStats({format: 'json'})
-    const stats2 = daemon1.node().getStats({format: 'json'})
-    expect(byteCountToNumber(stats1.totalBytesSent.total)).is.gte(byteCountToNumber(fileSize))
-    expect(byteCountToNumber(stats2.totalBytesReceived.total)).is.gte(byteCountToNumber(fileSize))
+    const stats2 = daemon2.node().getStats({format: 'json'})
+    expect(byteCountToNumber(stats1.totalBytesSent.total) - byteCountToNumber(initialStats1.totalBytesSent.total)).is.gte(byteCountToNumber(fileSize))
+    expect(byteCountToNumber(stats2.totalBytesReceived.total) - byteCountToNumber(initialStats2.totalBytesReceived.total)).is.gte(byteCountToNumber(fileSize))
 }
 
 const testLoadFileWithDefects = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fileSize: ByteCount = byteCount(20000), chunkSize: ByteCount = byteCount(1200)) => {
-    const f1Content = Buffer.alloc(byteCountToNumber(fileSize), 'c')
-    const f2Content = Buffer.alloc(byteCountToNumber(fileSize), 'd')
+    const f1Content = Buffer.from(randomAlphaString(byteCountToNumber(fileSize)), 'utf-8')
+    const f2Content = Buffer.from(randomAlphaString(byteCountToNumber(fileSize)), 'utf-8')
 
     daemon1.setDefects({
         fileReadDefect: true

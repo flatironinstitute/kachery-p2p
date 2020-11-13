@@ -41,7 +41,7 @@ export default class DownloadOptimizer {
             })
         })
     }
-    createTask(fileKey: FileKey, fileSize: ByteCount | null, label: string, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}): DataStreamy {
+    createTask(fileKey: FileKey, fileSize: ByteCount | null, label: string, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null, numRetries: number}): DataStreamy {
         const taskId = randomAlphaString(10)
         const fkh = fileKeyHash(fileKey)
         const t: DownloadOptimizerTask = {
@@ -53,11 +53,11 @@ export default class DownloadOptimizer {
         let j = this.#jobs.get(fkh)
         if (!j) {
             const findProviders: FindProvidersFunction = (onFound: (providerNode: DownloadOptimizerProviderNode) => void, onFinished: () => void) => {
+                // todo: what happens if we create 2 tasks, with different opts?
                 if (opts.fromNode) {
                     if (!opts.fromChannel) {
                         throw Error('When specifying fromNode, you must also specify fromChannel')
                     }
-                    // todo: what happens if we create 2 tasks, with different opts
                     const pn = this._getProviderNode(opts.fromNode, opts.fromChannel)
                     onFound(pn)
                 }
@@ -75,7 +75,7 @@ export default class DownloadOptimizer {
             const createDownloader0: CreateDownloaderFunction = (providerNode: DownloadOptimizerProviderNode, fileSize: ByteCount, label: string) => {
                 return createDownloader(this.node, fileKey, providerNode, fileSize, label)
             }
-            j = new DownloadOptimizerJob(fileKey, fileSize, label, findProviders, createDownloader0)
+            j = new DownloadOptimizerJob(fileKey, fileSize, label, findProviders, createDownloader0, {numRetries: opts.numRetries})
             this.#jobs.set(fkh, j)
         }
         j.getProgressStream().onStarted((byteCount: ByteCount) => {

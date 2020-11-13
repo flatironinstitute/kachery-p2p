@@ -29,10 +29,12 @@ const loadFileAsync = async (node: KacheryP2PNode, fileKey: FileKey, opts: {from
         })
     })
 }
-export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null, label: string}): Promise<DataStreamy> => {
+export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null, label: string, _numRetries?: number}): Promise<DataStreamy> => {
     const { fromNode, fromChannel } = opts
-    const manifestSha1 = fileKey.manifestSha1
-    if (manifestSha1) {
+
+    const loadFileWithManifest = async () => {
+        const manifestSha1 = fileKey.manifestSha1
+        if (!manifestSha1) throw Error('Unexpected')
         const entireFileTimestamp = nowTimestamp()
         const ret = new DataStreamy()
         const manifestFileKey = {sha1: manifestSha1}
@@ -83,7 +85,8 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
                         }
                     }
                     console.info(`${opts.label}: Queuing chunk ${chunkIndex} of ${manifest.chunks.length}`)
-                    const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel, label: `${opts.label} ch ${chunkIndex}`})
+                    const label0 = `${opts.label} ch ${chunkIndex}`
+                    const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel, label: label0, _numRetries: 2})
                     chunkDataStreams.push(ds)
                     ds.onError(err => {
                         numQueued --
@@ -140,11 +143,12 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
         })()
         return ret
     }
-    else {
+    const loadFileWithoutManifest = async () => {
         await node.downloadOptimizer().waitForReady()
         const ret = new DataStreamy()
         let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null
-        const task = node.downloadOptimizer().createTask(fileKey, fileSize, opts.label, {fromNode: opts.fromNode, fromChannel: opts.fromChannel})
+        const numRetries = opts._numRetries === undefined ? 0 : opts._numRetries
+        const task = node.downloadOptimizer().createTask(fileKey, fileSize, opts.label, {fromNode: opts.fromNode, fromChannel: opts.fromChannel, numRetries})
         task.onError(err => {
             ret.producer().error(err)
         })
@@ -159,5 +163,12 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
             task.cancel() // cancel the download
         })
         return ret
+    }
+
+    if (fileKey.manifestSha1) {
+        return await loadFileWithManifest()
+    }
+    else {
+        return await loadFileWithoutManifest()
     }
 }

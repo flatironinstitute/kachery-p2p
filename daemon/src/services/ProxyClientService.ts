@@ -37,10 +37,10 @@ export default class ProxyClientService {
         // periodically try to establish proxy connections to the remote nodes
         while (true) {
             if (this.#halted) return
-            const remoteNodes = this.#remoteNodeManager.getAllRemoteNodes()
+            const remoteNodes = this.#remoteNodeManager.getAllRemoteNodes({includeOffline: false})
             for (let remoteNode of remoteNodes) {
                 if ((remoteNode.isMessageProxy(null)) || (remoteNode.isDataProxy(null))) {
-                    if (remoteNode.getRemoteNodeWebSocketAddress()) {
+                    if ((remoteNode.isOnline()) && (remoteNode.getRemoteNodeWebSocketAddress())) {
                         const remoteNodeId = remoteNode.remoteNodeId()
                         const c = this.#node.getProxyConnectionToServer(remoteNodeId)
                         if (!c) {
@@ -49,7 +49,9 @@ export default class ProxyClientService {
                                 ///////////////////////////////////////////////////////////////////////
                                 await action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
                                     await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: TIMEOUTS.websocketConnect});
-                                }, null)
+                                }, async (err: Error) => {
+                                    console.warn(`Problem establishing outgoing proxy connection to ${remoteNode.remoteNodeId().slice(0, 6)} (${err.message})`)
+                                })
                                 ///////////////////////////////////////////////////////////////////////
                             }
                         }

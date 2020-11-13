@@ -231,6 +231,7 @@ export class ProxyWebsocketConnection {
             })
             this.#ws.onMessage(messageBuffer => {
                 if (this.#closed) return;
+                if (!isBuffer(messageBuffer)) throw Error('Unexpected message buffer in proxyConnectionToServerMessage')
                 this.#node.stats().reportBytesReceived('webSocket', this.#remoteNodeId, byteCount(messageBuffer.length))
                 /////////////////////////////////////////////////////////////////////////
                 action('proxyConnectionToServerMessage', {context: "ProxyConnectionToServer", remoteNodeId: this.#remoteNodeId}, async () => {
@@ -330,12 +331,12 @@ export class ProxyWebsocketConnection {
                 }
             })
             ws.onMessage(messageBuffer => {
-                if (this.#closed) return;
+                if (this.#closed) return
+                if (!isBuffer(messageBuffer)) throw Error('Unexpected message buffer in proxyConnectionToClientMessage')
+                this.#node.stats().reportBytesReceived('webSocket', this.#remoteNodeId, byteCount(messageBuffer.length))
                 /////////////////////////////////////////////////////////////////////////
                 action('proxyConnectionToClientMessage', {context: "ProxyConnectionToClient", remoteNodeId: this.#remoteNodeId}, async () => {
                     /* istanbul ignore next */
-                    if (!isBuffer(messageBuffer)) throw Error('Unexpected message buffer in proxyConnectionToClientMessage')
-                    this.#node.stats().reportBytesReceived('webSocket', this.#remoteNodeId, byteCount(messageBuffer.length))
                     let messageParsed: Object;
                     try {
                         messageParsed = kacheryP2PDeserialize(messageBuffer);

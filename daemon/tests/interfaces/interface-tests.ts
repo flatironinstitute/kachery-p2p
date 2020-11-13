@@ -3,6 +3,7 @@ import * as mocha from 'mocha' // import types for mocha e.g. describe
 import { hexToPublicKey } from '../../src/common/crypto_util'
 import * as ut from '../../src/interfaces/core'
 import { AnnounceRequestData } from '../../src/interfaces/NodeToNodeRequest'
+import { protocolVersion } from '../../src/protocolVersion'
 
 // Utility string manipulation
 const shorterByOne = (x: string): string => { return x.substring(1, x.length) }
@@ -307,25 +308,6 @@ describe('Utility comparisons', () => {
 })
 
 describe('Versioning types', () => {
-    describe('Protocol Version', () => {
-        it('isProtocolVersion() returns true on valid input', () => {
-            expect(ut.isProtocolVersion('example-protocol.Version')).to.be.true
-        })
-        it('isProtocolVersion() returns false on non-string input', () => {
-            expect(ut.isProtocolVersion(5)).to.be.false
-        })
-        it('isProtocolVersion() returns false on over-long input', () => {
-            // join inserts between each element -- array needs to be 2 bigger than allowed value
-            expect(ut.isProtocolVersion(new Array(32).join('a'))).to.be.false
-        })
-        it('isProtocolVersion() returns false on too-short input', () => {
-            expect(ut.isProtocolVersion('')).to.be.false
-            expect(ut.isProtocolVersion('abc')).to.be.false
-        })
-        it('isProtocolVersion() returns false on bad characters', () => {
-            expect(ut.isProtocolVersion('#example-protocol.Version')).to.be.false
-        })
-    })
     describe('Daemon Version', () => {
         it('isDaemonVersion() returns true on valid input', () => {
             expect(ut.isDaemonVersion('example-daemon.Version')).to.be.true
@@ -636,7 +618,7 @@ describe('Kachery primitives', () => {
             channelNodeInfo: validChannelNodeInfo as any as ut.ChannelNodeInfo
         }
         const validMulticastMessageBody: ut.MulticastAnnounceMessageBody = {
-            protocolVersion: 'protocol-version-12' as any as ut.ProtocolVersion,
+            protocolVersion: protocolVersion(),
             fromNodeId: (new Array(65).join('0')) as any as ut.NodeId,
             messageType: 'announce',
             requestData: validAnnounceRequestData,

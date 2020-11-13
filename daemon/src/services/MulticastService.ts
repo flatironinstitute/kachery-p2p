@@ -98,7 +98,9 @@ export default class MulticastService {
                     else {
                         throw Error('No multicast socket')
                     }
-                }, null)
+                }, async (err: Error) => {
+                    console.warn(`Problem sending multicast announce message (${err.message})`)
+                })
                 /////////////////////////////////////////////////////////////////////////
             }
             await sleepMsec(this.opts.intervalMsec, () => {return !this.#halted})

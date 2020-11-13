@@ -125,31 +125,37 @@ class RemoteNodeManager {
     onBootstrapNodeAdded(callback: (bootstrapNodeId: NodeId) => void) {
         this.#onBootstrapNodeAddedCallbacks.push(callback)
     }
-    getRemoteNodesInChannel(channelName: ChannelName): RemoteNode[] {
+    getRemoteNodesInChannel(channelName: ChannelName, args: {includeOffline: boolean}): RemoteNode[] {
         this._pruneRemoteNodes()
         const ret: RemoteNode[] = []
         this.#remoteNodes.forEach((n, nodeId) => {
-            if (n.getChannelNames().includes(channelName)) {
-                ret.push(n)
+            if ((args.includeOffline) || (n.isOnline())) {
+                if (n.getChannelNames().includes(channelName)) {
+                    ret.push(n)
+                }
             }
         });
         return ret
     }
-    getBootstrapRemoteNodes(): RemoteNode[] {
+    getBootstrapRemoteNodes(args: {includeOffline: boolean}): RemoteNode[] {
         this._pruneRemoteNodes()
         const ret: RemoteNode[] = []
         this.#remoteNodes.forEach((n, nodeId) => {
             if (n.isBootstrap() && (n.bootstrapAddress() !== null)) {
-                ret.push(n)
+                if ((args.includeOffline) || (n.isOnline())) {
+                    ret.push(n)
+                }
             }
         })
         return ret
     }
-    getAllRemoteNodes(): RemoteNode[] {
+    getAllRemoteNodes(args: {includeOffline: boolean}): RemoteNode[] {
         this._pruneRemoteNodes()
         const ret: RemoteNode[] = []
         this.#remoteNodes.forEach((n, nodeId) => {
-            ret.push(n)
+            if ((args.includeOffline) || (n.isOnline())) {
+                ret.push(n)
+            }
         })
         return ret
     }

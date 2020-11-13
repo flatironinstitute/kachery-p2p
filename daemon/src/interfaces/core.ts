@@ -2,6 +2,7 @@ import assert from 'assert';
 import crypto from 'crypto';
 import { hexToPublicKey, JSONStringifyDeterministic } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
+import { protocolVersion } from '../protocolVersion';
 import { AnnounceRequestData, isAnnounceRequestData } from "./NodeToNodeRequest";
 
 export type JSONPrimitive = string | number | boolean | null;
@@ -205,10 +206,11 @@ export const jsonObjectsMatch = (x1: any, x2: any): boolean => {
 export interface ProtocolVersion extends String {
     __protocolVersion__: never // phantom type
 }
-export const isProtocolVersion = (x: any): x is ProtocolVersion => {
-    if (!isString(x)) return false;
-    return (/^[0-9a-zA-z.\ \-]{4,30}$/.test(x));
-}
+// instead use isEqualTo(protocolVersion())
+// export const isProtocolVersion = (x: any): x is ProtocolVersion => {
+//     if (!isString(x)) return false;
+//     return (/^[0-9a-zA-z.\ \-]{4,30}$/.test(x));
+// }
 
 export interface DaemonVersion extends String {
     __daemonVersion__: never // phantom
@@ -446,7 +448,7 @@ export interface MulticastAnnounceMessageBody {
 }
 export const isMulticastAnnounceMessageBody = (x: any): x is MulticastAnnounceMessageBody => {
     return _validateObject(x, {
-        protocolVersion: isProtocolVersion,
+        protocolVersion: isEqualTo(protocolVersion()),
         fromNodeId: isNodeId,
         messageType: isEqualTo('announce'),
         requestData: isAnnounceRequestData,

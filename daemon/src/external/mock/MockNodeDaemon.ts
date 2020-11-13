@@ -1,6 +1,6 @@
 import DataStreamy from "../../common/DataStreamy"
 import { randomAlphaString, sleepMsec } from "../../common/util"
-import { Address, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, nodeLabel, scaledDurationMsec, toPort, UrlPath } from "../../interfaces/core"
+import { Address, byteCount, DurationMsec, FindFileResult, hostName, isNodeId, JSONObject, NodeId, nodeLabel, scaledDurationMsec, toPort, UrlPath } from "../../interfaces/core"
 import NodeStats from "../../NodeStats"
 import { ApiFindFileRequest } from "../../services/DaemonApiServer"
 import startDaemon, { DaemonInterface, StartDaemonOpts } from "../../startDaemon"
@@ -175,7 +175,11 @@ export class MockNodeDaemonGroup {
                 /* istanbul ignore next */
                 throw Error(`No daemon: ${nodeId}`)
             }
-            return await daemon.mockPublicApiGetDownload(path.toString())
+            const ds = await daemon.mockPublicApiGetDownload(path.toString())
+            ds.onData(d => {
+                stats.reportBytesReceived('http', opts.fromNodeId, byteCount(d.length))
+            })
+            return ds
         }
         else {
             /* istanbul ignore next */

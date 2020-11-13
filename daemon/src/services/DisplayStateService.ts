@@ -38,13 +38,13 @@ export default class DisplayStateService {
         const lines: string[] = []
         lines.push('=======================================')
         lines.push(`NODE ${this.#node.nodeId().slice(0, 6)} (${this.#node.nodeLabel()})`)
-        this.#remoteNodeManager.getBootstrapRemoteNodes().forEach(rn => {
+        this.#remoteNodeManager.getBootstrapRemoteNodes({includeOffline: true}).forEach(rn => {
             const connectionString = getConnectionString(rn, null)
             lines.push(`BOOTSTRAP ${rn.remoteNodeId().slice(0, 6)} ${connectionString} (${rn.remoteNodeLabel() || ''})`)
         })
         this.#node.channelNames().forEach(channelName => {
             lines.push(`CHANNEL ${channelName}`)
-            this.#remoteNodeManager.getRemoteNodesInChannel(channelName).forEach(rn => {
+            this.#remoteNodeManager.getRemoteNodesInChannel(channelName, {includeOffline: true}).forEach(rn => {
                 const connectionString = getConnectionString(rn, channelName)
                 lines.push(`    ${rn.remoteNodeId().slice(0, 6)} ${connectionString} (${rn.remoteNodeLabel() || ''})`)
             })

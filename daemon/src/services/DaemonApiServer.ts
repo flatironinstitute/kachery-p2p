@@ -6,7 +6,7 @@ import DataStreamy from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
 import { isGetStatsOpts, NodeStatsInterface } from '../getStats';
-import { Address, ChannelName, DaemonVersion, DurationMsec, durationMsecToNumber, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelName, isDaemonVersion, isDurationMsec, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isProtocolVersion, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
+import { Address, ChannelName, DaemonVersion, DurationMsec, durationMsecToNumber, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelName, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -25,7 +25,7 @@ export interface DaemonApiProbeResponse {
 export const isDaemonApiProbeResponse = (x: any): x is PublicApiProbeResponse => {
     return _validateObject(x, {
         success: isBoolean,
-        protocolVersion: isProtocolVersion,
+        protocolVersion: isEqualTo(protocolVersion()),
         daemonVersion: isDaemonVersion,
         nodeId: isNodeId,
         isBootstrapNode: isBoolean,
