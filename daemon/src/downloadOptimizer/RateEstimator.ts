@@ -4,7 +4,6 @@ import { byteCountPerSec, ByteCountPerSec, byteCountPerSecToNumber } from "../ud
 const FILTER_TIME_CONSTANT_SEC = 10;
 
 export default class RateEstimator {
-    #lastTimestamp: Timestamp = nowTimestamp()
     #currentEstimateTimestamp: Timestamp = nowTimestamp()
     #currentEstimate: ByteCountPerSec = byteCountPerSec(1000 * 1000)
     #running: boolean = false
@@ -49,5 +48,8 @@ export default class RateEstimator {
         }
 
         this.#currentEstimateTimestamp = nowTimestamp();
+    }
+    isRunning() {
+        return this.#running
     }
 }

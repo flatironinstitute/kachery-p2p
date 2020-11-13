@@ -1,5 +1,5 @@
 import { sleepMsec } from "../common/util";
-import { formatByteCount } from "../downloadOptimizer/DownloaderCreator";
+import { formatByteCount } from "../downloadOptimizer/createDownloader";
 import { byteCount, durationGreaterThan, DurationMsec, elapsedSince, nowTimestamp, Port, unscaledDurationMsec } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import RemoteNode, { SendRequestMethod } from "../RemoteNode";

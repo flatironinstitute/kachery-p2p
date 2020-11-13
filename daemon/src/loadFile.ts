@@ -1,7 +1,6 @@
-import { TIMEOUTS } from './common/constants'
 import DataStreamy, { DataStreamyProgress } from './common/DataStreamy'
 import { sha1MatchesFileKey, sleepMsec } from './common/util'
-import { formatByteCount } from './downloadOptimizer/DownloaderCreator'
+import { formatByteCount } from './downloadOptimizer/createDownloader'
 import { byteCount, ByteCount, byteCountToNumber, ChannelName, elapsedSince, FileKey, isFileManifest, NodeId, nowTimestamp, scaledDurationMsec, Sha1Hash } from './interfaces/core'
 import KacheryP2PNode from './KacheryP2PNode'
 
@@ -145,7 +144,7 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
         await node.downloadOptimizer().waitForReady()
         const ret = new DataStreamy()
         let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null
-        const task = node.downloadOptimizer().createTask(fileKey, fileSize, opts.label)
+        const task = node.downloadOptimizer().createTask(fileKey, fileSize, opts.label, {fromNode: opts.fromNode, fromChannel: opts.fromChannel})
         task.onError(err => {
             ret.producer().error(err)
         })
@@ -159,22 +158,6 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
             // this gets called on cancel or on any other error
             task.cancel() // cancel the download
         })
-        if (opts.fromNode) {
-            node.downloadOptimizer().setProviderNodeForFile({fileKey, nodeId: opts.fromNode})
-        }
-        else {
-            const ff = node.findFile({fileKey, timeoutMsec: TIMEOUTS.loadFileFindFile, fromChannel: opts.fromChannel})
-            let atLeastOneProviderFound = false
-            ff.onFound(result => {
-                node.downloadOptimizer().setProviderNodeForFile({fileKey, nodeId: result.nodeId})
-                atLeastOneProviderFound = true
-            })
-            ff.onFinished(() => {
-                if (!atLeastOneProviderFound) {
-                    ret.producer().error(Error('File not found'))
-                }
-            })
-        }
         return ret
     }
 }

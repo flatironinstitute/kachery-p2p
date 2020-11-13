@@ -1,5 +1,5 @@
-import { action } from "../common/action";
-import { TIMEOUTS } from "../common/constants";
+import { action } from '../common/action';
+import { TIMEOUTS } from '../common/constants';
 import GarbageMap from '../common/GarbageMap';
 import { sleepMsec } from "../common/util";
 import { durationGreaterThan, DurationMsec, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, unscaledDurationMsec, zeroTimestamp } from "../interfaces/core";
@@ -39,17 +39,19 @@ export default class ProxyClientService {
             if (this.#halted) return
             const remoteNodes = this.#remoteNodeManager.getAllRemoteNodes()
             for (let remoteNode of remoteNodes) {
-                if (remoteNode.getRemoteNodeWebSocketAddress()) {
-                    const remoteNodeId = remoteNode.remoteNodeId()
-                    const c = this.#node.getProxyConnectionToServer(remoteNodeId)
-                    if (!c) {
-                        const elapsedMsec = this.#proxyClientManager.elapsedMsecSinceLastFailedOutgoingConnection(remoteNodeId)
-                        if (durationGreaterThan(elapsedMsec, scaledDurationMsec(15000))) {
-                            /////////////////////////////////////////////////////////////////////////
-                            await action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
-                                await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: TIMEOUTS.websocketConnect});
-                            }, null)
-                            /////////////////////////////////////////////////////////////////////////
+                if ((remoteNode.isBootstrap()) || (this.#node.proxyNodeIds().includes(remoteNode.remoteNodeId()))) {
+                    if (remoteNode.getRemoteNodeWebSocketAddress()) {
+                        const remoteNodeId = remoteNode.remoteNodeId()
+                        const c = this.#node.getProxyConnectionToServer(remoteNodeId)
+                        if (!c) {
+                            const elapsedMsec = this.#proxyClientManager.elapsedMsecSinceLastFailedOutgoingConnection(remoteNodeId)
+                            if (durationGreaterThan(elapsedMsec, scaledDurationMsec(15000))) {
+                                ///////////////////////////////////////////////////////////////////////
+                                await action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
+                                    await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: TIMEOUTS.websocketConnect});
+                                }, null)
+                                ///////////////////////////////////////////////////////////////////////
+                            }
                         }
                     }
                 }

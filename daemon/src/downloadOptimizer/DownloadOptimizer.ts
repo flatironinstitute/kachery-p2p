@@ -1,13 +1,14 @@
+import { TIMEOUTS } from "../common/constants";
 import DataStreamy, { DataStreamyProgress } from "../common/DataStreamy";
+import GarbageMap from "../common/GarbageMap";
 import { randomAlphaString } from "../common/util";
-import { ByteCount, FileKey, fileKeyHash, FileKeyHash, NodeId } from "../interfaces/core";
-import RemoteNodeManager from "../RemoteNodeManager";
+import { ByteCount, ChannelName, FileKey, fileKeyHash, FileKeyHash, NodeId, scaledDurationMsec } from "../interfaces/core";
+import KacheryP2PNode from "../KacheryP2PNode";
+import createDownloader from "./createDownloader";
 import DownloadOptimizerJob from "./DownloadOptimizerJob";
 import DownloadOptimizerProviderNode from "./DownloadOptimizerProviderNode";
 
-interface DownloaderCreatorInterface {
-    createDownloader: (args: {fileKey: FileKey, nodeId: NodeId, label: string}) => {start: () => Promise<DataStreamy>, stop: () => void}
-}
+export type Downloader = {start: () => Promise<DataStreamy>, stop: () => void}
 
 interface DownloadOptimizerTask {
     taskId: string,
@@ -16,15 +17,17 @@ interface DownloadOptimizerTask {
     progressStream: DataStreamy
 }
 
+export type FindProvidersFunction = (onFound: (providerNode: DownloadOptimizerProviderNode) => void, onFinished: () => void) => void
+export type CreateDownloaderFunction = (providerNode: DownloadOptimizerProviderNode, fileSize: ByteCount | null, label: string) => Downloader
+
 export default class DownloadOptimizer {
-    #jobs = new Map<FileKeyHash, DownloadOptimizerJob>()
-    #tasks = new Map<FileKeyHash, Map<string, DownloadOptimizerTask>>()
-    #providerNodes = new Map<NodeId, DownloadOptimizerProviderNode>()
-    #providerNodesForFiles = new Map<FileKeyHash, Set<NodeId>>()
+    #jobs = new GarbageMap<FileKeyHash, DownloadOptimizerJob>(scaledDurationMsec(60 * 1000 * 60))
+    #tasks = new GarbageMap<FileKeyHash, Map<string, DownloadOptimizerTask>>(scaledDurationMsec(60 * 1000 * 60))
+    #providerNodes = new GarbageMap<NodeId, DownloadOptimizerProviderNode>(scaledDurationMsec(60 * 1000 * 60))
     #maxNumSimultaneousFileDownloads = 5
     #updateScheduled = false
     #onReadyListeners = new Map<string, () => void>()
-    constructor(private downloaderCreator: DownloaderCreatorInterface, private remoteNodeManager: RemoteNodeManager) {
+    constructor(private node: KacheryP2PNode) {
     }
     async waitForReady() {
         let numActiveFileDownloads = Array.from(this.#jobs.values()).filter(file => (file.isDownloading())).length
@@ -38,7 +41,7 @@ export default class DownloadOptimizer {
             })
         })
     }
-    createTask(fileKey: FileKey, fileSize: ByteCount | null, label: string): DataStreamy {
+    createTask(fileKey: FileKey, fileSize: ByteCount | null, label: string, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null}): DataStreamy {
         const taskId = randomAlphaString(10)
         const fkh = fileKeyHash(fileKey)
         const t: DownloadOptimizerTask = {
@@ -49,7 +52,27 @@ export default class DownloadOptimizer {
         }
         let j = this.#jobs.get(fkh)
         if (!j) {
-            j = new DownloadOptimizerJob(fileKey, fileSize, label)
+            const findProviders: FindProvidersFunction = (onFound: (providerNode: DownloadOptimizerProviderNode) => void, onFinished: () => void) => {
+                if (opts.fromNode) {
+                    // todo: what happens if we create 2 tasks, with different opts
+                    const pn = this._getProviderNode(opts.fromNode)
+                    onFound(pn)
+                }
+                else {
+                    const ff = this.node.findFile({fileKey, timeoutMsec: TIMEOUTS.loadFileFindFile, fromChannel: opts.fromChannel})
+                    ff.onFound(result => {
+                        const pn = this._getProviderNode(result.nodeId)
+                        onFound(pn)
+                    })
+                    ff.onFinished(() => {
+                        onFinished()
+                    })
+                }
+            }
+            const createDownloader0: CreateDownloaderFunction = (providerNode: DownloadOptimizerProviderNode, fileSize: ByteCount, label: string) => {
+                return createDownloader(this.node, fileKey, providerNode, fileSize, label)
+            }
+            j = new DownloadOptimizerJob(fileKey, fileSize, label, findProviders, createDownloader0)
             this.#jobs.set(fkh, j)
         }
         j.getProgressStream().onStarted((byteCount: ByteCount) => {
@@ -93,20 +116,27 @@ export default class DownloadOptimizer {
         }
         this._scheduleUpdate()
     }
-    setProviderNodeForFile({ fileKey, nodeId }: {fileKey: FileKey, nodeId: NodeId}) {
-        if (!this.#providerNodes.has(nodeId)) {
-            const p = new DownloadOptimizerProviderNode(nodeId)
-            this.#providerNodes.set(nodeId, p)
-        }
-        const fkh = fileKeyHash(fileKey)
-        let s: Set<NodeId> | null = this.#providerNodesForFiles.get(fkh) || null
-        if (s == null) {
-            s = new Set<NodeId>()
-            this.#providerNodesForFiles.set(fkh, s)
-        }
-        s.add(nodeId)
-        this._scheduleUpdate()
+    _getProviderNode(nodeId: NodeId): DownloadOptimizerProviderNode {
+        let p = this.#providerNodes.get(nodeId)
+        if (p) return p
+        const pNew = new DownloadOptimizerProviderNode(nodeId)
+        this.#providerNodes.set(nodeId, pNew)
+        return pNew
     }
+    // _setProviderNodeForFile(fileKey: FileKey, nodeId: NodeId) {
+    //     if (!this.#providerNodes.has(nodeId)) {
+    //         const p = new DownloadOptimizerProviderNode(nodeId)
+    //         this.#providerNodes.set(nodeId, p)
+    //     }
+    //     const fkh = fileKeyHash(fileKey)
+    //     let s: Set<NodeId> | null = this.#providerNodesForFiles.get(fkh) || null
+    //     if (s == null) {
+    //         s = new Set<NodeId>()
+    //         this.#providerNodesForFiles.set(fkh, s)
+    //     }
+    //     s.add(nodeId)
+    //     this._scheduleUpdate()
+    // }
     _scheduleUpdate() {
         if (this.#updateScheduled) return
         this.#updateScheduled = true
@@ -119,41 +149,33 @@ export default class DownloadOptimizer {
         }, 1);
     }
     async _update() {
-        let numActiveFileDownloads = Array.from(this.#jobs.values()).filter(file => (file.isDownloading())).length;
+        // delete the complete jobs
+        const keys = this.#jobs.keys()
+        for (let key of keys) {
+            const j = this.#jobs.get(key)
+            if (!j) throw Error('Unexpected j is null in _update')
+            if (j.isComplete()) {
+                this.#jobs.delete(key)
+            }
+        }
+
+        let numActiveFileDownloads = this.#jobs.values().filter(j => (j.isRunning())).length;
+        for (let fkh of this.#jobs.keys()) {
+            if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
+                const job = this.#jobs.get(fkh)
+                /* istanbul ignore next */
+                if (!job) throw Error('Unexpected in _update')
+                if ((!job.isRunning()) && (!job.isComplete())) {
+                    job.run()
+                    numActiveFileDownloads ++
+                }
+            }
+        }
         if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
             this.#onReadyListeners.forEach(listener => {
                 // will self-destruct
                 listener()
             })
-            for (let fkh of this.#jobs.keys()) {
-                const job = this.#jobs.get(fkh)
-                /* istanbul ignore next */
-                if (!job) throw Error('Unexpected in _update')
-                if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) {
-                    if (!job.isDownloading()) {
-                        const providerNodeCandidates: DownloadOptimizerProviderNode[] = []
-                        let providerNodeIds = this.#providerNodesForFiles.get(fkh)
-                        if (providerNodeIds) {
-                            providerNodeIds.forEach(providerNodeId => {
-                                const providerNode = this.#providerNodes.get(providerNodeId)
-                                if (providerNode) {
-                                    if ((!providerNode.isDownloading()) && (this.remoteNodeManager.remoteNodeIsOnline(providerNode.nodeId()))) {
-                                        providerNodeCandidates.push(providerNode);
-                                    }
-                                }
-                                
-                            })
-                        }
-                        const providerNode = chooseFastestProviderNode(providerNodeCandidates);
-                        if (providerNode) {
-                            const downloader = this.downloaderCreator.createDownloader({ fileKey: job.fileKey(), nodeId: providerNode.nodeId(), label: job.label() });
-                            job.setDownloader(downloader)
-                            providerNode.setDownloaderProgress(job.getProgressStream())
-                            numActiveFileDownloads++;
-                        }
-                    }
-                }
-            }
         }
     }
 }

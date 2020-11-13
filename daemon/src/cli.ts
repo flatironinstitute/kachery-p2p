@@ -1,11 +1,13 @@
 #!/usr/bin/env ts-node
 
+import Axios from 'axios';
 import fs from 'fs';
+import yaml from 'js-yaml';
 import os from 'os';
 import yargs from 'yargs';
 import { parseBootstrapInfo } from './common/util';
 import realExternalInterface from './external/real/realExternalInterface';
-import { HostName, isAddress, isChannelName, isHostName, isPort, LocalFilePath, localFilePath, nodeLabel, toPort } from './interfaces/core';
+import { Address, ChannelName, HostName, isAddress, isArrayOf, isChannelName, isHostName, isNodeId, isPort, isString, LocalFilePath, localFilePath, NodeId, nodeLabel, optional, toPort, _validateObject } from './interfaces/core';
 import startDaemon from './startDaemon';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
@@ -35,6 +37,40 @@ class CLIError extends Error {
   }
 }
 
+interface YamlConfigChannel {
+  channelName: ChannelName
+}
+const isYamlConfigChannel = (x: any): x is YamlConfigChannel => {
+  return _validateObject(x, {
+    channelName: isChannelName
+  })
+}
+
+interface YamlConfigProxyNode {
+  label: string,
+  nodeId: NodeId
+}
+const isYamlConfigProxyNode = (x: any): x is YamlConfigChannel => {
+  return _validateObject(x, {
+    label: isString,
+    nodeId: isNodeId
+  })
+}
+
+interface YamlConfig {
+  bootstrapAddresses?: Address[],
+  channels?: YamlConfigChannel[],
+  proxyNodes?: YamlConfigProxyNode[]
+}
+
+const isYamlConfig = (x: any): x is YamlConfig => {
+  return _validateObject(x, {
+    bootstrapAddresses: optional(isArrayOf(isAddress)),
+    channels: optional(isArrayOf(isYamlConfigChannel)),
+    proxyNodes: optional(isArrayOf(isYamlConfigProxyNode))
+  })
+}
+
 function main() {
   const argv = yargs
     .scriptName('kachery-p2p-daemon')
@@ -42,6 +78,11 @@ function main() {
       command: 'start',
       describe: 'Start the daemon',
       builder: (y) => {
+        y.option('config', {
+          describe: 'File path or URL of the .yaml configuration file to use',
+          type: 'string',
+          default: ''
+        })
         y.option('channel', {
           describe: 'Name of a kachery-p2p channel to join (you can join more than one)',
           type: 'array',
@@ -91,49 +132,82 @@ function main() {
         })
         return y
       },
-      handler: (argv) => {
-        const channelNames = ((argv.channel || []) as string[]).map(ch => {
-          if (!isChannelName(ch)) throw new CLIError('Invalid channel name');
-          return ch;
-        });
-        
-        const bootstrapStrings: any[] | null = argv.bootstrap as (any[] | null) || null;
-        let bootstrapAddresses = bootstrapStrings ? (
-          bootstrapStrings.filter((x: any) => (typeof(x) === 'string')).map((x: string) => parseBootstrapInfo(x))
-        ): [];
-        const configDir = (process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`) as any as LocalFilePath
-        if (!fs.existsSync(configDir.toString())) {
-          fs.mkdirSync(configDir.toString());
-        }
+      handler: async (argv) => {
         const hostName = argv.host || null;
         const httpListenPort = argv['http-port'] ? Number(argv['http-port']) || null : 14507
         const udpSocketPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort || 14507
         const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : null
         const daemonApiPort = Number(process.env.KACHERY_P2P_API_PORT || 20431)
         const label = nodeLabel(argv.label as string)
+
+        let yamlConfig: YamlConfig = {}
+        if (argv.config) {
+          const c = await loadConfig(argv.config as any as string)
+          if (!isYamlConfig(c)) {
+            throw Error('Invalid .yaml configuration')
+          }
+          yamlConfig = c
+        }
+
+        const channelNames = ((argv.channel || []) as ChannelName[]).map(ch => {
+          if (!isChannelName(ch)) throw new CLIError('Invalid channel name');
+          return ch;
+        })
+        if (yamlConfig.channels) {
+          yamlConfig.channels.forEach(ch => {
+            channelNames.push(ch.channelName)
+          })
+        }
+        console.info(`Joining channels: ${channelNames.map(c => (c.toString())).join(', ')}`)
+
+        let proxyNodeIds: NodeId[] = []
+        if (yamlConfig.proxyNodes) {
+          console.info(`Using ${yamlConfig.proxyNodes.length} proxy nodes from .yaml config`)
+          yamlConfig.proxyNodes.forEach(pn => {
+            proxyNodeIds.push(pn.nodeId)
+          })
+        }
+
+        const bootstrapStrings: any[] | null = argv.bootstrap as (any[] | null) || null;
+        let bootstrapAddresses = bootstrapStrings ? (
+          bootstrapStrings.filter((x: any) => (typeof(x) === 'string')).map((x: string) => parseBootstrapInfo(x))
+        ): [];
+
+        const configDir = (process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`) as any as LocalFilePath
+        if (!fs.existsSync(configDir.toString())) {
+          fs.mkdirSync(configDir.toString());
+        }
+        
         const noBootstrap = argv['nobootstrap'] ? true : false;
         const isBootstrapNode = argv['isbootstrap'] ? true : false;
         const noMulticast = argv['nomulticast'] ? true : false;
         const verbose = Number(argv.verbose || 0);
 
         if ((!noBootstrap) && (bootstrapAddresses.length === 0)) {
-          bootstrapAddresses = [
-            {hostName: '45.33.92.31', port: toPort(46003)}, // kachery-p2p-spikeforest
-            {hostName: '45.33.92.33', port: toPort(46003)} // kachery-p2p-flatiron1
-          ].map(bpi => {
-              if (isAddress(bpi)) {
-                  return bpi
-              }
-              else {
-                  throw Error(`Not an address: ${bpi}`)
-              }
-          }).filter(bpi => {
-              if ((bpi.hostName === 'localhost') || (bpi.hostName === hostName)) {
-                  if (Number(bpi.port) === httpListenPort) {
-                      return false
-                  }
-              }
-              return true
+          if (yamlConfig.bootstrapAddresses) {
+            console.info(`Using ${yamlConfig.bootstrapAddresses.length} bootstrap addresses from .yaml config`)
+            bootstrapAddresses = yamlConfig.bootstrapAddresses
+          }
+          else {
+            bootstrapAddresses = [
+              {hostName: '45.33.92.31', port: toPort(46003)}, // kachery-p2p-spikeforest
+              {hostName: '45.33.92.33', port: toPort(46003)} // kachery-p2p-flatiron1
+            ].map(bpi => {
+                if (isAddress(bpi)) {
+                    return bpi
+                }
+                else {
+                    throw Error(`Not an address: ${bpi}`)
+                }
+            })
+          }
+          bootstrapAddresses = bootstrapAddresses.filter(bpi => {
+            if ((bpi.hostName.toString() === 'localhost') || (bpi.hostName === hostName)) {
+                if (Number(bpi.port) === httpListenPort) {
+                    return false
+                }
+            }
+            return true
           })
         }
 
@@ -179,6 +253,7 @@ function main() {
           getDefects: () => {return {}}, // no defects
           opts: {
             bootstrapAddresses: bootstrapAddresses,
+            proxyNodeIds,
             isBootstrap: isBootstrapNode,
             channelNames,
             multicastUdpAddress: {hostName: '237.0.0.0' as any as HostName, port: toPort(21010)}, // how to choose this?
@@ -206,6 +281,17 @@ function main() {
     .help()
     .wrap(72)
     .argv
+}
+
+const loadConfig = async (pathOrUrl: string) => {
+  let txt: string
+  if ((pathOrUrl.startsWith('http://')) || (pathOrUrl.startsWith('https://'))) {
+    txt = (await Axios.get(pathOrUrl)).data
+  }
+  else {
+    txt = await fs.promises.readFile(pathOrUrl, 'utf-8')
+  }
+  return yaml.safeLoad(txt)
 }
 
 main();

@@ -5,7 +5,7 @@ import os from 'os';
 import util from 'util';
 import { parseBootstrapInfo, randomAlphaString, sleepMsec } from '../../src/common/util';
 import realExternalInterface from '../../src/external/real/realExternalInterface';
-import { channelName, ChannelName, FeedName, HostName, localFilePath, LocalFilePath, nodeLabel, NodeLabel, Port, scaledDurationMsec, toPort } from '../../src/interfaces/core';
+import { channelName, ChannelName, FeedName, HostName, localFilePath, LocalFilePath, NodeId, nodeLabel, NodeLabel, Port, scaledDurationMsec, toPort } from '../../src/interfaces/core';
 import startDaemon, { DaemonInterface, StartDaemonOpts } from '../../src/startDaemon';
 
 interface DaemonContextOpts {
@@ -14,7 +14,8 @@ interface DaemonContextOpts {
     httpListenPort: Port
     udpSocketPort: Port
     webSocketListenPort: Port
-    bootstrapAddressStrings?: string[]
+    bootstrapAddressStrings?: string[],
+    proxyNodeIds: NodeId[],
     isBootstrap: boolean
     channelNames: ChannelName[]
 }
@@ -56,6 +57,7 @@ const daemonContext = async (o: DaemonContextOpts[], testFunction: (daemons: Dae
             ): []
             const opts: StartDaemonOpts = {
                 bootstrapAddresses,
+                proxyNodeIds: oo.proxyNodeIds,
                 isBootstrap: oo.isBootstrap || false,
                 channelNames: oo.channelNames,
                 multicastUdpAddress: {hostName: '237.0.0.1' as any as HostName, port: toPort(21011)},
@@ -108,6 +110,7 @@ mocha.describe('Python tests', () => {
                 udpSocketPort: toPort(7010),
                 webSocketListenPort: toPort(8010),
                 bootstrapAddressStrings: [],
+                proxyNodeIds: [],
                 isBootstrap: true,
                 channelNames: [channelName('chan1')]
             }
@@ -118,6 +121,7 @@ mocha.describe('Python tests', () => {
                 udpSocketPort: toPort(7011),
                 webSocketListenPort: toPort(8011),
                 bootstrapAddressStrings: ['localhost:7010'],
+                proxyNodeIds: [],
                 isBootstrap: false,
                 channelNames: [channelName('chan1')]
             }

@@ -2,7 +2,6 @@ import fs from 'fs'
 import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util'
 import DataStreamy from './common/DataStreamy'
 import GarbageMap from './common/GarbageMap'
-import DownloaderCreator from './downloadOptimizer/DownloaderCreator'
 import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import ExternalInterface, { KacheryStorageManagerInterface } from './external/ExternalInterface'
 import { MockNodeDefects } from './external/mock/MockNodeDaemon'
@@ -57,6 +56,7 @@ class KacheryP2PNode {
         webSocketListenPort: Port | null,
         label: NodeLabel,
         bootstrapAddresses: Address[],
+        proxyNodeIds: NodeId[],
         channelNames: ChannelName[],
         externalInterface: ExternalInterface,
         opts: KacheryP2PNodeOpts
@@ -72,8 +72,7 @@ class KacheryP2PNode {
 
         this.#remoteNodeManager = new RemoteNodeManager(this)
 
-        const downloaderCreator = new DownloaderCreator(this, this.p.opts.getDefects)
-        this.#downloadOptimizer = new DownloadOptimizer(downloaderCreator, this.#remoteNodeManager)
+        this.#downloadOptimizer = new DownloadOptimizer(this)
     }
     nodeId() {
         return this.#nodeId
@@ -89,6 +88,9 @@ class KacheryP2PNode {
     }
     bootstrapAddresses() {
         return [...this.p.bootstrapAddresses]
+    }
+    proxyNodeIds() {
+        return this.p.proxyNodeIds
     }
     isBootstrapNode() {
         return this.p.opts.isBootstrapNode
