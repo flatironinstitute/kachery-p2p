@@ -523,23 +523,27 @@ export const publicKeyHexToNodeId = (x: PublicKeyHex) : NodeId => {
 
 // FindLiveFeedResult
 export interface FindLiveFeedResult {
-    nodeId: NodeId
+    nodeId: NodeId,
+    channelName: ChannelName | null // null if nodeId is this local nodeId
 }
 export const isFindLiveFeedResult = (x: any): x is FindLiveFeedResult => {
     return _validateObject(x, {
-        nodeId: (a: any) => isNodeId
+        nodeId: isNodeId,
+        channelName: isChannelName
     });
 }
 
 // FindFileResults
 export interface FindFileResult {
     nodeId: NodeId,
+    channelName: ChannelName,
     fileKey: FileKey,
     fileSize: ByteCount
 }
 export const isFindFileResult = (x: any): x is FindFileResult => {
     if (!_validateObject(x, {
         nodeId: isNodeId,
+        channelName: isChannelName,
         fileKey: isFileKey,
         fileSize: isByteCount
     })) return false;
@@ -584,7 +588,9 @@ export interface ChannelNodeInfoBody {
     httpAddress: Address | null,
     webSocketAddress: Address | null,
     publicUdpSocketAddress: Address | null,
-    proxyHttpAddresses: Address[],
+    isMessageProxy: boolean,
+    isDataProxy: boolean,
+    proxyWebsocketNodeIds: NodeId[],
     timestamp: Timestamp
 }
 export interface ChannelNodeInfo {
@@ -600,7 +606,9 @@ export const isChannelNodeInfoBody = (x: any): x is ChannelNodeInfoBody => {
         httpAddress: isOneOf([isNull, isAddress]),
         webSocketAddress: isOneOf([isNull, isAddress]),
         publicUdpSocketAddress: isOneOf([isNull, isAddress]),
-        proxyHttpAddresses: isArrayOf(isAddress),
+        isMessageProxy: isBoolean,
+        isDataProxy: isBoolean,
+        proxyWebsocketNodeIds: isArrayOf(isNodeId),
         timestamp: isTimestamp
     })) return false
     return true

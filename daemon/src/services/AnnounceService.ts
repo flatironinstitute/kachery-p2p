@@ -22,7 +22,7 @@ export default class AnnounceService {
             if (this.#halted) return
             // check if we can send message to node, if not, delay a bit
             let numPasses = 0
-            while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
+            while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, channelName, 'default')) {
                 if (numPasses > 3) return
                 numPasses ++
                 await sleepMsec(scaledDurationMsec(1000))
@@ -62,7 +62,7 @@ export default class AnnounceService {
     }
     async _announceToNode(remoteNodeId: NodeId, channelName: ChannelName) {
         let numPasses = 0
-        while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
+        while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, channelName, 'default')) {
             numPasses ++
             if (numPasses > 3) return
             await sleepMsec(scaledDurationMsec(1500))
@@ -74,7 +74,7 @@ export default class AnnounceService {
         let method: SendRequestMethod = 'prefer-udp' // we prefer to send via udp so that we can discover our own public udp address when we get the response
         let responseData
         try {
-            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method})
+            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, channelName, requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method})
         }
         catch(err) {
             if ((err instanceof HttpPostJsonError) || (err instanceof RequestTimeoutError)) {

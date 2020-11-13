@@ -1,8 +1,9 @@
 import { expect } from 'chai';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
+import GarbageMap from '../../src/common/GarbageMap';
 import { sleepMsec } from '../../src/common/util';
 import MockNodeDaemon, { MockNodeDaemonGroup, MockNodeDefects } from '../../src/external/mock/MockNodeDaemon';
-import { byteCount, ByteCount, byteCountToNumber, ChannelName, DurationMsec, durationMsecToNumber, FeedId, FeedName, HostName, JSONObject, MessageCount, messageCount, scaledDurationMsec, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, subfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toPort } from '../../src/interfaces/core';
+import { byteCount, ByteCount, byteCountToNumber, ChannelName, DurationMsec, durationMsecToNumber, FeedId, FeedName, HostName, JSONObject, MessageCount, messageCount, NodeId, scaledDurationMsec, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, subfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toPort } from '../../src/interfaces/core';
 import { ApiLoadFileRequest, FeedApiAppendMessagesRequest, FeedApiCreateFeedRequest, FeedApiDeleteFeedRequest, FeedApiGetAccessRulesRequest, FeedApiGetFeedIdRequest, FeedApiGetFeedInfoRequest, FeedApiGetMessagesRequest, FeedApiGetNumMessagesRequest, FeedApiGetSignedMessagesRequest, FeedApiSetAccessRulesRequest, FeedApiSubmitMessageRequest, FeedApiWatchForNewMessagesRequest, isFeedApiAppendMessagesResponse, isFeedApiCreateFeedResponse, isFeedApiDeleteFeedResponse, isFeedApiGetAccessRulesResponse, isFeedApiGetFeedIdResponse, isFeedApiGetFeedInfoResponse, isFeedApiGetMessagesResponse, isFeedApiGetNumMessagesResponse, isFeedApiGetSignedMessagesResponse, isFeedApiSetAccessRulesResponse, isFeedApiSubmitMessageResponse, isFeedApiWatchForNewMessagesResponse } from '../../src/services/DaemonApiServer';
 import { StartDaemonOpts } from '../../src/startDaemon';
 
@@ -32,9 +33,11 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
             testContext(async (g, resolve, reject) => {
                 const bootstrapOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    proxyNodeIds: [],
                     isBootstrap: true,
+                    isMessageProxy: true,
+                    isDataProxy: true,
                     channelNames: [],
+                    trustedNodesInChannels: new GarbageMap<ChannelName, NodeId[]>(null),
                     multicastUdpAddress: null,
                     udpSocketPort: null,
                     webSocketListenPort: null,
@@ -45,9 +48,11 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 }
                 const daemonOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    proxyNodeIds: [],
                     isBootstrap: false,
+                    isMessageProxy: false,
+                    isDataProxy: false,
                     channelNames: [mockChannelName],
+                    trustedNodesInChannels: new GarbageMap<ChannelName, NodeId[]>(null),
                     multicastUdpAddress: null,
                     udpSocketPort: null,
                     webSocketListenPort: null,
@@ -143,9 +148,11 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 const multicastUdpAddress = {hostName: 'local-mock-multicast-udp-address-1' as any as HostName, port: toPort(21010)}
                 const daemonOpts = {
                     bootstrapAddresses: [],
-                    proxyNodeIds: [],
                     isBootstrap: false,
+                    isMessageProxy: false,
+                    isDataProxy: false,
                     channelNames: [mockChannelName],
+                    trustedNodesInChannels: new GarbageMap<ChannelName, NodeId[]>(null),
                     multicastUdpAddress,
                     udpSocketPort: 'x', // random below
                     webSocketListenPort: null,
@@ -183,9 +190,11 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
             testContext(async (g, resolve, reject) => {
                 const bootstrapOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    proxyNodeIds: [],
                     isBootstrap: true,
+                    isMessageProxy: true,
+                    isDataProxy: true,
                     channelNames: [mockChannelName2],
+                    trustedNodesInChannels: new GarbageMap<ChannelName, NodeId[]>(null),
                     multicastUdpAddress: null,
                     udpSocketPort: null,
                     webSocketListenPort: randomMockPort(),
@@ -197,9 +206,11 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 }
                 const daemonOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    proxyNodeIds: [],
                     isBootstrap: false,
+                    isMessageProxy: false,
+                    isDataProxy: false,
                     channelNames: [mockChannelName, mockChannelName2],
+                    trustedNodesInChannels: new GarbageMap<ChannelName, NodeId[]>(null),
                     multicastUdpAddress: null,
                     udpSocketPort: null,
                     webSocketListenPort: null,
@@ -241,9 +252,11 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
             testContext(async (g, resolve, reject) => {
                 const bootstrapOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    proxyNodeIds: [],
                     isBootstrap: true,
+                    isMessageProxy: true,
+                    isDataProxy: true,
                     channelNames: [],
+                    trustedNodesInChannels: new GarbageMap<ChannelName, NodeId[]>(null),
                     multicastUdpAddress: null,
                     udpSocketPort: randomMockPort(),
                     webSocketListenPort: randomMockPort(),
@@ -257,9 +270,11 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 }
                 const daemonOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    proxyNodeIds: [],
                     isBootstrap: false,
+                    isMessageProxy: false,
+                    isDataProxy: false,
                     channelNames: [mockChannelName],
+                    trustedNodesInChannels: new GarbageMap<ChannelName, NodeId[]>(null),
                     multicastUdpAddress: null,
                     udpSocketPort: null, // determined below
                     webSocketListenPort: null,
@@ -306,9 +321,11 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
             testContext(async (g, resolve, reject) => {
                 const bootstrapOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    proxyNodeIds: [],
                     isBootstrap: true,
+                    isMessageProxy: true,
+                    isDataProxy: true,
                     channelNames: [],
+                    trustedNodesInChannels: new GarbageMap<ChannelName, NodeId[]>(null),
                     multicastUdpAddress: null,
                     udpSocketPort: randomMockPort(),
                     webSocketListenPort: randomMockPort(),
@@ -322,9 +339,11 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                 }
                 const daemonOpts: StartDaemonOpts = {
                     bootstrapAddresses: [],
-                    proxyNodeIds: [],
                     isBootstrap: false,
+                    isMessageProxy: false,
+                    isDataProxy: false,
                     channelNames: [mockChannelName],
+                    trustedNodesInChannels: new GarbageMap<ChannelName, NodeId[]>(null),
                     multicastUdpAddress: null,
                     udpSocketPort: null, // determined below
                     webSocketListenPort: null,

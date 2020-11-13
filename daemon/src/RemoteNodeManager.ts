@@ -60,7 +60,7 @@ class RemoteNodeManager {
             })
         }
     }
-    async setBootstrapNode(remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, udpSocketAddress: Address | null) {
+    async setBootstrapNode(remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, udpSocketAddress: Address | null, o: {isMessageProxy: boolean, isDataProxy: boolean}) {
         const n = this.#remoteNodes.get(remoteNodeId)
         if (n) {
             if ((!n.isBootstrap()) || (!jsonObjectsMatch(n.bootstrapAddress(), address))) {
@@ -73,6 +73,8 @@ class RemoteNodeManager {
                 remoteNodeId,
                 {
                     isBootstrap: true,
+                    isBootstrapMessageProxy: o.isMessageProxy,
+                    isBootstrapDataProxy: o.isDataProxy,
                     bootstrapAddress: address,
                     bootstrapWebSocketAddress: webSocketAddress,
                     bootstrapUdpSocketAddress: udpSocketAddress
@@ -99,23 +101,23 @@ class RemoteNodeManager {
             nodes
         }
     }
-    canSendRequestToNode(nodeId: NodeId, method: SendRequestMethod) {
+    canSendRequestToNode(nodeId: NodeId, channelName: ChannelName, method: SendRequestMethod) {
         const remoteNode = this.#remoteNodes.get(nodeId)
         if (!remoteNode) {
             return false
         }
-        return remoteNode.canSendRequest(method)
+        return remoteNode.canSendRequest(method, channelName)
     }
     canReceiveMessagesFromNode(nodeId: NodeId): boolean {
         const n = this.getRemoteNode(nodeId)
         return n ? true : false
     }
-    async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}): Promise<NodeToNodeResponseData> {
+    async sendRequestToNode(nodeId: NodeId, channelName: ChannelName, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}): Promise<NodeToNodeResponseData> {
         const remoteNode = this.#remoteNodes.get(nodeId)
         if (!remoteNode) {
             throw Error(`Cannot send request to node: node with ID ${nodeId} not found.`)
         }
-        return await remoteNode.sendRequest(requestData, {timeoutMsec: opts.timeoutMsec, method: opts.method})
+        return await remoteNode.sendRequest(requestData, channelName, {timeoutMsec: opts.timeoutMsec, method: opts.method})
     }
     onNodeChannelAdded(callback: (remoteNodeId: NodeId, channelName: ChannelName) => void) {
         this.#onNodeChannelAddedCallbacks.push(callback)
@@ -158,23 +160,24 @@ class RemoteNodeManager {
         let finished = false
         let numComplete = 0
         let numTotal = 0
-        const _onResponseCallbacks: ((nodeId: NodeId, responseData: NodeToNodeResponseData) => void)[] = [];
+        const _onResponseCallbacks: ((nodeId: NodeId, channelName: ChannelName, responseData: NodeToNodeResponseData) => void)[] = [];
         const _onErrorResponseCallbacks: ((nodeId: NodeId, reason: any) => void)[] = [];
         const _onFinishedCallbacks: (() => void)[] = [];
         this.#remoteNodes.forEach(n => {
-            const nodeChannelNames = n.getChannelNames();
-            let okay = false;
+            const nodeChannelNames = n.getChannelNames()
+            let okay = false
+            let channelNameToUse: ChannelName | null = null
             opts.channelNames.forEach(channelName => {
                 if (nodeChannelNames.includes(channelName)) {
-                    okay = true;
+                    channelNameToUse = channelName
                 }
             })
-            if ((okay) && (this.canSendRequestToNode(n.remoteNodeId(), 'default'))) {
+            if ((channelNameToUse) && (this.canSendRequestToNode(n.remoteNodeId(), channelNameToUse, 'default'))) {
                 numTotal ++
-                (async () => {
+                ;(async () => {
                     let responseData: NodeToNodeResponseData
                     try {
-                        responseData = await this.sendRequestToNode(n.remoteNodeId(), requestData, {timeoutMsec: opts.timeoutMsec, method: 'default'})
+                        responseData = await this.sendRequestToNode(n.remoteNodeId(), channelNameToUse, requestData, {timeoutMsec: opts.timeoutMsec, method: 'default'})
                     }
                     catch(err) {
                         _onErrorResponseCallbacks.forEach(cb => {
@@ -186,7 +189,8 @@ class RemoteNodeManager {
                     }
                     if (finished) return;
                     _onResponseCallbacks.forEach(cb => {
-                        cb(n.remoteNodeId(), responseData)
+                        if (!channelNameToUse) throw Error('Unexpected channelNameToUse is null')
+                        cb(n.remoteNodeId(), channelNameToUse, responseData)
                     });
                     numComplete ++
                     _checkComplete()
@@ -203,7 +207,7 @@ class RemoteNodeManager {
             // at some point in the future - cancel the pending requests
             _finalize()
         }
-        const onResponse = (callback: (nodeId: NodeId, responseData: NodeToNodeResponseData) => void) => {
+        const onResponse = (callback: (nodeId: NodeId, channelName: ChannelName, responseData: NodeToNodeResponseData) => void) => {
             _onResponseCallbacks.push(callback)
         }
         const onErrorResponse = (callback: (nodeId: NodeId, error: Error) => void) => {

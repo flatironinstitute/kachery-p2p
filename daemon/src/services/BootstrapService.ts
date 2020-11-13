@@ -1,28 +1,16 @@
 import { action } from "../common/action";
 import { TIMEOUTS } from "../common/constants";
 import { sleepMsec, sleepMsecNum } from "../common/util";
-import { Address, DurationMsec, JSONObject, NodeId, urlPath, UrlPath } from "../interfaces/core";
+import { Address, DurationMsec, JSONObject, urlPath, UrlPath } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
+import RemoteNodeManager from "../RemoteNodeManager";
 import { isPublicApiProbeResponse } from "../services/PublicApiServer";
-
-interface RemoteNodeManagerInterface {
-    setBootstrapNode: (remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, publicUdpSocketAddress: Address | null) => void
-}
-
-interface RemoteNodeInterface {
-}
-
-interface KacheryP2PNodeInterface {
-    remoteNodeManager: () => RemoteNodeManagerInterface
-    bootstrapAddresses: () => Address[]
-    httpPostJsonFunction: () => ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>)
-}
 
 export type HttpPostJson = (address: Address, path: UrlPath, data: JSONObject, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>
 
 export default class BootstrapService {
     #node: KacheryP2PNode
-    #remoteNodeManager: RemoteNodeManagerInterface
+    #remoteNodeManager: RemoteNodeManager
     #halted = false
     constructor(node: KacheryP2PNode, private opts: {probeIntervalMsec: DurationMsec}) {
         this.#node = node
@@ -37,12 +25,12 @@ export default class BootstrapService {
         if (!isPublicApiProbeResponse(response)) {
             throw Error('Invalid probe response from bootstrap node.')
         }
-        const {nodeId: remoteNodeId, isBootstrapNode, webSocketAddress} = response
+        const {nodeId: remoteNodeId, isBootstrapNode, isMessageProxy, isDataProxy, webSocketAddress} = response
         if (!isBootstrapNode) {
             throw Error('isBootstrapNode is false in probe response from bootstrap node.')
         }
         const publicUdpSocketAddress = response.publicUdpSocketAddress
-        this.#remoteNodeManager.setBootstrapNode(remoteNodeId, address, webSocketAddress, publicUdpSocketAddress)
+        this.#remoteNodeManager.setBootstrapNode(remoteNodeId, address, webSocketAddress, publicUdpSocketAddress, {isMessageProxy, isDataProxy})
     }
     async _start() {
         await sleepMsecNum(2) // important for tests

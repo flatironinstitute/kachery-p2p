@@ -1,3 +1,4 @@
+import GarbageMap from './common/GarbageMap';
 import ExternalInterface from './external/ExternalInterface';
 import { MockNodeDefects } from './external/mock/MockNodeDaemon';
 import { Address, ChannelName, HostName, LocalFilePath, NodeId, NodeLabel, Port, scaledDurationMsec, unscaledDurationMsec } from './interfaces/core';
@@ -15,9 +16,11 @@ import PublicWebSocketServer from './services/PublicWebSocketServer';
 
 export interface StartDaemonOpts {
     bootstrapAddresses: Address[],
-    proxyNodeIds: NodeId[],
     isBootstrap: boolean,
+    isMessageProxy: boolean,
+    isDataProxy: boolean,
     channelNames: ChannelName[],
+    trustedNodesInChannels: GarbageMap<ChannelName, NodeId[]>,
     multicastUdpAddress: Address | null,
     udpSocketPort: Port | null,
     webSocketListenPort: Port | null,
@@ -81,11 +84,13 @@ const startDaemon = async (args: {
         udpSocketPort: opts.udpSocketPort,
         label,
         bootstrapAddresses: opts.bootstrapAddresses,
-        proxyNodeIds: opts.proxyNodeIds,
         channelNames: opts.channelNames,
+        trustedNodesInChannels: opts.trustedNodesInChannels,
         externalInterface,
         opts: {
             isBootstrapNode: opts.isBootstrap,
+            isMessageProxy: opts.isMessageProxy,
+            isDataProxy: opts.isDataProxy,
             multicastUdpAddress: opts.services.multicast ? opts.multicastUdpAddress : null,
             getDefects: args.getDefects
         }

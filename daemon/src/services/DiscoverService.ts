@@ -37,7 +37,7 @@ export default class DiscoverService {
     }
     async _getChannelInfoFromNode(remoteNodeId: NodeId, channelName: ChannelName) {
         let numPasses = 0
-        while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
+        while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, channelName, 'default')) {
             numPasses ++
             if (numPasses > 3) return
             await sleepMsec(scaledDurationMsec(1500))
@@ -48,7 +48,7 @@ export default class DiscoverService {
         }
         let responseData
         try {
-            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
+            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, channelName, requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
         }
         catch(err) {
             if (err instanceof HttpPostJsonError) {

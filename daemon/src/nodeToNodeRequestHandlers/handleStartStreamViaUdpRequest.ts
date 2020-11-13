@@ -1,8 +1,8 @@
-import { errorMessage, NodeId } from '../interfaces/core'
+import { ChannelName, errorMessage, NodeId } from '../interfaces/core'
 import { StartStreamViaUdpRequestData, StartStreamViaUdpResponseData } from '../interfaces/NodeToNodeRequest'
 import KacheryP2PNode from '../KacheryP2PNode'
 
-export const handleStartStreamViaUdpRequest = async (node: KacheryP2PNode, fromNodeId: NodeId, requestData: StartStreamViaUdpRequestData): Promise<StartStreamViaUdpResponseData> => {
+export const handleStartStreamViaUdpRequest = async (node: KacheryP2PNode, fromNodeId: NodeId, requestData: StartStreamViaUdpRequestData, channelName: ChannelName): Promise<StartStreamViaUdpResponseData> => {
     let { streamId } = requestData
     const rn = node.remoteNodeManager().getRemoteNode(fromNodeId)
     if (!rn) {
@@ -22,7 +22,7 @@ export const handleStartStreamViaUdpRequest = async (node: KacheryP2PNode, fromN
         }    
     }
     try {
-        await rn.startStreamViaUdpToRemoteNode(streamId)
+        await rn.startStreamViaUdpToRemoteNode(streamId, channelName)
     }
     catch(err) {
         /* istanbul ignore next */

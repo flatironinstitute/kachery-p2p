@@ -54,14 +54,17 @@ export default class DownloadOptimizer {
         if (!j) {
             const findProviders: FindProvidersFunction = (onFound: (providerNode: DownloadOptimizerProviderNode) => void, onFinished: () => void) => {
                 if (opts.fromNode) {
+                    if (!opts.fromChannel) {
+                        throw Error('When specifying fromNode, you must also specify fromChannel')
+                    }
                     // todo: what happens if we create 2 tasks, with different opts
-                    const pn = this._getProviderNode(opts.fromNode)
+                    const pn = this._getProviderNode(opts.fromNode, opts.fromChannel)
                     onFound(pn)
                 }
                 else {
                     const ff = this.node.findFile({fileKey, timeoutMsec: TIMEOUTS.loadFileFindFile, fromChannel: opts.fromChannel})
                     ff.onFound(result => {
-                        const pn = this._getProviderNode(result.nodeId)
+                        const pn = this._getProviderNode(result.nodeId, result.channelName)
                         onFound(pn)
                     })
                     ff.onFinished(() => {
@@ -116,10 +119,10 @@ export default class DownloadOptimizer {
         }
         this._scheduleUpdate()
     }
-    _getProviderNode(nodeId: NodeId): DownloadOptimizerProviderNode {
+    _getProviderNode(nodeId: NodeId, channelName: ChannelName): DownloadOptimizerProviderNode {
         let p = this.#providerNodes.get(nodeId)
         if (p) return p
-        const pNew = new DownloadOptimizerProviderNode(nodeId)
+        const pNew = new DownloadOptimizerProviderNode(nodeId, channelName)
         this.#providerNodes.set(nodeId, pNew)
         return pNew
     }

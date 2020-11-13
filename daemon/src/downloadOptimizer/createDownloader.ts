@@ -50,7 +50,7 @@ const createDownloader = (node: KacheryP2PNode, fileKey: FileKey, providerNode: 
                 endByte: null
             }
         }
-        const responseData = await n.sendRequest(requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
+        const responseData = await n.sendRequest(requestData, providerNode.channelName(), {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
         if (_cancelled) {
             ret.producer().error(Error('Cancelled'))
             return ret
@@ -66,7 +66,7 @@ const createDownloader = (node: KacheryP2PNode, fileKey: FileKey, providerNode: 
         if (!responseData.streamId) {
             throw Error('Unexpected: no stream ID')
         }        
-        o = await n.downloadFileData(responseData.streamId, {method: 'default'})
+        o = await n.downloadFileData(responseData.streamId, providerNode.channelName(), {method: 'default'})
         o.dataStream.onError(err => {
             if (!o) throw Error('Unexpected in onError of createDownloader')
             const bytesLoaded = ret.bytesLoaded()

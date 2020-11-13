@@ -39,7 +39,7 @@ export default class ProxyClientService {
             if (this.#halted) return
             const remoteNodes = this.#remoteNodeManager.getAllRemoteNodes()
             for (let remoteNode of remoteNodes) {
-                if ((remoteNode.isBootstrap()) || (this.#node.proxyNodeIds().includes(remoteNode.remoteNodeId()))) {
+                if ((remoteNode.isMessageProxy(null)) || (remoteNode.isDataProxy(null))) {
                     if (remoteNode.getRemoteNodeWebSocketAddress()) {
                         const remoteNodeId = remoteNode.remoteNodeId()
                         const c = this.#node.getProxyConnectionToServer(remoteNodeId)

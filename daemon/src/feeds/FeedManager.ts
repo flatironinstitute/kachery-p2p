@@ -114,7 +114,8 @@ class FeedManager {
         const privateKey = await this.#localFeedManager.getPrivateKeyForFeed(feedId)
         if (privateKey) {
             return {
-                nodeId: this.#node.nodeId()
+                nodeId: this.#node.nodeId(),
+                channelName: null
             }
         }
         else {
@@ -260,9 +261,15 @@ class RemoteFeedManager {
             }
         }
 
+        const channelName = liveFeedInfo.channelName
+        if (channelName === null) {
+            throw Error('Unexpected null channelName when we expect the live feed to be on a remote node (getSignedMessages)')
+        }
+
         // Now that we know the channel and nodeId, we can get the messages from the swarm
         const signedMessages = await this.#node.getRemoteLiveFeedSignedMessages({
             nodeId: liveFeedInfo.nodeId,
+            channelName,
             feedId,
             subfeedHash,
             position,
@@ -304,9 +311,15 @@ class RemoteFeedManager {
             throw Error(`Cannot find live feed: ${feedId}`);
         }
 
+        const channelName = liveFeedInfo.channelName
+        if (channelName === null) {
+            throw Error('Unexpected null channelName when we expect the live feed to be on a remote node (submitMessage)')
+        }
+
         // Now that we know the channel and nodeId, we can submit the messages via the swarm
         await this.#node.submitMessageToRemoteLiveFeed({
             nodeId: liveFeedInfo.nodeId,
+            channelName,
             feedId,
             subfeedHash,
             message,

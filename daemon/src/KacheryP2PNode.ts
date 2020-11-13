@@ -28,6 +28,8 @@ import { PacketId } from './udp/UdpPacketSender'
 
 export interface KacheryP2PNodeOpts {
     isBootstrapNode: boolean,
+    isMessageProxy: boolean,
+    isDataProxy: boolean,
     multicastUdpAddress: Address | null,
     getDefects: () => MockNodeDefects
 }
@@ -56,8 +58,8 @@ class KacheryP2PNode {
         webSocketListenPort: Port | null,
         label: NodeLabel,
         bootstrapAddresses: Address[],
-        proxyNodeIds: NodeId[],
         channelNames: ChannelName[],
+        trustedNodesInChannels: GarbageMap<ChannelName, NodeId[]>,
         externalInterface: ExternalInterface,
         opts: KacheryP2PNodeOpts
     }) {
@@ -89,11 +91,17 @@ class KacheryP2PNode {
     bootstrapAddresses() {
         return [...this.p.bootstrapAddresses]
     }
-    proxyNodeIds() {
-        return this.p.proxyNodeIds
+    trustedNodesInChannel(channelName: ChannelName) {
+        return this.p.trustedNodesInChannels.getWithDefault(channelName, [])
     }
     isBootstrapNode() {
         return this.p.opts.isBootstrapNode
+    }
+    isMessageProxy() {
+        return this.p.opts.isMessageProxy
+    }
+    isDataProxy() {
+        return this.p.opts.isDataProxy
     }
     useMulticastUdp() {
         return (this.p.opts.multicastUdpAddress !== null)
@@ -135,7 +143,7 @@ class KacheryP2PNode {
             const channelNames = args.fromChannel ? [args.fromChannel] : this.p.channelNames
             const { onResponse, onFinished, onErrorResponse, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec: args.timeoutMsec, channelNames })
             handleCancel = cancel
-            onResponse((nodeId: NodeId, responseData: NodeToNodeResponseData) => {
+            onResponse((nodeId: NodeId, channelName: ChannelName, responseData: NodeToNodeResponseData) => {
                 if (!isCheckForFileResponseData(responseData)) {
                     /* istanbul ignore next */
                     throw Error(`Unexpected response type: ${responseData.requestType} <> 'checkForFile'`)
@@ -145,6 +153,7 @@ class KacheryP2PNode {
                     onFoundCallbacks.forEach(cb => {
                         cb({
                             nodeId,
+                            channelName,
                             fileKey: args.fileKey,
                             fileSize: size
                         })
@@ -305,7 +314,9 @@ class KacheryP2PNode {
             httpAddress: this.httpAddress(),
             webSocketAddress: this.webSocketAddress(),
             publicUdpSocketAddress: this.#publicUdpSocketAddress,
-            proxyHttpAddresses,
+            isMessageProxy: this.p.opts.isMessageProxy,
+            isDataProxy: this.p.opts.isDataProxy,
+            proxyWebsocketNodeIds: Array.from(this.#proxyConnectionsToServers.keys()),
             timestamp: nowTimestamp()
         }
         return {
@@ -315,6 +326,7 @@ class KacheryP2PNode {
     }
     async getRemoteLiveFeedSignedMessages(args: {
         nodeId: NodeId,
+        channelName: ChannelName,
         feedId: FeedId,
         subfeedHash: SubfeedHash,
         position: SubfeedPosition,
@@ -330,7 +342,7 @@ class KacheryP2PNode {
             maxNumMessages,
             waitMsec
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, { timeoutMsec: addDurations(waitMsec, scaledDurationMsec(1000)), method: 'default' })
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, args.channelName, requestData, { timeoutMsec: addDurations(waitMsec, scaledDurationMsec(1000)), method: 'default' })
         if (!isGetLiveFeedSignedMessagesResponseData(responseData)) {
             /* istanbul ignore next */
             throw Error('Unexpected response type.')
@@ -346,8 +358,9 @@ class KacheryP2PNode {
         }
         return signedMessages
     }
-    async submitMessageToRemoteLiveFeed({ nodeId, feedId, subfeedHash, message, timeoutMsec }: {
+    async submitMessageToRemoteLiveFeed({ nodeId, channelName, feedId, subfeedHash, message, timeoutMsec }: {
         nodeId: NodeId,
+        channelName: ChannelName,
         feedId: FeedId,
         subfeedHash: SubfeedHash,
         message: SubmittedSubfeedMessage,
@@ -359,7 +372,7 @@ class KacheryP2PNode {
             subfeedHash,
             message
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, { timeoutMsec: timeoutMsec, method: 'default' })
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, channelName, requestData, { timeoutMsec: timeoutMsec, method: 'default' })
         if (!isSubmitMessageToLiveFeedResponseData(responseData)) {
             /* istanbul ignore next */
             throw Error(`Error submitting message to remote live feed: Unexpected response data.`)
@@ -380,7 +393,7 @@ class KacheryP2PNode {
             }
             const { onResponse, onFinished, onErrorResponse, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec, channelNames: this.p.channelNames })
             let found = false
-            onResponse((nodeId, responseData) => {
+            onResponse((nodeId, channelName, responseData) => {
                 if (found) return
                 if (!isCheckForLiveFeedResponseData(responseData)) {
                     /* istanbul ignore next */
@@ -389,7 +402,8 @@ class KacheryP2PNode {
                 if (responseData.found) {
                     found = true
                     resolve({
-                        nodeId
+                        nodeId,
+                        channelName
                     })
                 }
             })
@@ -449,7 +463,7 @@ class KacheryP2PNode {
             responseData = await handleSubmitMessageToLiveFeedRequest(this, fromNodeId, requestData)
         }
         else if (isStartStreamViaUdpRequestData(requestData)) {
-            responseData = await handleStartStreamViaUdpRequest(this, fromNodeId, requestData)
+            responseData = await handleStartStreamViaUdpRequest(this, fromNodeId, requestData, request.body.channelName)
         }
         else if (isFallbackUdpPacketRequestData(requestData)) {
             responseData = await handleFallbackUdpPacketRequest(this, fromNodeId, requestData)

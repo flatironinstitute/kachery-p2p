@@ -33,10 +33,9 @@ export const validNodeInfoBody: ut.ChannelNodeInfoBody = {
     httpAddress: { hostName: validHostName, port: 80 as any as ut.Port },
     webSocketAddress: { hostName: validHostName, port: 212 as any as ut.Port },
     publicUdpSocketAddress: { hostName: validHostName, port: 443 as any as ut.Port },
-    proxyHttpAddresses: [
-        { hostName: validHostName, port: 80 as any as ut.Port },
-        { hostName: validHostName, port: 80 as any as ut.Port }, 
-        { hostName: validHostName, port: 80 as any as ut.Port }],
+    proxyWebsocketNodeIds: [],
+    isMessageProxy: false,
+    isDataProxy: false,
     timestamp: ut.nowTimestamp()
 }
 const validChannelNodeInfo: ut.ChannelNodeInfo = {
@@ -694,12 +693,13 @@ describe('Kachery primitives', () => {
 describe('Searches and Requests', () => {
     describe('FindLiveFeedResult', () => {
         it('isFindLiveFeedResult() returns true for object with valid node ID', () => {
-            expect(ut.isFindLiveFeedResult({ nodeId: validNodeId })).to.be.true
+            expect(ut.isFindLiveFeedResult({ nodeId: validNodeId, channelName: validChannelName })).to.be.true
         })
     })
     describe('FindFileResult', () => {
-        const validResult = {
+        const validResult: ut.FindFileResult = {
             nodeId: validNodeId,
+            channelName: validChannelName,
             fileKey: validFileKey,
             fileSize: ut.byteCount(16)
         }

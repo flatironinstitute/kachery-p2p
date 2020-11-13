@@ -32,6 +32,8 @@ class RemoteNode {
     #remoteNodeId: NodeId
     #channelNodeInfoByChannel = new Map<ChannelName, ChannelNodeInfo>()
     #isBootstrap: boolean
+    #isBootstrapMessageProxy: boolean
+    #isBootstrapDataProxy: boolean
     #bootstrapAddress: Address | null
     #bootstrapWebSocketAddress: Address | null
     #bootstrapUdpSocketAddress: Address | null
@@ -46,13 +48,17 @@ class RemoteNode {
     #downloadFileDataMethodOptimizer: DownloadFileDataMethodOptimizer
     constructor(node: KacheryP2PNode, remoteNodeId: NodeId, opts: {
         isBootstrap: boolean,
+        isBootstrapMessageProxy: boolean,
+        isBootstrapDataProxy: boolean,
         bootstrapAddress: Address | null,
         bootstrapWebSocketAddress: Address | null,
         bootstrapUdpSocketAddress: Address | null,
-    } = {isBootstrap: false, bootstrapAddress: null, bootstrapWebSocketAddress: null, bootstrapUdpSocketAddress: null}) {
+    } = {isBootstrap: false, isBootstrapMessageProxy: false, isBootstrapDataProxy: false, bootstrapAddress: null, bootstrapWebSocketAddress: null, bootstrapUdpSocketAddress: null}) {
         this.#node = node
         this.#remoteNodeId = remoteNodeId;
         this.#isBootstrap = opts.isBootstrap
+        this.#isBootstrapMessageProxy = opts.isBootstrapMessageProxy,
+        this.#isBootstrapDataProxy = opts.isBootstrapDataProxy,
         this.#bootstrapAddress = opts.bootstrapAddress
         this.#bootstrapWebSocketAddress = opts.bootstrapWebSocketAddress
         this.#bootstrapUdpSocketAddress = opts.bootstrapUdpSocketAddress
@@ -68,6 +74,31 @@ class RemoteNode {
     }
     isBootstrap() {
         return this.#isBootstrap
+    }
+    isMessageProxy(channelName: ChannelName | null) {
+        if (channelName === null) {
+            if (this.#isBootstrapMessageProxy) return true
+            for (let cn of this.#node.channelNames()) {
+                if (this.isMessageProxy(cn)) return true
+            }
+            return false
+        }
+        if (this.#isBootstrapMessageProxy) return true
+        const cni = this.getChannelNodeInfo(channelName)
+        if (!cni) return false
+        return cni.body.isMessageProxy
+    }
+    isDataProxy(channelName: ChannelName | null) {
+        if (channelName === null) {
+            if (this.#isBootstrapDataProxy) return true
+            for (let cn of this.#node.channelNames()) {
+                if (this.isDataProxy(cn)) return true
+            }
+            return false
+        }
+        const cni = this.getChannelNodeInfo(channelName)
+        if (!cni) return false
+        return cni.body.isDataProxy
     }
     bootstrapAddress() {
         return this.#bootstrapAddress
@@ -87,7 +118,6 @@ class RemoteNode {
         this.#channelNodeInfoByChannel.set(channelName, channelNodeInfo)
     }
     getChannelNames() {
-
         let ret: ChannelName[] = [];
         this.#channelNodeInfoByChannel.forEach((channelNodeInfo, channelName) => {
             ret.push(channelName);
@@ -98,14 +128,14 @@ class RemoteNode {
         return this.#channelNodeInfoByChannel.get(channelName) || null
     }
     getRemoteNodeWebSocketAddress(): Address | null {
-        const ret = this.bootstrapWebSocketAddress()
+        let ret = this.bootstrapWebSocketAddress()
         if (ret) return ret
         this.#channelNodeInfoByChannel.forEach((cni, channelName) => {
             if (cni.body.webSocketAddress) {
-                return cni.body.webSocketAddress
+                ret = cni.body.webSocketAddress
             }
         })
-        return null
+        return ret
     }
     setLocalUdpAddressForRemoteNode(address: Address | null) {
         this.#localUdpAddressForRemoteNode = address
@@ -165,12 +195,13 @@ class RemoteNode {
             }
         }
     }
-    _formRequestFromRequestData(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec}): NodeToNodeRequest {
+    _formRequestFromRequestData(requestData: NodeToNodeRequestData, channelName: ChannelName, opts: {timeoutMsec: DurationMsec}): NodeToNodeRequest {
         const requestId = createRequestId()
         const requestBody = {
             protocolVersion: protocolVersion(),
             requestId,
             fromNodeId: this.#node.nodeId(),
+            channelName,
             toNodeId: this.#remoteNodeId,
             timestamp: nowTimestamp(),
             timeoutMsec: opts.timeoutMsec,
@@ -200,25 +231,50 @@ class RemoteNode {
             }
         }
     }
-    getRemoteNodeHttpProxyAddress(): Address | null {
-        const channelNodeData = this._getMostRecentChannelNodeInfo();
-        if (channelNodeData === null) {
-            return null;
+    getRemoteNodeMessageProxyNode(channelName: ChannelName): RemoteNode | null {
+        const channelNodeInfo = this.#channelNodeInfoByChannel.get(channelName)
+        if (!channelNodeInfo) return null
+        for (let proxyNodeId of channelNodeInfo.body.proxyWebsocketNodeIds) {
+            if (proxyNodeId !== this.#remoteNodeId) {
+                const prn = this.#node.remoteNodeManager().getRemoteNode(proxyNodeId)
+                if (prn) {
+                    if (prn.isMessageProxy(channelName)) { /////////////////////////// message proxy
+                        if (prn.isOnline()) {
+                            if (prn.getRemoteNodeHttpAddress()) {
+                                return prn
+                            }
+                        }
+                    }
+                }
+            }
         }
-        const remoteInfo = channelNodeData.body
-        if (remoteInfo.proxyHttpAddresses.length > 0) {
-            return remoteInfo.proxyHttpAddresses[0]
-        }
-        else {
-            return null;
-        }
+        return null
     }
-    canSendRequest(method: SendRequestMethod): boolean {
-        let method2 = this.#sendMessageMethodOptimizer.determineSendRequestMethod(method)
+    getRemoteNodeDataProxyNode(channelName: ChannelName): RemoteNode | null {
+        const channelNodeInfo = this.#channelNodeInfoByChannel.get(channelName)
+        if (!channelNodeInfo) return null
+        for (let proxyNodeId of channelNodeInfo.body.proxyWebsocketNodeIds) {
+            if (proxyNodeId !== this.#remoteNodeId) {
+                const prn = this.#node.remoteNodeManager().getRemoteNode(proxyNodeId)
+                if (prn) {
+                    if (prn.isDataProxy(channelName)) { /////////////////////////// data proxy
+                        if (prn.isOnline()) {
+                            if (prn.getRemoteNodeHttpAddress()) {
+                                return prn
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null
+    }
+    canSendRequest(method: SendRequestMethod, channelName: ChannelName): boolean {
+        let method2 = this.#sendMessageMethodOptimizer.determineSendRequestMethod(method, channelName)
         return method2 === null ? false : true
     }
-    async downloadFileData(streamId: StreamId, opts: {method: DownloadFileDataMethod}): Promise<{dataStream: DataStreamy, method: DownloadFileDataMethod}> {
-        const method = this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(opts.method)
+    async downloadFileData(streamId: StreamId, channelName: ChannelName, opts: {method: DownloadFileDataMethod}): Promise<{dataStream: DataStreamy, method: DownloadFileDataMethod}> {
+        const method = this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(opts.method, channelName)
         if (method === null) {
             throw Error('No method available to download stream')
         }
@@ -234,10 +290,15 @@ class RemoteNode {
             }
         }
         else if (method === 'http-proxy') {
-            const address = this.getRemoteNodeHttpProxyAddress()
+            const proxyRemoteNode = this.getRemoteNodeDataProxyNode(channelName)
+            if (!proxyRemoteNode) {
+                /* istanbul ignore next */
+                throw Error('Unexpected. Unable to download file data... no proxy remote node found.')
+            }
+            const address = proxyRemoteNode.getRemoteNodeHttpAddress()
             if (!address) {
                 /* istanbul ignore next */
-                throw Error('Unexpected. Unable to download file data... no http-proxy address found.')
+                throw Error('Unexpected. Unable to download file data... no http address for proxy remote node.')
             }
             const ds = await this.#node.externalInterface().httpGetDownload(address, urlPath(`/download/${this.remoteNodeId()}/${this.#node.nodeId()}/${streamId}`), this.#node.stats(), {fromNodeId: null})
             return {
@@ -246,7 +307,7 @@ class RemoteNode {
             }
         }
         else if (method === 'udp') {
-            const ds = await this._streamDataViaUdpFromRemoteNode(streamId)
+            const ds = await this._streamDataViaUdpFromRemoteNode(streamId, channelName)
             return {
                 method,
                 dataStream: ds
@@ -257,7 +318,7 @@ class RemoteNode {
             throw Error ('Unexpected')
         }
     }
-    async _streamDataViaUdpFromRemoteNode(streamId: StreamId): Promise<DataStreamy> {
+    async _streamDataViaUdpFromRemoteNode(streamId: StreamId, channelName: ChannelName): Promise<DataStreamy> {
         const udpS = this.#node.publicUdpSocketServer()
         if (!udpS) {
             /* istanbul ignore next */
@@ -273,7 +334,7 @@ class RemoteNode {
                 requestType: "stopStreamViaUdp",
                 streamId
             }
-            this.sendRequest(stopReqData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'}).then(stopResponseData => {
+            this.sendRequest(stopReqData, channelName, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'}).then(stopResponseData => {
                 /* istanbul ignore next */
                 if (!isStopStreamViaUdpResponseData(stopResponseData)) throw Error('Unexpected in _streamDataViaUdpFromRemoteNode')
                 // okay
@@ -282,7 +343,7 @@ class RemoteNode {
             })
         })
         try {
-            const responseData = await this.sendRequest(requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
+            const responseData = await this.sendRequest(requestData, channelName, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
             /* istanbul ignore next */
             if (!isStartStreamViaUdpResponseData(responseData)) throw Error('Unexpected in _streamDataViaUdpFromRemoteNode')
             /* istanbul ignore next */
@@ -293,7 +354,7 @@ class RemoteNode {
         }
         return incomingDataStream
     }
-    async startStreamViaUdpToRemoteNode(streamId: StreamId): Promise<void> {
+    async startStreamViaUdpToRemoteNode(streamId: StreamId, channelName: ChannelName): Promise<void> {
         const r: DownloadFileDataRequestData | null = this.#node.downloadStreamManager().get(streamId)
         if (r === null) {
             /* istanbul ignore next */
@@ -309,11 +370,11 @@ class RemoteNode {
 
         const ds = await this.#node.kacheryStorageManager().getFileReadStream(r.fileKey)
         const fallbackAddress = nodeIdFallbackAddress(this.#remoteNodeId)
-        udpS.setOutgoingDataStream(udpA, fallbackAddress, streamId, ds, {toNodeId: this.#remoteNodeId})
+        udpS.setOutgoingDataStream(udpA, fallbackAddress, streamId, ds, channelName, {toNodeId: this.#remoteNodeId})
     }
-    async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
+    async sendRequest(requestData: NodeToNodeRequestData, channelName: ChannelName, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
         try {
-            const ret = await this._trySendRequest(requestData, opts)
+            const ret = await this._trySendRequest(requestData, channelName, opts)
             this._setOnline(true)
             return ret
         }
@@ -329,11 +390,11 @@ class RemoteNode {
     isOnline() {
         return this.#isOnline
     }
-    async _trySendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
-        const request = this._formRequestFromRequestData(requestData, {timeoutMsec: opts.timeoutMsec});
+    async _trySendRequest(requestData: NodeToNodeRequestData, channelName: ChannelName, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
+        const request = this._formRequestFromRequestData(requestData, channelName, {timeoutMsec: opts.timeoutMsec});
         const requestId = request.body.requestId;
 
-        const method = this.#sendMessageMethodOptimizer.determineSendRequestMethod(opts.method)
+        const method = this.#sendMessageMethodOptimizer.determineSendRequestMethod(opts.method, channelName)
         if (method === null) {
             /* istanbul ignore next */
             throw Error(`Method not available for sending request ${requestData.requestType}: ${opts.method} (from ${this.#node.nodeId().slice(0, 6)} to ${this.#remoteNodeId.slice(0, 6)})`)
@@ -352,10 +413,15 @@ class RemoteNode {
                 }
             }
             else if (method === 'http-proxy') {
-                address = this.getRemoteNodeHttpProxyAddress()
+                const proxyRemoteNode = this.getRemoteNodeMessageProxyNode(channelName)
+                if (!proxyRemoteNode) {
+                    /* istanbul ignore next */
+                    throw Error('Unexpected. Unable to send request... no proxy remote node found.')
+                }
+                address = proxyRemoteNode.getRemoteNodeHttpAddress()
                 if (!address) {
                     /* istanbul ignore next */
-                    throw Error('Unexpected. Unable to send request... no http-proxy address found.')
+                    throw Error('Unexpected. Unable to send request... no http address for proxy remote node.')
                 }
             }
             else {
@@ -387,7 +453,7 @@ class RemoteNode {
             }
             this.#numUdpBytesSent = addByteCount(this.#numUdpBytesSent, requestSize)
             this.#numRequestsSent ++
-            const R = await udpS.sendRequest(udpA, request, {timeoutMsec: opts.timeoutMsec})
+            const R = await udpS.sendRequest(udpA, request, channelName, {timeoutMsec: opts.timeoutMsec})
             this.#numResponsesReceived ++
             response = R.response
             const udpHeader = R.header

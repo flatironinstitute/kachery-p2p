@@ -1,7 +1,7 @@
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { DgramSocket } from '../external/ExternalInterface';
-import { Address, byteCount, DurationMsec, durationMsecToNumber, isBoolean, isNodeId, isProtocolVersion, isString, JSONObject, NodeId, portToNumber, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
+import { Address, byteCount, ChannelName, DurationMsec, durationMsecToNumber, isBoolean, isNodeId, isProtocolVersion, isString, JSONObject, NodeId, portToNumber, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
 import NodeStats from '../NodeStats';
 import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { UdpTimeoutError } from './UdpCongestionManager';
@@ -41,7 +41,7 @@ export const isUdpPacketSenderHeader = (x: any): x is UdpPacketSenderHeader => {
 }
 
 interface FallbackPacketSenderInterface {
-    sendPacket: (fallbackAddress: FallbackAddress, packetId: PacketId, packet: Buffer) => Promise<void>
+    sendPacket: (fallbackAddress: FallbackAddress, packetId: PacketId, packet: Buffer, channelName: ChannelName) => Promise<void>
 }
 
 export default class UdpPacketSender {
@@ -55,9 +55,9 @@ export default class UdpPacketSender {
     socket() {
         return this.#socket
     }
-    async sendPackets(address: Address | null, fallbackAddress: FallbackAddress, packets: Buffer[], opts: {timeoutMsec: DurationMsec, toNodeId: NodeId}): Promise<void> {
+    async sendPackets(address: Address | null, fallbackAddress: FallbackAddress, packets: Buffer[], channelName: ChannelName, opts: {timeoutMsec: DurationMsec, toNodeId: NodeId}): Promise<void> {
         const outgoingPackets = packets.map(p => {
-            const pkt = new OutgoingPacket(this, address, fallbackAddress, p, opts.timeoutMsec, this.stats, {thisNodeId: this.opts.thisNodeId, toNodeId: opts.toNodeId})
+            const pkt = new OutgoingPacket(this, address, fallbackAddress, p, channelName, opts.timeoutMsec, this.stats, {thisNodeId: this.opts.thisNodeId, toNodeId: opts.toNodeId})
             this.#unconfirmedOutgoingPackets.set(pkt.packetId(), pkt)
             return pkt
         })
@@ -91,8 +91,8 @@ export default class UdpPacketSender {
         this.#congestionManagers.set(address, c)
         return c
     }
-    async _fallbackSendPacket(fallbackAddress: FallbackAddress, packetId: PacketId, buffer: Buffer): Promise<void> {
-        await this.fallbackPacketSender.sendPacket(fallbackAddress, packetId, buffer)
+    async _fallbackSendPacket(fallbackAddress: FallbackAddress, packetId: PacketId, buffer: Buffer, channelName: ChannelName): Promise<void> {
+        await this.fallbackPacketSender.sendPacket(fallbackAddress, packetId, buffer, channelName)
     }
 }
 
@@ -102,16 +102,18 @@ class OutgoingPacket {
     #address: Address | null
     #fallbackAddress: FallbackAddress
     #buffer: Buffer
+    #channelName: ChannelName
     #onConfirmed: (() => void) | null
     #onCancelled: (() => void) | null
     #confirmed = false
     #cancelled = false
     #timeoutMsec: DurationMsec
-    constructor(packetSender: UdpPacketSender, address: Address | null, fallbackAddress: FallbackAddress, buffer: Buffer, timeoutMsec: DurationMsec, private stats: NodeStats, private opts: {thisNodeId: NodeId, toNodeId: NodeId}) {
+    constructor(packetSender: UdpPacketSender, address: Address | null, fallbackAddress: FallbackAddress, buffer: Buffer, channelName: ChannelName, timeoutMsec: DurationMsec, private stats: NodeStats, private opts: {thisNodeId: NodeId, toNodeId: NodeId}) {
         this.#packetSender = packetSender
         this.#address = address
         this.#fallbackAddress = fallbackAddress
         this.#buffer = buffer
+        this.#channelName = channelName
         this.#timeoutMsec = timeoutMsec
         this.#packetId = createPacketId()
     }
@@ -123,7 +125,7 @@ class OutgoingPacket {
     }
     async send() {
         if (this.#address === null) {
-            await this.#packetSender._fallbackSendPacket(this.#fallbackAddress, this.#packetId, this.#buffer)
+            await this.#packetSender._fallbackSendPacket(this.#fallbackAddress, this.#packetId, this.#buffer, this.#channelName)
             return
         }
         const cm = this.#packetSender.congestionManagers(this.#address)
@@ -133,7 +135,7 @@ class OutgoingPacket {
             })
         }
         catch(err) {
-            await this.#packetSender._fallbackSendPacket(this.#fallbackAddress, this.#packetId, this.#buffer)
+            await this.#packetSender._fallbackSendPacket(this.#fallbackAddress, this.#packetId, this.#buffer, this.#channelName)
         }
     }
     size() {

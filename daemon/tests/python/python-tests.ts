@@ -3,6 +3,7 @@ import fs, { mkdirSync } from 'fs';
 import * as mocha from 'mocha'; // import types for mocha e.g. describe
 import os from 'os';
 import util from 'util';
+import GarbageMap from '../../src/common/GarbageMap';
 import { parseBootstrapInfo, randomAlphaString, sleepMsec } from '../../src/common/util';
 import realExternalInterface from '../../src/external/real/realExternalInterface';
 import { channelName, ChannelName, FeedName, HostName, localFilePath, LocalFilePath, NodeId, nodeLabel, NodeLabel, Port, scaledDurationMsec, toPort } from '../../src/interfaces/core';
@@ -14,10 +15,12 @@ interface DaemonContextOpts {
     httpListenPort: Port
     udpSocketPort: Port
     webSocketListenPort: Port
-    bootstrapAddressStrings?: string[],
-    proxyNodeIds: NodeId[],
-    isBootstrap: boolean
+    bootstrapAddressStrings?: string[]
+    isBootstrap?: boolean
+    isMessageProxy?: boolean
+    isDataProxy?: boolean
     channelNames: ChannelName[]
+    trustedNodesInChannels: GarbageMap<ChannelName, NodeId[]>,
 }
 
 const daemonContext = async (o: DaemonContextOpts[], testFunction: (daemons: DaemonInterface[], resolve: () => void, reject: (err: Error) => void) => Promise<void>, done: (err?: Error) => void) => {
@@ -57,9 +60,11 @@ const daemonContext = async (o: DaemonContextOpts[], testFunction: (daemons: Dae
             ): []
             const opts: StartDaemonOpts = {
                 bootstrapAddresses,
-                proxyNodeIds: oo.proxyNodeIds,
                 isBootstrap: oo.isBootstrap || false,
+                isMessageProxy: oo.isMessageProxy || false,
+                isDataProxy: oo.isDataProxy || false,
                 channelNames: oo.channelNames,
+                trustedNodesInChannels: oo.trustedNodesInChannels,
                 multicastUdpAddress: {hostName: '237.0.0.1' as any as HostName, port: toPort(21011)},
                 udpSocketPort: oo.udpSocketPort,
                 webSocketListenPort: oo.webSocketListenPort,
@@ -110,9 +115,9 @@ mocha.describe('Python tests', () => {
                 udpSocketPort: toPort(7010),
                 webSocketListenPort: toPort(8010),
                 bootstrapAddressStrings: [],
-                proxyNodeIds: [],
                 isBootstrap: true,
-                channelNames: [channelName('chan1')]
+                channelNames: [channelName('chan1')],
+                trustedNodesInChannels: new GarbageMap<ChannelName, NodeId[]>(null),
             }
             const o2 = {
                 label: nodeLabel('daemon'),
@@ -121,9 +126,9 @@ mocha.describe('Python tests', () => {
                 udpSocketPort: toPort(7011),
                 webSocketListenPort: toPort(8011),
                 bootstrapAddressStrings: ['localhost:7010'],
-                proxyNodeIds: [],
                 isBootstrap: false,
-                channelNames: [channelName('chan1')]
+                channelNames: [channelName('chan1')],
+                trustedNodesInChannels: new GarbageMap<ChannelName, NodeId[]>(null),
             }
             daemonContext([o1, o2], async (daemons, resolve, reject) => {
                 const d1 = daemons[0]

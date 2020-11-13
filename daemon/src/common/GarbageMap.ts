@@ -2,9 +2,9 @@ import { DurationMsec, durationMsecToNumber, elapsedSince, nowTimestamp, Timesta
 
 export default class GarbageMap<Key, Value> {
     #map = new Map<Key, {value: Value, timestamp: Timestamp}>()
-    #expirationTimeoutMsec: DurationMsec
+    #expirationTimeoutMsec: DurationMsec | null
     #lastCheckTimestamp = nowTimestamp()
-    constructor(expirationTimeoutMSec: DurationMsec) {
+    constructor(expirationTimeoutMSec: DurationMsec | null) {
         this.#expirationTimeoutMsec = expirationTimeoutMSec
     }
     get(key: Key): Value | undefined {
@@ -49,18 +49,21 @@ export default class GarbageMap<Key, Value> {
     }
     async _checkGarbageCollection() {
         const elapsedSinceCheck = elapsedSince(this.#lastCheckTimestamp)
-        if (elapsedSinceCheck > durationMsecToNumber(this.#expirationTimeoutMsec) / 2) {
-            this.#lastCheckTimestamp = nowTimestamp()
-            let keysToDelete: Key[] = [];
-            this.#map.forEach((v, k) => {
-                const elapsed = elapsedSince(v.timestamp);
-                if (elapsed > durationMsecToNumber(this.#expirationTimeoutMsec)) {
-                    keysToDelete.push(k)
-                }
-            })
-            keysToDelete.forEach(k => {
-                this.#map.delete(k)
-            })
+        if (this.#expirationTimeoutMsec !== null) {
+            if (elapsedSinceCheck > durationMsecToNumber(this.#expirationTimeoutMsec) / 2) {
+                this.#lastCheckTimestamp = nowTimestamp()
+                let keysToDelete: Key[] = [];
+                this.#map.forEach((v, k) => {
+                    const elapsed = elapsedSince(v.timestamp);
+                    if (!this.#expirationTimeoutMsec) throw Error('Unexpected in _checkGarbageCollection')
+                    if (elapsed > durationMsecToNumber(this.#expirationTimeoutMsec)) {
+                        keysToDelete.push(k)
+                    }
+                })
+                keysToDelete.forEach(k => {
+                    this.#map.delete(k)
+                })
+            }
         }
     }
 }

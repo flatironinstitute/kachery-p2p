@@ -1,6 +1,6 @@
 import { sleepMsec } from "../common/util";
 import { formatByteCount } from "../downloadOptimizer/createDownloader";
-import { byteCount, durationGreaterThan, DurationMsec, elapsedSince, nowTimestamp, Port, unscaledDurationMsec } from "../interfaces/core";
+import { byteCount, ChannelName, durationGreaterThan, DurationMsec, elapsedSince, nowTimestamp, Port, unscaledDurationMsec } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import RemoteNode, { SendRequestMethod } from "../RemoteNode";
 import RemoteNodeManager from "../RemoteNodeManager";
@@ -39,13 +39,13 @@ export default class DisplayStateService {
         lines.push('=======================================')
         lines.push(`NODE ${this.#node.nodeId().slice(0, 6)} (${this.#node.nodeLabel()})`)
         this.#remoteNodeManager.getBootstrapRemoteNodes().forEach(rn => {
-            const connectionString = getConnectionString(rn)
+            const connectionString = getConnectionString(rn, null)
             lines.push(`BOOTSTRAP ${rn.remoteNodeId().slice(0, 6)} ${connectionString} (${rn.remoteNodeLabel() || ''})`)
         })
         this.#node.channelNames().forEach(channelName => {
             lines.push(`CHANNEL ${channelName}`)
             this.#remoteNodeManager.getRemoteNodesInChannel(channelName).forEach(rn => {
-                const connectionString = getConnectionString(rn)
+                const connectionString = getConnectionString(rn, channelName)
                 lines.push(`    ${rn.remoteNodeId().slice(0, 6)} ${connectionString} (${rn.remoteNodeLabel() || ''})`)
             })
         })
@@ -71,10 +71,10 @@ export default class DisplayStateService {
     }
 }
 
-const getConnectionString = (rn: RemoteNode) => {
+const getConnectionString = (rn: RemoteNode, channelName: ChannelName | null) => {
     const onlineString = rn.isOnline() ? '' : '[offline] '
     const candidateMethods: SendRequestMethod[] = ['udp', 'http', 'http-proxy']
-    const methods: SendRequestMethod[] = candidateMethods.filter(method => (rn.canSendRequest(method)))
+    const methods: SendRequestMethod[] = candidateMethods.filter(method => (channelName && rn.canSendRequest(method, channelName)))
     return `${onlineString}${methods.join(' ')}`
 }
 

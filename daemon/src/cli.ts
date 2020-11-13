@@ -5,6 +5,7 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import os from 'os';
 import yargs from 'yargs';
+import GarbageMap from './common/GarbageMap';
 import { parseBootstrapInfo } from './common/util';
 import realExternalInterface from './external/real/realExternalInterface';
 import { Address, ChannelName, HostName, isAddress, isArrayOf, isChannelName, isHostName, isNodeId, isPort, isString, LocalFilePath, localFilePath, NodeId, nodeLabel, optional, toPort, _validateObject } from './interfaces/core';
@@ -37,37 +38,37 @@ class CLIError extends Error {
   }
 }
 
-interface YamlConfigChannel {
-  channelName: ChannelName
-}
-const isYamlConfigChannel = (x: any): x is YamlConfigChannel => {
-  return _validateObject(x, {
-    channelName: isChannelName
-  })
-}
-
-interface YamlConfigProxyNode {
+interface YamlConfigTrustedNode {
   label: string,
   nodeId: NodeId
 }
-const isYamlConfigProxyNode = (x: any): x is YamlConfigChannel => {
+const isYamlConfigTrustedNode = (x: any): x is YamlConfigTrustedNode => {
   return _validateObject(x, {
     label: isString,
     nodeId: isNodeId
   })
 }
 
+interface YamlConfigChannel {
+  channelName: ChannelName,
+  trustedNodes?: YamlConfigTrustedNode[]
+}
+const isYamlConfigChannel = (x: any): x is YamlConfigChannel => {
+  return _validateObject(x, {
+    channelName: isChannelName,
+    trustedNodes: optional(isArrayOf(isYamlConfigTrustedNode))
+  })
+}
+
 interface YamlConfig {
   bootstrapAddresses?: Address[],
-  channels?: YamlConfigChannel[],
-  proxyNodes?: YamlConfigProxyNode[]
+  channels?: YamlConfigChannel[]
 }
 
 const isYamlConfig = (x: any): x is YamlConfig => {
   return _validateObject(x, {
     bootstrapAddresses: optional(isArrayOf(isAddress)),
-    channels: optional(isArrayOf(isYamlConfigChannel)),
-    proxyNodes: optional(isArrayOf(isYamlConfigProxyNode))
+    channels: optional(isArrayOf(isYamlConfigChannel))
   })
 }
 
@@ -93,7 +94,7 @@ function main() {
           default: 0
         })
         y.option('host', {
-          describe: 'host name or IP address of this daemon.',
+          describe: 'host name or IP address of this node.',
           type: 'string',
           default: ''
         })
@@ -111,7 +112,7 @@ function main() {
           type: 'string'
         })
         y.option('websocket-port', {
-          describe: 'Override the default websocket port to listen on.',
+          describe: 'Specify the websocket port to listen on (required for ismessageproxy and/or isdataproxy).',
           type: 'string'
         })
         y.option('bootstrap', {
@@ -124,6 +125,14 @@ function main() {
         })
         y.option('isbootstrap', {
           describe: 'Mark this node as a bootstrap node',
+          type: 'boolean'
+        })
+        y.option('ismessageproxy', {
+          describe: 'Allow this node to be used as a message proxy node for the channels it is in',
+          type: 'boolean'
+        })
+        y.option('isdataproxy', {
+          describe: 'Allow this node to be used as a data proxy node for the channels it is in',
           type: 'boolean'
         })
         y.option('nomulticast', {
@@ -139,6 +148,18 @@ function main() {
         const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : null
         const daemonApiPort = Number(process.env.KACHERY_P2P_API_PORT || 20431)
         const label = nodeLabel(argv.label as string)
+        const noBootstrap = argv['nobootstrap'] ? true : false
+        const isBootstrapNode = argv['isbootstrap'] ? true : false
+        const isMessageProxy = argv['ismessageproxy'] ? true : false
+        const isDataProxy = argv['isdataproxy'] ? true : false
+        const noMulticast = argv['nomulticast'] ? true : false
+        const verbose = Number(argv.verbose || 0)
+
+        if ((isMessageProxy) || (isDataProxy)) {
+          if (webSocketListenPort === null) {
+            throw Error('You must specify a websocket-port when using --ismessageproxy or --isdataproxy')
+          }
+        }
 
         let yamlConfig: YamlConfig = {}
         if (argv.config) {
@@ -149,24 +170,26 @@ function main() {
           yamlConfig = c
         }
 
+        const trustedNodesInChannels = new GarbageMap<ChannelName, NodeId[]>(null)
         const channelNames = ((argv.channel || []) as ChannelName[]).map(ch => {
           if (!isChannelName(ch)) throw new CLIError('Invalid channel name');
           return ch;
         })
+        channelNames.forEach(ch => {
+          trustedNodesInChannels.set(ch, [])
+        })
         if (yamlConfig.channels) {
           yamlConfig.channels.forEach(ch => {
             channelNames.push(ch.channelName)
+            if (ch.trustedNodes) {
+              trustedNodesInChannels.set(ch.channelName, ch.trustedNodes.map(tn => tn.nodeId))
+            }
+            else {
+              trustedNodesInChannels.set(ch.channelName, [])
+            }
           })
         }
         console.info(`Joining channels: ${channelNames.map(c => (c.toString())).join(', ')}`)
-
-        let proxyNodeIds: NodeId[] = []
-        if (yamlConfig.proxyNodes) {
-          console.info(`Using ${yamlConfig.proxyNodes.length} proxy nodes from .yaml config`)
-          yamlConfig.proxyNodes.forEach(pn => {
-            proxyNodeIds.push(pn.nodeId)
-          })
-        }
 
         const bootstrapStrings: any[] | null = argv.bootstrap as (any[] | null) || null;
         let bootstrapAddresses = bootstrapStrings ? (
@@ -177,11 +200,6 @@ function main() {
         if (!fs.existsSync(configDir.toString())) {
           fs.mkdirSync(configDir.toString());
         }
-        
-        const noBootstrap = argv['nobootstrap'] ? true : false;
-        const isBootstrapNode = argv['isbootstrap'] ? true : false;
-        const noMulticast = argv['nomulticast'] ? true : false;
-        const verbose = Number(argv.verbose || 0);
 
         if ((!noBootstrap) && (bootstrapAddresses.length === 0)) {
           if (yamlConfig.bootstrapAddresses) {
@@ -253,9 +271,11 @@ function main() {
           getDefects: () => {return {}}, // no defects
           opts: {
             bootstrapAddresses: bootstrapAddresses,
-            proxyNodeIds,
             isBootstrap: isBootstrapNode,
+            isMessageProxy,
+            isDataProxy,
             channelNames,
+            trustedNodesInChannels,
             multicastUdpAddress: {hostName: '237.0.0.0' as any as HostName, port: toPort(21010)}, // how to choose this?
             udpSocketPort,
             webSocketListenPort,

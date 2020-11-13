@@ -31,6 +31,8 @@ export interface PublicApiProbeResponse {
     daemonVersion: DaemonVersion,
     nodeId: NodeId,
     isBootstrapNode: boolean,
+    isMessageProxy: boolean,
+    isDataProxy: boolean,
     webSocketAddress: Address | null,
     publicUdpSocketAddress: Address | null
 };
@@ -41,6 +43,8 @@ export const isPublicApiProbeResponse = (x: any): x is PublicApiProbeResponse =>
         daemonVersion: isDaemonVersion,
         nodeId: isNodeId,
         isBootstrapNode: isBoolean,
+        isMessageProxy: isBoolean,
+        isDataProxy: isBoolean,
         webSocketAddress: isOneOf([isNull, isAddress]),
         publicUdpSocketAddress: isOneOf([isNull, isAddress])
     });
@@ -197,6 +201,8 @@ export default class PublicApiServer {
             daemonVersion: daemonVersion(),
             nodeId: this.#node.nodeId(),
             isBootstrapNode: this.#node.isBootstrapNode(),
+            isMessageProxy: this.#node.isMessageProxy(),
+            isDataProxy: this.#node.isDataProxy(),
             webSocketAddress: this.#node.webSocketAddress(),
             publicUdpSocketAddress: this.#node.publicUdpSocketAddress()
         };
