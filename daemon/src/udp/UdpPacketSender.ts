@@ -1,7 +1,7 @@
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString } from '../common/util';
 import { DgramSocket } from '../external/ExternalInterface';
-import { Address, byteCount, ChannelName, DurationMsec, durationMsecToNumber, isBoolean, isNodeId, isProtocolVersion, isString, JSONObject, NodeId, portToNumber, ProtocolVersion, scaledDurationMsec, _validateObject } from '../interfaces/core';
+import { Address, byteCount, ChannelName, DurationMsec, durationMsecToNumber, isBoolean, isNodeId, isProtocolVersion, isString, JSONObject, NodeId, portToNumber, ProtocolVersion, scaledDurationMsec, sha1OfObject, _validateObject } from '../interfaces/core';
 import NodeStats from '../NodeStats';
 import { protocolVersion } from '../protocolVersion';
 import UdpCongestionManager, { UdpTimeoutError } from './UdpCongestionManager';
@@ -46,7 +46,7 @@ interface FallbackPacketSenderInterface {
 
 export default class UdpPacketSender {
     #socket: DgramSocket
-    #congestionManagers = new GarbageMap<Address, UdpCongestionManager>(scaledDurationMsec(5 * 60 * 1000))
+    #congestionManagers = new GarbageMap<string, UdpCongestionManager>(scaledDurationMsec(5 * 60 * 1000))
     #unconfirmedOutgoingPackets = new GarbageMap<PacketId, OutgoingPacket>(scaledDurationMsec(5 * 60 * 1000))
     #debugId = randomAlphaString(4)
     constructor(socket: DgramSocket, private fallbackPacketSender: FallbackPacketSenderInterface, private stats: NodeStats, private opts: {thisNodeId: NodeId}) {
@@ -86,9 +86,10 @@ export default class UdpPacketSender {
         }
     }
     congestionManagers(address: Address) {
-        const c = this.#congestionManagers.get(address) || new UdpCongestionManager()
+        const addressHash = sha1OfObject(address as any as JSONObject).toString()
+        const c = this.#congestionManagers.get(addressHash) || new UdpCongestionManager()
         // do it this way so that garbage collection of GarbageMap will function
-        this.#congestionManagers.set(address, c)
+        this.#congestionManagers.set(addressHash, c)
         return c
     }
     async _fallbackSendPacket(fallbackAddress: FallbackAddress, packetId: PacketId, buffer: Buffer, channelName: ChannelName): Promise<void> {

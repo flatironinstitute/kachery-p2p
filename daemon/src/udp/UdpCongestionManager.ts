@@ -2,9 +2,8 @@ import { randomAlphaString } from "../common/util";
 import { addByteCount, byteCount, ByteCount, byteCountToNumber, DurationMsec, durationMsecToNumber, elapsedSince, isNumber, nowTimestamp, scaledDurationMsec, scaleDurationBy, unscaledDurationMsec } from "../interfaces/core";
 import { PacketId } from "./UdpPacketSender";
 
+// this is the target fraction of udp packets lost
 const TARGET_FRAC_LOST_BYTES = 0.02
-
-type Callbacks = (() => void)[]
 
 export class UdpTimeoutError extends Error {
     constructor(errorString: string) {
@@ -67,7 +66,7 @@ export const createInternalId = () => {
 }
 
 export default class UdpCongestionManager {
-    #maxNumBytesPerSecondToSend = byteCountPerSec(3 * 1000 * 1000) // current number of bytes per second allowed to send
+    #maxNumBytesPerSecondToSend = byteCountPerSec(3 * 1000 * 1000) // current number of bytes per second allowed to send -- this will get adjusted based on the udp packet loss rate
     #estimatedRoundtripLatencyMsec = scaledDurationMsec(200) // current estimated roundtrip latency
     #trialDurationMsec = scaledDurationMsec(5000); // duration of a single trial
     #currentTrialData = new TrialData();
