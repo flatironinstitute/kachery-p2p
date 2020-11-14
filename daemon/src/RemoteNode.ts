@@ -2,7 +2,7 @@ import { TIMEOUTS } from "./common/constants";
 import { getSignature, verifySignature } from "./common/crypto_util";
 import DataStreamy from "./common/DataStreamy";
 import { addByteCount, Address, byteCount, ByteCount, ChannelName, ChannelNodeInfo, createRequestId, durationGreaterThan, DurationMsec, elapsedSince, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec, unscaledDurationMsec, urlPath } from "./interfaces/core";
-import { DownloadFileDataRequestData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, isStopStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StopStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
+import { CheckAliveRequestData, DownloadFileDataRequestData, isCheckAliveResponseData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, isStopStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StopStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import DownloadFileDataMethodOptimizer, { DownloadFileDataMethod } from "./methodOptimizers/DownloadFileDataMethodOptimizer";
 import SendMessageMethodOptimizer from './methodOptimizers/SendMessageMethodOptimizer';
@@ -116,7 +116,20 @@ class RemoteNode {
                 return;
             }
         }
-        this._setOnline(true)
+        if (!this.#isOnline) {
+            // let's check to see if it is online
+            const requestData: CheckAliveRequestData = {
+                requestType: 'checkAlive'
+            }
+            this.sendRequest(requestData, channelName, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'}).then(responseData => {
+                if (!isCheckAliveResponseData(responseData)) throw Error('Unexpected response for checkAlive request')
+                if (responseData.alive) {
+                    this._setOnline(true)
+                }
+            }).catch(err => {
+                // maybe not online
+            })
+        }
         this.#channelNodeInfoByChannel.set(channelName, channelNodeInfo)
     }
     getChannelNames() {

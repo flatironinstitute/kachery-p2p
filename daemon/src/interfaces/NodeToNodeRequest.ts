@@ -82,7 +82,7 @@ export const isNodeToNodeResponse = (x: any): x is NodeToNodeResponse => {
 }
 
 export type NodeToNodeRequestData = (
-    // ProbeRequestData |
+    CheckAliveRequestData |
     GetChannelInfoRequestData |
     AnnounceRequestData |
     CheckForFileRequestData |
@@ -97,6 +97,7 @@ export type NodeToNodeRequestData = (
 )
 export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
     return isOneOf([
+        isCheckAliveRequestData,
         isGetChannelInfoRequestData,
         isAnnounceRequestData,
         isCheckForFileRequestData,
@@ -111,7 +112,7 @@ export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
     ]) ? true : false;
 }
 export type NodeToNodeResponseData = (
-    // ProbeResponseData |
+    CheckAliveResponseData |
     GetChannelInfoResponseData |
     AnnounceResponseData |
     CheckForFileResponseData |
@@ -126,6 +127,7 @@ export type NodeToNodeResponseData = (
 )
 export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData => {
     return isOneOf([
+        isCheckAliveResponseData,
         isGetChannelInfoResponseData,
         isAnnounceResponseData,
         isCheckForFileResponseData,
@@ -159,6 +161,26 @@ export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData =>
 //         probeResponse: isApiProbeResponse
 //     })
 // }
+
+// CheckAliveRequestData
+export interface CheckAliveRequestData {
+    requestType: 'checkAlive'
+}
+export const isCheckAliveRequestData = (x: any): x is CheckAliveRequestData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('checkAlive')
+    })
+}
+export interface CheckAliveResponseData {
+    requestType: 'checkAlive',
+    alive: boolean
+}
+export const isCheckAliveResponseData = (x: any): x is CheckAliveResponseData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('checkAlive'),
+        alive: isBoolean
+    })
+}
 
 // getChannelInfo
 export interface GetChannelInfoRequestData {
