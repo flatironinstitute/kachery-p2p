@@ -189,8 +189,7 @@ class RemoteNode {
             const cni = this.#channelNodeInfoByChannel.get(channelName)
             /* istanbul ignore next */
             if (!cni) throw Error('Unexpected in pruneChannelNodeInfos')
-            const elapsed = unscaledDurationMsec(elapsedSince(cni.body.timestamp))
-            if (durationGreaterThan(elapsed, scaledDurationMsec(120000))) {
+            if (channelNodeInfoIsExpired(cni)) {
                 this.#channelNodeInfoByChannel.delete(channelName)
             }
         }
@@ -520,6 +519,11 @@ class RemoteNode {
         })
         return result;
     }
+}
+
+export const channelNodeInfoIsExpired = (cni: ChannelNodeInfo) => {
+    const elapsed = unscaledDurationMsec(elapsedSince(cni.body.timestamp))
+    return (durationGreaterThan(elapsed, scaledDurationMsec(2 * 60 * 1000)))
 }
 
 export default RemoteNode;

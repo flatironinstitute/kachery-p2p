@@ -67,10 +67,13 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
             let numComplete = 0
             let chunkDataStreams: DataStreamy[] = []
             let numQueued = 0
+            let errored = false
             for (let chunkIndex = 0; chunkIndex < manifest.chunks.length; chunkIndex ++) {
                 while (numQueued >= QUEUE_SIZE) {
+                    if (errored) break
                     await sleepMsec(scaledDurationMsec(100))
                 }
+                if (errored) break
                 numQueued ++
                 await (async (chunkIndex: number) => { // do it this way so that we have function closure
                     const chunk = manifest.chunks[chunkIndex]
@@ -91,6 +94,7 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
                     ds.onError(err => {
                         numQueued --
                         ret.producer().error(err)
+                        errored = true
                     })
                     ds.onProgress((progress: DataStreamyProgress) => {
                         _updateProgressForManifestLoad()

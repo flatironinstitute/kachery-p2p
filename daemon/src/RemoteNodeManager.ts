@@ -1,15 +1,14 @@
 import { verifySignature } from './common/crypto_util';
-import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, durationGreaterThan, DurationMsec, durationMsecToNumber, elapsedSince, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec, unscaledDurationMsec } from './interfaces/core';
+import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey } from './interfaces/core';
 import { AnnounceRequestData, AnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest';
 import KacheryP2PNode from './KacheryP2PNode';
-import RemoteNode, { SendRequestMethod } from './RemoteNode';
+import RemoteNode, { channelNodeInfoIsExpired, SendRequestMethod } from './RemoteNode';
 
 class RemoteNodeManager {
     #node: KacheryP2PNode
     #remoteNodes = new Map<NodeId, RemoteNode>()
     #onNodeChannelAddedCallbacks: ((remoteNodeId: NodeId, channelName: ChannelName) => void)[] = []
     #onBootstrapNodeAddedCallbacks: ((bootstrapNodeId: NodeId) => void)[] = []
-    #lastPrune = nowTimestamp()
     constructor(node: KacheryP2PNode) {
         this.#node = node;
     }
@@ -40,6 +39,7 @@ class RemoteNodeManager {
     }
     setChannelNodeInfo(channelNodeInfo: ChannelNodeInfo) {
         const { body, signature } = channelNodeInfo;
+        if (channelNodeInfoIsExpired(channelNodeInfo)) return
         if (!verifySignature(body, signature, nodeIdToPublicKey(channelNodeInfo.body.nodeId))) {
             throw Error('Invalid signature for channelNodeInfo.');
         }
@@ -245,18 +245,14 @@ class RemoteNodeManager {
         return (rn && rn.isOnline())
     }
     _pruneRemoteNodes() {
-        const elapsed = elapsedSince(this.#lastPrune)
-        if (durationGreaterThan(unscaledDurationMsec(elapsed), scaledDurationMsec(30000))) {
-            this.#lastPrune = nowTimestamp()
-            const remoteNodeIds = this.#remoteNodes.keys()
-            for (let nodeId of remoteNodeIds) {
-                const rn = this.#remoteNodes.get(nodeId)
-                if (!rn) throw Error('Unexpected in _pruneRemoteNodes')
-                rn.pruneChannelNodeInfos()
-                if (!rn.isBootstrap()) {
-                    if (rn.getChannelNames().length === 0) {
-                        this.#remoteNodes.delete(nodeId)
-                    }
+        const remoteNodeIds = this.#remoteNodes.keys()
+        for (let nodeId of remoteNodeIds) {
+            const rn = this.#remoteNodes.get(nodeId)
+            if (!rn) throw Error('Unexpected in _pruneRemoteNodes')
+            rn.pruneChannelNodeInfos()
+            if (!rn.isBootstrap()) {
+                if (rn.getChannelNames().length === 0) {
+                    this.#remoteNodes.delete(nodeId)
                 }
             }
         }
