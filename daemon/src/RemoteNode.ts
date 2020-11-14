@@ -107,6 +107,7 @@ class RemoteNode {
         return this.#bootstrapWebSocketAddress
     }
     setChannelNodeInfoIfMoreRecent(channelName: ChannelName, channelNodeInfo: ChannelNodeInfo) {
+        if (channelNodeInfoIsExpired(channelNodeInfo)) return
         if (this.#channelNodeInfoByChannel.has(channelName)) {
             const x = this.#channelNodeInfoByChannel.get(channelName);
             if (!x) throw Error('Unexpected.');
@@ -115,6 +116,7 @@ class RemoteNode {
                 return;
             }
         }
+        this._setOnline(true)
         this.#channelNodeInfoByChannel.set(channelName, channelNodeInfo)
     }
     getChannelNames() {
@@ -507,7 +509,6 @@ class RemoteNode {
             /* istanbul ignore next */
             throw Error('Invalid signature in response.');
         }
-        this._setOnline(true)
         return response.body.responseData;
     }
     _getMostRecentChannelNodeInfo(): ChannelNodeInfo | null {

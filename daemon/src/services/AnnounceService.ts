@@ -124,7 +124,6 @@ export default class AnnounceService {
                 lastBootstrapAnnounceTimestamp = nowTimestamp()
             }
             
-            
             const elapsedSinceLastIndividualNodeAnnounce = elapsedSince(lastIndividualNodeAnnounceTimestamp)
             if (elapsedSinceLastIndividualNodeAnnounce > durationMsecToNumber(this.opts.announceToIndividualNodeIntervalMsec)) {
                 // for each channel, choose a node and announce to that node
