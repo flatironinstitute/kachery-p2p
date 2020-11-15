@@ -1,7 +1,7 @@
 import { DaemonVersion, ProtocolVersion } from './interfaces/core';
 
-const PROTOCOL_VERSION = 'kachery-p2p-0.5.6';
-const DAEMON_VERSION = 'kachery-p2p-0.5.6';
+const PROTOCOL_VERSION = 'kachery-p2p-0.5.7';
+const DAEMON_VERSION = 'kachery-p2p-0.5.7';
 
 export const protocolVersion = (): ProtocolVersion => {
     return PROTOCOL_VERSION as any as ProtocolVersion;
