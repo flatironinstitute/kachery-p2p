@@ -1,6 +1,6 @@
 import { DurationMsec, durationMsecToNumber, elapsedSince, nowTimestamp, Timestamp } from '../interfaces/core'
 
-export default class GarbageMap<Key, Value> {
+export default class GarbageMap<Key extends String, Value> {
     #map = new Map<Key, {value: Value, timestamp: Timestamp}>()
     #expirationTimeoutMsec: DurationMsec | null
     #lastCheckTimestamp = nowTimestamp()

@@ -9,7 +9,7 @@ import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
 import { getStats, GetStatsOpts } from './getStats'
 import { addDurations, Address, ChannelName, ChannelNodeInfo, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, MessageCount, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage } from './interfaces/core'
-import { CheckForFileRequestData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, GetLiveFeedSignedMessagesRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
+import { CheckForFileRequestData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, GetLiveFeedSignedMessagesRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isGetLiveFeedSignedMessagesRequestData, isGetLiveFeedSignedMessagesResponseData, isReportSubfeedMessagesResponseData, isSetLiveFeedSubscriptionsRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import NodeStats from './NodeStats'
 import { handleCheckAliveRequest } from './nodeToNodeRequestHandlers/handleCheckAliveRequest'
 import { handleCheckForFileRequest } from './nodeToNodeRequestHandlers/handleCheckForFileRequest'
@@ -18,9 +18,11 @@ import { handleDownloadFileDataRequest } from './nodeToNodeRequestHandlers/handl
 import { handleFallbackUdpPacketRequest } from './nodeToNodeRequestHandlers/handleFallbackUdpPacketRequest'
 import { handleGetChannelInfoRequest } from './nodeToNodeRequestHandlers/handleGetChannelInfoRequest'
 import { handleGetLiveFeedSignedMessagesRequest } from './nodeToNodeRequestHandlers/handleGetLiveFeedSignedMessagesRequest'
+import { handleReportSubfeedMessages } from './nodeToNodeRequestHandlers/handleReportSubfeedMessages'
 import { handleSetLiveFeedSubscriptionsRequest } from './nodeToNodeRequestHandlers/handleSetLiveFeedSubscriptionsRequest'
 import { handleStartStreamViaUdpRequest } from './nodeToNodeRequestHandlers/handleStartStreamViaUdpRequest'
 import { handleSubmitMessageToLiveFeedRequest } from './nodeToNodeRequestHandlers/handleSubmitMessageToLiveFeedRequest'
+import { handleSubscribeToSubfeed } from './nodeToNodeRequestHandlers/handleSubscribeToSubfeed'
 import { protocolVersion } from './protocolVersion'
 import { ProxyWebsocketConnection } from './proxyConnections/ProxyWebsocketConnection'
 import RemoteNodeManager from './RemoteNodeManager'
@@ -343,6 +345,7 @@ class KacheryP2PNode {
             maxNumMessages,
             waitMsec
         }
+        
         const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, args.channelName, requestData, { timeoutMsec: addDurations(waitMsec, scaledDurationMsec(1000)), method: 'default' })
         if (!isGetLiveFeedSignedMessagesResponseData(responseData)) {
             /* istanbul ignore next */
@@ -449,6 +452,12 @@ class KacheryP2PNode {
         }
         else if (isCheckForLiveFeedRequestData(requestData)) {
             responseData = await handleCheckForLiveFeedRequest(this, fromNodeId, requestData)
+        }
+        else if (isSubscribeToSubfeedRequestData(requestData)) {
+            responseData = await handleSubscribeToSubfeed(this, fromNodeId, request.body.channelName, requestData)
+        }
+        else if (isReportSubfeedMessagesResponseData(requestData)) {
+            responseData = await handleReportSubfeedMessages(this, fromNodeId, requestData)
         }
         else if (isSetLiveFeedSubscriptionsRequestData(requestData)) {
             /* istanbul ignore next */

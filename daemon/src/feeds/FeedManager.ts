@@ -1,10 +1,14 @@
 import { assert } from 'console';
+import { TIMEOUTS } from '../common/constants';
 import { getSignatureJson, hexToPublicKey, verifySignatureJson } from '../common/crypto_util';
 import GarbageMap from '../common/GarbageMap';
 import { randomAlphaString, sleepMsec } from '../common/util';
 import { LocalFeedManagerInterface } from '../external/ExternalInterface';
-import { DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, JSONObject, messageCount, MessageCount, messageCountToNumber, nowTimestamp, PrivateKey, PublicKey, scaledDurationMsec, Signature, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubfeedPosition, subfeedPositionToNumber, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
+import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, FeedId, feedIdToPublicKeyHex, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, JSONObject, messageCount, MessageCount, messageCountToNumber, NodeId, nowTimestamp, PrivateKey, PublicKey, scaledDurationMsec, Signature, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubfeedPosition, subfeedPositionToNumber, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage, Timestamp } from '../interfaces/core';
+import { isSubscribeToSubfeedResponseData, SubscribeToSubfeedRequestData } from '../interfaces/NodeToNodeRequest';
 import KacheryP2PNode from '../KacheryP2PNode';
+import RemoteNode from '../RemoteNode';
+import IncomingSubfeedSubscriptionManager from './IncomingSubfeedSubscriptionManager';
 
 class FeedManager {
     // Manages the local feeds and access to the remote feeds in the p2p network
@@ -12,10 +16,12 @@ class FeedManager {
     #localFeedManager: LocalFeedManagerInterface
     #subfeeds = new GarbageMap<FeedSubfeedId, Subfeed>(scaledDurationMsec(8 * 60 * 1000)) // The subfeed instances (Subfeed()) that have been loaded into memory
     #remoteFeedManager: RemoteFeedManager // Manages the interaction with feeds on remote nodes
+    #incomingSubfeedSubscriptionManager: IncomingSubfeedSubscriptionManager
     constructor(node: KacheryP2PNode, localFeedManager: LocalFeedManagerInterface) {
         this.#node = node
         this.#localFeedManager = localFeedManager
-        this.#remoteFeedManager = new RemoteFeedManager(this.#node);
+        this.#remoteFeedManager = new RemoteFeedManager(this.#node)
+        this.#incomingSubfeedSubscriptionManager = new IncomingSubfeedSubscriptionManager(this.#node)
     }
     async createFeed({ feedName } : {feedName: FeedName | null }) {
         // Create a new writeable feed on this node and return the ID of the new feed
@@ -28,7 +34,7 @@ class FeedManager {
     async getFeedId({ feedName }: { feedName: FeedName }) {
         return await this.#localFeedManager.getFeedId(feedName)
     }
-    async hasWriteableFeed({ feedId }: { feedId: FeedId }) {
+    async hasWriteableFeed(feedId: FeedId) {
         return await this.#localFeedManager.hasWriteableFeed(feedId)
     }
     async appendMessages(args: { feedId: FeedId, subfeedHash: SubfeedHash, messages: SubfeedMessage[]}) {
@@ -200,86 +206,175 @@ class FeedManager {
             }, durationMsecToNumber(waitMsec));
         });
     }
-    async _loadSubfeed({feedId, subfeedHash}: {feedId: FeedId, subfeedHash: SubfeedHash}) {
+    async renewIncomingSubfeedSubscription(fromNodeId: NodeId, channelName: ChannelName, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, durationMsec: DurationMsec): Promise<SignedSubfeedMessage[]> {
+        return await this.#incomingSubfeedSubscriptionManager.renewIncomingSubfeedSubscription(fromNodeId, channelName, feedId, subfeedHash, position, durationMsec)
+    }
+    async reportRemoteSubfeedMessages(feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) {
+        const sf = await this._loadSubfeed({feedId, subfeedHash})
+        if (messageCountToNumber(sf.getNumMessages()) < subfeedPositionToNumber(position)) {
+            throw Error(`Problem reporting subfeed messages. sf.getNumMessages() < position: ${sf.getNumMessages()} < ${position}`)
+        }
+        const offset = messageCountToNumber(sf.getNumMessages()) - subfeedPositionToNumber(position)
+        if (offset < signedMessages.length) {
+            sf.appendSignedMessages(signedMessages.slice(offset))
+        }
+    }
+    async _loadSubfeed({feedId, subfeedHash}: {feedId: FeedId, subfeedHash: SubfeedHash}): Promise<Subfeed> {
         // Load a subfeed (Subfeed() instance
 
         // If we have already loaded it into memory, then do not reload
-        const k = feedSubfeedId(feedId, subfeedHash);
-        const subfeed = this.#subfeeds.get(k) || null;
+        const k = feedSubfeedId(feedId, subfeedHash)
+        let subfeed = this.#subfeeds.get(k) || null
 
         if (subfeed) {
-            await subfeed.waitUntilInitialized();
+            await subfeed.waitUntilInitialized()
         }
         else {
             // Instantiate and initialize the subfeed
-            const sf = new Subfeed({ node: this.#node, remoteFeedManager: this.#remoteFeedManager, feedId, subfeedHash, localFeedManager: this.#localFeedManager });
+            subfeed = new Subfeed({ remoteFeedManager: this.#remoteFeedManager, feedId, subfeedHash, localFeedManager: this.#localFeedManager })
+            subfeed.onMessagesAdded((position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) => {
+                this.#incomingSubfeedSubscriptionManager.reportMessagesAdded(feedId, subfeedHash, position, signedMessages).then(() => {
+                }).catch((err: Error) => {
+                    console.warn(`Problem reporting messages added: ${err.message}`)
+                })
+            })
             // Store in memory for future access (the order is important here, see waitUntilInitialized above)
-            this.#subfeeds.set(k, sf);
+            this.#subfeeds.set(k, subfeed)
 
             // Load private key if this is writeable (otherwise, privateKey will be null)
             // important to do this after setting this.#subfeeds(k), because we need to await it
             const privateKey = await this.#localFeedManager.getPrivateKeyForFeed(feedId)
 
             try {
-                await sf.initialize(privateKey)
+                await subfeed.initialize(privateKey)
             }
             catch(err) {
                 /* istanbul ignore next */
                 this.#subfeeds.delete(k)
                 /* istanbul ignore next */
-                throw err;
+                throw err
             }
         }
         
         // Return the subfeed instance
-        return this.#subfeeds.get(k);
+        return subfeed
+    }
+}
+
+class RemoteSubfeedSubscription {
+    #expirationTimestamp: Timestamp
+    #onExpiredCallbacks: (() => void)[] = []
+    constructor(private node: KacheryP2PNode, private remoteNode: RemoteNode, private channelName: ChannelName, private feedId: FeedId, private subfeedHash: SubfeedHash, private position: SubfeedPosition, durationMsec: DurationMsec) {
+        this.#expirationTimestamp = nowTimestamp()
+        // extendExpiration is called after the constructor, which sends the subscription request
+    }
+    async extendExpiration(durationMsec: DurationMsec) {
+        const newExpirationTimestamp = ((nowTimestamp() as any as number) + (durationMsec as any as number)) as any as Timestamp
+        if ((newExpirationTimestamp as any as number) > (this.#expirationTimestamp as any as number)) {
+            await this._sendSubscriptionRequest(durationMsec)
+            this.#expirationTimestamp = newExpirationTimestamp
+            setTimeout(() => {
+                this._checkExpired()
+            }, durationMsecToNumber(durationMsec) + durationMsecToNumber(scaledDurationMsec(1000)))
+        }
+    }
+    onExpired(callback: () => void) {
+        this.#onExpiredCallbacks.push(callback)
+    }
+    _checkExpired() {
+        const elapsed = elapsedSince(this.#expirationTimestamp)
+        if (elapsed > 0) {
+            this.#onExpiredCallbacks.forEach(cb => {cb()})
+        }
+    }
+    async _sendSubscriptionRequest(durationMsec: DurationMsec) {
+        const requestData: SubscribeToSubfeedRequestData = {
+            requestType: 'subscribeToSubfeed',
+            feedId: this.feedId,
+            subfeedHash: this.subfeedHash,
+            position: this.position,
+            durationMsec
+        }
+        const responseData = await this.remoteNode.sendRequest(requestData, this.channelName, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
+        if (!isSubscribeToSubfeedResponseData(responseData)) {
+            throw Error('Unexpected response to SubscribeToSubfeed request')
+        } 
+        if (!responseData.success) {
+            throw Error(`Error in subscribing to remote feed: ${responseData.errorMessage}`)
+        }
+        if ((responseData.initialSignedMessages) && (responseData.initialSignedMessages.length > 0)) {
+            this.node.feedManager().reportRemoteSubfeedMessages(this.feedId, this.subfeedHash, this.position, responseData.initialSignedMessages)
+        }
     }
 }
 
 class RemoteFeedManager {
     #node: KacheryP2PNode
     #liveFeedInfos = new GarbageMap<FeedId, FindLiveFeedResult>(scaledDurationMsec(5 * 60 * 1000)) // Information about the live feeds (cached in memory)
+    #remoteSubfeedSubscriptions = new GarbageMap<string, RemoteSubfeedSubscription>(null)
     // Manages interactions with feeds on remote nodes within the p2p network
     constructor(node: KacheryP2PNode) {
         this.#node = node; // The kachery-p2p node
     }
-    async getSignedMessages({feedId, subfeedHash, position, maxNumMessages, waitMsec}: {feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec}): Promise<SignedSubfeedMessage[] | null> {
-        // Get signed messages from a remote feed
 
-        let w = durationMsecToNumber(waitMsec)
-
-        // Search and find the info for the feed (channel and node id)
-        // If not found, return null
-        let liveFeedInfo
-        while (true) {
-            try {
-                liveFeedInfo = await this.findLiveFeedInfo({feedId, timeoutMsec: waitMsec})
-                break
-            }
-            catch(err) {
-                return null
-            }
+    async subscribeToRemoteSubfeed(feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, durationMsec: DurationMsec) {
+        // todo: find the node ID and channel of the remote subfeed
+        const key0 = feedId.toString() + ':' + subfeedHash.toString()
+        let s: RemoteSubfeedSubscription | undefined = this.#remoteSubfeedSubscriptions.get(key0)
+        if (!s) {
+            const findLiveFeedResult = await this.#node.findLiveFeed({feedId, timeoutMsec: TIMEOUTS.defaultRequest})
+            if (!findLiveFeedResult) throw Error('Unable to find live feed (subscribeToRemoteSubfeed).')
+            if (!findLiveFeedResult.channelName) throw Error('channelName is null in findLiveFeedResult')
+            const rn = this.#node.remoteNodeManager().getRemoteNode(findLiveFeedResult.nodeId)
+            if (!rn) throw Error('Unable to find remote node in subscribeToRemoteSubfeed')
+            s = new RemoteSubfeedSubscription(this.#node, rn, findLiveFeedResult.channelName, feedId, subfeedHash, position, durationMsec)
+            this.#remoteSubfeedSubscriptions.set(key0, s)
+            s.onExpired(() => {
+                this.#remoteSubfeedSubscriptions.delete(key0)
+            })
         }
-
-        const channelName = liveFeedInfo.channelName
-        if (channelName === null) {
-            throw Error('Unexpected null channelName when we expect the live feed to be on a remote node (getSignedMessages)')
-        }
-
-        // Now that we know the channel and nodeId, we can get the messages from the swarm
-        const signedMessages = await this.#node.getRemoteLiveFeedSignedMessages({
-            nodeId: liveFeedInfo.nodeId,
-            channelName,
-            feedId,
-            subfeedHash,
-            position,
-            maxNumMessages,
-            waitMsec
-        });
-
-        // Return the retrieved messages
-        return signedMessages;
+        // this is the part that actually sends the subscription request
+        await s.extendExpiration(durationMsec)
     }
+
+
+
+    // // to be removed:
+    // async getSignedMessages({feedId, subfeedHash, position, maxNumMessages, waitMsec}: {feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec}): Promise<SignedSubfeedMessage[] | null> {
+    //     // Get signed messages from a remote feed
+
+    //     // Search and find the info for the feed (channel and node id)
+    //     // If not found, return null
+    //     let liveFeedInfo
+    //     while (true) {
+    //         try {
+    //             liveFeedInfo = await this.findLiveFeedInfo({feedId, timeoutMsec: waitMsec})
+    //             break
+    //         }
+    //         catch(err) {
+    //             return null
+    //         }
+    //     }
+
+    //     const channelName = liveFeedInfo.channelName
+    //     if (channelName === null) {
+    //         throw Error('Unexpected null channelName when we expect the live feed to be on a remote node (getSignedMessages)')
+    //     }
+
+    //     // Now that we know the channel and nodeId, we can get the messages from the swarm
+    //     const signedMessages = await this.#node.getRemoteLiveFeedSignedMessages({
+    //         nodeId: liveFeedInfo.nodeId,
+    //         channelName,
+    //         feedId,
+    //         subfeedHash,
+    //         position,
+    //         maxNumMessages,
+    //         waitMsec
+    //     });
+
+    //     // Return the retrieved messages
+    //     return signedMessages;
+    // }
     async submitMessage(args: {feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage, timeoutMsec: DurationMsec}) {
         const {feedId, subfeedHash, message, timeoutMsec} = args;
 
@@ -331,22 +426,31 @@ class RemoteFeedManager {
         // If not found, throws an error.
 
         // First check if we have the information in the memory cache
-        const cachedInfo = this.#liveFeedInfos.get(feedId);
-        if (cachedInfo) return cachedInfo;
+        const cachedInfo = this.#liveFeedInfos.get(feedId)
+        if (cachedInfo) {
+            // check whether the node is still online
+            if (this.#node.remoteNodeManager().remoteNodeIsOnline(cachedInfo.nodeId)) {
+                // if so, return it
+                return cachedInfo
+            }
+            else {
+                // if not, then set the cached info to null
+                this.#liveFeedInfos.delete(feedId)
+            }
+        }
 
-        const x = await this.#node.findLiveFeed({feedId, timeoutMsec});
+        const x = await this.#node.findLiveFeed({feedId, timeoutMsec})
         if (x === null) {
-            throw Error('Unable to find live feed.');
+            throw Error('Unable to find live feed.')
         }
 
         // Store in memory cache
-        this.#liveFeedInfos.set(feedId, x);
-        return x;
+        this.#liveFeedInfos.set(feedId, x)
+        return x
     }
 }
 
 interface SubfeedParams {
-    node: KacheryP2PNode,
     localFeedManager: LocalFeedManagerInterface,
     remoteFeedManager: RemoteFeedManager,
     feedId: FeedId,
@@ -363,16 +467,14 @@ const createListenerId = (): ListenerId => {
 class Subfeed {
     // Represents a subfeed, which may or may not be writeable on this node
     #localFeedManager: LocalFeedManagerInterface
-    #node : KacheryP2PNode // The kachery-p2p daemon
     #feedId: FeedId // The ID of the feed
     #publicKey: PublicKey // The public key of the feed (which is determined by the feed ID)
     #privateKey: PrivateKey | null // The private key (or null if this is not writeable on the local node) -- set below
     #subfeedHash: SubfeedHash // The hash of the subfeed
-    #subfeedMessagesPath: string // The text file containing the actual messages (JSON strings on lines of text)
     #signedMessages: SignedSubfeedMessage[] | null = null // The signed messages loaded from the messages file (in-memory cache)
     #accessRules: SubfeedAccessRules | null = null // Access rules for this subfeed -- like which nodes on the p2p network have permission to submit messages
     #isWriteable: boolean | null = null
-    #remoteFeedManager: RemoteFeedManager // The remote feed manager, allowing us to retrieve data from remote nodes
+    #remoteFeedManager: RemoteFeedManager // The remote feed manager, allowing us to subscribe to remote feeds and submit messages to remote feeds
     
     #initialized: boolean = false;
     #initializing: boolean = false;
@@ -381,8 +483,9 @@ class Subfeed {
     #onInitializeErrorCallbacks: ((err: Error) => void)[] = [];
     #newMessageListeners = new Map<ListenerId, () => void>();
 
+    #onMessagesAddedCallbacks: ((position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) => void)[] = []
+
     constructor(params: SubfeedParams) {
-        this.#node = params.node; // The kachery-p2p daemon
         this.#feedId = params.feedId; // The ID of the feed
         this.#publicKey = hexToPublicKey(feedIdToPublicKeyHex(this.#feedId)); // The public key of the feed (which is determined by the feed ID)
         this.#subfeedHash = params.subfeedHash; // The hash of the subfeed
@@ -523,67 +626,46 @@ class Subfeed {
             throw Error('_signedMessages is null. Perhaps getSignedMessages was called before subfeed was initialized.');
         }
         if (subfeedPositionToNumber(position) < this.#signedMessages.length) {
-            // If we have some messages loaded into memory, let's return those!
+            // If we have some messages loaded into memory, let's return those! (no need to look remotely)
             return this._getInMemorySignedMessages({position, maxNumMessages});
         }
-        else if (subfeedPositionToNumber(position) === this.#signedMessages.length) {
-            // We don't have any new messages in memory
-            let signedMessages: SignedSubfeedMessage[] = [];
+        else if (subfeedPositionToNumber(position) >= this.#signedMessages.length) {
+            // We don't have any new messages in memory - let's try to get them remotely or else wait for local messages to be added
             if (!this.isWriteable()) {
-                // If it's not locally writeable, then we should try to load messages from a remote node
-                const remoteSignedMessages = await this.#remoteFeedManager.getSignedMessages({
-                    feedId: this.#feedId,
-                    subfeedHash: this.#subfeedHash,
-                    position: subfeedPosition(this.#signedMessages.length),
-                    maxNumMessages,
-                    waitMsec
-                });
-                if ((remoteSignedMessages) && (remoteSignedMessages.length > 0)) {
-                    // We found them! Let's first make sure that our position is still equal to this._signedMessages.length
-                    if (subfeedPositionToNumber(position) === this.#signedMessages.length) {
-                        // We found them! So we append them to local feed, and then call getSignedMessages() again. We should then return the appropriate number of signed messages.
-                        this.appendSignedMessages(remoteSignedMessages);
-                        return this._getInMemorySignedMessages({position, maxNumMessages});
-                    }
-                    else {
-                        if (subfeedPositionToNumber(position) < this.#signedMessages.length) {
-                            // we somehow got more signed messages. So let's go with those!
-                            return this._getInMemorySignedMessages({position, maxNumMessages});
-                        }
-                        else {
-                            /* istanbul ignore next */
-                            throw Error('Unexpected problem. Position is now greater than signedMessages.length.')
-                        }
-                    }
-                }
+                // If it's not locally writeable, then we need to subscribe to a remote feed
+                await this.#remoteFeedManager.subscribeToRemoteSubfeed(this.#feedId, this.#subfeedHash, subfeedPosition(this.#signedMessages.length), scaledDurationMsec(30 * 1000))
             }
-            else if (durationMsecToNumber(waitMsec) > 0) {
-                // If this is a writeable subfeed, and we have been instructed to wait, then let's just wait for a bit and maybe some new messages will arrive.
-
+            if (durationMsecToNumber(waitMsec) > 0) {
+                // let's just wait for a bit and maybe some new messages will arrive (either from remote or added locally)
+                let signedMessages: SignedSubfeedMessage[] = []
                 await new Promise((resolve) => {
                     let resolved = false;
                     const listenerId = createListenerId();
                     this.#newMessageListeners.set(listenerId, () => {
-                        if (resolved) return;
-                        resolved = true;
-                        this.#newMessageListeners.delete(listenerId);
+                        if (resolved) return
+                        resolved = true
+                        this.#newMessageListeners.delete(listenerId)
                         // We have new messages! Call getSignedMessages again to retrieve them.
-                        signedMessages = this._getInMemorySignedMessages({position, maxNumMessages});
-                        resolve();    
+                        signedMessages = this._getInMemorySignedMessages({position, maxNumMessages})
+                        resolve()
                     });
                     setTimeout(() => {
-                        if (resolved) return;
-                        resolved = true;
-                        this.#newMessageListeners.delete(listenerId);
-                        resolve();
+                        if (resolved) return
+                        resolved = true
+                        this.#newMessageListeners.delete(listenerId)
+                        resolve()
                     }, durationMsecToNumber(waitMsec));
                 });
+                // Finally, return the signed messages that were obtained above.
+                return signedMessages;    
             }
-            // Finally, return the signed messages that have been accumulated above.
-            return signedMessages;
+            else {
+                return []
+            }
         }
         else {
-            return [];
+            /* istanbul ignore next */
+            throw Error('Unexpected: impossible case')
         }
     }
     // important that this is synchronous
@@ -659,6 +741,10 @@ class Subfeed {
         this.#newMessageListeners.forEach((listener) => {
             listener()
         })
+        this.#onMessagesAddedCallbacks.forEach(cb => {
+            if (!this.#signedMessages) throw Error('Unexpected in appendSignedMessages')
+            cb(subfeedPosition(this.#signedMessages.length - signedMessagesToAppend.length), signedMessagesToAppend)
+        })
     }
     async getAccessRules(): Promise<SubfeedAccessRules | null> {
         return this.#accessRules
@@ -670,6 +756,9 @@ class Subfeed {
         }
         this.#localFeedManager.setSubfeedAccessRules(this.#feedId, this.#subfeedHash, accessRules)
         this.#accessRules = accessRules
+    }
+    onMessagesAdded(callback: (position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) => void) {
+        this.#onMessagesAddedCallbacks.push(callback)
     }
 }
 

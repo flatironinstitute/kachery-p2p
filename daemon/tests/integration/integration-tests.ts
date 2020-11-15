@@ -668,7 +668,7 @@ const testSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaem
     }
     expect(response.messages.length).equals(2)
 
-    // expect(await fm1.hasWriteableFeed({feedId: feed1})).is.true
+    // expect(await fm1.hasWriteableFeed(feed1)).is.true
     const feed1b = await getFeedId(daemon1, 'f1' as any as FeedName)
     expect(feed1b).equals(feed1)
 
@@ -694,7 +694,7 @@ const testSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaem
     expect(w1.length).equals(2)
 
     await deleteFeed(daemon1, feed1)
-    // expect(await fm1.hasWriteableFeed({feedId: feed1})).is.false
+    // expect(await fm1.hasWriteableFeed(feed1)).is.false
 }
 
 const testSubmitSubfeedMessage = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) => {

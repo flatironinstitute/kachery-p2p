@@ -87,6 +87,8 @@ export type NodeToNodeRequestData = (
     AnnounceRequestData |
     CheckForFileRequestData |
     CheckForLiveFeedRequestData |
+    SubscribeToSubfeedRequestData |
+    ReportSubfeedMessagesRequestData |
     SetLiveFeedSubscriptionsRequestData |
     SubmitMessageToLiveFeedRequestData |
     GetLiveFeedSignedMessagesRequestData |
@@ -102,6 +104,8 @@ export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
         isAnnounceRequestData,
         isCheckForFileRequestData,
         isCheckForLiveFeedRequestData,
+        isSubscribeToSubfeedResponseData,
+        isReportSubfeedMessagesResponseData,
         isSetLiveFeedSubscriptionsRequestData,
         isSubmitMessageToLiveFeedRequestData,
         isGetLiveFeedSignedMessagesRequestData,
@@ -117,6 +121,8 @@ export type NodeToNodeResponseData = (
     AnnounceResponseData |
     CheckForFileResponseData |
     CheckForLiveFeedResponseData |
+    SubscribeToSubfeedResponseData |
+    ReportSubfeedMessagesResponseData |
     SetLiveFeedSubscriptionsResponseData |
     SubmitMessageToLiveFeedResponseData |
     GetLiveFeedSignedMessagesResponseData |
@@ -132,6 +138,8 @@ export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData =>
         isAnnounceResponseData,
         isCheckForFileResponseData,
         isCheckForLiveFeedResponseData,
+        isSubscribeToSubfeedResponseData,
+        isReportSubfeedMessagesResponseData,
         isSetLiveFeedSubscriptionsResponseData,
         isSubmitMessageToLiveFeedResponseData,
         isGetLiveFeedSignedMessagesResponseData,
@@ -271,6 +279,68 @@ export const isCheckForLiveFeedResponseData = (x: any): x is CheckForLiveFeedRes
     return _validateObject(x, {
         requestType: isEqualTo('checkForLiveFeed'),
         found: isBoolean
+    })
+}
+
+// subscribeToSubfeed
+export interface SubscribeToSubfeedRequestData {
+    requestType: 'subscribeToSubfeed',
+    feedId: FeedId,
+    subfeedHash: SubfeedHash,
+    position: SubfeedPosition,
+    durationMsec: DurationMsec
+}
+export const isSubscribeToSubfeedRequestData = (x: any): x is SubscribeToSubfeedRequestData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('subscribeToSubfeed'),
+        feedId: isFeedId,
+        subfeedHash: isSubfeedHash,
+        position: isSubfeedPosition,
+        durationMsec: isDurationMsec
+    })
+}
+export interface SubscribeToSubfeedResponseData {
+    requestType: 'subscribeToSubfeed',
+    success: boolean,
+    initialSignedMessages: SignedSubfeedMessage[] | null,
+    errorMessage: ErrorMessage | null
+}
+export const isSubscribeToSubfeedResponseData = (x: any): x is SubscribeToSubfeedResponseData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('subscribeToSubfeed'),
+        success: isBoolean,
+        initialSignedMessages: isOneOf([isArrayOf(isSignedSubfeedMessage), isNull]),
+        errorMessage: isOneOf([isErrorMessage, isNull])
+    })
+}
+
+// reportSubfeedMessages
+export interface ReportSubfeedMessagesRequestData {
+    requestType: 'reportSubfeedMessages',
+    feedId: FeedId,
+    subfeedHash: SubfeedHash,
+    position: SubfeedPosition,
+    signedMessages: SignedSubfeedMessage[]
+}
+export const isReportSubfeedMessagesRequestData = (x: any): x is ReportSubfeedMessagesRequestData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('reportSubfeedMessages'),
+        feedId: isFeedId,
+        subfeedHash: isSubfeedHash,
+        position: isSubfeedPosition,
+        signedMessages: isArrayOf(isSignedSubfeedMessage)
+    })
+}
+export interface ReportSubfeedMessagesResponseData {
+    requestType: 'reportSubfeedMessages',
+    success: boolean,
+    errorMessage: ErrorMessage | null
+}
+export const isReportSubfeedMessagesResponseData = (x: any): x is ReportSubfeedMessagesResponseData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('reportSubfeedMessages'),
+        success: isBoolean,
+        errorMessage: isOneOf([isErrorMessage, isNull])
     })
 }
 

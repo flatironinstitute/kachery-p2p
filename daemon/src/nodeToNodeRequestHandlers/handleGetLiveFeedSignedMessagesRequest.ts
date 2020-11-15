@@ -4,7 +4,7 @@ import KacheryP2PNode from '../KacheryP2PNode'
 
 export const handleGetLiveFeedSignedMessagesRequest = async (node: KacheryP2PNode, fromNodeId: NodeId, requestData: GetLiveFeedSignedMessagesRequestData): Promise<GetLiveFeedSignedMessagesResponseData> => {
     const { feedId, subfeedHash, position, maxNumMessages, waitMsec } = requestData
-    const hasLiveFeed = await node.feedManager().hasWriteableFeed({feedId})
+    const hasLiveFeed = await node.feedManager().hasWriteableFeed(feedId)
     if (!hasLiveFeed) {
         return {
             requestType: 'getLiveFeedSignedMessages',
