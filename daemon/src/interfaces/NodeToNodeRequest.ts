@@ -2,7 +2,7 @@ import assert from 'assert'
 import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
 import { isPacketId, PacketId } from '../udp/UdpPacketSender'
-import { ByteCount, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isByteCount, isChannelInfo, isChannelName, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isLiveFeedSubscriptions, isMessageCount, isNodeId, isNull, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubfeedPosition, isSubmittedSubfeedMessage, isTimestamp, LiveFeedSubscriptions, MessageCount, NodeId, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
+import { ByteCount, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isByteCount, isChannelInfo, isChannelName, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isNodeId, isNull, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubfeedPosition, isSubmittedSubfeedMessage, isTimestamp, NodeId, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
 
@@ -89,9 +89,7 @@ export type NodeToNodeRequestData = (
     CheckForLiveFeedRequestData |
     SubscribeToSubfeedRequestData |
     ReportSubfeedMessagesRequestData |
-    SetLiveFeedSubscriptionsRequestData |
     SubmitMessageToLiveFeedRequestData |
-    GetLiveFeedSignedMessagesRequestData |
     DownloadFileDataRequestData |
     StartStreamViaUdpRequestData |
     StopStreamViaUdpRequestData |
@@ -106,9 +104,7 @@ export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
         isCheckForLiveFeedRequestData,
         isSubscribeToSubfeedResponseData,
         isReportSubfeedMessagesResponseData,
-        isSetLiveFeedSubscriptionsRequestData,
         isSubmitMessageToLiveFeedRequestData,
-        isGetLiveFeedSignedMessagesRequestData,
         isDownloadFileDataRequestData,
         isStartStreamViaUdpRequestData,
         isStopStreamViaUdpRequestData,
@@ -123,9 +119,7 @@ export type NodeToNodeResponseData = (
     CheckForLiveFeedResponseData |
     SubscribeToSubfeedResponseData |
     ReportSubfeedMessagesResponseData |
-    SetLiveFeedSubscriptionsResponseData |
     SubmitMessageToLiveFeedResponseData |
-    GetLiveFeedSignedMessagesResponseData |
     DownloadFileDataResponseData |
     StartStreamViaUdpResponseData |
     StopStreamViaUdpResponseData |
@@ -140,9 +134,7 @@ export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData =>
         isCheckForLiveFeedResponseData,
         isSubscribeToSubfeedResponseData,
         isReportSubfeedMessagesResponseData,
-        isSetLiveFeedSubscriptionsResponseData,
         isSubmitMessageToLiveFeedResponseData,
-        isGetLiveFeedSignedMessagesResponseData,
         isDownloadFileDataResponseData,
         isStartStreamViaUdpResponseData,
         isStopStreamViaUdpResponseData,
@@ -344,28 +336,6 @@ export const isReportSubfeedMessagesResponseData = (x: any): x is ReportSubfeedM
     })
 }
 
-// setLiveFeedSubscriptions
-export interface SetLiveFeedSubscriptionsRequestData {
-    requestType: 'setLiveFeedSubscriptions',
-    liveFeedSubscriptions: LiveFeedSubscriptions
-}
-export const isSetLiveFeedSubscriptionsRequestData = (x: any): x is SetLiveFeedSubscriptionsRequestData => {
-    return _validateObject(x, {
-        requestType: isEqualTo('setLiveFeedSubscriptions'),
-        liveFeedSubscriptions: isLiveFeedSubscriptions
-    })
-}
-export interface SetLiveFeedSubscriptionsResponseData {
-    requestType: 'setLiveFeedSubscriptions',
-    success: boolean
-}
-export const isSetLiveFeedSubscriptionsResponseData = (x: any): x is SetLiveFeedSubscriptionsResponseData => {
-    return _validateObject(x, {
-        requestType: isEqualTo('setLiveFeedSubscriptions'),
-        success: isBoolean
-    })
-}
-
 // submitMessageToLiveFeed
 export interface SubmitMessageToLiveFeedRequestData {
     requestType: 'submitMessageToLiveFeed',
@@ -390,40 +360,6 @@ export const isSubmitMessageToLiveFeedResponseData = (x: any): x is SubmitMessag
     return _validateObject(x, {
         requestType: isEqualTo('submitMessageToLiveFeed'),
         success: isBoolean,
-        errorMessage: isOneOf([isNull, isErrorMessage])
-    })
-}
-
-// getLiveFeedSignedMessages
-export interface GetLiveFeedSignedMessagesRequestData {
-    requestType: 'getLiveFeedSignedMessages',
-    feedId: FeedId,
-    subfeedHash: SubfeedHash,
-    position: SubfeedPosition,
-    maxNumMessages: MessageCount,
-    waitMsec: DurationMsec
-}
-export const isGetLiveFeedSignedMessagesRequestData = (x: any): x is GetLiveFeedSignedMessagesRequestData => {
-    return _validateObject(x, {
-        requestType: isEqualTo('getLiveFeedSignedMessages'),
-        feedId: isFeedId,
-        subfeedHash: isSubfeedHash,
-        position: isSubfeedPosition,
-        maxNumMessages: isMessageCount,
-        waitMsec: isDurationMsec
-    })
-}
-export interface GetLiveFeedSignedMessagesResponseData {
-    requestType: 'getLiveFeedSignedMessages',
-    success: boolean,
-    signedMessages: SignedSubfeedMessage[] | null,
-    errorMessage: ErrorMessage | null
-}
-export const isGetLiveFeedSignedMessagesResponseData = (x: any): x is GetLiveFeedSignedMessagesResponseData => {
-    return _validateObject(x, {
-        requestType: isEqualTo('getLiveFeedSignedMessages'),
-        success: isBoolean,
-        signedMessages: isOneOf([isNull, isArrayOf(isSignedSubfeedMessage)]),
         errorMessage: isOneOf([isNull, isErrorMessage])
     })
 }

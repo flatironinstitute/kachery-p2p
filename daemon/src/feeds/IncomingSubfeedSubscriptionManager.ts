@@ -45,7 +45,7 @@ class IncomingSubfeedSubscriptionManager {
         const key0 = fromNodeId + ':' + channelName + ':' + feedId + ':' + subfeedHash
         const key1 = feedId + ':' + subfeedHash
         const tmp = this.#subscriptionKeysBySubfeedKey.getWithDefault(key1, {})
-        this.#subscriptionKeysBySubfeedKey.set(key1, {...tmp, key0: true})
+        this.#subscriptionKeysBySubfeedKey.set(key1, {...tmp, [key0]: true})
         let s = this.#subscriptions.get(key0)
         if (!s) {
             s = new Subscription(fromNodeId, channelName, feedId, subfeedHash)

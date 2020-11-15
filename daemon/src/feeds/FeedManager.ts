@@ -42,7 +42,7 @@ class FeedManager {
         // Append messages to a subfeed (must be in a writeable feed on this node)
 
         // Load the subfeed and make sure it is writeable
-        const subfeed = await this._loadSubfeed({feedId: args.feedId, subfeedHash: args.subfeedHash});
+        const subfeed = await this._loadSubfeed(args.feedId, args.subfeedHash);
         if (!subfeed) {
             /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${args.feedId} ${args.subfeedHash}`);
@@ -57,7 +57,7 @@ class FeedManager {
     async submitMessage({ feedId, subfeedHash, message, timeoutMsec }: { feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage, timeoutMsec: DurationMsec}) {
         // Same as appendMessages, except if we don't have a writeable feed, we submit it to the p2p network
         // and then, on success, it will append the messages on the node where the feed is writeable
-        const subfeed = await this._loadSubfeed({feedId, subfeedHash});
+        const subfeed = await this._loadSubfeed(feedId, subfeedHash);
         if (!subfeed) {
             /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
@@ -94,7 +94,7 @@ class FeedManager {
     }
     async getSignedMessages({ feedId, subfeedHash, position, maxNumMessages, waitMsec }: {feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec}) {
         // Same as getMessages() except we return the signed messages. This is also called by getMessages().
-        const subfeed = await this._loadSubfeed({feedId, subfeedHash});
+        const subfeed = await this._loadSubfeed(feedId, subfeedHash);
         if (!subfeed) {
             /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
@@ -105,7 +105,7 @@ class FeedManager {
     async getNumMessages({ feedId, subfeedHash }: {feedId: FeedId, subfeedHash: SubfeedHash}): Promise<MessageCount> {
         // Get the total number of messages in the local feed only
         // future: we may want to optionally do a p2p search, and retrieve the number of messages without retrieving the actual messages
-        const subfeed = await this._loadSubfeed({feedId, subfeedHash});
+        const subfeed = await this._loadSubfeed(feedId, subfeedHash);
         if (!subfeed) {
             /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
@@ -134,7 +134,7 @@ class FeedManager {
         // Get the access rules for a local writeable subfeed
         // These determine which remote nodes have permission to submit messages
         // to this subfeed.
-        const subfeed = await this._loadSubfeed({feedId, subfeedHash});
+        const subfeed = await this._loadSubfeed(feedId, subfeedHash);
         if (!subfeed) {
             /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
@@ -148,7 +148,7 @@ class FeedManager {
         // Set the access rules for a local writeable subfeed
         // These determine which remote nodes have permission to submit messages to this subfeed
         // to this subfeed.
-        const subfeed = await this._loadSubfeed({feedId, subfeedHash});
+        const subfeed = await this._loadSubfeed(feedId, subfeedHash);
         if (!subfeed) {
             /* istanbul ignore next */
             throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
@@ -188,17 +188,20 @@ class FeedManager {
             }
 
             subfeedWatches.forEach((w: SubfeedWatch, watchName: SubfeedWatchName) => {
-                (async () => {
-                    const subfeed = await this._loadSubfeed({feedId: w.feedId, subfeedHash: w.subfeedHash});
+                messages.set(watchName, [])
+            })
+            subfeedWatches.forEach((w: SubfeedWatch, watchName: SubfeedWatchName) => {
+                this._loadSubfeed(w.feedId, w.subfeedHash).then((subfeed) => {
                     if (subfeed) {
-                        const messages0 = await subfeed.getSignedMessages({position: w.position, maxNumMessages, waitMsec});
-                        if (messages0.length > 0) {
-                            messages.set(watchName, messages0.map(m => m.body.message));
-                            numMessages += messages0.length;
-                            if (!finished) doFinish();
-                        }
+                        subfeed.getSignedMessages({position: w.position, maxNumMessages, waitMsec}).then((messages0) => {
+                            if (messages0.length > 0) {
+                                messages.set(watchName, messages0.map(m => m.body.message));
+                                numMessages += messages0.length;
+                                if (!finished) doFinish();
+                            }
+                        });
                     }
-                })();
+                })
             })
 
             setTimeout(() => {
@@ -210,7 +213,7 @@ class FeedManager {
         return await this.#incomingSubfeedSubscriptionManager.renewIncomingSubfeedSubscription(fromNodeId, channelName, feedId, subfeedHash, position, durationMsec)
     }
     async reportRemoteSubfeedMessages(feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) {
-        const sf = await this._loadSubfeed({feedId, subfeedHash})
+        const sf = await this._loadSubfeed(feedId, subfeedHash)
         if (messageCountToNumber(sf.getNumMessages()) < subfeedPositionToNumber(position)) {
             throw Error(`Problem reporting subfeed messages. sf.getNumMessages() < position: ${sf.getNumMessages()} < ${position}`)
         }
@@ -219,7 +222,8 @@ class FeedManager {
             sf.appendSignedMessages(signedMessages.slice(offset))
         }
     }
-    async _loadSubfeed({feedId, subfeedHash}: {feedId: FeedId, subfeedHash: SubfeedHash}): Promise<Subfeed> {
+    async _loadSubfeed(feedId: FeedId, subfeedHash: SubfeedHash): Promise<Subfeed> {
+        const timer = nowTimestamp()
         // Load a subfeed (Subfeed() instance
 
         // If we have already loaded it into memory, then do not reload
@@ -552,8 +556,11 @@ class Subfeed {
                 this.#signedMessages = messages
                 this.#accessRules = null
 
-                // Let's try to load messages from remote nodes on the p2p network
-                await this.getSignedMessages({position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: scaledDurationMsec(1)})
+                // don't do this
+                // // Let's try to load messages from remote nodes on the p2p network
+                // if (!opts.localOnly) {
+                //     await this.getSignedMessages({position: subfeedPosition(0), maxNumMessages: messageCount(10), waitMsec: scaledDurationMsec(1)})
+                // }
             }
         }
         catch(err) {
@@ -639,6 +646,13 @@ class Subfeed {
                 // let's just wait for a bit and maybe some new messages will arrive (either from remote or added locally)
                 let signedMessages: SignedSubfeedMessage[] = []
                 await new Promise((resolve) => {
+                    // need to check it here once again before setting up the listeners
+                    if (!this.#signedMessages) throw Error('Unexpected signedMessages is null')
+                    if (subfeedPositionToNumber(position) < this.#signedMessages.length) {
+                        signedMessages = this._getInMemorySignedMessages({position, maxNumMessages});
+                        resolve()
+                        return
+                    }
                     let resolved = false;
                     const listenerId = createListenerId();
                     this.#newMessageListeners.set(listenerId, () => {
