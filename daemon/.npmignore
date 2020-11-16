@@ -1,4 +1,6 @@
-node_modules/
+node_modules
 Dockerfile
 build_docker.sh
-bin/
+bin
+.nyc_output
+coverage
