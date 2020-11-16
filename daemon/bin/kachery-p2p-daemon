@@ -1,4 +1,0 @@
-#!/bin/bash
-
-DIRECTORY=$(cd `dirname $0` && pwd)
-exec ts-node --experimental-modules $DIRECTORY/../src/cli.js "$@"

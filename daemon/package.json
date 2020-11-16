@@ -1,11 +1,11 @@
 {
   "name": "kachery-p2p-daemon",
-  "version": "0.5.7",
+  "version": "0.5.8-alpha.4",
   "engines": {
     "node": ">=12.0.0"
   },
   "description": "Peer-to-peer content-addressable file sharing",
-  "bin": "./src/cli.ts",
+  "bin": "./dist/cli.js",
   "scripts": {
     "start": "tsc && node dist/cli.js",
     "dev": "ts-node ./src/cli.ts",

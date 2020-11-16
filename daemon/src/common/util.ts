@@ -1,5 +1,6 @@
 import assert from 'assert';
-import bson from 'bson';
+// somehow it doesn't work to use the default import from bson
+import { Binary as bsonBinary, deserialize as bsonDeserialize, serialize as bsonSerialize } from 'bson';
 import { Address, DurationMsec, durationMsecToNumber, elapsedSince, FileKey, isAddress, nowTimestamp, scaledDurationMsec, Sha1Hash, unscaledDurationMsec } from '../interfaces/core';
 
 export const randomAlphaString = (num_chars: number) => {
@@ -22,11 +23,11 @@ export const sha1MatchesFileKey = ({ sha1, fileKey }: { sha1: Sha1Hash, fileKey:
 }
 
 export const kacheryP2PSerialize = (x: Object) => {
-    return bson.serialize(sortKeysInObject(x));
+    return bsonSerialize(sortKeysInObject(x));
 }
 
 export const kacheryP2PDeserialize = (x: Buffer) => {
-    return convertBinaryToBufferInObject(bson.deserialize(x));
+    return convertBinaryToBufferInObject(bsonDeserialize(x));
 }
 
 const sortKeysInObject = (x: any): any => {
@@ -52,7 +53,7 @@ const sortKeysInObject = (x: any): any => {
 }
 
 const convertBinaryToBufferInObject = (x: any): any => {
-    if (x instanceof bson.Binary) {
+    if (x instanceof bsonBinary) {
         // This might be the troublesome line.
         // We should check to see if the underlying type is byte array before returning the internal buffer.
         const ret = x.buffer
