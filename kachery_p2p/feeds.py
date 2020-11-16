@@ -400,8 +400,15 @@ def load_feed(feed_name_or_uri, *, timeout_sec: Union[None, float]=None, create=
 def watch_for_new_messages(subfeed_watches, *, wait_msec):
     port = _api_port()
     url = f'http://localhost:{port}/feed/watchForNewMessages'
+    subfeed_watches2 = {}
+    for key, watch in subfeed_watches.items():
+        subfeed_watches2[key] = {
+            'feedId': watch['feedId'],
+            'subfeedHash': _subfeed_hash(watch['subfeedName']),
+            'position': watch['position']
+        }
     x = _http_post_json(url, dict(
-        subfeedWatches=subfeed_watches,
+        subfeedWatches=subfeed_watches2,
         waitMsec=wait_msec
     ))
     if not x['success']:

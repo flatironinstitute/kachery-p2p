@@ -143,7 +143,7 @@ export default class DataStreamy {
             // important to use setTimeout here because we want to get data before finished (if both are already available)
             setTimeout(() => {
                 callback()
-            }, 10)
+            }, 0)
         }
         this.#onFinishedCallbacks.push(callback)
     }
@@ -153,7 +153,7 @@ export default class DataStreamy {
             setTimeout(() => {
                 if (!this.#error) throw Error('error')
                 callback(this.#error)
-            }, 10)
+            }, 0)
         }
         this.#onErrorCallbacks.push(callback)
     }

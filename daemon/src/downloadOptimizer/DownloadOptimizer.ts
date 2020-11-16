@@ -2,7 +2,7 @@ import { TIMEOUTS } from "../common/constants";
 import DataStreamy, { DataStreamyProgress } from "../common/DataStreamy";
 import GarbageMap from "../common/GarbageMap";
 import { randomAlphaString } from "../common/util";
-import { ByteCount, ChannelName, FileKey, fileKeyHash, FileKeyHash, NodeId, scaledDurationMsec } from "../interfaces/core";
+import { ByteCount, ChannelName, FileKey, fileKeyHash, FileKeyHash, NodeId, nowTimestamp, scaledDurationMsec } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import createDownloader from "./createDownloader";
 import DownloadOptimizerJob from "./DownloadOptimizerJob";
@@ -169,7 +169,8 @@ export default class DownloadOptimizer {
                 /* istanbul ignore next */
                 if (!job) throw Error('Unexpected in _update')
                 if ((!job.isRunning()) && (!job.isComplete())) {
-                    job.run()
+                    console.log('starting job', nowTimestamp())
+                    job.start()
                     numActiveFileDownloads ++
                 }
             }

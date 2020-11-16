@@ -1,7 +1,7 @@
 import DataStreamy, { DataStreamyProgress } from './common/DataStreamy'
-import { sha1MatchesFileKey, sleepMsec } from './common/util'
+import { sha1MatchesFileKey } from './common/util'
 import { formatByteCount } from './downloadOptimizer/createDownloader'
-import { byteCount, ByteCount, byteCountToNumber, ChannelName, elapsedSince, FileKey, isFileManifest, NodeId, nowTimestamp, scaledDurationMsec, Sha1Hash } from './interfaces/core'
+import { byteCount, ByteCount, byteCountToNumber, ChannelName, elapsedSince, FileKey, FileManifestChunk, isFileManifest, NodeId, nowTimestamp, Sha1Hash } from './interfaces/core'
 import KacheryP2PNode from './KacheryP2PNode'
 
 
@@ -29,8 +29,49 @@ const loadFileAsync = async (node: KacheryP2PNode, fileKey: FileKey, opts: {from
         })
     })
 }
+
+async function asyncLoop<T>(list: T[], func: (item: T, index: number) => Promise<void>, opts: {numSimultaneous: number}) {
+    return new Promise((resolve, reject) => {
+        let i = 0
+        let numComplete = 0
+        let numRunning = 0
+        let error = false
+        const update = () => {
+            if (error) return
+            if (numComplete === list.length) {
+                resolve()
+                return
+            }
+            if (numRunning < opts.numSimultaneous) {
+                if (i < list.length) {
+                    i ++
+                    numRunning ++
+                    func(list[i], i - 1).then(() => {
+                        numComplete ++
+                        numRunning --
+                        process.nextTick(update)
+                    })
+                    .catch((err: Error) => {
+                        error = true
+                        numRunning --
+                        reject(err)
+                    })
+                }
+            }
+        }
+        update()
+    })
+}
+
 export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null, label: string, _numRetries?: number}): Promise<DataStreamy> => {
     const { fromNode, fromChannel } = opts
+
+    const r = await node.kacheryStorageManager().findFile(fileKey)
+    if (r.found) {
+        const ret = new DataStreamy()
+        ret.producer().end()
+        return ret
+    }
 
     const loadFileWithManifest = async () => {
         const manifestSha1 = fileKey.manifestSha1
@@ -60,47 +101,39 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
             ret.producer().error(Error(`Manifest sha1 does not match file key: ${manifest.sha1}`))
             return ret
         }
-        const QUEUE_SIZE = 5
         ;(async () => {
+            let timer = nowTimestamp()
             // this happens after ret is returned
             ret.producer().start(manifest.size)
             let numComplete = 0
             let chunkDataStreams: DataStreamy[] = []
-            let numQueued = 0
             let errored = false
-            for (let chunkIndex = 0; chunkIndex < manifest.chunks.length; chunkIndex ++) {
-                while (numQueued >= QUEUE_SIZE) {
-                    if (errored) break
-                    await sleepMsec(scaledDurationMsec(100))
-                }
-                if (errored) break
-                numQueued ++
-                await (async (chunkIndex: number) => { // do it this way so that we have function closure
-                    const chunk = manifest.chunks[chunkIndex]
-                    const chunkFileKey: FileKey = {
-                        sha1: chunk.sha1,
-                        chunkOf: {
-                            fileKey: {
-                                sha1: manifest.sha1
-                            },
-                            startByte: chunk.start,
-                            endByte: chunk.end
-                        }
+            await asyncLoop<FileManifestChunk>(manifest.chunks, async (chunk: FileManifestChunk, chunkIndex: number) => {
+                if (errored) return
+                const chunkFileKey: FileKey = {
+                    sha1: chunk.sha1,
+                    chunkOf: {
+                        fileKey: {
+                            sha1: manifest.sha1
+                        },
+                        startByte: chunk.start,
+                        endByte: chunk.end
                     }
-                    console.info(`${opts.label}: Queuing chunk ${chunkIndex} of ${manifest.chunks.length}`)
-                    const label0 = `${opts.label} ch ${chunkIndex}`
-                    const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel, label: label0, _numRetries: 2})
-                    chunkDataStreams.push(ds)
+                }
+                console.info(`${opts.label}: Handling chunk ${chunkIndex} of ${manifest.chunks.length}`)
+                const label0 = `${opts.label} ch ${chunkIndex}`
+                const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel, label: label0, _numRetries: 2})
+                chunkDataStreams.push(ds)
+                return new Promise((resolve, reject) => {
                     ds.onError(err => {
-                        numQueued --
                         ret.producer().error(err)
                         errored = true
+                        reject(err)
                     })
                     ds.onProgress((progress: DataStreamyProgress) => {
                         _updateProgressForManifestLoad()
                     })
                     ds.onFinished(() => {
-                        numQueued --
                         numComplete ++
                         if (numComplete === manifest.chunks.length) {
                             console.info(`${opts.label}: Concatenating chunks`)
@@ -114,9 +147,10 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
                                 ret.producer().error(err)
                             })
                         }
+                        resolve()
                     })
-                })(chunkIndex)
-            }
+                })
+            }, {numSimultaneous: 5})
             const _calculateTotalBytesLoaded = () => {
                 let bytesLoaded = 0
                 chunkDataStreams.forEach(ds => {
@@ -148,6 +182,7 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
         return ret
     }
     const loadFileWithoutManifest = async () => {
+        let timer = nowTimestamp()
         await node.downloadOptimizer().waitForReady()
         const ret = new DataStreamy()
         let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null

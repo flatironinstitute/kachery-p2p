@@ -6,7 +6,7 @@ import yaml from 'js-yaml';
 import os from 'os';
 import yargs from 'yargs';
 import GarbageMap from './common/GarbageMap';
-import { parseBootstrapInfo } from './common/util';
+import { parseBootstrapInfo, randomAlphaString } from './common/util';
 import realExternalInterface from './external/real/realExternalInterface';
 import { Address, ChannelName, HostName, isAddress, isArrayOf, isChannelName, isHostName, isNodeId, isPort, isString, LocalFilePath, localFilePath, NodeId, nodeLabel, optional, toPort, _validateObject } from './interfaces/core';
 import startDaemon from './startDaemon';
@@ -304,10 +304,19 @@ function main() {
     .argv
 }
 
+const cacheBust = (url: string) => {
+  if (url.includes('?')) {
+    return url + `&cb=${randomAlphaString(10)}`
+  }
+  else {
+    return url + `?cb=${randomAlphaString(10)}`
+  }
+}
+
 const loadConfig = async (pathOrUrl: string) => {
   let txt: string
   if ((pathOrUrl.startsWith('http://')) || (pathOrUrl.startsWith('https://'))) {
-    txt = (await Axios.get(pathOrUrl)).data
+    txt = (await Axios.get(cacheBust(pathOrUrl))).data
   }
   else {
     txt = await fs.promises.readFile(pathOrUrl, 'utf-8')

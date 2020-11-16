@@ -38,7 +38,7 @@ export default class DownloadOptimizerJob {
     isComplete() {
         return this.#isComplete
     }
-    run() {
+    start() {
         this.#isRunning = true
         const timestamp = nowTimestamp()
         let numRemainingRetries = this.opts.numRetries
