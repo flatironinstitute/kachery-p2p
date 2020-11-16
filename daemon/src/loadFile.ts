@@ -46,7 +46,7 @@ async function asyncLoop<T>(list: T[], func: (item: T, index: number) => Promise
                 if (i < list.length) {
                     i ++
                     numRunning ++
-                    func(list[i], i - 1).then(() => {
+                    func(list[i - 1], i - 1).then(() => {
                         numComplete ++
                         numRunning --
                         process.nextTick(update)
@@ -101,12 +101,39 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
             ret.producer().error(Error(`Manifest sha1 does not match file key: ${manifest.sha1}`))
             return ret
         }
+        let chunkDataStreams: DataStreamy[] = []
+        const _calculateTotalBytesLoaded = () => {
+            let bytesLoaded = 0
+            chunkDataStreams.forEach(ds => {
+                bytesLoaded += byteCountToNumber(ds.bytesLoaded())
+            })
+            return byteCount(bytesLoaded)
+        }
+        const _updateProgressForManifestLoad = () => {
+            // this can be made more efficient - don't need to loop through all in-progress files every time
+            const bytesLoaded = _calculateTotalBytesLoaded()
+            ret.producer().reportBytesLoaded(bytesLoaded)
+        }
+        const _concatenateChunks = async () => {
+            const chunkSha1s: Sha1Hash[] = manifest.chunks.map(c => c.sha1)
+            await node.kacheryStorageManager().concatenateChunksAndStoreResult(manifest.sha1, chunkSha1s)
+            ret.producer().end()
+        }
+        const _cancelAllChunkDataStreams = () => {
+            chunkDataStreams.forEach((ds) => {
+                ds.cancel()
+            })
+            chunkDataStreams = [] // do this so we don't cancel things twice (although it would not be a big deal)
+        }
+        ret.onError(() => {
+            // this will get called if ret is cancelled or if there is another error
+            _cancelAllChunkDataStreams()
+        })
         ;(async () => {
             let timer = nowTimestamp()
             // this happens after ret is returned
             ret.producer().start(manifest.size)
             let numComplete = 0
-            let chunkDataStreams: DataStreamy[] = []
             let errored = false
             await asyncLoop<FileManifestChunk>(manifest.chunks, async (chunk: FileManifestChunk, chunkIndex: number) => {
                 if (errored) return
@@ -151,33 +178,7 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
                     })
                 })
             }, {numSimultaneous: 5})
-            const _calculateTotalBytesLoaded = () => {
-                let bytesLoaded = 0
-                chunkDataStreams.forEach(ds => {
-                    bytesLoaded += byteCountToNumber(ds.bytesLoaded())
-                })
-                return byteCount(bytesLoaded)
-            }
-            const _updateProgressForManifestLoad = () => {
-                // this can be made more efficient - don't need to loop through all in-progress files every time
-                const bytesLoaded = _calculateTotalBytesLoaded()
-                ret.producer().reportBytesLoaded(bytesLoaded)
-            }
-            const _concatenateChunks = async () => {
-                const chunkSha1s: Sha1Hash[] = manifest.chunks.map(c => c.sha1)
-                await node.kacheryStorageManager().concatenateChunksAndStoreResult(manifest.sha1, chunkSha1s)
-                ret.producer().end()
-            }
-            const _cancelAllChunkDataStreams = () => {
-                chunkDataStreams.forEach((ds) => {
-                    ds.cancel()
-                })
-                chunkDataStreams = [] // do this so we don't cancel things twice (although it would not be a big deal)
-            }
-            ret.onError(() => {
-                // this will get called if ret is cancelled or if there is another error
-                _cancelAllChunkDataStreams()
-            })
+            
         })()
         return ret
     }
