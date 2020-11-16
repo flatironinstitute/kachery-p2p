@@ -347,7 +347,7 @@ def start_daemon(*,
     config_dir = os.getenv('KACHERY_P2P_CONFIG_DIR', f'{pathlib.Path.home()}/.kachery-p2p')
 
     start_args = []
-    if config_path_or_url is not '':
+    if config_path_or_url != '':
         start_args.append(f'--config {config_path_or_url}')
     for ch in channels:
         start_args.append(f'--channel {ch}')
