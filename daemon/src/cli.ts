@@ -208,17 +208,18 @@ function main() {
             bootstrapAddresses = yamlConfig.bootstrapAddresses
           }
           else {
-            bootstrapAddresses = [
-              {hostName: '45.33.92.31', port: toPort(46003)}, // kachery-p2p-spikeforest
-              {hostName: '45.33.92.33', port: toPort(46003)} // kachery-p2p-flatiron1
-            ].map(bpi => {
-                if (isAddress(bpi)) {
-                    return bpi
-                }
-                else {
-                    throw Error(`Not an address: ${bpi}`)
-                }
-            })
+            bootstrapAddresses = []
+            // bootstrapAddresses = [
+            //   {hostName: '45.33.92.31', port: toPort(46003)}, // kachery-p2p-spikeforest
+            //   {hostName: '45.33.92.33', port: toPort(46003)} // kachery-p2p-flatiron1
+            // ].map(bpi => {
+            //     if (isAddress(bpi)) {
+            //         return bpi
+            //     }
+            //     else {
+            //         throw Error(`Not an address: ${bpi}`)
+            //     }
+            // })
           }
           bootstrapAddresses = bootstrapAddresses.filter(bpi => {
             if ((bpi.hostName.toString() === 'localhost') || (bpi.hostName === hostName)) {
