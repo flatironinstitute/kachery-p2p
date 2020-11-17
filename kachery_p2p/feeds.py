@@ -267,7 +267,7 @@ class Subfeed:
             raise Exception('Cannot submit messages to a snapshot')
         port = _api_port()
         for message in messages:
-            url = f'http://localhost:{port}/feed/submitMessages'
+            url = f'http://localhost:{port}/feed/submitMessage'
             x = _http_post_json(url, dict(
                 feedId=self._feed_id,
                 subfeedHash=self._subfeed_hash,
