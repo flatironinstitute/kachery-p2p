@@ -102,7 +102,7 @@ It is also possible to install without conda. Just make sure that the above requ
 Ensure you are in the correct conda environment, then:
 
 ```bash
-kachery-p2p-start-daemon --label `<name-of-node>` --config <url-or-path-to-yaml-file>
+kachery-p2p-start-daemon --label <name-of-node> --config <url-or-path-to-yaml-file>
 ```
 
 where `<name-of-node>` is a node label for display purposes and `<url-or-path-to-yaml-file>` points to a configuration file. To get started you may use this example configuration file:
