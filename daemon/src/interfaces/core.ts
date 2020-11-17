@@ -268,7 +268,7 @@ export const isNodeLabel = (x: any): x is NodeLabel => {
     let result = true
     x.split(".").forEach((element) => {
         if (element.length === 0) result = false
-        if (!/^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?$/.test(element)) result = false
+        if (!/^[a-zA-Z0-9\@]([a-zA-Z0-9\@\-]*[a-zA-Z0-9\@])?$/.test(element)) result = false
     });
     return result;
 }

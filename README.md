@@ -78,9 +78,9 @@ Installation using Conda:
 export KACHERY_STORAGE_DIR=/desired/file/storage/location
 # also add that to .bashrc or wherever you keep your env vars
 
-conda create --name MYENV python=3.8 numpy
+conda create --name MYENV python=3.8 numpy>=1.19.0
 conda activate MYENV
-conda install -c conda-forge/label/cf202003 nodejs
+conda install -c conda-forge nodejs
 pip install --upgrade kachery_p2p
 ```
 
@@ -98,15 +98,17 @@ It is also possible to install without conda. Just make sure that the above requ
 Ensure you are in the correct conda environment, then:
 
 ```bash
-kachery-p2p-start-daemon --channel CHANNELNAME
+kachery-p2p-start-daemon --config <url-or-path-to-yaml-file>
 ```
 
-Where CHANNELNAME is something unique you’ve shared with your collaborators.
+where `<url-or-path-to-yaml-file>` points to a configuration file. To get started you may use this example configuration file:
+`https://gist.githubusercontent.com/magland/9b858ee9dae97db9879826316fa2ba52/raw/kachery-example1.yaml`
+
+This configuration file points to a couple of bootstrap nodes which are used to assist with node discovery and specifies that we join the `example1-zXk8tk` channel. Any other node configured with this same file will become a member of this same channel.
 
 Keep this daemon running in a terminal. You may want to use [tmux](https://github.com/tmux/tmux/wiki) or a similar tool to keep this daemon running even if the terminal is closed.
 
-Other more advanced options are available, such as specifying non-default bootstrap nodes and specifying listen ports (see below)
-.
+Other more advanced options are available, such as specifying specifying listen ports (see below).
 
 ### File Transfer
 
@@ -121,7 +123,7 @@ kachery-store /path/to/your/file.dat
 This will copy the file to the kachery storage directory and will display a SHA1 URI, which you can then share with your collaborators. The file can then be retrieved from any computer running a kachery-p2p daemon on the same channel:
 
 ```
-kachery-p2p-load sha1://ABC...XYZ/file.dat --dest file.dat
+kachery-p2p-load sha1://012...abc/file.dat --dest file.dat
 ```
 
 ### From python:
@@ -217,6 +219,6 @@ kachery-p2p-start-daemon --bootstrap <ip>:<port>
 
 You may want to use [tmux](https://github.com/tmux/tmux/wiki) or a similar tool to keep this daemon running even if the terminal is closed. This gives you the ability to reattach from a different terminal at a later time.
 
-## Authors
+## Primary developers
 
 Jeremy Magland and Jeff Soules, Center for Computational Mathematics, Flatiron Institute
