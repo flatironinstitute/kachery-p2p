@@ -324,6 +324,7 @@ def _probe_daemon(api_port=None):
 def start_daemon(*,
     config_path_or_url: str='',
     port: int=0,
+    udp_port: int=0,
     websocket_port: int=0,
     label: Union[str, None]=None,
     method: str='npx',
@@ -368,6 +369,8 @@ def start_daemon(*,
         start_args.append(f'--host {host}')
     if websocket_port > 0:
         start_args.append(f'--websocket-port {websocket_port}')
+    if udp_port > 0:
+        start_args.append(f'--udp-port {udp_port}')
     if label is not None:
         start_args.append(f'--label {label}')
     start_args.append(f'--http-port {port}')
@@ -388,7 +391,7 @@ def start_daemon(*,
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.5.9'
+                npm_package = 'kachery-p2p-daemon@0.5.10'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''

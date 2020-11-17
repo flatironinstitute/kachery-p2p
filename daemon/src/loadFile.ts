@@ -169,7 +169,7 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
                                     const elapsedSec = elapsedSince(entireFileTimestamp) / 1000
                                     const rate = (byteCountToNumber(bytesLoaded) / 1e6) / elapsedSec
                                     console.info(`${opts.label}: Downloaded ${formatByteCount(bytesLoaded)} in ${elapsedSec} sec [${rate.toFixed(3)} MiB/sec]`)
-                                    resolve()
+                                    ret.producer().end()
                                 }).catch((err: Error) => {
                                     reject(err)
                                 })
@@ -183,7 +183,6 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
                 ret.producer().error(err)
                 return
             }
-            ret.producer().end()
         })()
         return ret
     }

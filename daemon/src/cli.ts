@@ -144,7 +144,7 @@ function main() {
       handler: async (argv) => {
         const hostName = argv.host || null;
         const httpListenPort = argv['http-port'] ? Number(argv['http-port']) || null : 14507
-        const udpSocketPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort || 14507
+        const udpSocketPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort || await findAvailableUdpPort()
         const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : null
         const daemonApiPort = Number(process.env.KACHERY_P2P_API_PORT || 20431)
         const label = nodeLabel(argv.label as string)
@@ -323,6 +323,10 @@ const loadConfig = async (pathOrUrl: string) => {
     txt = await fs.promises.readFile(pathOrUrl, 'utf-8')
   }
   return yaml.safeLoad(txt)
+}
+
+const findAvailableUdpPort = async (): Promise<number> => {
+  return 14507
 }
 
 main();

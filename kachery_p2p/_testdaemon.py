@@ -24,12 +24,13 @@ class KPEnv:
             os.putenv('KACHERY_P2P_CONFIG_DIR', self._old_kachery_p2p_config_dir)
 
 class TestDaemon:
-    def __init__(self, *, channels, api_port, storage_dir, port=None, websocket_port=None, bootstraps=None, isbootstrap=False, nomulticast=False):
+    def __init__(self, *, channels, api_port, storage_dir, port=None, udp_port=None, websocket_port=None, bootstraps=None, isbootstrap=False, nomulticast=False):
         self._channels = channels
         self._storage_dir = storage_dir
         self._api_port = api_port
         self._script = None
         self._port = port
+        self._udp_port = udp_port
         self._websocket_port = websocket_port
         self._bootstraps = bootstraps
         self._isbootstrap = isbootstrap
@@ -51,6 +52,8 @@ class TestDaemon:
             opts.append(f'--nomulticast')
         if self._port is not None:
             opts.append(f'--port {self._port}')
+        if self._udp_port is not None:
+            opts.append(f'--udp-port {self._udp_port}')
         if self._websocket_port is not None:
             opts.append(f'--websocket-port {self._websocket_port}')
         print('Starting daemon')

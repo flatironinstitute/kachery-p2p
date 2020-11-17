@@ -23,7 +23,8 @@ Check the version by running:
 kachery-p2p version
 ```
 
-The current version is: `0.5.9`
+The current version is: `0.5.10`
+The current protocol version is: `0.5.9`
 
 ## Start a daemon
 
@@ -87,7 +88,7 @@ import kachery_p2p as kp
 # Note: if you interrupt this download (via ctrl+c),
 # then when you restart, it should pick up roughly
 # where you left off
-a = kp.load_npy('sha1://62eaa118d68f2ea6f222925a7c7c0daff6b60218/file.npy?manifest=d82da29c1d3911e45d6fcfe19b6e747f04f99d61')
+a = kp.load_npy('sha1://2732ce0fe8e3cb74d8b39c2fe982a14afecc58a1/file.npy?manifest=357870edbcfdc7767578a0fb5ae26d66b324d052')
 
 print(a.shape)
 ```
