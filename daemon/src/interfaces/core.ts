@@ -233,7 +233,7 @@ export const portToNumber = (x: Port): number => {
     return x as any as number;
 }
 export const toPort = (x: number): Port => {
-    if (!isPort(x)) throw Error('Not a valid port')
+    if (!isPort(x)) throw Error(`Not a valid port: ${x}`)
     return x
 }
 
@@ -255,7 +255,7 @@ export const isHostName = (x: any): x is HostName => {
     return result;
 }
 export const hostName = (x: string): HostName => {
-    if (!isHostName(x)) throw Error('Not a valid host name')
+    if (!isHostName(x)) throw Error(`Not a valid host name: ${x}`)
     return x
 }
 
@@ -273,7 +273,7 @@ export const isNodeLabel = (x: any): x is NodeLabel => {
     return result;
 }
 export const nodeLabel= (x: string): NodeLabel => {
-    if (!isNodeLabel(x)) throw Error('Not a valid node label')
+    if (!isNodeLabel(x)) throw Error(`Not a valid node label: ${x}`)
     return x
 }
 

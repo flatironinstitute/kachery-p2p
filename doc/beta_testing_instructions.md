@@ -4,7 +4,7 @@ Thank you for helping to test the kachery-p2p software!
 
 ## Installation
 
-Please follow the Conda installation instructions on the main README document (or the non-Conda instructions if you prefer).
+Please follow the Conda installation instructions on the [main README document](../README.md) (or the non-Conda instructions if you prefer).
 
 Open a terminal and verify that you have the following commands available:
 
@@ -23,17 +23,19 @@ Check the version by running:
 kachery-p2p version
 ```
 
+The current version is: `0.5.9`
+
 ## Start a daemon
 
 By running a daemon on your computer you are creating a node on the kachery-p2p network.
 
-In a new terminal (activate the conda environment), start the daemon and join the flatiron2 channel:
+In a new terminal (activate the conda environment), start the daemon and join the example channel:
 
 ```
-kachery-p2p-start-daemon --channel flatiron2
+kachery-p2p-start-daemon --config https://gist.githubusercontent.com/magland/9b858ee9dae97db9879826316fa2ba52/raw/kachery-example1.yaml
 ```
 
-Keep this program running in a terminal (you may want to use [tmux](https://github.com/tmux/tmux/wiki) or screen). While this daemon is running, other members of the flatiron2 channel have access to any file that you store in your local kachery database (provided they know the SHA-1 hash).
+Keep this program running in a terminal (you may want to use [tmux](https://github.com/tmux/tmux/wiki) or screen). While this daemon is running, other members of this example channel have access to any file that you store in your local kachery database (provided they know the SHA-1 hash).
 
 If you are able to do so, please keep this daemon open even after you have run the tests, so that testing may continue by others with your node on the system. Note that if files are downloaded by others from your computer, you will experience outgoing network traffic on your computer.
 
@@ -42,10 +44,10 @@ If you are able to do so, please keep this daemon open even after you have run t
 In a new terminal (activate the conda environment), run:
 
 ```
-kachery-p2p-load sha1://18330303c3861bb286dabb94dd5f0bb81d04107f/example1.txt --dest /tmp/example1.txt
+kachery-p2p-load sha1://c37d2a4b156ff9bcfdbbd2eec12b9c6b74135685/test1.txt
 ```
 
-This will download a small text file from the kachery-p2p network on the flatiron2 channel. Verify that the content of the file starts with `"This is an example text file..."`
+This will download a small text file from the kachery-p2p network and will display the path where the file is stored inside the $KACHERY_STORAGE_DIR. Verify that the content of the file starts with `"This is an example text file..."`
 
 ```
 cat /tmp/example1.txt
@@ -54,14 +56,14 @@ cat /tmp/example1.txt
 Also verify that this gives you the same output:
 
 ```
-kachery-p2p-cat sha1://18330303c3861bb286dabb94dd5f0bb81d04107f/example1.txt
+kachery-p2p-cat sha1://c37d2a4b156ff9bcfdbbd2eec12b9c6b74135685/test1.txt
 ```
 
 Now do something similar in Python (for example use `ipython` which can be installed via `pip install ipython`):
 
 ```python
 import kachery_p2p as kp
-a = kp.load_text('sha1://18330303c3861bb286dabb94dd5f0bb81d04107f/example1.txt')
+a = kp.load_text('sha1://c37d2a4b156ff9bcfdbbd2eec12b9c6b74135685/test1.txt')
 print(a)
 ```
 
@@ -90,7 +92,7 @@ a = kp.load_npy('sha1://a3f6ff6f17056fe6955b3f0b9674220a0a3982c7/file.npy?manife
 print(a.shape)
 ```
 
-This should take around 1-2 minutes (depending on the speed of your internet connection). The shape of the downloaded array should be `(500, 500, 300)`. While you wait, you could move on to the next tests in a new terminal. Or you could test the auto-resume capability (see the note above).
+This should take around 1-2 minutes (depending on the speed of your internet connection). The shape of the downloaded array should be `(500, 500, 300)`. While you wait, you could move on to the next tests in a new terminal. Or you could test the auto-resume capability by stopping and starting the download (see the note above).
 
 ## Sharing files
 
@@ -111,9 +113,9 @@ kachery-store tmp.txt
 
 Copy the URI that is printed it will have the form `sha1://.../tmp.txt`
 
-Now anyone with that URI (on the flatiron2 channel) will be able to download that file directly from your computer (or from another computer if it was downloaded elsewhere).
+Now anyone with that URI (on the example channel) will be able to download that file directly from your computer (or from another computer if it was downloaded elsewhere).
 
-To test that this worked, you will need to install kachery-p2p on a different computer, and email/slack yourself the URI. From the other computer (with a running daemon on the flatiron2 channel) try:
+To test that this worked, you will need to install kachery-p2p on a different computer, and email/slack yourself the URI. From the other computer (with a running daemon on the example channel) try:
 
 ```bash
 kachery-p2p-cat sha1://.../tmp.txt
@@ -139,17 +141,19 @@ uri_npy = kp.store_npy(A)
 print(uri_npy)
 ```
 
-Try to load those files from another computer (on the flatiron2 channel), or send the URIs to the authors.
+Try to load those files from another computer (on the example channel), or send the URIs to the authors.
 
 ## Reading feeds
 
-It is also possible to share live feeds (collections of append-only logs) that can update in real time. Here's an example feed on the flatiron2 channel that you can read. Do this in Python:
+It is also possible to share live feeds (collections of append-only logs) that can update in real time. Here's an example feed on the example channel that you can read. Do this in Python:
 
 ```python
 import kachery_p2p as kp
 
-sf = kp.load_subfeed('feed://c13f6c5b6b93b9e99cbbe30bb2a47b87e73f13e7760026eb83b3c033f973a389/default')
-sf.print_messages()
+sf = kp.load_subfeed('feed://d8a6fe9049f699e5e60bf0937394a986a974d4529c94baa37a6327be72b43148/test-subfeed')
+messages = sf.get_next_messages()
+for message in messages:
+    print('MESSAGE:', message)
 ```
 
 You should see at least a couple of messages.
@@ -161,11 +165,15 @@ Here's how you can create your own feed (in Python):
 ```python
 import kachery_p2p as kp
 
-f = kp.create_feed()
+f = kp.create_feed('example-feed')
 sf = f.get_subfeed('default')
-sf.append_message('some-test-message')
+sf.append_message({'name': 'some-test-message', 'data': [4, 9, 1]})
 uri = sf.get_uri()
 print(uri)
+
+# You can read from this subfeed from any computer using this uri
+# Or, on this computer, you can retrieve the feed using `f = kp.load_feed('example-feed')` above
+# Note that this second method of retrieving by name only works on the node where the feed was created
 ```
 
 Now from the terminal you can view the messages
@@ -180,18 +188,9 @@ Keep that terminal open and append more messages (in real time):
 import kachery_p2p as kp
 
 sf = kp.load_subfeed('feed://your-subfeed-uri...')
-sf.append_message('another-test-message ###')
+sf.append_message({'name': 'another-test-message'})
 ```
 
 If you run that command, you should see the messages appear in real time in the terminal you left open.
 
-Now try running the `kachery-p2p-print-messages` command on a different computer (that has a running daemon on the flatiron2 channel). You should be able to see the live-updating messages from there.
-
-
-
-
-
-
-
-
-
+Now try running the `kachery-p2p-print-messages` command on a different computer (that has a running daemon on the example channel). You should be able to see the live-updating messages from there.

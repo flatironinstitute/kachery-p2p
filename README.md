@@ -1,6 +1,10 @@
 # kachery-p2p
 
-**This project is at an early stage. We welcome contributors and testers**
+**Important: The kachery-p2p protocol has recently changed. Old versions of the daemon software may no longer work properly. Please update to the latest version.**
+
+**This project is still at an early stage of development. We welcome contributors and testers**
+
+Current version: `kachery-p2p 0.5.9`
 
 Kachery-p2p is a **peer-to-peer, content-addressable file storage and distribution framework** which can operate with minimal infrastructural requirements and offers both command-line and programmatic interfaces to file distribution. In short, it’s a way for you to distribute your data to collaborators with minimal fuss.
 
@@ -98,13 +102,13 @@ It is also possible to install without conda. Just make sure that the above requ
 Ensure you are in the correct conda environment, then:
 
 ```bash
-kachery-p2p-start-daemon --config <url-or-path-to-yaml-file>
+kachery-p2p-start-daemon --label `<name-of-node>` --config <url-or-path-to-yaml-file>
 ```
 
-where `<url-or-path-to-yaml-file>` points to a configuration file. To get started you may use this example configuration file:
+where `<name-of-node>` is a node label for display purposes and `<url-or-path-to-yaml-file>` points to a configuration file. To get started you may use this example configuration file:
 `https://gist.githubusercontent.com/magland/9b858ee9dae97db9879826316fa2ba52/raw/kachery-example1.yaml`
 
-This configuration file points to a couple of bootstrap nodes which are used to assist with node discovery and specifies that we join the `example1-zXk8tk` channel. Any other node configured with this same file will become a member of this same channel.
+This example configuration points to a couple of bootstrap nodes which are used to assist with node discovery and specifies that we join the `example1-zXk8tk` channel. Any other node configured with this same file will become a member of this same channel.
 
 Keep this daemon running in a terminal. You may want to use [tmux](https://github.com/tmux/tmux/wiki) or a similar tool to keep this daemon running even if the terminal is closed.
 
@@ -204,18 +208,16 @@ Environment variables
 
 ## Hosting a bootstrap node
 
-In order for peers to find one another, they need to connect to a common bootstrap server. By default, kachery-p2p uses a hard-coded address to a node hosted by us. However, you can host your own bootstrap node.
+In order for peers to find one another, they need to connect to a common bootstrap server. In the example above, we provide a couple of bootstrap nodes. You are welcome to use these in your own channels. But you can also host your own bootstrap node(s).
+
+To create your own bootstrap node, install kachery-p2p on a computer in the cloud with two accessible ports, one for http and one for websocket. The ports must be open to tcp connections and the http port must also accept udp connections. Start the bootstrap daemon with the following command:
 
 ```bash
-# Start the daemon on a computer in the cloud with an accessible port
-# The port must be open to both tcp and udp connections
-kachery-p2p-start-daemon --host <ip> --port <port>
+kachery-p2p-start-daemon --label <bootstrap-label> --isbootstrap --i
+smessageproxy --host <ip-or-hostname> --port <http-listen-port> --websocket-port <websocket-listen-port>
 ```
 
-```bash
-# Peers can then specify this bootstrap server
-kachery-p2p-start-daemon --bootstrap <ip>:<port>
-```
+You can then create a .yaml configuration file github gist (as above) that points to this node as a bootstrap, using the `<ip-or-hostname>` and the `<listen-port>`.
 
 You may want to use [tmux](https://github.com/tmux/tmux/wiki) or a similar tool to keep this daemon running even if the terminal is closed. This gives you the ability to reattach from a different terminal at a later time.
 

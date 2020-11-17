@@ -335,9 +335,10 @@ class Subfeed:
 def create_feed(feed_name=None):
     port = _api_port()
     url = f'http://localhost:{port}/feed/createFeed'
-    x = _http_post_json(url, dict(
-        feedName=feed_name
-    ))
+    req_data = dict()
+    if feed_name is not None:
+        req_data['feedName'] = feed_name
+    x = _http_post_json(url, req_data)
     if not x['success']:
         raise Exception(f'Unable to create feed: {feed_name}')
     return load_feed('feed://' + x['feedId'])
