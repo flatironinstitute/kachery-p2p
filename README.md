@@ -108,11 +108,11 @@ kachery-p2p-start-daemon --label <name-of-node> --config <url-or-path-to-yaml-fi
 where `<name-of-node>` is a node label for display purposes and `<url-or-path-to-yaml-file>` points to a configuration file. To get started you may use this example configuration file:
 `https://gist.githubusercontent.com/magland/9b858ee9dae97db9879826316fa2ba52/raw/kachery-example1.yaml`
 
-This example configuration points to a couple of bootstrap nodes which are used to assist with node discovery and specifies that we join the `example1-zXk8tk` channel. Any other node configured with this same file will become a member of this same channel.
+This example configuration points to a couple of bootstrap nodes which are used to assist with node discovery and specifies that we join a couple of channels including the `example1-zXk8tk` channel. Any other node configured with this same file will become a member of these same channels.
 
 Keep this daemon running in a terminal. You may want to use [tmux](https://github.com/tmux/tmux/wiki) or a similar tool to keep this daemon running even if the terminal is closed.
 
-Other more advanced options are available, such as specifying specifying listen ports (see below).
+Other more advanced options are available, such as specifying listen ports (see below).
 
 ### File Transfer
 
