@@ -131,7 +131,7 @@ def node_info():
 
 @click.command(help="Display kachery_p2p version and exit.")
 def version():
-    click.echo(f"This is kachery_p2p version {kp.__version__}.")
+    click.echo(f"This is kachery_p2p version {kp.__version__} [protocol version {kp.__protocol_version__}].")
     exit()
 
 cli.add_command(cat_file)

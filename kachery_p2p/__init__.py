@@ -1,4 +1,5 @@
 __version__ = "0.5.10"
+__protocol_version__ = "0.5.9"
 
 from ._testdaemon import TestDaemon
 from .core import (_experimental_config, find_file, get_channels, get_node_id,

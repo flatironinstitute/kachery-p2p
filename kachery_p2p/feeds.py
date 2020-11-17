@@ -44,7 +44,7 @@ class Feed:
             timeoutMsec=(self._timeout_sec if self._timeout_sec is not None else 1) * 1000
         ))
 
-        assert x['success'], f'Unable to initialize feed: {self._feed_id}. {x["error"]}'
+        assert x['success'], f'Unable to initialize feed: {self._feed_id} ({x["error"]})'
         self._feed_node_id = x['nodeId']
         self._is_writeable = x['isWriteable']
     def is_writeable(self):
@@ -266,14 +266,16 @@ class Subfeed:
         if self.is_snapshot():
             raise Exception('Cannot submit messages to a snapshot')
         port = _api_port()
-        url = f'http://localhost:{port}/feed/submitMessages'
-        x = _http_post_json(url, dict(
-            feedId=self._feed_id,
-            subfeedHash=self._subfeed_hash,
-            messages=messages
-        ))
-        if not x['success']:
-            raise Exception(f'Unable to submit messages: {x.get("error")}')
+        for message in messages:
+            url = f'http://localhost:{port}/feed/submitMessages'
+            x = _http_post_json(url, dict(
+                feedId=self._feed_id,
+                subfeedHash=self._subfeed_hash,
+                message=message,
+                timeoutMsec=4000
+            ))
+            if not x['success']:
+                raise Exception(f'Unable to submit message: {x.get("error")}')
 
     def set_access_rules(self, access_rules):
         if not self._is_writeable:
