@@ -47,6 +47,9 @@ class FeedsConfigManager {
                 this.#feedsConfigMemCache.set(feedId, config)
                 return config
             }
+            else {
+                throw Error(`Problem with feed config file: ${dirPath}/config.json`)
+            }
         }
         return null
     }
@@ -138,7 +141,9 @@ export default class LocalFeedManager {
         // assert(typeof(feedName) === 'string');
         // Look up the feed ID for a particular feed name by consulting the config file
 
-        return await this.#feedsConfigManager.getFeedIdForName(feedName)
+        const feedId = await this.#feedsConfigManager.getFeedIdForName(feedName)
+        if ((feedId) && (!this.feedExistsLocally(feedId))) return null
+        return feedId
     }
     async hasWriteableFeed(feedId: FeedId) {
         // Check whether this node has a writeable feed.

@@ -135,50 +135,55 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
             ret.producer().start(manifest.size)
             let numComplete = 0
             let errored = false
-            await asyncLoop<FileManifestChunk>(manifest.chunks, async (chunk: FileManifestChunk, chunkIndex: number) => {
-                if (errored) return
-                const chunkFileKey: FileKey = {
-                    sha1: chunk.sha1,
-                    chunkOf: {
-                        fileKey: {
-                            sha1: manifest.sha1
-                        },
-                        startByte: chunk.start,
-                        endByte: chunk.end
-                    }
-                }
-                console.info(`${opts.label}: Handling chunk ${chunkIndex} of ${manifest.chunks.length}`)
-                const label0 = `${opts.label} ch ${chunkIndex}`
-                const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel, label: label0, _numRetries: 2})
-                chunkDataStreams.push(ds)
-                return new Promise((resolve, reject) => {
-                    ds.onError(err => {
-                        ret.producer().error(err)
-                        errored = true
-                        reject(err)
-                    })
-                    ds.onProgress((progress: DataStreamyProgress) => {
-                        _updateProgressForManifestLoad()
-                    })
-                    ds.onFinished(() => {
-                        numComplete ++
-                        if (numComplete === manifest.chunks.length) {
-                            console.info(`${opts.label}: Concatenating chunks`)
-                            _concatenateChunks().then(() => {
-                                const bytesLoaded = _calculateTotalBytesLoaded()
-                                const elapsedSec = elapsedSince(entireFileTimestamp) / 1000
-                                const rate = (byteCountToNumber(bytesLoaded) / 1e6) / elapsedSec
-                                console.info(`${opts.label}: Downloaded ${formatByteCount(bytesLoaded)} in ${elapsedSec} sec [${rate.toFixed(3)} MiB/sec]`)
-                                ret.producer().end()
-                            }).catch((err: Error) => {
-                                ret.producer().error(err)
-                            })
+            try {
+                await asyncLoop<FileManifestChunk>(manifest.chunks, async (chunk: FileManifestChunk, chunkIndex: number) => {
+                    if (errored) return
+                    const chunkFileKey: FileKey = {
+                        sha1: chunk.sha1,
+                        chunkOf: {
+                            fileKey: {
+                                sha1: manifest.sha1
+                            },
+                            startByte: chunk.start,
+                            endByte: chunk.end
                         }
-                        resolve()
+                    }
+                    console.info(`${opts.label}: Handling chunk ${chunkIndex} of ${manifest.chunks.length}`)
+                    const label0 = `${opts.label} ch ${chunkIndex}`
+                    const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel, label: label0, _numRetries: 2})
+                    chunkDataStreams.push(ds)
+                    return new Promise((resolve, reject) => {
+                        ds.onError(err => {
+                            errored = true
+                            reject(err)
+                        })
+                        ds.onProgress((progress: DataStreamyProgress) => {
+                            _updateProgressForManifestLoad()
+                        })
+                        ds.onFinished(() => {
+                            numComplete ++
+                            if (numComplete === manifest.chunks.length) {
+                                console.info(`${opts.label}: Concatenating chunks`)
+                                _concatenateChunks().then(() => {
+                                    const bytesLoaded = _calculateTotalBytesLoaded()
+                                    const elapsedSec = elapsedSince(entireFileTimestamp) / 1000
+                                    const rate = (byteCountToNumber(bytesLoaded) / 1e6) / elapsedSec
+                                    console.info(`${opts.label}: Downloaded ${formatByteCount(bytesLoaded)} in ${elapsedSec} sec [${rate.toFixed(3)} MiB/sec]`)
+                                    resolve()
+                                }).catch((err: Error) => {
+                                    reject(err)
+                                })
+                            }
+                            resolve()
+                        })
                     })
-                })
-            }, {numSimultaneous: 5})
-            
+                }, {numSimultaneous: 5})
+            }
+            catch(err) {
+                ret.producer().error(err)
+                return
+            }
+            ret.producer().end()
         })()
         return ret
     }

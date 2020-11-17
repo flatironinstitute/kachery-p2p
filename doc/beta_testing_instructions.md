@@ -50,7 +50,7 @@ kachery-p2p-load sha1://c37d2a4b156ff9bcfdbbd2eec12b9c6b74135685/test1.txt
 This will download a small text file from the kachery-p2p network and will display the path where the file is stored inside the $KACHERY_STORAGE_DIR. Verify that the content of the file starts with `"This is an example text file..."`
 
 ```
-cat /tmp/example1.txt
+cat `kachery-p2p-load sha1://c37d2a4b156ff9bcfdbbd2eec12b9c6b74135685/test1.txt`
 ```
 
 Also verify that this gives you the same output:
@@ -77,7 +77,7 @@ print(a.shape)
 
 The shape of this array should be `(500, 500, 2)`.
 
-Verify that if you run this script again, the file does not need to be re-downloaded.
+Verify that if you run this script again, the file does not need to be re-downloaded (the file will be loaded much more quickly).
 
 Now we'll go for something larger (600 MB):
 
@@ -87,7 +87,7 @@ import kachery_p2p as kp
 # Note: if you interrupt this download (via ctrl+c),
 # then when you restart, it should pick up roughly
 # where you left off
-a = kp.load_npy('sha1://a3f6ff6f17056fe6955b3f0b9674220a0a3982c7/file.npy?manifest=a79769fc3ed451d3ef45a48d8d1b5c03da0d5309')
+a = kp.load_npy('sha1://62eaa118d68f2ea6f222925a7c7c0daff6b60218/file.npy?manifest=d82da29c1d3911e45d6fcfe19b6e747f04f99d61')
 
 print(a.shape)
 ```
