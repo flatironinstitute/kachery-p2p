@@ -3,7 +3,7 @@ import os
 import kachery as ka
 import kachery_p2p as kp
 import numpy as np
-from kachery_p2p import exceptions
+from kachery_p2p._exceptions import LoadFileError
 
 
 def main():
@@ -38,7 +38,7 @@ def test1():
     try:
         a = kp.load_file('sha1://e25f95079381fe07651aa7d37c2f4e8bda19727c/file.txt')
         raise Exception('Did not get expected error')
-    except kp.exceptions.LoadFileError as err:
+    except LoadFileError as err:
         pass # expected
     except Exception as err:
         raise err

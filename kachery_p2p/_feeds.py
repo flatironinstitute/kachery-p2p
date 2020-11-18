@@ -60,7 +60,7 @@ class Feed:
     def get_subfeed(self, subfeed_name, position=0):
         return Subfeed(feed=self, subfeed_name=subfeed_name, position=position)
     def delete(self):
-        delete_feed(self.get_uri())
+        _delete_feed(self.get_uri())
     def create_snapshot(self, subfeed_names: list):
         subfeeds = dict()
         for subfeed_name in subfeed_names:
@@ -334,7 +334,7 @@ class Subfeed:
         if changed:
             self.set_access_rules(access_rules)
 
-def create_feed(feed_name=None):
+def _create_feed(feed_name=None):
     port = _api_port()
     url = f'http://localhost:{port}/feed/createFeed'
     req_data = dict()
@@ -343,9 +343,9 @@ def create_feed(feed_name=None):
     x = _http_post_json(url, req_data)
     if not x['success']:
         raise Exception(f'Unable to create feed: {feed_name}')
-    return load_feed('feed://' + x['feedId'])
+    return _load_feed('feed://' + x['feedId'])
 
-def delete_feed(feed_name_or_uri):
+def _delete_feed(feed_name_or_uri):
     if feed_name_or_uri.startswith('feed://'):
         feed_uri = feed_name_or_uri
         feed_id, subfeed_name, position = _parse_feed_uri(feed_uri)
@@ -359,11 +359,11 @@ def delete_feed(feed_name_or_uri):
             raise Exception(f'Unable to delete feed {feed_id}: {x.get("error", None)}')
     else:
         feed_name = feed_name_or_uri
-        feed_id = get_feed_id(feed_name, create=False)
+        feed_id = _get_feed_id(feed_name, create=False)
         assert feed_id is not None, f'Unable to find feed with name: {feed_name}'
-        delete_feed(f'feed://{feed_id}')
+        _delete_feed(f'feed://{feed_id}')
 
-def get_feed_id(feed_name, *, create=False):
+def _get_feed_id(feed_name, *, create=False):
     port = _api_port()
     url = f'http://localhost:{port}/feed/getFeedId'
     x = _http_post_json(url, dict(
@@ -371,18 +371,18 @@ def get_feed_id(feed_name, *, create=False):
     ))
     if not x['success']:
         if create:
-            return create_feed(feed_name)._feed_id
+            return _create_feed(feed_name)._feed_id
         else:
             raise Exception(f'Unable to load feed with name: {feed_name}')
     feed_id = x['feedId']
     return feed_id
 
-def load_subfeed(subfeed_uri):
+def _load_subfeed(subfeed_uri):
     feed_id, subfeed_name, position = _parse_feed_uri(subfeed_uri)
     assert subfeed_name is not None, 'No subfeed name found'
     return Feed('feed://' + feed_id).get_subfeed(subfeed_name=subfeed_name, position=position)
         
-def load_feed(feed_name_or_uri, *, timeout_sec: Union[None, float]=None, create=False):
+def _load_feed(feed_name_or_uri, *, timeout_sec: Union[None, float]=None, create=False):
     if feed_name_or_uri.startswith('feed://'):
         if create is True:
             raise Exception('Cannot use create=True when feed ID is specified.')
@@ -397,10 +397,10 @@ def load_feed(feed_name_or_uri, *, timeout_sec: Union[None, float]=None, create=
         return Feed(feed_uri)
     else:
         feed_name = feed_name_or_uri
-        feed_id = get_feed_id(feed_name, create=create)
-        return load_feed(f'feed://{feed_id}')
+        feed_id = _get_feed_id(feed_name, create=create)
+        return _load_feed(f'feed://{feed_id}')
 
-def watch_for_new_messages(subfeed_watches, *, wait_msec):
+def _watch_for_new_messages(subfeed_watches, *, wait_msec):
     port = _api_port()
     url = f'http://localhost:{port}/feed/watchForNewMessages'
     subfeed_watches2 = {}

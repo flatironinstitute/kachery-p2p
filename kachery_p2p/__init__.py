@@ -15,8 +15,8 @@ from ._core import (_experimental_config, _find_file, _get_channels,
                     _store_object, _store_text, read_dir, start_daemon,
                     stop_daemon)
 from ._exceptions import LoadFileError
-from ._feeds import (create_feed, get_feed_id, load_feed, load_subfeed,
-                     watch_for_new_messages)
+from ._feeds import (_create_feed, _delete_feed, _get_feed_id, _load_feed,
+                     _load_subfeed, _watch_for_new_messages)
 from ._testdaemon import TestDaemon
 
 
@@ -180,3 +180,72 @@ def get_node_id(api_port=None) -> str:
         str: The node ID
     """
     return _get_node_id(api_port=api_port)
+
+################################################
+
+def create_feed(feed_name: Union[str, None]=None):
+    """Create a new local feed and optionally associate it with a local name
+
+    Args:
+        feed_name (Union[str, None], optional): Optional name for local retrieval. Defaults to None.
+
+    Returns:
+        Feed: The newly-created local writeable feed
+    """
+    return _create_feed(feed_name=feed_name)
+
+def delete_feed(feed_name_or_uri: str) -> None:
+    """Delete a feed with a particular name or URI
+
+    Args:
+        feed_name_or_uri (str): The name or URI of the feed to delete
+    """
+    return _delete_feed(feed_name_or_uri=feed_name_or_uri)    
+
+def get_feed_id(feed_name: str, *, create: bool=False) -> Union[None, str]:
+    """Return the ID of a feed by name, and optionally create a new feed if it does not exist
+
+    Args:
+        feed_name (str): The local name of the feed ID to retrieve
+        create (bool, optional): Whether to create a new feed if none exists with this name. Defaults to False.
+
+    Returns:
+        Union[None, str]: The feed ID, if exists, else None
+    """
+    return _get_feed_id(feed_name=feed_name, create=create)
+
+def load_subfeed(subfeed_uri: str):
+    """Load a subfeed by URI
+
+    Args:
+        subfeed_uri (str): the URI of the subfeed
+
+    Returns:
+        Subfeed: The subfeed associated with the URI
+    """
+    return _load_subfeed(subfeed_uri=subfeed_uri)
+        
+def load_feed(feed_name_or_uri: str, *, timeout_sec: Union[None, float]=None, create=False):
+    """Load a feed by URI or local name
+
+    Args:
+        feed_name_or_uri (str): Either the local name or the URI of the feed to load
+        timeout_sec (Union[None, float], optional): An optional timeout for searching for the feed. Defaults to None.
+        create (bool, optional): Whether to create if doesn't exist (only applies when supplying a local feed name). Defaults to False.
+
+    Returns:
+        Feed: The loaded feed
+    """
+    return _load_feed(feed_name_or_uri=feed_name_or_uri, timeout_sec=timeout_sec, create=create)
+
+def watch_for_new_messages(subfeed_watches: List[dict], *, wait_msec) -> List[dict]:
+    """Watch for new messages on one or more subfeeds
+
+    Args:
+        subfeed_watches (List[dict]): A list of subfeed watches (TODO: more details needed)
+        wait_msec ([type]): The wait duration for retrieving the messages
+
+    Returns:
+        List[dict]: The list of retrieved messages (TODO: more details needed)
+    """
+    return _watch_for_new_messages(subfeed_watches=subfeed_watches, wait_msec=wait_msec)

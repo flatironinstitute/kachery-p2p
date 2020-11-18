@@ -122,8 +122,8 @@ from ._core import (_experimental_config, _find_file, _get_channels,
                     _store_object, _store_text, read_dir, start_daemon,
                     stop_daemon)
 from ._exceptions import LoadFileError
-from ._feeds import (create_feed, get_feed_id, load_feed, load_subfeed,
-                     watch_for_new_messages)
+from ._feeds import (_create_feed, _delete_feed, _get_feed_id, _load_feed,
+                     _load_subfeed, _watch_for_new_messages)
 from ._testdaemon import TestDaemon
 
 
@@ -286,7 +286,76 @@ def get_node_id(api_port=None) -&gt; str:
     Returns:
         str: The node ID
     &#34;&#34;&#34;
-    return _get_node_id(api_port=api_port)</code></pre>
+    return _get_node_id(api_port=api_port)
+
+################################################
+
+def create_feed(feed_name: Union[str, None]=None):
+    &#34;&#34;&#34;Create a new local feed and optionally associate it with a local name
+
+    Args:
+        feed_name (Union[str, None], optional): Optional name for local retrieval. Defaults to None.
+
+    Returns:
+        Feed: The newly-created local writeable feed
+    &#34;&#34;&#34;
+    return _create_feed(feed_name=feed_name)
+
+def delete_feed(feed_name_or_uri: str) -&gt; None:
+    &#34;&#34;&#34;Delete a feed with a particular name or URI
+
+    Args:
+        feed_name_or_uri (str): The name or URI of the feed to delete
+    &#34;&#34;&#34;
+    return _delete_feed(feed_name_or_uri=feed_name_or_uri)    
+
+def get_feed_id(feed_name: str, *, create: bool=False) -&gt; Union[None, str]:
+    &#34;&#34;&#34;Return the ID of a feed by name, and optionally create a new feed if it does not exist
+
+    Args:
+        feed_name (str): The local name of the feed ID to retrieve
+        create (bool, optional): Whether to create a new feed if none exists with this name. Defaults to False.
+
+    Returns:
+        Union[None, str]: The feed ID, if exists, else None
+    &#34;&#34;&#34;
+    return _get_feed_id(feed_name=feed_name, create=create)
+
+def load_subfeed(subfeed_uri: str):
+    &#34;&#34;&#34;Load a subfeed by URI
+
+    Args:
+        subfeed_uri (str): the URI of the subfeed
+
+    Returns:
+        Subfeed: The subfeed associated with the URI
+    &#34;&#34;&#34;
+    return _load_subfeed(subfeed_uri=subfeed_uri)
+        
+def load_feed(feed_name_or_uri: str, *, timeout_sec: Union[None, float]=None, create=False):
+    &#34;&#34;&#34;Load a feed by URI or local name
+
+    Args:
+        feed_name_or_uri (str): Either the local name or the URI of the feed to load
+        timeout_sec (Union[None, float], optional): An optional timeout for searching for the feed. Defaults to None.
+        create (bool, optional): Whether to create if doesn&#39;t exist (only applies when supplying a local feed name). Defaults to False.
+
+    Returns:
+        Feed: The loaded feed
+    &#34;&#34;&#34;
+    return _load_feed(feed_name_or_uri=feed_name_or_uri, timeout_sec=timeout_sec, create=create)
+
+def watch_for_new_messages(subfeed_watches: List[dict], *, wait_msec) -&gt; List[dict]:
+    &#34;&#34;&#34;Watch for new messages on one or more subfeeds
+
+    Args:
+        subfeed_watches (List[dict]): A list of subfeed watches (TODO: more details needed)
+        wait_msec ([type]): The wait duration for retrieving the messages
+
+    Returns:
+        List[dict]: The list of retrieved messages (TODO: more details needed)
+    &#34;&#34;&#34;
+    return _watch_for_new_messages(subfeed_watches=subfeed_watches, wait_msec=wait_msec)</code></pre>
 </details>
 </section>
 <section>
@@ -296,6 +365,60 @@ def get_node_id(api_port=None) -&gt; str:
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
+<dt id="kachery_p2p.create_feed"><code class="name flex">
+<span>def <span class="ident">create_feed</span></span>(<span>feed_name: Union[str, NoneType] = None)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Create a new local feed and optionally associate it with a local name</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>feed_name</code></strong> :&ensp;<code>Union[str, None]</code>, optional</dt>
+<dd>Optional name for local retrieval. Defaults to None.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>Feed</code></dt>
+<dd>The newly-created local writeable feed</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def create_feed(feed_name: Union[str, None]=None):
+    &#34;&#34;&#34;Create a new local feed and optionally associate it with a local name
+
+    Args:
+        feed_name (Union[str, None], optional): Optional name for local retrieval. Defaults to None.
+
+    Returns:
+        Feed: The newly-created local writeable feed
+    &#34;&#34;&#34;
+    return _create_feed(feed_name=feed_name)</code></pre>
+</details>
+</dd>
+<dt id="kachery_p2p.delete_feed"><code class="name flex">
+<span>def <span class="ident">delete_feed</span></span>(<span>feed_name_or_uri: str) ‑> NoneType</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Delete a feed with a particular name or URI</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>feed_name_or_uri</code></strong> :&ensp;<code>str</code></dt>
+<dd>The name or URI of the feed to delete</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def delete_feed(feed_name_or_uri: str) -&gt; None:
+    &#34;&#34;&#34;Delete a feed with a particular name or URI
+
+    Args:
+        feed_name_or_uri (str): The name or URI of the feed to delete
+    &#34;&#34;&#34;
+    return _delete_feed(feed_name_or_uri=feed_name_or_uri)    </code></pre>
+</details>
+</dd>
 <dt id="kachery_p2p.find_file"><code class="name flex">
 <span>def <span class="ident">find_file</span></span>(<span>uri: str, timeout_sec: float = 5) ‑> Iterable[dict]</span>
 </code></dt>
@@ -365,6 +488,40 @@ One result for each peer on which the file has been found, plus one for self if 
         List[str]: The list of channel names
     &#34;&#34;&#34;
     return _get_channels()</code></pre>
+</details>
+</dd>
+<dt id="kachery_p2p.get_feed_id"><code class="name flex">
+<span>def <span class="ident">get_feed_id</span></span>(<span>feed_name: str, *, create: bool = False) ‑> Union[NoneType, str]</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Return the ID of a feed by name, and optionally create a new feed if it does not exist</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>feed_name</code></strong> :&ensp;<code>str</code></dt>
+<dd>The local name of the feed ID to retrieve</dd>
+<dt><strong><code>create</code></strong> :&ensp;<code>bool</code>, optional</dt>
+<dd>Whether to create a new feed if none exists with this name. Defaults to False.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>Union[None, str]</code></dt>
+<dd>The feed ID, if exists, else None</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def get_feed_id(feed_name: str, *, create: bool=False) -&gt; Union[None, str]:
+    &#34;&#34;&#34;Return the ID of a feed by name, and optionally create a new feed if it does not exist
+
+    Args:
+        feed_name (str): The local name of the feed ID to retrieve
+        create (bool, optional): Whether to create a new feed if none exists with this name. Defaults to False.
+
+    Returns:
+        Union[None, str]: The feed ID, if exists, else None
+    &#34;&#34;&#34;
+    return _get_feed_id(feed_name=feed_name, create=create)</code></pre>
 </details>
 </dd>
 <dt id="kachery_p2p.get_node_id"><code class="name flex">
@@ -442,6 +599,43 @@ One result for each peer on which the file has been found, plus one for self if 
         Union[bytes, None]: The bytes if found, else None
     &#34;&#34;&#34;
     return _load_bytes(uri=uri, start=start, end=end, write_to_stdout=write_to_stdout, p2p=p2p, from_node=from_node, from_channel=from_channel)</code></pre>
+</details>
+</dd>
+<dt id="kachery_p2p.load_feed"><code class="name flex">
+<span>def <span class="ident">load_feed</span></span>(<span>feed_name_or_uri: str, *, timeout_sec: Union[NoneType, float] = None, create=False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Load a feed by URI or local name</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>feed_name_or_uri</code></strong> :&ensp;<code>str</code></dt>
+<dd>Either the local name or the URI of the feed to load</dd>
+<dt><strong><code>timeout_sec</code></strong> :&ensp;<code>Union[None, float]</code>, optional</dt>
+<dd>An optional timeout for searching for the feed. Defaults to None.</dd>
+<dt><strong><code>create</code></strong> :&ensp;<code>bool</code>, optional</dt>
+<dd>Whether to create if doesn't exist (only applies when supplying a local feed name). Defaults to False.</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>Feed</code></dt>
+<dd>The loaded feed</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def load_feed(feed_name_or_uri: str, *, timeout_sec: Union[None, float]=None, create=False):
+    &#34;&#34;&#34;Load a feed by URI or local name
+
+    Args:
+        feed_name_or_uri (str): Either the local name or the URI of the feed to load
+        timeout_sec (Union[None, float], optional): An optional timeout for searching for the feed. Defaults to None.
+        create (bool, optional): Whether to create if doesn&#39;t exist (only applies when supplying a local feed name). Defaults to False.
+
+    Returns:
+        Feed: The loaded feed
+    &#34;&#34;&#34;
+    return _load_feed(feed_name_or_uri=feed_name_or_uri, timeout_sec=timeout_sec, create=create)</code></pre>
 </details>
 </dd>
 <dt id="kachery_p2p.load_file"><code class="name flex">
@@ -571,6 +765,37 @@ One result for each peer on which the file has been found, plus one for self if 
         Union[dict, None]: If found, the Python dict, else None
     &#34;&#34;&#34;
     return _load_object(uri=uri, p2p=p2p, from_node=from_node, from_channel=from_channel)</code></pre>
+</details>
+</dd>
+<dt id="kachery_p2p.load_subfeed"><code class="name flex">
+<span>def <span class="ident">load_subfeed</span></span>(<span>subfeed_uri: str)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Load a subfeed by URI</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>subfeed_uri</code></strong> :&ensp;<code>str</code></dt>
+<dd>the URI of the subfeed</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>Subfeed</code></dt>
+<dd>The subfeed associated with the URI</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def load_subfeed(subfeed_uri: str):
+    &#34;&#34;&#34;Load a subfeed by URI
+
+    Args:
+        subfeed_uri (str): the URI of the subfeed
+
+    Returns:
+        Subfeed: The subfeed associated with the URI
+    &#34;&#34;&#34;
+    return _load_subfeed(subfeed_uri=subfeed_uri)</code></pre>
 </details>
 </dd>
 <dt id="kachery_p2p.load_text"><code class="name flex">
@@ -749,6 +974,40 @@ One result for each peer on which the file has been found, plus one for self if 
     return _store_text(text=text, basename=basename)</code></pre>
 </details>
 </dd>
+<dt id="kachery_p2p.watch_for_new_messages"><code class="name flex">
+<span>def <span class="ident">watch_for_new_messages</span></span>(<span>subfeed_watches: List[dict], *, wait_msec) ‑> List[dict]</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Watch for new messages on one or more subfeeds</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>subfeed_watches</code></strong> :&ensp;<code>List[dict]</code></dt>
+<dd>A list of subfeed watches (TODO: more details needed)</dd>
+<dt><strong><code>wait_msec</code></strong> :&ensp;<code>[type]</code></dt>
+<dd>The wait duration for retrieving the messages</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>List[dict]</code></dt>
+<dd>The list of retrieved messages (TODO: more details needed)</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def watch_for_new_messages(subfeed_watches: List[dict], *, wait_msec) -&gt; List[dict]:
+    &#34;&#34;&#34;Watch for new messages on one or more subfeeds
+
+    Args:
+        subfeed_watches (List[dict]): A list of subfeed watches (TODO: more details needed)
+        wait_msec ([type]): The wait duration for retrieving the messages
+
+    Returns:
+        List[dict]: The list of retrieved messages (TODO: more details needed)
+    &#34;&#34;&#34;
+    return _watch_for_new_messages(subfeed_watches=subfeed_watches, wait_msec=wait_msec)</code></pre>
+</details>
+</dd>
 </dl>
 </section>
 <section>
@@ -767,19 +1026,25 @@ One result for each peer on which the file has been found, plus one for self if 
 </div>
 <ul id="index">
 <li><h3><a href="#header-functions">Functions</a></h3>
-<ul class="two-column">
+<ul class="">
+<li><code><a title="kachery_p2p.create_feed" href="#kachery_p2p.create_feed">create_feed</a></code></li>
+<li><code><a title="kachery_p2p.delete_feed" href="#kachery_p2p.delete_feed">delete_feed</a></code></li>
 <li><code><a title="kachery_p2p.find_file" href="#kachery_p2p.find_file">find_file</a></code></li>
 <li><code><a title="kachery_p2p.get_channels" href="#kachery_p2p.get_channels">get_channels</a></code></li>
+<li><code><a title="kachery_p2p.get_feed_id" href="#kachery_p2p.get_feed_id">get_feed_id</a></code></li>
 <li><code><a title="kachery_p2p.get_node_id" href="#kachery_p2p.get_node_id">get_node_id</a></code></li>
 <li><code><a title="kachery_p2p.load_bytes" href="#kachery_p2p.load_bytes">load_bytes</a></code></li>
+<li><code><a title="kachery_p2p.load_feed" href="#kachery_p2p.load_feed">load_feed</a></code></li>
 <li><code><a title="kachery_p2p.load_file" href="#kachery_p2p.load_file">load_file</a></code></li>
 <li><code><a title="kachery_p2p.load_npy" href="#kachery_p2p.load_npy">load_npy</a></code></li>
 <li><code><a title="kachery_p2p.load_object" href="#kachery_p2p.load_object">load_object</a></code></li>
+<li><code><a title="kachery_p2p.load_subfeed" href="#kachery_p2p.load_subfeed">load_subfeed</a></code></li>
 <li><code><a title="kachery_p2p.load_text" href="#kachery_p2p.load_text">load_text</a></code></li>
 <li><code><a title="kachery_p2p.store_file" href="#kachery_p2p.store_file">store_file</a></code></li>
 <li><code><a title="kachery_p2p.store_npy" href="#kachery_p2p.store_npy">store_npy</a></code></li>
 <li><code><a title="kachery_p2p.store_object" href="#kachery_p2p.store_object">store_object</a></code></li>
 <li><code><a title="kachery_p2p.store_text" href="#kachery_p2p.store_text">store_text</a></code></li>
+<li><code><a title="kachery_p2p.watch_for_new_messages" href="#kachery_p2p.watch_for_new_messages">watch_for_new_messages</a></code></li>
 </ul>
 </li>
 </ul>
