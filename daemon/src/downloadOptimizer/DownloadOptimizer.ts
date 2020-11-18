@@ -64,8 +64,12 @@ export default class DownloadOptimizer {
                 else {
                     const ff = this.node.findFile({fileKey, timeoutMsec: TIMEOUTS.loadFileFindFile, fromChannel: opts.fromChannel})
                     ff.onFound(result => {
-                        const pn = this._getProviderNode(result.nodeId, result.channelName)
-                        onFound(pn)
+                        if (result.nodeId !== this.node.nodeId()) {
+                            const channelName = result.channelName
+                            if (!channelName) throw Error('Unexpected channelName is null in findFile result')
+                            const pn = this._getProviderNode(result.nodeId, channelName)
+                            onFound(pn)
+                        }
                     })
                     ff.onFinished(() => {
                         onFinished()

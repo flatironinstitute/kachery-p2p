@@ -9,7 +9,7 @@ import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
 import { getStats, GetStatsOpts } from './getStats'
 import { addDurations, Address, ChannelName, ChannelNodeInfo, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SubfeedHash, SubmittedSubfeedMessage } from './interfaces/core'
-import { CheckForFileRequestData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isReportSubfeedMessagesRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
+import { CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isReportSubfeedMessagesRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import NodeStats from './NodeStats'
 import { handleCheckAliveRequest } from './nodeToNodeRequestHandlers/handleCheckAliveRequest'
 import { handleCheckForFileRequest } from './nodeToNodeRequestHandlers/handleCheckForFileRequest'
@@ -141,33 +141,52 @@ class KacheryP2PNode {
                 requestType: 'checkForFile',
                 fileKey: args.fileKey
             }
-            const channelNames = args.fromChannel ? [args.fromChannel] : this.p.channelNames
-            const { onResponse, onFinished, onErrorResponse, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec: args.timeoutMsec, channelNames })
-            handleCancel = cancel
-            onResponse((nodeId: NodeId, channelName: ChannelName, responseData: NodeToNodeResponseData) => {
-                if (!isCheckForFileResponseData(responseData)) {
-                    /* istanbul ignore next */
-                    throw Error(`Unexpected response type: ${responseData.requestType} <> 'checkForFile'`)
-                }
-                const { found, size } = responseData
-                if ((found) && (size !== null)) {
+
+            // first check on this node
+            handleCheckForFileRequest(this, this.#nodeId, requestData).then((thisResponse: CheckForFileResponseData) => {
+                const s = thisResponse.size
+                if ((thisResponse.found) && (s !== null)) {
                     onFoundCallbacks.forEach(cb => {
                         cb({
-                            nodeId,
-                            channelName,
+                            nodeId: this.#nodeId,
+                            channelName: null,
                             fileKey: args.fileKey,
-                            fileSize: size
+                            fileSize: s
                         })
                     })
                 }
-            })
-            onFinished(() => {
-                onFinishedCallbacks.forEach(cb => {
-                    cb()
+
+                const channelNames = args.fromChannel ? [args.fromChannel] : this.p.channelNames
+                const { onResponse, onFinished, onErrorResponse, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec: args.timeoutMsec, channelNames })
+                handleCancel = cancel
+                onResponse((nodeId: NodeId, channelName: ChannelName, responseData: NodeToNodeResponseData) => {
+                    if (!isCheckForFileResponseData(responseData)) {
+                        /* istanbul ignore next */
+                        throw Error(`Unexpected response type: ${responseData.requestType} <> 'checkForFile'`)
+                    }
+                    const { found, size } = responseData
+                    if ((found) && (size !== null)) {
+                        onFoundCallbacks.forEach(cb => {
+                            cb({
+                                nodeId,
+                                channelName,
+                                fileKey: args.fileKey,
+                                fileSize: size
+                            })
+                        })
+                    }
                 })
-            })
-            onErrorResponse((nodeId: NodeId, err: Error) => {
-                // todo
+                onFinished(() => {
+                    onFinishedCallbacks.forEach(cb => {
+                        cb()
+                    })
+                })
+                onErrorResponse((nodeId: NodeId, err: Error) => {
+                    // todo
+                })
+
+            }).catch((err) => {
+                throw Error('Unexpected problem trying to find file on local node')
             })
         }, 10)
         return {

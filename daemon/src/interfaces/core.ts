@@ -538,14 +538,14 @@ export const isFindLiveFeedResult = (x: any): x is FindLiveFeedResult => {
 // FindFileResults
 export interface FindFileResult {
     nodeId: NodeId,
-    channelName: ChannelName,
+    channelName: ChannelName | null,
     fileKey: FileKey,
     fileSize: ByteCount
 }
 export const isFindFileResult = (x: any): x is FindFileResult => {
     if (!_validateObject(x, {
         nodeId: isNodeId,
-        channelName: isChannelName,
+        channelName: isOneOf([isNull, isChannelName]),
         fileKey: isFileKey,
         fileSize: isByteCount
     })) return false;

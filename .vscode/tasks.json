@@ -1,0 +1,10 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Generate html docs",
+            "type": "shell",
+            "command": "cd doc && pdoc --html --force kachery_p2p"
+        }
+    ]
+}

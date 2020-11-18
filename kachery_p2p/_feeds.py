@@ -8,7 +8,7 @@ from urllib.parse import quote, unquote
 
 import kachery as ka
 
-from .core import _api_port, _http_post_json, load_object
+from ._core import _api_port, _http_post_json, _load_object
 
 
 class Feed:
@@ -32,7 +32,7 @@ class Feed:
             self._feed_node_id = None
             self._is_writeable = False
             self._is_snapshot = True
-            self._snapshot_object = load_object(uri)
+            self._snapshot_object = _load_object(uri)
             assert self._snapshot_object is not None, f'Unable to load snapshot: {uri}'
         else:
             raise Exception(f'Unexpected feed uri: {uri}')

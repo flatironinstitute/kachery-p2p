@@ -12,9 +12,9 @@ from urllib.parse import parse_qs
 import kachery as ka
 import numpy as np
 
+from ._exceptions import LoadFileError
 from ._shellscript import ShellScript
 from ._temporarydirectory import TemporaryDirectory
-from .exceptions import LoadFileError
 
 _global_config = {
     'nop2p': False,
@@ -32,12 +32,7 @@ def _experimental_config(*, nop2p: Union[None, bool]=None, file_server_urls: Uni
 def _api_port():
     return os.getenv('KACHERY_P2P_API_PORT', 20431)
 
-def get_channels() -> List[str]:
-    """Returns the list of channels that this node belongs to
-
-    Returns:
-        List[str]: The list of channel names
-    """
+def _get_channels() -> List[str]:
     port = _api_port()
     url = f'http://localhost:{port}/probe'
     resp = _http_post_json(url, dict())
@@ -45,7 +40,7 @@ def get_channels() -> List[str]:
     #     raise Exception(resp['error'])
     return resp['channels']
 
-def find_file(uri: str) -> Iterable[dict]:
+def _find_file(uri: str, timeout_sec: float) -> Iterable[dict]:
     if uri.startswith('sha1dir://'):
         uri_resolved = _resolve_file_uri_from_dir_uri(uri)
         if uri_resolved is None:
@@ -67,7 +62,7 @@ def find_file(uri: str) -> Iterable[dict]:
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     assert algorithm == 'sha1'
     file_key = _create_file_key(sha1=hash0, query=query)
-    return _http_post_json_receive_json_socket(url, dict(fileKey=file_key))
+    return _http_post_json_receive_json_socket(url, dict(fileKey=file_key, timeoutMsec=timeout_sec * 1000, fromChannel=None))
 
 def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str, dict]:
     listA = uri.split('?')
@@ -89,23 +84,7 @@ def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str, dict]:
         raise Exception('Unexpected protocol: {}'.format(protocol))
     return protocol, algorithm, hash0, additional_path, query
 
-def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None):
-    """Load a file either from local kachery storage or from a remote kachery node
-
-    Args:
-        uri (str): [description]
-        dest (Union[str, None], optional): [description]. Defaults to None.
-        p2p (bool, optional): [description]. Defaults to True.
-        from_node (Union[str, None], optional): [description]. Defaults to None.
-        from_channel (Union[str, None], optional): [description]. Defaults to None.
-
-    Raises:
-        Exception: [description]
-        LoadFileError: [description]
-
-    Returns:
-        [type]: [description]
-    """
+def _load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[str, None]:
     if uri.startswith('sha1dir://...'):
         uri0 = _resolve_file_uri_from_dir_uri(uri)
         if uri0 is None:
@@ -168,7 +147,7 @@ def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: 
 def _load_file_from_file_server(*, uri, dest, file_server_url):
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     if query.get('manifest'):
-        manifest = load_object(f'sha1://{query["manifest"][0]}')
+        manifest = _load_object(f'sha1://{query["manifest"][0]}')
         if manifest is None:
             print('Unable to load manifest')
             return None
@@ -177,7 +156,7 @@ def _load_file_from_file_server(*, uri, dest, file_server_url):
         for ii, ch in enumerate(manifest['chunks']):
             if len(manifest['chunks']) > 1:
                 print(f'load_bytes: Loading chunk {ii + 1} of {len(manifest["chunks"])}')
-            a = load_file(
+            a = _load_file(
                 uri=f'sha1://{ch["sha1"]}?chunkOf={hash0}~{ch["start"]}~{ch["end"]}'
             )
             if a is None:
@@ -250,7 +229,7 @@ def _download_file_and_compute_sha1(*, url, fname, start=None, end=None):
                 f.write(chunk)
     return sha1sum.hexdigest()
 
-def load_bytes(uri: str, start: int, end: int, write_to_stdout=False, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[bytes, None]:
+def _load_bytes(uri: str, start: int, end: int, write_to_stdout=False, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[bytes, None]:
     ret = ka.load_bytes(uri, start=start, end=end, write_to_stdout=write_to_stdout)
     if ret is not None:
         return ret
@@ -258,7 +237,7 @@ def load_bytes(uri: str, start: int, end: int, write_to_stdout=False, p2p: bool=
         return    
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     if query.get('manifest'):
-        manifest = load_object(f'sha1://{query["manifest"][0]}')
+        manifest = _load_object(f'sha1://{query["manifest"][0]}')
         if manifest is None:
             print('Unable to load manifest')
             return None
@@ -271,7 +250,7 @@ def load_bytes(uri: str, start: int, end: int, write_to_stdout=False, p2p: bool=
         for ii, ch in enumerate(chunks_to_load):
             if len(chunks_to_load) > 1:
                 print(f'load_bytes: Loading chunk {ii + 1} of {len(chunks_to_load)}')
-            a = load_bytes(
+            a = _load_bytes(
                 uri=f'sha1://{ch["sha1"]}?chunkOf={hash0}~{ch["start"]}~{ch["end"]}',
                 start=max(0, start - ch['start']),
                 end=min(ch['end']-ch['start'], end-ch['start']
@@ -282,51 +261,60 @@ def load_bytes(uri: str, start: int, end: int, write_to_stdout=False, p2p: bool=
             data_chunks.append(a)
         return b''.join(data_chunks)
     
-    path = load_file(uri=uri, from_node=from_node, from_channel=from_channel)
+    path = _load_file(uri=uri, from_node=from_node, from_channel=from_channel)
     if path is None:
         print('Unable to load file.')
         return None
     return ka.load_bytes(uri, start=start, end=end, write_to_stdout=write_to_stdout)
 
-def read_dir(uri: str, p2p: bool=True):
+def read_dir(uri: str, p2p: bool=True) -> Union[dict, None]:
+    """Deprecated
+
+    Args:
+        uri (str): The directory URI: sha1dir://...
+        p2p (bool, optional): Whether to search remote nodes. Defaults to True.
+
+    Returns:
+        dict: deprecated
+    """
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     assert protocol == algorithm + 'dir'
-    dd = load_object(algorithm + '://' + hash0, p2p=p2p)
+    dd = _load_object(algorithm + '://' + hash0, p2p=p2p)
     if dd is None:
         return None
     return ka.read_dir(uri)
         
-def load_object(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None):
-    local_path = load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
+def _load_object(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[dict, None]:
+    local_path = _load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
     if local_path is None:
         return None
     return ka.load_object(uri)
 
-def load_text(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None):
-    local_path = load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
+def _load_text(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[str, None]:
+    local_path = _load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
     if local_path is None:
         return None
     return ka.load_text(uri)
 
-def load_npy(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None):
-    local_path = load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
+def _load_npy(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[np.ndarray, None]:
+    local_path = _load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
     if local_path is None:
         return None
     return ka.load_npy(uri)
 
-def store_file(path: str, basename: Union[str, None]=None):
+def _store_file(path: str, basename: Union[str, None]=None) -> str:
     return ka.store_file(path, basename=basename)
 
-def store_object(object: dict, basename: Union[str, None]=None):
+def _store_object(object: dict, basename: Union[str, None]=None) -> str:
     return ka.store_object(object, basename=basename)
 
-def store_text(text: str, basename: Union[str, None]=None):
+def _store_text(text: str, basename: Union[str, None]=None) -> str:
     return ka.store_text(text, basename=basename)
 
-def store_npy(array: np.ndarray, basename: Union[str, None]=None):
+def _store_npy(array: np.ndarray, basename: Union[str, None]=None) -> str:
     return ka.store_npy(array, basename=basename)
 
-def get_node_id(api_port=None):
+def _get_node_id(api_port=None) -> str:
     x = _probe_daemon(api_port=api_port)
     assert x is not None, 'Unable to connect to daemon.'
     return x['nodeId']
@@ -361,6 +349,8 @@ def start_daemon(*,
     nomulticast: bool=False,
     node_arg: List[str]=[]
 ):
+    """Used internally. Use the kachery-p2p-start-daemon command in the terminal.
+    """
     from kachery_p2p import __version__
 
     if _probe_daemon() is not None:
@@ -499,6 +489,11 @@ def _check_latest_npm_package_version(package_name):
     return latest_version
 
 def stop_daemon(api_port=None):
+    """Stop the kachery daemon (take the node offline)
+
+    Args:
+        api_port ([type], optional): Optional override of the api port for the daemon. Defaults to None.
+    """
     if api_port is not None:
         port = api_port
     else:
@@ -513,7 +508,7 @@ def stop_daemon(api_port=None):
 def _resolve_file_uri_from_dir_uri(dir_uri, p2p: bool=True):
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(dir_uri)
     assert protocol == algorithm + 'dir'
-    dd = load_object(algorithm + '://' + hash0, p2p=p2p)
+    dd = _load_object(algorithm + '://' + hash0, p2p=p2p)
     if dd is None:
         return None
     if additional_path:

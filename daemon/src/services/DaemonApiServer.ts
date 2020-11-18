@@ -614,7 +614,7 @@ export default class DaemonApiServer {
         if (!isJSONObject(response)) throw Error('Unexpected json object in _handleStats')
         return response
     }
-    // /findFile - find a file (or feed) in the remote nodes. May return more than one.
+    // /findFile - find a file (or feed) locally or in the remote nodes. May return more than one.
     /* istanbul ignore next */
     async _apiFindFile(req: Req, res: Res) {
         const reqData = req.body
@@ -626,7 +626,7 @@ export default class DaemonApiServer {
         const jsonSocket = new JsonSocket(res as any as Socket)
 
         let isDone = false
-        x.onFound(result => {
+        x.onFound((result: FindFileResult) => {
             if (isDone) return
             // may return more than one result
             // we send them one-by-one
