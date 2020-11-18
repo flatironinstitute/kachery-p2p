@@ -6,7 +6,7 @@ import subprocess
 import sys
 import time
 from types import SimpleNamespace
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 from urllib.parse import parse_qs
 
 import kachery as ka
@@ -33,6 +33,11 @@ def _api_port():
     return os.getenv('KACHERY_P2P_API_PORT', 20431)
 
 def get_channels() -> List[str]:
+    """Returns the list of channels that this node belongs to
+
+    Returns:
+        List[str]: The list of channel names
+    """
     port = _api_port()
     url = f'http://localhost:{port}/probe'
     resp = _http_post_json(url, dict())
@@ -40,11 +45,12 @@ def get_channels() -> List[str]:
     #     raise Exception(resp['error'])
     return resp['channels']
 
-def find_file(uri):
+def find_file(uri: str) -> Iterable[dict]:
     if uri.startswith('sha1dir://'):
-        uri = _resolve_file_uri_from_dir_uri(uri)
-        if uri is None:
+        uri_resolved = _resolve_file_uri_from_dir_uri(uri)
+        if uri_resolved is None:
             raise Exception('Unable to find file.')
+        uri = uri_resolved
     if _global_config['nop2p']:
         class empty_iterator:
             def __init__(self):
@@ -84,7 +90,23 @@ def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str, dict]:
     return protocol, algorithm, hash0, additional_path, query
 
 def load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None):
-    if uri.startswith('sha1dir://'):
+    """Load a file either from local kachery storage or from a remote kachery node
+
+    Args:
+        uri (str): [description]
+        dest (Union[str, None], optional): [description]. Defaults to None.
+        p2p (bool, optional): [description]. Defaults to True.
+        from_node (Union[str, None], optional): [description]. Defaults to None.
+        from_channel (Union[str, None], optional): [description]. Defaults to None.
+
+    Raises:
+        Exception: [description]
+        LoadFileError: [description]
+
+    Returns:
+        [type]: [description]
+    """
+    if uri.startswith('sha1dir://...'):
         uri0 = _resolve_file_uri_from_dir_uri(uri)
         if uri0 is None:
             return None
@@ -603,7 +625,7 @@ def _http_post_json(url: str, data: dict, verbose: Optional[bool] = None) -> dic
         print('Elapsed time for _http_post_json: {}'.format(time.time() - timer))
     return json.loads(req.content)
 
-def _http_post_json_receive_json_socket(url: str, data: dict, verbose: Optional[bool] = None):
+def _http_post_json_receive_json_socket(url: str, data: dict, verbose: Optional[bool] = None) -> Iterable[dict]:
     timer = time.time()
     if verbose is None:
         verbose = (os.environ.get('HTTP_VERBOSE', '') == 'TRUE')
@@ -615,11 +637,7 @@ def _http_post_json_receive_json_socket(url: str, data: dict, verbose: Optional[
         raise Exception('Error importing requests *')
     req = requests.post(url, json=data, stream=True)
     if req.status_code != 200:
-        return dict(
-            success=False,
-            error='Error posting json: {} {}'.format(
-                req.status_code, req.content.decode('utf-8'))
-        )
+        raise Exception('Error posting json: {} {}'.format(req.status_code, req.content.decode('utf-8')))
     class custom_iterator:
         def __init__(self):
             pass
