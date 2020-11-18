@@ -4,7 +4,7 @@ Thank you for helping to test the kachery-p2p software!
 
 ## Installation
 
-Please install kachery-p2p by following the Conda installation instructions found [here](../docs/setup_and_installation.md) (or the non-Conda instructions if you prefer).
+Please install kachery-p2p by following the Conda installation instructions found [here](../doc/setup_and_installation.md) (or the non-Conda instructions if you prefer).
 
 Open a terminal and verify that you have the following commands available:
 
