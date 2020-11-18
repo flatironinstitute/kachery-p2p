@@ -4,7 +4,7 @@ Thank you for helping to test the kachery-p2p software!
 
 ## Installation
 
-Please follow the Conda installation instructions on the [main README document](../README.md) (or the non-Conda instructions if you prefer).
+Please install kachery-p2p by following the Conda installation instructions found [here](../docs/setup_and_installation.md) (or the non-Conda instructions if you prefer).
 
 Open a terminal and verify that you have the following commands available:
 
@@ -23,8 +23,7 @@ Check the version by running:
 kachery-p2p version
 ```
 
-The current version is: `0.5.10`
-The current protocol version is: `0.5.9`
+The current version should be `0.5.10` and the current protocol version should be `0.5.9`.
 
 ## Start a daemon
 
@@ -33,8 +32,10 @@ By running a daemon on your computer you are creating a node on the kachery-p2p 
 In a new terminal (activate the conda environment), start the daemon and join the example channel:
 
 ```
-kachery-p2p-start-daemon --config https://gist.githubusercontent.com/magland/9b858ee9dae97db9879826316fa2ba52/raw/kachery-example1.yaml
+kachery-p2p-start-daemon --label <node-label> --config https://gist.githubusercontent.com/magland/9b858ee9dae97db9879826316fa2ba52/raw/kachery-example1.yaml
 ```
+
+where `<node-label>` is a display name you choose for your new node. This name will be visible to others.
 
 Keep this program running in a terminal (you may want to use [tmux](https://github.com/tmux/tmux/wiki) or screen). While this daemon is running, other members of this example channel have access to any file that you store in your local kachery database (provided they know the SHA-1 hash).
 

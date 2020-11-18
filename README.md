@@ -9,13 +9,13 @@ Current protocol version: `kachery-p2p 0.5.9`
 
 Kachery-p2p is a **peer-to-peer, content-addressable file storage and distribution framework** which can operate with minimal infrastructural requirements and offers both command-line and programmatic interfaces to file distribution. In short, it’s a way for you to distribute your data to collaborators with minimal fuss.
 
-[Instructions for beta testers](./doc/beta_testing_instructions.md)
-
 ## Getting started
 
 * [Setup and installation](./doc/setup_and_installation.md)
 
 * [User's guide](https://htmlpreview.github.io/?https://github.com/flatironinstitute/kachery-p2p/blob/main/doc/html/kachery_p2p/index.html) - Python API, basic usage
+
+* [Instructions for beta testers](./doc/beta_testing_instructions.md)
 
 ## Motivation
 
