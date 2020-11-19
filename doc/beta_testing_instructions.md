@@ -10,7 +10,7 @@ Open a terminal and verify that you have the following commands available:
 
 ```
 kachery-store
-kachery-load
+kachery-p2p-load
 kachery-p2p-start-daemon
 kachery-p2p-find
 kachery-p2p-load
