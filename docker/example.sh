@@ -5,7 +5,7 @@ KACHERY_P2P_CONFIG_DIR=/some/config/dir
 KACHERY_P2P_VERSION=0.5.11
 CONFIG="https://gist.githubusercontent.com/magland/637ad8be96f8bbf5a86ae1f409ab751c/raw/flatiron3.yaml"
 HTTP_LISTEN_PORT=
-HOSTNAME=
+PUBLIC_URL=
 LABEL=node-label
 
 OPTS=""
@@ -22,9 +22,9 @@ if [ -n "$HTTP_LISTEN_PORT" ]
 then
 	OPTS="$OPTS --http-port $HTTP_LISTEN_PORT"
 fi
-if [ -n "$HOSTNAME" ]
+if [ -n "$PUBLIC_URL" ]
 then
-	OPTS="$OPTS --host $HOSTNAME"
+	OPTS="$OPTS --public-url $PUBLIC_URL"
 fi
 
 docker run $OPTS
