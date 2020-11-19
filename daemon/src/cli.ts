@@ -8,7 +8,7 @@ import yargs from 'yargs';
 import GarbageMap from './common/GarbageMap';
 import { parseBootstrapInfo, randomAlphaString } from './common/util';
 import realExternalInterface from './external/real/realExternalInterface';
-import { Address, ChannelName, HostName, isAddress, isArrayOf, isChannelName, isHostName, isNodeId, isPort, isString, LocalFilePath, localFilePath, NodeId, nodeLabel, optional, toPort, _validateObject } from './interfaces/core';
+import { Address, ChannelName, HostName, isAddress, isArrayOf, isChannelName, isHostName, isNodeId, isPort, isString, isUrlString, LocalFilePath, localFilePath, NodeId, nodeLabel, optional, toPort, _validateObject } from './interfaces/core';
 import startDaemon from './startDaemon';
 
 // Thanks: https://stackoverflow.com/questions/4213351/make-node-js-not-exit-on-error
@@ -98,10 +98,15 @@ function main() {
           type: 'string',
           default: ''
         })
+        y.option('public-url', {
+          describe: 'Base URL for public http access',
+          type: 'string',
+          default: ''
+        })
         y.option('label', {
           describe: 'Label for this node.',
           type: 'string',
-          default: os.hostname()
+          default: ''
         })
         y.option('http-port', {
           describe: 'Override the default daemon http port to listen on.',
@@ -143,6 +148,7 @@ function main() {
       },
       handler: async (argv) => {
         const hostName = argv.host || null;
+        const publicUrl = argv['public-url'] || null;
         const httpListenPort = argv['http-port'] ? Number(argv['http-port']) || null : 14507
         const udpSocketPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort || await findAvailableUdpPort()
         const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : null
@@ -222,10 +228,14 @@ function main() {
             // })
           }
           bootstrapAddresses = bootstrapAddresses.filter(bpi => {
+            if (!bpi.hostName) throw Error('Missing hostname in bootstrap server')
             if ((bpi.hostName.toString() === 'localhost') || (bpi.hostName === hostName)) {
                 if (Number(bpi.port) === httpListenPort) {
                     return false
                 }
+            }
+            else if ((publicUrl) && (bpi.url === publicUrl)) {
+              return false
             }
             return true
           })
@@ -234,6 +244,11 @@ function main() {
         if (hostName !== null) {
           if (!isHostName(hostName)) {
             throw new CLIError('Invalid host name');
+          }
+        }
+        if (publicUrl !== null) {
+          if (!isUrlString(publicUrl)) {
+            throw new CLIError('Invalid public url');
           }
         }
         if (!isPort(daemonApiPort)) {
@@ -266,6 +281,7 @@ function main() {
           configDir,
           verbose,
           hostName,
+          publicUrl,
           daemonApiPort,
           httpListenPort,
           label,

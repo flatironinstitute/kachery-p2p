@@ -341,6 +341,7 @@ def start_daemon(*,
     channels: List[str]=[],
     verbose: int=0,
     host: str='',
+    public_url: str='',
     bootstrap: List[str],
     nobootstrap: bool=False,
     isbootstrap: bool=False,
@@ -379,6 +380,8 @@ def start_daemon(*,
     start_args.append(f'--verbose {verbose}')
     if host:
         start_args.append(f'--host {host}')
+    if public_url:
+        start_args.append(f'--public-url {public_url}')
     if websocket_port > 0:
         start_args.append(f'--websocket-port {websocket_port}')
     if udp_port > 0:
@@ -403,7 +406,7 @@ def start_daemon(*,
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.5.10'
+                npm_package = 'kachery-p2p-daemon@0.5.11'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''

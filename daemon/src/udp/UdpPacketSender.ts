@@ -181,6 +181,8 @@ class OutgoingPacket {
             /* istanbul ignore next */
             if (!this.#address) throw Error('Unexpected address in _trySend')
             this.stats.reportBytesSent('udp', this.opts.toNodeId, byteCount(b2.length))
+            if (!this.#address.hostName) throw Error('Unexpected udp address')
+            if (!this.#address.port) throw Error('Unexpected udp address port')
             socket.send(b2, 0, b2.length, portToNumber(this.#address.port), this.#address.hostName.toString(), (err, numBytesSent) => {
                 /* istanbul ignore next */
                 if (err) {

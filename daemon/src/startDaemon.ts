@@ -1,7 +1,7 @@
 import GarbageMap from './common/GarbageMap';
 import ExternalInterface from './external/ExternalInterface';
 import { MockNodeDefects } from './external/mock/MockNodeDaemon';
-import { Address, ChannelName, HostName, LocalFilePath, NodeId, NodeLabel, Port, scaledDurationMsec, unscaledDurationMsec } from './interfaces/core';
+import { Address, ChannelName, HostName, LocalFilePath, NodeId, NodeLabel, Port, scaledDurationMsec, unscaledDurationMsec, UrlString } from './interfaces/core';
 import KacheryP2PNode from './KacheryP2PNode';
 import AnnounceService from './services/AnnounceService';
 import BootstrapService from './services/BootstrapService';
@@ -58,6 +58,7 @@ const startDaemon = async (args: {
     configDir: LocalFilePath | null,
     verbose: number,
     hostName: HostName | null,
+    publicUrl: UrlString | null,
     daemonApiPort: Port | null,
     httpListenPort: Port | null,
     label: NodeLabel,
@@ -69,6 +70,7 @@ const startDaemon = async (args: {
         configDir,
         verbose,
         hostName,
+        publicUrl,
         daemonApiPort,
         httpListenPort,
         label,
@@ -79,6 +81,7 @@ const startDaemon = async (args: {
         configDir,
         verbose,
         hostName,
+        publicUrl,
         httpListenPort,
         webSocketListenPort: opts.webSocketListenPort,
         udpSocketPort: opts.udpSocketPort,

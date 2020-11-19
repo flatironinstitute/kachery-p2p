@@ -1,4 +1,6 @@
+import { Mutex } from 'async-mutex';
 import { assert } from 'console';
+import { nextTick } from 'process';
 import { TIMEOUTS } from '../common/constants';
 import { getSignatureJson, hexToPublicKey, verifySignatureJson } from '../common/crypto_util';
 import GarbageMap from '../common/GarbageMap';
@@ -51,8 +53,14 @@ class FeedManager {
             throw Error(`Subfeed is not writeable: ${args.feedId} ${args.subfeedHash}`);
         }
 
-        // Append the messages
-        subfeed.appendMessages(args.messages, {metaData: undefined});
+        const release = await subfeed.acquireLock()
+        try {
+            // Append the messages
+            await subfeed.appendMessages(args.messages, {metaData: undefined});
+        }
+        finally {
+            release()
+        }
     }
     async submitMessage({ feedId, subfeedHash, message, timeoutMsec }: { feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage, timeoutMsec: DurationMsec}) {
         // Same as appendMessages, except if we don't have a writeable feed, we submit it to the p2p network
@@ -64,23 +72,13 @@ class FeedManager {
         }
         if (subfeed.isWriteable()) {
             // If writeable, let's just append the messages
-            await this.appendMessages({feedId, subfeedHash, messages: [submittedSubfeedMessageToSubfeedMessage(message)]});
+            await this.appendMessages({feedId, subfeedHash, messages: [submittedSubfeedMessageToSubfeedMessage(message)]})
             return
             // throw Error(`Cannot submit messages. Subfeed is writeable: ${feedId} ${subfeedHash}`);
         }
         // Submit the messages to the p2p network
         await this.#remoteFeedManager.submitMessage({feedId, subfeedHash, message, timeoutMsec});
     }
-    // async appendSignedMessages({ feedId, subfeedHash, signedMessages}: {feedId: FeedId, subfeedHash: SubfeedHash, signedMessages: SignedSubfeedMessage[]}) {
-    //     // Append signed messages to the local version of a feed.
-    //     // This feed does not need to be writeable on this node. If the signatures
-    //     // are correct, then we know that they are valid. These will typically come from a remote node.
-    //     const subfeed = await this._loadSubfeed({feedId, subfeedHash});
-    //     if (!subfeed) {
-    //         throw Error(`Unable to load subfeed: ${feedId} ${subfeedHash}`);
-    //     }
-    //     subfeed.appendSignedMessages(signedMessages);
-    // }
     async getMessages({ feedId, subfeedHash, position, maxNumMessages, waitMsec }: {feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec}) {
         // Load messages from a subfeed.
         // If there are no messages available locally, and waitMsec > 0, then we will search
@@ -142,7 +140,15 @@ class FeedManager {
         if (!subfeed.isWriteable()) {
             throw Error('Cannot get access rules for subfeed that is not writeable')
         }
-        return await subfeed.getAccessRules();
+        const release = await subfeed.acquireLock()
+        let accessRules
+        try {
+            accessRules = await subfeed.getAccessRules()
+        }
+        finally {
+            release()
+        }
+        return accessRules
     }
     async setAccessRules({ feedId, subfeedHash, accessRules }: {feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules}) {
         // Set the access rules for a local writeable subfeed
@@ -156,7 +162,13 @@ class FeedManager {
         if (!subfeed.isWriteable()) {
             throw Error('Cannot set access rules for subfeed that is not writeable')
         }
-        subfeed.setAccessRules(accessRules)
+        const release = await subfeed.acquireLock()
+        try {
+            await subfeed.setAccessRules(accessRules)
+        }
+        finally {
+            release()
+        }
     }
     async watchForNewMessages({
         subfeedWatches,
@@ -219,7 +231,13 @@ class FeedManager {
         }
         const offset = messageCountToNumber(sf.getNumMessages()) - subfeedPositionToNumber(position)
         if (offset < signedMessages.length) {
-            sf.appendSignedMessages(signedMessages.slice(offset))
+            const release = await sf.acquireLock()
+            try {
+                await sf.appendSignedMessages(signedMessages.slice(offset))
+            }
+            finally {
+                release()
+            }
         }
     }
     async _loadSubfeed(feedId: FeedId, subfeedHash: SubfeedHash): Promise<Subfeed> {
@@ -489,12 +507,17 @@ class Subfeed {
 
     #onMessagesAddedCallbacks: ((position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) => void)[] = []
 
+    #mutex = new Mutex()
+
     constructor(params: SubfeedParams) {
         this.#feedId = params.feedId; // The ID of the feed
         this.#publicKey = hexToPublicKey(feedIdToPublicKeyHex(this.#feedId)); // The public key of the feed (which is determined by the feed ID)
         this.#subfeedHash = params.subfeedHash; // The hash of the subfeed
         this.#localFeedManager = params.localFeedManager
         this.#remoteFeedManager = params.remoteFeedManager // The remote feed manager, allowing us to retrieve data from remote nodes
+    }
+    async acquireLock() {
+        return await this.#mutex.acquire()
     }
     async initialize(privateKey: PrivateKey | null) {
         this.#privateKey = privateKey
@@ -506,7 +529,7 @@ class Subfeed {
         try {
             this.#initializing = true
             // Check whether we have the feed locally (may or may not be locally writeable)
-            const existsLocally = this.#localFeedManager.feedExistsLocally(this.#feedId)
+            const existsLocally = await this.#localFeedManager.feedExistsLocally(this.#feedId)
             if (existsLocally) {
                 const messages = await this.#localFeedManager.getSignedSubfeedMessages(this.#feedId, this.#subfeedHash)
 
@@ -682,22 +705,22 @@ class Subfeed {
             throw Error('Unexpected: impossible case')
         }
     }
-    // important that this is synchronous
-    appendMessages(messages: SubfeedMessage[], {metaData} : {metaData: Object | undefined}) {
+    async appendMessages(messages: SubfeedMessage[], {metaData} : {metaData: Object | undefined}) {
         if (!this.#signedMessages) {
             /* istanbul ignore next */
-            throw Error('_signedMessages is null. Perhaps appendMessages was called before subfeed was initialized.');
+            throw Error('_signedMessages is null. Perhaps appendMessages was called before subfeed was initialized.')
         }
+        if (messages.length === 0) return
         if (!this.#privateKey) {
             /* istanbul ignore next */
-            throw Error(`Cannot write to feed without private key: ${this.#privateKey}`);
+            throw Error(`Cannot write to feed without private key: ${this.#privateKey}`)
         }
+        const signedMessagesToAppend: SignedSubfeedMessage[] = []
         let previousSignature;
         if (this.#signedMessages.length > 0) {
             previousSignature = this.#signedMessages[this.#signedMessages.length - 1].signature;
         }
         let messageNumber = this.#signedMessages.length;
-        const signedMessages: SignedSubfeedMessage[] = [];
         for (let msg of messages) {
             let body = {
                 message: msg,
@@ -705,34 +728,33 @@ class Subfeed {
                 messageNumber,
                 timestamp: nowTimestamp(),
                 metaData: metaData ? metaData : undefined
-            };
+            }
             const signedMessage: SignedSubfeedMessage = {
                 body,
                 signature: getSignatureJson(body as any as JSONObject, {publicKey: this.#publicKey, privateKey: this.#privateKey})
-            };
+            }
             if (!verifySignatureJson(body as any as JSONObject, getSignatureJson(body as any as JSONObject, {publicKey: this.#publicKey, privateKey: this.#privateKey}), this.#publicKey)) {
                 throw Error('Error verifying signature')
             }
-            signedMessages.push(signedMessage);
-            previousSignature = signedMessage.signature;
+            signedMessagesToAppend.push(signedMessage)
+            previousSignature = signedMessage.signature
             messageNumber ++;
         }
-        this.appendSignedMessages(signedMessages);
+        await this.appendSignedMessages(signedMessagesToAppend)
     }
-    // important that this is synchronous!
-    appendSignedMessages(signedMessages: SignedSubfeedMessage[]) {
+    async appendSignedMessages(signedMessages: SignedSubfeedMessage[]) {
         if (!this.#signedMessages) {
             /* istanbul ignore next */
             throw Error('_signedMessages is null. Perhaps appendSignedMessages was called before subfeed was initialized.');
         }
         if (signedMessages.length === 0)
             return;
+        const signedMessagesToAppend: SignedSubfeedMessage[] = []
         let previousSignature;
         if (this.#signedMessages.length > 0) {
             previousSignature = this.#signedMessages[this.#signedMessages.length - 1].signature;
         }
         let messageNumber = this.#signedMessages.length;
-        const signedMessagesToAppend: SignedSubfeedMessage[] = []
         for (let signedMessage of signedMessages) {
             const body = signedMessage.body;
             const signature = signedMessage.signature;
@@ -750,25 +772,26 @@ class Subfeed {
             this.#signedMessages.push(signedMessage);
             signedMessagesToAppend.push(signedMessage)
         }
-        this.#localFeedManager.appendSignedMessagesToSubfeed(this.#feedId, this.#subfeedHash, signedMessagesToAppend)
-
-        this.#newMessageListeners.forEach((listener) => {
-            listener()
-        })
-        this.#onMessagesAddedCallbacks.forEach(cb => {
-            if (!this.#signedMessages) throw Error('Unexpected in appendSignedMessages')
-            cb(subfeedPosition(this.#signedMessages.length - signedMessagesToAppend.length), signedMessagesToAppend)
+        await this.#localFeedManager.appendSignedMessagesToSubfeed(this.#feedId, this.#subfeedHash, signedMessagesToAppend)
+        nextTick(() => {
+            this.#newMessageListeners.forEach((listener) => {
+                listener()
+            })
+            this.#onMessagesAddedCallbacks.forEach(cb => {
+                if (!this.#signedMessages) throw Error('Unexpected in appendSignedMessages')
+                cb(subfeedPosition(this.#signedMessages.length - signedMessagesToAppend.length), signedMessagesToAppend)
+            })
         })
     }
     async getAccessRules(): Promise<SubfeedAccessRules | null> {
         return this.#accessRules
     }
-    setAccessRules(accessRules: SubfeedAccessRules): void {
+    async setAccessRules(accessRules: SubfeedAccessRules): Promise<void> {
         if (!this.isWriteable()) {
             /* istanbul ignore next */
             throw Error(`Cannot set access rules for not writeable subfeed.`);
         }
-        this.#localFeedManager.setSubfeedAccessRules(this.#feedId, this.#subfeedHash, accessRules)
+        await this.#localFeedManager.setSubfeedAccessRules(this.#feedId, this.#subfeedHash, accessRules)
         this.#accessRules = accessRules
     }
     onMessagesAdded(callback: (position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) => void) {

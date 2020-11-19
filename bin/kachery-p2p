@@ -96,11 +96,12 @@ def log():
 @click.option('--verbose', default=0, help='Verbosity level')
 @click.option('--method', default='npx', help='Method for starting daemon: npx (default), npx-latest, npm, npm-latest or dev')
 @click.option('--host', default='', help='IP for connecting to this daemon')
+@click.option('--public-url', default='', help='Base URL for public http access')
 @click.option('--port', default=0, help='Public http port to listen on')
 @click.option('--udp-port', default=0, help='Override the udp listen port (by default equals the http port)')
 @click.option('--websocket-port', default=0, help='Port for websocket server')
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
-def start_daemon(config, label, method, channel, verbose, host, port, udp_port, websocket_port, bootstrap, nobootstrap, isbootstrap, ismessageproxy, isdataproxy, nomulticast, node_arg):
+def start_daemon(config, label, method, channel, verbose, host, public_url, port, udp_port, websocket_port, bootstrap, nobootstrap, isbootstrap, ismessageproxy, isdataproxy, nomulticast, node_arg):
     kp.start_daemon(
         config_path_or_url=config,
         label=label if label else None,
@@ -108,6 +109,7 @@ def start_daemon(config, label, method, channel, verbose, host, port, udp_port, 
         channels=channel,
         verbose=verbose,
         host=host,
+        public_url=public_url,
         port=port,
         udp_port=udp_port,
         websocket_port=websocket_port,

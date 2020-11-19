@@ -32,7 +32,7 @@ export default class MockLocalFeedManager {
         if (!k) return null
         return k
     }
-    feedExistsLocally(feedId: FeedId): boolean {
+    async feedExistsLocally(feedId: FeedId): Promise<boolean> {
         return this.#feeds.has(feedId)
     }
     async getSignedSubfeedMessages(feedId: FeedId, subfeedHash: SubfeedHash): Promise<SignedSubfeedMessage[]> {
@@ -45,15 +45,15 @@ export default class MockLocalFeedManager {
         if (!f) return null
         return await f.getSubfeedAccessRules(subfeedHash)
     }
-    appendSignedMessagesToSubfeed(feedId: FeedId, subfeedHash: SubfeedHash, messages: SignedSubfeedMessage[]) {
+    async appendSignedMessagesToSubfeed(feedId: FeedId, subfeedHash: SubfeedHash, messages: SignedSubfeedMessage[]) {
         let f = this.#feeds.get(feedId)
         if (!f) {
             f = new MockFeed(feedId)
             this.#feeds.set(feedId, f)
         }
-        f.appendSignedMessagesToSubfeed(subfeedHash, messages)
+        await f.appendSignedMessagesToSubfeed(subfeedHash, messages)
     }
-    setSubfeedAccessRules(feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules): void {
+    async setSubfeedAccessRules(feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules): Promise<void> {
         const f = this.#feeds.get(feedId)
         if (!f) {
             throw Error('No feed')
@@ -61,7 +61,7 @@ export default class MockLocalFeedManager {
         if (!f.isWriteable()) {
             throw Error('Not writeable')
         }
-        f.setSubfeedAccessRules(subfeedHash, accessRules)
+        await f.setSubfeedAccessRules(subfeedHash, accessRules)
     }
 }
 
@@ -98,21 +98,21 @@ class MockFeed {
         if (!s) return null
         return await s.getSubfeedAccessRules()
     }
-    appendSignedMessagesToSubfeed(subfeedHash: SubfeedHash, messages: SignedSubfeedMessage[]) {
+    async appendSignedMessagesToSubfeed(subfeedHash: SubfeedHash, messages: SignedSubfeedMessage[]) {
         let s = this.#subfeeds.get(subfeedHash)
         if (!s) {
             s = new MockSubfeed()
             this.#subfeeds.set(subfeedHash, s)
         }
-        s.appendSignedMessagesToSubfeed(messages)
+        await s.appendSignedMessagesToSubfeed(messages)
     }
-    setSubfeedAccessRules(subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules): void {
+    async setSubfeedAccessRules(subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules): Promise<void> {
         let s = this.#subfeeds.get(subfeedHash)
         if (!s) {
             s = new MockSubfeed()
             this.#subfeeds.set(subfeedHash, s)
         }
-        s.setSubfeedAccessRules(accessRules)
+        await s.setSubfeedAccessRules(accessRules)
     }
 }
 
@@ -127,10 +127,10 @@ class MockSubfeed {
     async getSubfeedAccessRules(): Promise<SubfeedAccessRules | null> {
         return this.#subfeedAccessRules
     }
-    appendSignedMessagesToSubfeed(messages: SignedSubfeedMessage[]) {
+    async appendSignedMessagesToSubfeed(messages: SignedSubfeedMessage[]) {
         this.#signedSubfeedMessages = [...this.#signedSubfeedMessages, ...messages]
     }
-    setSubfeedAccessRules(accessRules: SubfeedAccessRules): void {
+    async setSubfeedAccessRules(accessRules: SubfeedAccessRules): Promise<void> {
         this.#subfeedAccessRules = accessRules
     }
 }

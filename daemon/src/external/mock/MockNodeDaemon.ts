@@ -45,6 +45,7 @@ export default class MockNodeDaemon {
             configDir: null,
             verbose: 0,
             hostName: null,
+            publicUrl: null,
             daemonApiPort: null,
             httpListenPort: null,
             label: nodeLabel('mock-daemon-' + randomAlphaString(5)),
@@ -153,6 +154,7 @@ export class MockNodeDaemonGroup {
         return this.#daemons.get(nodeId) || null
     }
     async mockHttpPostJson(address: Address, path: UrlPath, data: JSONObject, opts: {timeoutMsec: DurationMsec}): Promise<JSONObject> {
+        if (!address.hostName) throw Error('Unexpected in mockHttpPostJson')
         const nodeId = address.hostName.toString()
         if (isNodeId(nodeId)) {
             const daemon = this.getDaemon(nodeId)
@@ -168,6 +170,7 @@ export class MockNodeDaemonGroup {
         throw Error('mock - unable to process http post json')
     }
     async mockHttpGetDownload(address: Address, path: UrlPath, stats: NodeStats, opts: {fromNodeId: NodeId}): Promise<DataStreamy> {
+        if (!address.hostName) throw Error('Unexpected in mockHttpGetDownload')
         const nodeId = address.hostName.toString()
         if (isNodeId(nodeId)) {
             const daemon = this.getDaemon(nodeId)

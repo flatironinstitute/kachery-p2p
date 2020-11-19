@@ -193,6 +193,7 @@ export class ProxyWebsocketConnection {
             throw Error('Unexpected in initializeConnectionToServer')
         }
         this.#remoteNodeId = remoteNodeId;
+        if (!address.hostName) throw Error('Unexpected in initializeConnectionToServer')
         return new Promise((resolve, reject) => {
             const url = `ws://${address.hostName}:${address.port}`;
             this.#ws = this.#node.externalInterface().createWebSocket(url, {timeoutMsec: opts.timeoutMsec})

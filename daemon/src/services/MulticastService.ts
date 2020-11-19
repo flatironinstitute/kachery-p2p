@@ -28,8 +28,11 @@ export default class MulticastService {
         this.#multicastSocket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: true, nodeId: this.#node.nodeId(), firewalled: true })
         const multicastAddress = this.opts.multicastAddress
         const multicastPort = multicastAddress.port
+        if (!multicastAddress.hostName) throw Error('Unexpected multicast address')
+        if (!multicastAddress.port) throw Error('Unexpected multicast address port')
         this.#multicastSocket.bind(portToNumber(multicastAddress.port))
         this.#multicastSocket.on('listening', () => {
+            if (!multicastAddress.hostName) throw Error('Unexpected multicast address')
             if (this.#multicastSocket) {
                 this.#multicastSocket.addMembership(multicastAddress.hostName.toString())
             }
@@ -87,6 +90,8 @@ export default class MulticastService {
                 await action('sendMulticastAnnounceMessage', {}, async () => {
                     if (this.#multicastSocket) {
                         this.#node.stats().reportBytesSent('multicastUdp', null, byteCount(mJson.length))
+                        if (!multicastAddress.hostName) throw Error('Unexpected multicast address')
+                        if (!multicastAddress.port) throw Error('Unexpected multicast address port')
                         this.#multicastSocket.send(
                             Buffer.from(mJson),
                             0,

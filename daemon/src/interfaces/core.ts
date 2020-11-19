@@ -259,6 +259,25 @@ export const hostName = (x: string): HostName => {
     return x
 }
 
+// UrlString
+export interface UrlString extends String {
+    __urlString__: never
+}
+export const isUrlString = (x: any): x is UrlString => {
+    if (!isString(x)) return false;
+    if ((x.startsWith('http://') || (x.startsWith('https://')))) {
+        if (x.length > 500) return false
+        return true
+    }
+    else {
+        return false
+    }
+}
+export const urlString = (x: string): UrlString => {
+    if (!isUrlString(x)) throw Error(`Not a valid url string: ${x}`)
+    return x
+}
+
 export interface NodeLabel extends String {
     __nodeLabel__: never
 }
@@ -279,14 +298,27 @@ export const nodeLabel= (x: string): NodeLabel => {
 
 // Address
 export interface Address {
-    hostName: HostName,
-    port: Port
+    hostName?: HostName,
+    port?: Port,
+    url?: UrlString
 }
 export const isAddress = (x: any): x is Address => {
-    return _validateObject(x, {
-        hostName: isHostName,
-        port: isPort
-    });
+    if (!_validateObject(x, {
+        hostName: optional(isHostName),
+        port: optional(isPort),
+        url: optional(isUrlString)
+    })) {
+        return false
+    }
+    if ((x.hostName) && (x.port)) {
+        return x.url ? false : true
+    }
+    else if (x.url) {
+        return ((x.hostName) || (x.port)) ? false : true
+    }
+    else {
+        return false
+    }
 }
 
 // TimeStamp

@@ -87,6 +87,7 @@ const daemonContext = async (o: DaemonContextOpts[], testFunction: (daemons: Dae
                 configDir,
                 verbose: 0,
                 hostName: 'localhost' as any as HostName,
+                publicUrl: null,
                 daemonApiPort: oo.daemonApiPort,
                 httpListenPort: oo.httpListenPort,
                 label: oo.label,

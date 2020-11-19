@@ -56,11 +56,11 @@ export interface LocalFeedManagerInterface {
     getFeedId: (feedName: FeedName) => Promise<FeedId | null>
     hasWriteableFeed: (feedId: FeedId) => Promise<boolean>
     getPrivateKeyForFeed: (feedId: FeedId) => Promise<PrivateKey | null>
-    feedExistsLocally: (feedId: FeedId) => boolean
+    feedExistsLocally: (feedId: FeedId) => Promise<boolean>
     getSignedSubfeedMessages: (feedId: FeedId, subfeedHash: SubfeedHash) => Promise<SignedSubfeedMessage[]>
     getSubfeedAccessRules: (feedId: FeedId, subfeedHash: SubfeedHash) => Promise<SubfeedAccessRules | null>
-    appendSignedMessagesToSubfeed: (feedId: FeedId, subfeedHash: SubfeedHash, messages: SignedSubfeedMessage[]) => void // synchronous!
-    setSubfeedAccessRules: (feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules) => void // synchronous!
+    appendSignedMessagesToSubfeed: (feedId: FeedId, subfeedHash: SubfeedHash, messages: SignedSubfeedMessage[]) => Promise<void> // synchronous???!!!
+    setSubfeedAccessRules: (feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules) => Promise<void> // synchronous???!!!
 }
 
 export type CreateLocalFeedManagerFunction = () => LocalFeedManagerInterface

@@ -8,7 +8,7 @@ import { MockNodeDefects } from './external/mock/MockNodeDaemon'
 import FeedManager from './feeds/FeedManager'
 import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
 import { getStats, GetStatsOpts } from './getStats'
-import { addDurations, Address, ChannelName, ChannelNodeInfo, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SubfeedHash, SubmittedSubfeedMessage } from './interfaces/core'
+import { addDurations, Address, ChannelName, ChannelNodeInfo, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SubfeedHash, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
 import { CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isReportSubfeedMessagesRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import NodeStats from './NodeStats'
 import { handleCheckAliveRequest } from './nodeToNodeRequestHandlers/handleCheckAliveRequest'
@@ -54,6 +54,7 @@ class KacheryP2PNode {
         configDir: LocalFilePath | null,
         verbose: number,
         hostName: HostName | null,
+        publicUrl: UrlString | null,
         httpListenPort: Port | null,
         udpSocketPort: Port | null,
         webSocketListenPort: Port | null,
@@ -269,7 +270,7 @@ class KacheryP2PNode {
     //     }
     //     return x
     // }
-    hostName() {
+    hostName(): HostName | null {
         if (this.p.hostName) return this.p.hostName
         if (this.p.externalInterface.isMock) {
             return hostName(this.nodeId().toString())
@@ -279,9 +280,20 @@ class KacheryP2PNode {
             return null
         }
     }
+    publicUrl(): UrlString | null {
+        return this.p.publicUrl
+    }
     httpAddress(): Address | null {
-        const h = this.hostName()
-        return (h !== null) && (this.p.httpListenPort !== null) ? { hostName: h, port: this.p.httpListenPort } : null
+        const u = this.publicUrl()
+        if (u) {
+            return {
+                url: u
+            }
+        }
+        else {
+            const h = this.hostName()
+            return (h !== null) && (this.p.httpListenPort !== null) ? { hostName: h, port: this.p.httpListenPort } : null
+        }
     }
     webSocketAddress(): Address | null {
         const h = this.hostName()

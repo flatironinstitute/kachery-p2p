@@ -129,7 +129,7 @@ mocha.describe('Real external interface', () => {
                 if (!privateKey) {
                     throw Error('No private key')
                 }
-                expect(fm.feedExistsLocally(feedId)).is.true
+                expect(await fm.feedExistsLocally(feedId)).is.true
                 const subfeedHash = '0123456789012345678901234567890123456789' as any as SubfeedHash
                 const msgBody = {
                     messageNumber: 0,
@@ -140,13 +140,13 @@ mocha.describe('Real external interface', () => {
                     body: msgBody,
                     signature: getSignature(msgBody, {publicKey: hexToPublicKey(feedIdToPublicKeyHex(feedId)), privateKey})
                 }
-                fm.appendSignedMessagesToSubfeed(feedId, subfeedHash, [msg0])
+                await fm.appendSignedMessagesToSubfeed(feedId, subfeedHash, [msg0])
                 const messages = await fm.getSignedSubfeedMessages(feedId, subfeedHash)
                 expect(messages.length).equals(1)
                 const accessRules: SubfeedAccessRules = {
                     rules: []
                 }
-                fm.setSubfeedAccessRules(feedId, subfeedHash, accessRules)
+                await fm.setSubfeedAccessRules(feedId, subfeedHash, accessRules)
                 const ar2 = await fm.getSubfeedAccessRules(feedId, subfeedHash)
                 if (!ar2) {
                     throw Error('No access rules')

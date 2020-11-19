@@ -2,8 +2,7 @@ import axios from 'axios';
 import { ClientRequest } from 'http';
 import { Socket } from 'net';
 import DataStreamy from '../../common/DataStreamy';
-import { randomAlphaString } from '../../common/util';
-import { Address, byteCount, ByteCount, DurationMsec, durationMsecToNumber, JSONObject, NodeId, UrlPath } from '../../interfaces/core';
+import { Address, byteCount, ByteCount, DurationMsec, durationMsecToNumber, JSONObject, NodeId, UrlPath, urlString, UrlString } from '../../interfaces/core';
 import NodeStats from '../../NodeStats';
 
 export const _tests: {[key: string]: () => Promise<void>} = {}
@@ -14,11 +13,25 @@ export class HttpPostJsonError extends Error {
     }
 }
 
+const formUrl = (address: Address, path: UrlPath): UrlString => {
+    let url: UrlString
+    if (address.url) {
+        url = urlString(address.url.toString() + path)
+    }
+    else if ((address.hostName) && (address.port)) {
+        url = urlString('http://' + address.hostName + ':' + address.port + path)
+    }
+    else {
+        throw Error(`Unexpected address in formUrl: ${address}`)
+    }
+    return url
+}
+
 export const httpPostJson = async (address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}): Promise<JSONObject> => {
-    const url = 'http://' + address.hostName + ':' + address.port + path
+    const url = formUrl(address, path)
     let res
     try {
-        res = await axios.post(url, data, {timeout: durationMsecToNumber(opts.timeoutMsec), responseType: 'json'})
+        res = await axios.post(url.toString(), data, {timeout: durationMsecToNumber(opts.timeoutMsec), responseType: 'json'})
     }
     catch(err) {
         throw new HttpPostJsonError(err.message)
@@ -26,9 +39,8 @@ export const httpPostJson = async (address: Address, path: UrlPath, data: Object
     return res.data
 }
 export const httpGetDownload = async (address: Address, path: UrlPath, stats: NodeStats, opts: {fromNodeId: NodeId}): Promise<DataStreamy> => {
-    const debug = randomAlphaString(5)
-    const url = 'http://' + address.hostName + ':' + address.port + path
-    const res = await axios.get(url, {responseType: 'stream'})
+    const url = formUrl(address, path)
+    const res = await axios.get(url.toString(), {responseType: 'stream'})
     const stream = res.data
     const socket: Socket = stream.socket
     const req: ClientRequest = stream.req
