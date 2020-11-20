@@ -3,7 +3,6 @@ import { createKeyPair, hexToPrivateKey, JSONStringifyDeterministic, privateKeyT
 import GarbageMap from '../../common/GarbageMap';
 import { FeedId, FeedName, isFeedId, isJSONObject, isPrivateKeyHex, localFilePath, LocalFilePath, PrivateKey, PrivateKeyHex, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, _validateObject } from '../../interfaces/core';
 import LocalFeedsDatabase from './LocalFeedsDatabase';
-import LocalFeedsDatabaseOld from './LocalFeedsDatabaseOld';
 
 interface FeedConfig {
     feedId: FeedId,
@@ -107,11 +106,10 @@ class FeedsConfigManager {
 }
 
 export default class LocalFeedManager {
-    #storageDir: LocalFilePath
     #configDir: LocalFilePath
     #feedsConfigManager: FeedsConfigManager
     #localFeedsDatabase: LocalFeedsDatabase
-    #localFeedsDatabaseOld: LocalFeedsDatabaseOld
+    // #localFeedsDatabaseOld: LocalFeedsDatabaseOld
     constructor(storageDir: LocalFilePath, configDir: LocalFilePath) {
         if (!fs.existsSync(storageDir.toString())) {
             throw Error(`Storage directory does not exist: ${storageDir}`)
@@ -120,7 +118,7 @@ export default class LocalFeedManager {
         this.#configDir = configDir
         this.#feedsConfigManager = new FeedsConfigManager(this.#configDir, {useMemoryCache: true}) // todo: need to test this for both false and true
         this.#localFeedsDatabase = new LocalFeedsDatabase(localFilePath(storageDir + '/feeds.db'))
-        this.#localFeedsDatabaseOld = new LocalFeedsDatabaseOld(storageDir)
+        // this.#localFeedsDatabaseOld = new LocalFeedsDatabaseOld(storageDir)
     }
     async createFeed(feedName: FeedName | null): Promise<FeedId> {
         // Create a new writeable feed on this node and return the ID of the new feed
