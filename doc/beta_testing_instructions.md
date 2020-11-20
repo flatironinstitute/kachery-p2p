@@ -89,7 +89,10 @@ import kachery_p2p as kp
 # Note: if you interrupt this download (via ctrl+c),
 # then when you restart, it should pick up roughly
 # where you left off
-a = kp.load_npy('sha1://2732ce0fe8e3cb74d8b39c2fe982a14afecc58a1/file.npy?manifest=357870edbcfdc7767578a0fb5ae26d66b324d052')
+a = kp.load_npy('sha1://e626c1d97cb80d4c1d5ed76c7fbc86f395b181d5/file.npy?manifest=848d2fead4b95681bc3c7aa52955af192cc9c1c7')
+
+# here's a periodic file where only the first 3 chunks actually need to be downloaded
+# a = kp.load_npy('sha1://2732ce0fe8e3cb74d8b39c2fe982a14afecc58a1/file.npy?manifest=357870edbcfdc7767578a0fb5ae26d66b324d052')
 
 print(a.shape)
 ```
