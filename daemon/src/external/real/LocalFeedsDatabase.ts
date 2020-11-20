@@ -162,6 +162,7 @@ class LocalFeedsDatabase {
     }
     async setSubfeedAccessRules(feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules): Promise<void> {
         const db = await this._database()
+        await this._createFeedRowIfNeeded(feedId)
         await db.run(`
             INSERT OR REPLACE INTO subfeeds (feedId, subfeedHash, accessRules) VALUES ($feedId, $subfeedHash, $accessRules)
         `, {
@@ -173,7 +174,7 @@ class LocalFeedsDatabase {
     async appendSignedMessagesToSubfeed(feedId: FeedId, subfeedHash: SubfeedHash, messages: SignedSubfeedMessage[]) {
         const db = await this._database()
         if (messages.length === 0) return
-        await this._createSubfeedTableIfNeeded(feedId, subfeedHash)
+        await this._createSubfeedRowIfNeeded(feedId, subfeedHash)
         const data = messages.map(m => ({
             feedId,
             subfeedHash,
@@ -191,8 +192,17 @@ class LocalFeedsDatabase {
             })
         }
     }
-    async _createSubfeedTableIfNeeded(feedId: FeedId, subfeedHash: SubfeedHash) {
+    async _createFeedRowIfNeeded(feedId: FeedId) {
         const db = await this._database()
+        await db.run(`
+            INSERT OR IGNORE INTO feeds (feedId) VALUES ($feedId)
+        `, {
+            '$feedId': feedId.toString()
+        })
+    }
+    async _createSubfeedRowIfNeeded(feedId: FeedId, subfeedHash: SubfeedHash) {
+        const db = await this._database()
+        await this._createFeedRowIfNeeded(feedId)
         await db.run(`
             INSERT OR IGNORE INTO subfeeds (feedId, subfeedHash) VALUES ($feedId, $subfeedHash)
         `, {
