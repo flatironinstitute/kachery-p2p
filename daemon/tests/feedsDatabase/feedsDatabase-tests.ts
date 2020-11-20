@@ -27,6 +27,18 @@ const testContext = (testFunction: (localFeedsDatabase: LocalFeedsDatabase, reso
     })
 }
 
+/*
+Jeff says:
+
+Noting that this is an integration test rather than a unit test.
+
+Not blocking, but when we have the chance to expand it, it'd be nice to:
+
+ - add internal logic tests with mocks (unit tests)
+ - break this test into several (even though repeating the test fixtures is time-consuming) to test different functionality discretely
+ - test that failure modes work as expected
+*/
+
 // need to explicitly use mocha prefix once or the dependency gets wrongly cleaned up
 mocha.describe('Feeds database', () => {
     describe('feeds database aaa102', () => {

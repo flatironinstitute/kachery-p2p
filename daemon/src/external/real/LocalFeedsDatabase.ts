@@ -49,6 +49,8 @@ class LocalFeedsDatabase {
     }
     async _database(): Promise<Database> {
         if (this.#db) return this.#db
+        // the mutex here is just to make sure that the database isn't being created before it's returned
+        // --no need to reacquire the lock for each data operation
         const release = await this.#mutex.acquire()
         if (this.#db) {
             release()
@@ -87,6 +89,7 @@ class LocalFeedsDatabase {
                 return true
             }
             else {
+                // not expected, but checking anyway
                 throw Error('Unexpected: mismatch in feedId')
             }
         }
@@ -103,12 +106,14 @@ class LocalFeedsDatabase {
             '$subfeedHash': subfeedHash.toString()
         })
         if (!rows) {
-            throw Error('Unexpected rows undefined')
+            throw Error('Unexpected: rows undefined')
         }
         const ret: SignedSubfeedMessage[] = []
         for (let i = 0; i < rows.length; i ++) {
             const row = rows[i]
             if (row.position !== i) {
+                // this enforces that feed messages are unreadable if they have gaps,
+                // but the way feed message numbers are assigned in FeedManager should keep that from ever happening.
                 throw Error(`Unexpected position in signed subfeed message: ${feedId} ${subfeedHash} ${i} <> ${row.position}`)
             }
             let m
