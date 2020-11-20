@@ -140,6 +140,7 @@ class LocalFeedsDatabase {
             if (!isJSONObject(row)) {
                 throw Error(`Problem getting access rules of subfeed (*): ${feedId} ${subfeedHash}`)
             }
+            if (!row.accessRules) return null
             let accessRulesJson = row.accessRules
             if (!isString(accessRulesJson)) {
                 throw Error(`Problem getting access rules of subfeed: ${feedId} ${subfeedHash}`)
