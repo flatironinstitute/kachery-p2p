@@ -25,6 +25,7 @@
     "@types/js-yaml": "^3.12.5",
     "@types/json-socket": "^0.1.17",
     "@types/node": "^14.11.1",
+    "@types/sqlite3": "^3.1.6",
     "@types/ws": "^7.2.7",
     "@types/yargs": "^15.0.9",
     "ajv": "^6.12.4",
@@ -36,6 +37,8 @@
     "js-yaml": "^3.14.0",
     "json-socket": "^0.3.0",
     "jsonschema": "^1.2.6",
+    "sqlite": "^4.0.17",
+    "sqlite3": "^5.0.0",
     "ws": "^7.3.1",
     "yargs": "^15.3.1"
   },
