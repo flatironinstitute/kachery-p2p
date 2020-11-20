@@ -74,6 +74,14 @@ mocha.describe('Feeds database', () => {
                 }
                 expect(ar.rules.length).equals(accessRules.rules.length)
 
+                await db.deleteFeed(feedId)
+                const has2 = await db.hasFeed(feedId)
+                expect(has2).to.be.false
+                const ar2 = await db.getSubfeedAccessRules(feedId, subfeedHash)
+                expect(ar2).to.be.null
+                const x2 = await db.getSignedSubfeedMessages(feedId, subfeedHash)
+                expect(x2.length).equals(0)
+
                 resolve()
             }, done)
         })

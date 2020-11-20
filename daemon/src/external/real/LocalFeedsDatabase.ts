@@ -43,6 +43,7 @@ class LocalFeedsDatabase {
             `)   
         }
         const db = await open({filename: this.databasePath.toString(), driver: sqlite3.Database})
+        await db.run(`PRAGMA foreign_keys = ON`)
         await createTables(db)
         this.#db = db
     }
