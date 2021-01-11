@@ -85,7 +85,7 @@ def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str, dict]:
     return protocol, algorithm, hash0, additional_path, query
 
 def _load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[str, None]:
-    if uri.startswith('sha1dir://...'):
+    if uri.startswith('sha1dir://'):
         uri0 = _resolve_file_uri_from_dir_uri(uri)
         if uri0 is None:
             return None
