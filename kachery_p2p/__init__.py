@@ -2,7 +2,7 @@
 .. include:: ./documentation.md
 """
 
-__version__ = "0.5.11"
+__version__ = "0.5.12"
 __protocol_version__ = "0.5.11p"
 
 from typing import Iterable, List, Union

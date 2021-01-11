@@ -406,7 +406,7 @@ def start_daemon(*,
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.5.11'
+                npm_package = 'kachery-p2p-daemon@0.5.12'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''
