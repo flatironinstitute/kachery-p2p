@@ -263,7 +263,7 @@ export default class PublicApiServer {
     }
     // Helper function for returning http request with an error response
     async _errorResponse(req: Req, res: Res, code: number, errorString: string) {
-        console.info(`Responding with error: ${code} ${errorString}`);
+        console.info(`Public responding with error: ${code} ${errorString}`);
         try {
             res.status(code).send(errorString);
         }

@@ -882,7 +882,7 @@ export default class DaemonApiServer {
     // Helper function for returning http request with an error response
     /* istanbul ignore next */
     async _errorResponse(req: Req, res: Res, code: number, errorString: string) {
-        console.info(`Responding with error: ${code} ${errorString}`);
+        console.info(`Daemon responding with error: ${code} ${errorString}`);
         try {
             res.status(code).send(errorString);
         }

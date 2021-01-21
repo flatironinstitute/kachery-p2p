@@ -486,6 +486,85 @@ const createListenerId = (): ListenerId => {
     return randomAlphaString(10) as any as ListenerId;
 }
 
+// we use this interface to ensure consistency between the in-memory signed messages and the in-database signed messages (this is crucial for integrity of p2p feed system)
+class LocalSubfeedSignedMessagesInterface {
+    #signedMessages: SignedSubfeedMessage[] | null = null // in-memory cache
+    #appending = false
+    constructor(private localFeedManager: LocalFeedManagerInterface, private feedId: FeedId, private subfeedHash: SubfeedHash, private publicKey: PublicKey) {
+
+    }
+    async initializeFromLocal() {
+        const messages = await this.localFeedManager.getSignedSubfeedMessages(this.feedId, this.subfeedHash)
+
+        // Verify the integrity of the messages
+        // The first message has a previousSignature of null
+        let previousSignature: Signature | null = null
+        let previousMessageNumber: number = -1
+        for (let msg of messages) {
+            if (!verifySignatureJson(msg.body as any as JSONObject, msg.signature, this.publicKey)) {
+                /* istanbul ignore next */
+                throw Error(`Unable to verify signature of message in feed: ${msg.signature}`)
+            }
+            if (previousSignature !== (msg.body.previousSignature || null)) {
+                /* istanbul ignore next */
+                throw Error(`Inconsistent previousSignature of message in feed when reading messages from file: ${previousSignature} ${msg.body.previousSignature}`)
+            }
+            if (previousMessageNumber + 1 !== msg.body.messageNumber) {
+                /* istanbul ignore next */
+                throw Error(`Incorrect message number for message in feed when reading messages from file: ${previousMessageNumber + 1} ${msg.body.messageNumber}`)
+            }
+            previousSignature = msg.signature
+            previousMessageNumber = msg.body.messageNumber
+        }
+
+        // store in memory
+        this.#signedMessages = messages
+    }
+    initializeEmptyMessageList() {
+        this.#signedMessages = []
+    }
+    isInitialized = () => {
+        return this.#signedMessages !== null
+    }
+    getNumMessages() {
+        if (this.#signedMessages === null) {
+            /* istanbul ignore next */
+            throw Error('#signedMessages is null. Perhaps getNumMessages was called before subfeed was initialized.');
+        }
+        return messageCount(this.#signedMessages.length)
+    }
+    getSignedMessage(i: number) {
+        if (this.#signedMessages === null) {
+            /* istanbul ignore next */
+            throw Error('#signedMessages is null. Perhaps getSignedMessage was called before subfeed was initialized.');
+        }
+        return this.#signedMessages[i]
+    }
+    async appendSignedMessages(signedMessagesToAppend: SignedSubfeedMessage[]) {
+        if (this.#signedMessages === null) {
+            /* istanbul ignore next */
+            throw Error('#signedMessages is null. Perhaps appendSignedMessages was called before subfeed was initialized.');
+        }
+        const firstAppendMessageNumber = signedMessagesToAppend.length === 0 ? null : signedMessagesToAppend[0].body.messageNumber
+        const lastExistingMessageNumber = this.#signedMessages.length === 0 ? null : this.#signedMessages[this.#signedMessages.length - 1].body.messageNumber
+        if (firstAppendMessageNumber !== null) {
+            if (lastExistingMessageNumber === null) {       
+                if (firstAppendMessageNumber !== 0) throw Error('Unexpected in appendSignedMessages: first message number to append does not equal zero')
+            }
+            else {
+                if (firstAppendMessageNumber !== lastExistingMessageNumber + 1) throw Error(`Unexpected in appendSignedMessages: unexpcted first message number for appending ${firstAppendMessageNumber} <> ${lastExistingMessageNumber + 1}`)
+            }
+        }
+        if (this.#appending) throw Error('Cannot append messages while messages are being appended.')
+        this.#appending = true
+        await this.localFeedManager.appendSignedMessagesToSubfeed(this.feedId, this.subfeedHash, signedMessagesToAppend)
+        for (let sm of signedMessagesToAppend) {
+            this.#signedMessages.push(sm)
+        }
+        this.#appending = false
+    }
+}
+
 class Subfeed {
     // Represents a subfeed, which may or may not be writeable on this node
     #localFeedManager: LocalFeedManagerInterface
@@ -493,7 +572,7 @@ class Subfeed {
     #publicKey: PublicKey // The public key of the feed (which is determined by the feed ID)
     #privateKey: PrivateKey | null // The private key (or null if this is not writeable on the local node) -- set below
     #subfeedHash: SubfeedHash // The hash of the subfeed
-    #signedMessages: SignedSubfeedMessage[] | null = null // The signed messages loaded from the messages file (in-memory cache)
+    #signedMessagesInterface: LocalSubfeedSignedMessagesInterface // The signed messages loaded from the messages file (in-memory cache)
     #accessRules: SubfeedAccessRules | null = null // Access rules for this subfeed -- like which nodes on the p2p network have permission to submit messages
     #isWriteable: boolean | null = null
     #remoteFeedManager: RemoteFeedManager // The remote feed manager, allowing us to subscribe to remote feeds and submit messages to remote feeds
@@ -515,6 +594,7 @@ class Subfeed {
         this.#subfeedHash = params.subfeedHash; // The hash of the subfeed
         this.#localFeedManager = params.localFeedManager
         this.#remoteFeedManager = params.remoteFeedManager // The remote feed manager, allowing us to retrieve data from remote nodes
+        this.#signedMessagesInterface = new LocalSubfeedSignedMessagesInterface(this.#localFeedManager, this.#feedId, this.#subfeedHash, this.#publicKey)
     }
     async acquireLock() {
         return await this.#mutex.acquire()
@@ -531,31 +611,7 @@ class Subfeed {
             // Check whether we have the feed locally (may or may not be locally writeable)
             const existsLocally = await this.#localFeedManager.feedExistsLocally(this.#feedId)
             if (existsLocally) {
-                const messages = await this.#localFeedManager.getSignedSubfeedMessages(this.#feedId, this.#subfeedHash)
-
-                // Verify the integrity of the messages
-                // The first message has a previousSignature of null
-                let previousSignature: Signature | null = null
-                let previousMessageNumber: number = -1
-                for (let msg of messages) {
-                    if (!verifySignatureJson(msg.body as any as JSONObject, msg.signature, this.#publicKey)) {
-                        /* istanbul ignore next */
-                        throw Error(`Unable to verify signature of message in feed: ${msg.signature}`)
-                    }
-                    if (previousSignature !== (msg.body.previousSignature || null)) {
-                        /* istanbul ignore next */
-                        throw Error(`Inconsistent previousSignature of message in feed when reading messages from file: ${previousSignature} ${msg.body.previousSignature}`)
-                    }
-                    if (previousMessageNumber + 1 !== msg.body.messageNumber) {
-                        /* istanbul ignore next */
-                        throw Error(`Incorrect message number for message in feed when reading messages from file: ${previousMessageNumber + 1} ${msg.body.messageNumber}`)
-                    }
-                    previousSignature = msg.signature
-                    previousMessageNumber = msg.body.messageNumber
-                }
-
-                // store in memory
-                this.#signedMessages = messages
+                await this.#signedMessagesInterface.initializeFromLocal()
 
                 // If this is a writeable feed, we also load the access rules into memory
                 this.#isWriteable = await this.#localFeedManager.hasWriteableFeed(this.#feedId)
@@ -576,7 +632,6 @@ class Subfeed {
                 const messages = await this.#localFeedManager.getSignedSubfeedMessages(this.#feedId, this.#subfeedHash)
                 assert(messages.length === 0)
 
-                this.#signedMessages = messages
                 this.#accessRules = null
 
                 // don't do this
@@ -596,7 +651,7 @@ class Subfeed {
 
         this.#onInitializedCallbacks.forEach(cb => {cb()})
     }
-    async waitUntilInitialized() {
+    async waitUntilInitialized(): Promise<void> {
         if (this.#initialized) return
         return new Promise((resolve, reject) => {
             this.#onInitializeErrorCallbacks.push((err: Error) => {
@@ -609,11 +664,7 @@ class Subfeed {
     }
     getNumMessages(): MessageCount {
         // Return the number of messages that are currently loaded into memory
-        if (this.#signedMessages === null) {
-            /* istanbul ignore next */
-            throw Error('#signedMessages is null. Perhaps getNumMessages was called before subfeed was initialized.');
-        }
-        return messageCount(this.#signedMessages.length)
+        return this.#signedMessagesInterface.getNumMessages()
     }
     isWriteable(): boolean {
         // Whether this subfeed is writeable. That depends on whether we have a private key
@@ -631,15 +682,15 @@ class Subfeed {
     //     return (a.length > 0);
     // }
     _getInMemorySignedMessages({position, maxNumMessages}: {position: SubfeedPosition, maxNumMessages: MessageCount}): SignedSubfeedMessage[] {
-        if (!this.#signedMessages) {
+        if (!this.#signedMessagesInterface.isInitialized()) {
             /* istanbul ignore next */
-            throw Error('_signedMessages is null. Perhaps _getInMemorySignedMessages was called before subfeed was initialized.');
+            throw Error('signed messages not initialized. Perhaps _getInMemorySignedMessages was called before subfeed was initialized.');
         }
         let signedMessages: SignedSubfeedMessage[] = [];
-        if (subfeedPositionToNumber(position) < this.#signedMessages.length) {
+        if (subfeedPositionToNumber(position) < Number(this.#signedMessagesInterface.getNumMessages())) {
             // If we have some messages loaded into memory, let's return those!
-            for (let i = subfeedPositionToNumber(position); i < this.#signedMessages.length; i++) {
-                signedMessages.push(this.#signedMessages[i]);
+            for (let i = subfeedPositionToNumber(position); i < Number(this.#signedMessagesInterface.getNumMessages()); i++) {
+                signedMessages.push(this.#signedMessagesInterface.getSignedMessage(i));
                 if (maxNumMessages) {
                     if (signedMessages.length >= messageCountToNumber(maxNumMessages)) {
                         break;
@@ -651,27 +702,27 @@ class Subfeed {
     }
     async getSignedMessages({position, maxNumMessages, waitMsec}: {position: SubfeedPosition, maxNumMessages: MessageCount, waitMsec: DurationMsec}): Promise<SignedSubfeedMessage[]> {
         // Get some signed messages starting at position
-        if (!this.#signedMessages) {
+        if (!this.#signedMessagesInterface.isInitialized()) {
             /* istanbul ignore next */
-            throw Error('_signedMessages is null. Perhaps getSignedMessages was called before subfeed was initialized.');
+            throw Error('signed messages not initialized. Perhaps getSignedMessages was called before subfeed was initialized.');
         }
-        if (subfeedPositionToNumber(position) < this.#signedMessages.length) {
+        if (subfeedPositionToNumber(position) < Number(this.#signedMessagesInterface.getNumMessages())) {
             // If we have some messages loaded into memory, let's return those! (no need to look remotely)
             return this._getInMemorySignedMessages({position, maxNumMessages});
         }
-        else if (subfeedPositionToNumber(position) >= this.#signedMessages.length) {
+        else if (subfeedPositionToNumber(position) >= Number(this.#signedMessagesInterface.getNumMessages())) {
             // We don't have any new messages in memory - let's try to get them remotely or else wait for local messages to be added
             if (!this.isWriteable()) {
                 // If it's not locally writeable, then we need to subscribe to a remote feed
-                await this.#remoteFeedManager.subscribeToRemoteSubfeed(this.#feedId, this.#subfeedHash, subfeedPosition(this.#signedMessages.length), scaledDurationMsec(30 * 1000))
+                await this.#remoteFeedManager.subscribeToRemoteSubfeed(this.#feedId, this.#subfeedHash, subfeedPosition(Number(this.#signedMessagesInterface.getNumMessages())), scaledDurationMsec(30 * 1000))
             }
             if (durationMsecToNumber(waitMsec) > 0) {
                 // let's just wait for a bit and maybe some new messages will arrive (either from remote or added locally)
                 let signedMessages: SignedSubfeedMessage[] = []
-                await new Promise((resolve) => {
+                await new Promise<void>((resolve) => {
                     // need to check it here once again before setting up the listeners
-                    if (!this.#signedMessages) throw Error('Unexpected signedMessages is null')
-                    if (subfeedPositionToNumber(position) < this.#signedMessages.length) {
+                    if (!this.#signedMessagesInterface.isInitialized()) throw Error('Unexpected signedMessages is not initialized')
+                    if (subfeedPositionToNumber(position) < Number(this.#signedMessagesInterface.getNumMessages())) {
                         signedMessages = this._getInMemorySignedMessages({position, maxNumMessages});
                         resolve()
                         return
@@ -706,9 +757,9 @@ class Subfeed {
         }
     }
     async appendMessages(messages: SubfeedMessage[], {metaData} : {metaData: Object | undefined}) {
-        if (!this.#signedMessages) {
+        if (!this.#signedMessagesInterface.isInitialized()) {
             /* istanbul ignore next */
-            throw Error('_signedMessages is null. Perhaps appendMessages was called before subfeed was initialized.')
+            throw Error('signed messages not initialized. Perhaps appendMessages was called before subfeed was initialized.')
         }
         if (messages.length === 0) return
         if (!this.#privateKey) {
@@ -717,10 +768,10 @@ class Subfeed {
         }
         const signedMessagesToAppend: SignedSubfeedMessage[] = []
         let previousSignature;
-        if (this.#signedMessages.length > 0) {
-            previousSignature = this.#signedMessages[this.#signedMessages.length - 1].signature;
+        if (Number(this.#signedMessagesInterface.getNumMessages()) > 0) {
+            previousSignature = this.#signedMessagesInterface.getSignedMessage(Number(this.#signedMessagesInterface.getNumMessages()) - 1).signature;
         }
-        let messageNumber = this.#signedMessages.length;
+        let messageNumber = Number(this.#signedMessagesInterface.getNumMessages());
         for (let msg of messages) {
             let body = {
                 message: msg,
@@ -743,18 +794,18 @@ class Subfeed {
         await this.appendSignedMessages(signedMessagesToAppend)
     }
     async appendSignedMessages(signedMessages: SignedSubfeedMessage[]) {
-        if (!this.#signedMessages) {
+        if (!this.#signedMessagesInterface.isInitialized()) {
             /* istanbul ignore next */
-            throw Error('_signedMessages is null. Perhaps appendSignedMessages was called before subfeed was initialized.');
+            throw Error('signed messages not initialized. Perhaps appendSignedMessages was called before subfeed was initialized.');
         }
         if (signedMessages.length === 0)
             return;
         const signedMessagesToAppend: SignedSubfeedMessage[] = []
         let previousSignature;
-        if (this.#signedMessages.length > 0) {
-            previousSignature = this.#signedMessages[this.#signedMessages.length - 1].signature;
+        if (Number(this.#signedMessagesInterface.getNumMessages()) > 0) {
+            previousSignature = this.#signedMessagesInterface.getSignedMessage(Number(this.#signedMessagesInterface.getNumMessages()) - 1).signature;
         }
-        let messageNumber = this.#signedMessages.length;
+        let messageNumber = Number(this.#signedMessagesInterface.getNumMessages());
         for (let signedMessage of signedMessages) {
             const body = signedMessage.body;
             const signature = signedMessage.signature;
@@ -765,21 +816,21 @@ class Subfeed {
                 throw Error(`Error in previousSignature when appending signed message for: ${this.#feedId} ${this.#subfeedHash} ${body.previousSignature} <> ${previousSignature}`);
             }
             if (body.messageNumber !== messageNumber) {
+                // problem here
                 throw Error(`Error in messageNumber when appending signed message for: ${this.#feedId} ${this.#subfeedHash} ${body.messageNumber} <> ${messageNumber}`);
             }
             previousSignature = signedMessage.signature;
             messageNumber ++;
-            this.#signedMessages.push(signedMessage);
             signedMessagesToAppend.push(signedMessage)
         }
-        await this.#localFeedManager.appendSignedMessagesToSubfeed(this.#feedId, this.#subfeedHash, signedMessagesToAppend)
+        await this.#signedMessagesInterface.appendSignedMessages(signedMessagesToAppend);
         nextTick(() => {
             this.#newMessageListeners.forEach((listener) => {
                 listener()
             })
             this.#onMessagesAddedCallbacks.forEach(cb => {
-                if (!this.#signedMessages) throw Error('Unexpected in appendSignedMessages')
-                cb(subfeedPosition(this.#signedMessages.length - signedMessagesToAppend.length), signedMessagesToAppend)
+                if (!this.#signedMessagesInterface.isInitialized()) throw Error('Unexpected in appendSignedMessages')
+                cb(subfeedPosition(Number(this.#signedMessagesInterface.getNumMessages()) - signedMessagesToAppend.length), signedMessagesToAppend)
             })
         })
     }
