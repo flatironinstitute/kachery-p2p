@@ -24,7 +24,7 @@ class KPEnv:
             os.putenv('KACHERY_P2P_CONFIG_DIR', self._old_kachery_p2p_config_dir)
 
 class TestDaemon:
-    def __init__(self, *, channels, api_port, storage_dir, port=None, udp_port=None, websocket_port=None, bootstraps=None, isbootstrap=False, nomulticast=False):
+    def __init__(self, *, channels, api_port, storage_dir, label, port=None, udp_port=None, websocket_port=None, bootstraps=None, isbootstrap=False, nomulticast=False):
         self._channels = channels
         self._storage_dir = storage_dir
         self._api_port = api_port
@@ -35,6 +35,7 @@ class TestDaemon:
         self._bootstraps = bootstraps
         self._isbootstrap = isbootstrap
         self._nomulticast = nomulticast
+        self._label = label
     def testEnv(self):
         return KPEnv(test_daemon=self)
     def start(self):
@@ -66,7 +67,7 @@ class TestDaemon:
         export KACHERY_P2P_CONFIG_DIR=$KACHERY_STORAGE_DIR
         # export KACHERY_P2P_DISABLE_OUTGOING_WEBSOCKET_CONNECTIONS=true
         mkdir -p $KACHERY_STORAGE_DIR
-        exec kachery-p2p-start-daemon --method dev {' '.join(opts)}
+        exec kachery-p2p-start-daemon --method dev {' '.join(opts)} --label {self._label}
         ''')
         self._script.start()
         with KPEnv(self):

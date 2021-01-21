@@ -11,6 +11,7 @@ def run_test(test_nodes, tmpdir):
         # Start the daemons
         for tn in test_nodes:
             d = TestDaemon(
+                label='d',
                 channels=tn['channels'],
                 api_port=api_port,
                 storage_dir=tmpdir + f'/test_storage_{api_port}_{_randstr(5)}',

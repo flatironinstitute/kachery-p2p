@@ -12,6 +12,7 @@ def main():
         with TemporaryDirectory() as tmpdir:
             channels = ['benchmark1']
             d1 = TestDaemon(
+                label='d1',
                 channels=channels,
                 api_port=50401,
                 storage_dir=str(tmpdir) + f'/test_storage_{_randstr(5)}',
@@ -24,6 +25,7 @@ def main():
                 uri = ka.store_text(_randstr(40000000))
             
             d2 = TestDaemon(
+                label='d2',
                 channels=channels,
                 api_port=50402,
                 storage_dir=str(tmpdir) + f'/test_storage_{_randstr(5)}',
