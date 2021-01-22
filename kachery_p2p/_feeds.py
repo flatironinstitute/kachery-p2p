@@ -257,7 +257,7 @@ class Subfeed:
             messages=messages
         ))
         if not x['success']:
-            raise Exception('Unable to append messages.')
+            raise Exception(f'Unable to append messages: {x.get("error")}')
     
     def submit_message(self, message):
         self.submit_messages([message])
