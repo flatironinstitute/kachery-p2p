@@ -2,7 +2,7 @@
 .. include:: ./documentation.md
 """
 
-__version__ = "0.5.15"
+__version__ = "0.5.16"
 __protocol_version__ = "0.5.11p"
 
 from typing import Iterable, List, Union
@@ -16,7 +16,7 @@ from ._core import (_experimental_config, _find_file, _get_channels,
                     stop_daemon)
 from ._exceptions import LoadFileError
 from ._feeds import (_create_feed, _delete_feed, _get_feed_id, _load_feed,
-                     _load_subfeed, _watch_for_new_messages)
+                     _load_subfeed, _watch_for_new_messages, Feed, Subfeed)
 from ._testdaemon import TestDaemon
 
 

@@ -77,6 +77,8 @@ class Feed:
 
 def _subfeed_hash(subfeed_name):
     if isinstance(subfeed_name, str):
+        if subfeed_name.startswith('~'):
+            return subfeed_name[1:]
         return _sha1_of_string(subfeed_name)
     else:
         return _sha1_of_object(subfeed_name)
@@ -407,7 +409,7 @@ def _watch_for_new_messages(subfeed_watches, *, wait_msec):
     for key, watch in subfeed_watches.items():
         subfeed_watches2[key] = {
             'feedId': watch['feedId'],
-            'subfeedHash': _subfeed_hash(watch['subfeedName']),
+            'subfeedHash': watch.get('subfeedHash') if 'subfeedHash' in watch else _subfeed_hash(watch['subfeedName']),
             'position': watch['position']
         }
     x = _http_post_json(url, dict(
