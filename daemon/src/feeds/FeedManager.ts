@@ -629,6 +629,7 @@ class Subfeed {
                 this.#isWriteable = false
 
                 // Otherwise, we don't have it locally -- so let's just initialize things
+                this.#signedMessagesInterface.initializeEmptyMessageList()
                 const messages = await this.#localFeedManager.getSignedSubfeedMessages(this.#feedId, this.#subfeedHash)
                 assert(messages.length === 0)
 
