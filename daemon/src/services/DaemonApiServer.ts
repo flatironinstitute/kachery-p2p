@@ -752,7 +752,6 @@ export default class DaemonApiServer {
         const { feedId, subfeedHash, messages } = reqData
 
         // CHAIN:append_messages:step(2)
-        console.log('--------------------------- A2')
         await this.#node.feedManager().appendMessages({
             feedId, subfeedHash, messages
         });
@@ -801,12 +800,10 @@ export default class DaemonApiServer {
         const { feedId, subfeedHash, position, maxNumMessages, waitMsec } = reqData;
 
         // CHAIN:get_remote_messages:step(2)
-        console.log('-------------------- S2')
         const signedMessages = await this.#node.feedManager().getSignedMessages({
             feedId, subfeedHash, position, maxNumMessages, waitMsec
         });
         // CHAIN:get_remote_messages:step(21)
-        console.log('-------------------- S21')
 
         const response: FeedApiGetSignedMessagesResponse = {success: true, signedMessages}
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
