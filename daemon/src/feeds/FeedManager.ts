@@ -841,6 +841,12 @@ class Subfeed {
         }
         if (signedMessages.length === 0)
             return;
+        // it's possible that we have already appended some of these messages. Let's check
+        if (signedMessages[0].body.messageNumber < messageCountToNumber(this.#signedMessagesInterface.getNumMessages())) {
+            signedMessages = signedMessages.slice(messageCountToNumber(this.#signedMessagesInterface.getNumMessages()) - signedMessages[0].body.messageNumber)
+        }
+        if (signedMessages.length === 0)
+            return;
         const signedMessagesToAppend: SignedSubfeedMessage[] = []
         let previousSignature;
         if (Number(this.#signedMessagesInterface.getNumMessages()) > 0) {

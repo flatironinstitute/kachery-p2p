@@ -8,6 +8,8 @@ class LocalFeedsDatabase {
     #db: Database | null = null
     #initializing = false
     #initialized = false
+    #databaseLocked = false
+    #onDatabaseLockReleasedCallbacks: (() => void)[] = []
     constructor(private databasePath: LocalFilePath) {
     }
     async _initialize() {
@@ -49,30 +51,68 @@ class LocalFeedsDatabase {
                 ) WITHOUT ROWID;
             `)
         }
-        const db = await open({filename: this.databasePath.toString(), driver: sqlite3.Database})
-        await db.run(`PRAGMA foreign_keys = ON`)
-        await createTables(db)
-        db.close()
+        const db = await this._openDatabase()
+        try {
+            await db.run(`PRAGMA foreign_keys = ON`)
+            await createTables(db)
+        }
+        finally {
+            await this._closeDatabase()
+        }
         this.#initialized = true
         this.#initializing = false
     }
+    async _acquireDatabaseLock() {
+        if (!this.#databaseLocked) {
+            this.#databaseLocked = true
+            return
+        }
+        await new Promise<void>((resolve) => {
+            this.#onDatabaseLockReleasedCallbacks.push(() => {
+                this.#databaseLocked = true
+                resolve()
+            })
+        })
+    }
+    _releaseDatabaseLock() {
+        if (!this.#databaseLocked) {
+            throw Error('Unexpected: cannot release database lock when it is not locked')
+        }
+        this.#databaseLocked = false
+        if (this.#onDatabaseLockReleasedCallbacks.length > 0) {
+            const cb = this.#onDatabaseLockReleasedCallbacks[0]
+            this.#onDatabaseLockReleasedCallbacks = this.#onDatabaseLockReleasedCallbacks.slice(1)
+            cb()
+        }
+    }
     async _openDatabase() {
-        await this._initialize()
-        const db = await open({filename: this.databasePath.toString(), driver: sqlite3.Database})
-        return db
+        await this._acquireDatabaseLock()
+        this.#db = await open({filename: this.databasePath.toString(), driver: sqlite3.Database})
+        return this.#db
+    }
+    async _closeDatabase() {
+        if (!this.#db) throw Error('Unexpected in closeDatabase: database is null')
+        await this.#db.close()
+        this._releaseDatabaseLock()
     }
     async addFeed(feedId: FeedId) {
+        await this._initialize()
         const db = await this._openDatabase()
-        await db.run('BEGIN TRANSACTION')
-        await db.run(`
-            INSERT INTO feeds (feedId) VALUES ($feedId)
-        `, {
-            '$feedId': feedId.toString()
-        })
-        await db.run('COMMIT')
-        await db.close()
+        try {
+            await db.run('BEGIN TRANSACTION')
+            await db.run(`
+                INSERT INTO feeds (feedId) VALUES ($feedId)
+            `, {
+                '$feedId': feedId.toString()
+            })
+            await db.run('COMMIT')
+        }
+        finally {
+            await this._closeDatabase()
+        }
     }
     async deleteFeed(feedId: FeedId) {
+        await this._initialize()
         const db = await this._openDatabase()
         try {
             await db.run('BEGIN TRANSACTION')
@@ -84,10 +124,11 @@ class LocalFeedsDatabase {
             await db.run('COMMIT')
         }
         finally {
-            db.close()
+            await this._closeDatabase()
         }
     }
     async hasFeed(feedId: FeedId): Promise<boolean> {
+        await this._initialize()
         const db = await this._openDatabase()
         try {
             const row = await db.get(`
@@ -109,10 +150,11 @@ class LocalFeedsDatabase {
             }
         }
         finally {
-            db.close()
+            await this._closeDatabase()
         }
     }
     async getSignedSubfeedMessages(feedId: FeedId, subfeedHash: SubfeedHash): Promise<SignedSubfeedMessage[]> {
+        await this._initialize()
         const db = await this._openDatabase()
         try {
             const rows: {message: string, position: number}[] = await db.all(`
@@ -150,10 +192,11 @@ class LocalFeedsDatabase {
             return ret
         }
         finally {
-            db.close()
+            await this._closeDatabase()
         }
     }
     async getSubfeedAccessRules(feedId: FeedId, subfeedHash: SubfeedHash): Promise<SubfeedAccessRules | null> {
+        await this._initialize()
         const db = await this._openDatabase()
         try {
             const row = await db.get(`
@@ -188,10 +231,11 @@ class LocalFeedsDatabase {
             }
         }
         finally {
-            db.close()
+            await this._closeDatabase()
         }
     }
     async setSubfeedAccessRules(feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules): Promise<void> {
+        await this._initialize()
         const db = await this._openDatabase()
         try {
             await this._createFeedRowIfNeeded(db, feedId)
@@ -206,10 +250,11 @@ class LocalFeedsDatabase {
             await db.run('COMMIT')
         }
         finally {
-            db.close()
+            await this._closeDatabase()
         }
     }
     async appendSignedMessagesToSubfeed(feedId: FeedId, subfeedHash: SubfeedHash, messages: SignedSubfeedMessage[]) {
+        await this._initialize()
         const db = await this._openDatabase()
         try {
             if (messages.length === 0) return
@@ -236,7 +281,7 @@ class LocalFeedsDatabase {
             await db.run('COMMIT')
         }
         finally {
-            db.close()
+            await this._closeDatabase()
             // CHAIN:append_messages:step(8)
         }
     }

@@ -2,7 +2,7 @@
 
 KACHERY_STORAGE_DIR=/some/storage/dir
 KACHERY_P2P_CONFIG_DIR=/some/config/dir
-KACHERY_P2P_VERSION=0.5.19
+KACHERY_P2P_VERSION=0.5.22
 CONFIG="https://gist.githubusercontent.com/magland/637ad8be96f8bbf5a86ae1f409ab751c/raw/flatiron3.yaml"
 HTTP_LISTEN_PORT=
 PUBLIC_URL=
