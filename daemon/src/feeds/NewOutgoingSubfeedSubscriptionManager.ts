@@ -16,6 +16,7 @@ class NewOutgoingSubfeedSubscriptionManager {
             this.#outgoingSubscriptions.set(subfeedCode, S)
         }
         // CHAIN:get_remote_messages:step(6)
+        console.log('-------------------- S6')
         const initialSignedMessages = await S.renew(position, durationMsec)
         setTimeout(() => {
             this._checkRemove(remoteNodeId, channelName, feedId, subfeedHash)
@@ -52,6 +53,7 @@ class OutgoingSubfeedSubscription {
         this.#lastRenewTimestamp = nowTimestamp()
         this.#initialMessageSent = true
         // CHAIN:get_remote_messages:step(7)
+        console.log('-------------------- S7')
         const requestData: SubscribeToSubfeedRequestData = {
             requestType: 'subscribeToSubfeed',
             feedId: this.feedId,

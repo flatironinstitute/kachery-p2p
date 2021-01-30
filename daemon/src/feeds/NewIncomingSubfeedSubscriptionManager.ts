@@ -16,8 +16,9 @@ class NewIncomingSubfeedSubscriptionManager {
         let S = this.#incomingSubscriptions.get(subfeedCode)
         if (!S) {
             // CHAIN:get_remote_messages:step(12)
+            console.log('-------------------- S12')
             S = new IncomingSubfeedSubscription(this.node, remoteNodeId, channelName, feedId, subfeedHash)
-            this.#incomingSubscriptions.set(subfeedCode, S)
+            this.#incomingSubscriptions.set(subscriptionCode, S)
         }
         S.renew(position, durationMsec)
         setTimeout(() => {
@@ -26,11 +27,16 @@ class NewIncomingSubfeedSubscriptionManager {
     }
     reportMessagesAdded(feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) {
         const subfeedCode = makeSubfeedCode(feedId, subfeedHash)
+        // CHAIN:append_messages:step(11)
+        console.log('--------------------------- A11', subfeedCode, this.#subscriptionCodesBySubfeedCode.keys(), this.#subscriptionCodesBySubfeedCode.get(subfeedCode))
         const x = this.#subscriptionCodesBySubfeedCode.get(subfeedCode) || {}
+        console.log('---------------------------- x', x)
         for (let subscriptionCode in x) {
             const s = this.#incomingSubscriptions.get(subscriptionCode)
+            console.log('---- debug', subscriptionCode, s)
             if (s) {
                 // CHAIN:get_remote_messages:step(13)
+                console.log('-------------------- S13')
                 this._sendMessages(s.remoteNodeId, s.channelName, s.feedId, s.subfeedHash, position, signedMessages).then(() => {}).catch((err: Error) => {
                     console.warn(`Problem sending subfeed messages to remote node: ${err.message}`)
                 })
@@ -39,6 +45,7 @@ class NewIncomingSubfeedSubscriptionManager {
     }
     async _sendMessages(toNodeId: NodeId, channelName: ChannelName, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) {
         // CHAIN:get_remote_messages:step(14)
+        console.log('-------------------- S14')
         const requestData: ReportSubfeedMessagesRequestData = {
             requestType: 'reportSubfeedMessages',
             feedId,

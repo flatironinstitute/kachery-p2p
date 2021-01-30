@@ -213,6 +213,8 @@ class LocalFeedsDatabase {
         const db = await this._openDatabase()
         try {
             if (messages.length === 0) return
+            // CHAIN:append_messages:step(7)
+            console.log('--------------------------- A7')
             await this._createSubfeedRowIfNeeded(db, feedId, subfeedHash)
             const data = messages.map(m => ({
                 feedId,
@@ -236,6 +238,8 @@ class LocalFeedsDatabase {
         }
         finally {
             db.close()
+            // CHAIN:append_messages:step(8)
+            console.log('--------------------------- A8')
         }
     }
     async _createFeedRowIfNeeded(db: Database, feedId: FeedId) {
