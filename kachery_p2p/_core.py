@@ -406,7 +406,7 @@ def start_daemon(*,
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.5.16'
+                npm_package = 'kachery-p2p-daemon@0.5.19'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''
@@ -424,7 +424,7 @@ def start_daemon(*,
 
                 export KACHERY_P2P_API_PORT="{api_port}"
                 export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-                npm install -g {npm_package}
+                # npm install -g {npm_package}
                 exec kachery-p2p-daemon start {' '.join(start_args)}
                 ''')
             else:

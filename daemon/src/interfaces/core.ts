@@ -829,42 +829,6 @@ export const toSubfeedWatches = (x: SubfeedWatchesRAM) => {
     return mapToObject<SubfeedWatchName, SubfeedWatch>(x);
 }
 
-// LiveFeedSubscriptionName
-export interface LiveFeedSubscriptionName extends String {
-    __liveFeedSubscriptionName__: never // phantom type
-}
-export const isLiveFeedSubscriptionName = (x: any): x is LiveFeedSubscriptionName => {
-    if (!isString(x)) return false;
-    return (/^[0-9a-zA-Z_\-\. ]{4,160}?$/.test(x));
-}
-
-// LiveFeedSubscription
-// not used right now
-export interface LiveFeedSubscription {
-    subscriptionName: LiveFeedSubscriptionName,
-    feedId: FeedId,
-    subfeedHash: SubfeedHash,
-    position: SubfeedPosition
-}
-export const isLiveFeedSubscription = (x: any): x is LiveFeedSubscription => {
-    return _validateObject(x, {
-        subscriptionName: isLiveFeedSubscriptionName,
-        feedId: isFeedId,
-        subfeedHash: isSubfeedHash,
-        position: isSubfeedPosition
-    })
-}
-
-// LiveFeedSubscriptions
-export interface LiveFeedSubscriptions {
-    subscriptions: LiveFeedSubscription[]
-}
-export const isLiveFeedSubscriptions = (x: any): x is LiveFeedSubscriptions => {
-    return _validateObject(x, {
-        subscriptions: isArrayOf(isLiveFeedSubscription)
-    })
-}
-
 export interface UrlPath extends String {
     __urlPath__: never
 }

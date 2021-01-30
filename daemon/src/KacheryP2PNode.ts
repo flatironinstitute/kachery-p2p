@@ -6,7 +6,6 @@ import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import ExternalInterface, { KacheryStorageManagerInterface } from './external/ExternalInterface'
 import { MockNodeDefects } from './external/mock/MockNodeDaemon'
 import FeedManager from './feeds/FeedManager'
-import { LiveFeedSubscriptionManager } from './feeds/LiveFeedSubscriptionManager'
 import { getStats, GetStatsOpts } from './getStats'
 import { addDurations, Address, ChannelName, ChannelNodeInfo, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SubfeedHash, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
 import { CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isReportSubfeedMessagesRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
@@ -41,7 +40,6 @@ class KacheryP2PNode {
     #feedManager: FeedManager
     #remoteNodeManager: RemoteNodeManager
     #kacheryStorageManager: KacheryStorageManagerInterface
-    #liveFeedSubscriptionManager: LiveFeedSubscriptionManager // not used right now
     #proxyConnectionsToClients = new Map<NodeId, ProxyWebsocketConnection>()
     #proxyConnectionsToServers = new Map<NodeId, ProxyWebsocketConnection>()
     #downloadStreamManager = new DownloadStreamManager
@@ -68,7 +66,6 @@ class KacheryP2PNode {
         this.#keyPair = p.configDir !== null ? _loadKeypair(p.configDir) : createKeyPair()
         this.#nodeId = publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey)) // get the node id from the public key
         this.#kacheryStorageManager = p.externalInterface.createKacheryStorageManager()
-        this.#liveFeedSubscriptionManager = new LiveFeedSubscriptionManager() // not used right now
 
         // The feed manager -- each feed is a collection of append-only logs
         const localFeedManager = this.p.externalInterface.createLocalFeedManager()
@@ -110,10 +107,6 @@ class KacheryP2PNode {
     }
     kacheryStorageManager() {
         return this.#kacheryStorageManager
-    }
-    liveFeedSubscriptionManager() {
-        /* istanbul ignore next */
-        return this.#liveFeedSubscriptionManager // not used right now
     }
     downloadStreamManager(): DownloadStreamManager {
         return this.#downloadStreamManager

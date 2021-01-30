@@ -41,7 +41,7 @@ class Feed:
         url = f'http://localhost:{port}/feed/getFeedInfo'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
-            timeoutMsec=(self._timeout_sec if self._timeout_sec is not None else 1) * 1000
+            timeoutMsec=(self._timeout_sec if self._timeout_sec is not None else 6) * 1000
         ))
 
         assert x['success'], f'Unable to initialize feed: {self._feed_id} ({x["error"]})'
@@ -156,6 +156,7 @@ class Subfeed:
         except:
             return []
 
+    # CHAIN:get_remote_messages:step(1)
     def get_next_messages(self, *, wait_msec=10, signed=False, max_num_messages=0, advance_position=True):
         if not self.is_snapshot():
             port = _api_port()
@@ -181,6 +182,7 @@ class Subfeed:
                     messages.append(msg)
             if advance_position:
                 self._position = self._position + len(messages)
+            # CHAIN:get_remote_messages:step(21)
             return messages
         else:
             messages = self._get_snapshot_messages()

@@ -1,11 +1,11 @@
-import { errorMessage, NodeId, nowTimestamp } from '../interfaces/core'
+import { errorMessage, NodeId } from '../interfaces/core'
 import { ReportSubfeedMessagesRequestData, ReportSubfeedMessagesResponseData } from '../interfaces/NodeToNodeRequest'
 import KacheryP2PNode from '../KacheryP2PNode'
 
 export const handleReportSubfeedMessages = async (node: KacheryP2PNode, fromNodeId: NodeId, requestData: ReportSubfeedMessagesRequestData): Promise<ReportSubfeedMessagesResponseData> => {
     const { feedId, subfeedHash, position, signedMessages } = requestData
     try {
-        const timer = nowTimestamp()
+        // CHAIN:get_remote_messages:step(15)
         await node.feedManager().reportRemoteSubfeedMessages(feedId, subfeedHash, position, signedMessages)
         return {
             requestType: 'reportSubfeedMessages',
