@@ -98,7 +98,7 @@ def log():
 @click.option('--host', default='', help='IP for connecting to this daemon')
 @click.option('--public-url', default='', help='Base URL for public http access')
 @click.option('--port', default=0, help='Public http port to listen on')
-@click.option('--udp-port', default=0, help='Override the udp listen port (by default equals the http port)')
+@click.option('--udp-port', default=None, help='Override the udp listen port (by default equals the http port)')
 @click.option('--websocket-port', default=0, help='Port for websocket server')
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
 def start_daemon(config, label, method, channel, verbose, host, public_url, port, udp_port, websocket_port, bootstrap, nobootstrap, isbootstrap, ismessageproxy, isdataproxy, nomulticast, node_arg):

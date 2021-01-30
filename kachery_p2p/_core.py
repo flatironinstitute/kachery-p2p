@@ -334,7 +334,7 @@ def _probe_daemon(api_port=None):
 def start_daemon(*,
     config_path_or_url: str='',
     port: int=0,
-    udp_port: int=0,
+    udp_port: Union[int, None]=None,
     websocket_port: int=0,
     label: Union[str, None]=None,
     method: str='npx',
@@ -384,7 +384,7 @@ def start_daemon(*,
         start_args.append(f'--public-url {public_url}')
     if websocket_port > 0:
         start_args.append(f'--websocket-port {websocket_port}')
-    if udp_port > 0:
+    if udp_port is not None:
         start_args.append(f'--udp-port {udp_port}')
     if label is not None:
         start_args.append(f'--label {label}')

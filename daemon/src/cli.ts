@@ -150,7 +150,7 @@ function main() {
         const hostName = argv.host || null;
         const publicUrl = argv['public-url'] || null;
         const httpListenPort = argv['http-port'] ? Number(argv['http-port']) || null : 14507
-        const udpSocketPort = argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort || await findAvailableUdpPort()
+        const udpSocketPort: number | null = argv['udp-port'] === '0' ? null : ((argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort) || await findAvailableUdpPort())
         const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : null
         const daemonApiPort = Number(process.env.KACHERY_P2P_API_PORT || 20431)
         const label = nodeLabel(argv.label as string)
@@ -305,7 +305,7 @@ function main() {
                 proxyClient: true,
                 multicast: noMulticast ? false : true,
                 display: true,
-                udpSocket: true,
+                udpSocket: udpSocketPort !== null,
                 webSocketServer: webSocketListenPort ? true : false,
                 httpServer: true,
                 daemonServer: true
