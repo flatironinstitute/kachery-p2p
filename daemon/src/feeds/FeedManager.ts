@@ -244,8 +244,9 @@ class FeedManager {
     }
     async reportRemoteSubfeedMessages(feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) {
         // CHAIN:get_remote_messages:step(16)
-        console.log('-------------------- S16')
+        console.log('-------------------- S16', feedId.slice(0, 6), subfeedHash.slice(0, 6))
         const sf = await this._loadSubfeed(feedId, subfeedHash)
+        console.log('----- debug1', sf.getNumMessages(), position)
         if (messageCountToNumber(sf.getNumMessages()) < subfeedPositionToNumber(position)) {
             // in this case we have received messages early (perhaps because messages got delayed or came out of order)
             // we will save them for later
@@ -386,6 +387,15 @@ class RemoteFeedManager {
         // CHAIN:get_remote_messages:step(5)
         console.log('-------------------- S5')
         const initialSignedMessages = await this.outgoingSubfeedSubscriptionManager.createOrRenewOutgoingSubscription(remoteNodeId, channelName, feedId, subfeedHash, position, durationMsec)
+        if (initialSignedMessages.length > 0) {
+            // we got some initial messages, let's report them
+            // CHAIN:get_remote_messages:step(5b)
+            console.log('-------------------- S5b')
+            this.node.feedManager().reportRemoteSubfeedMessages(
+                feedId, subfeedHash, position, initialSignedMessages
+            )
+        }
+        this.outgoingSubfeedSubscriptionManager
         return initialSignedMessages
     }
 
@@ -643,8 +653,10 @@ class Subfeed {
             this.#initializing = true
             // Check whether we have the feed locally (may or may not be locally writeable)
             const existsLocally = await this.#localFeedManager.feedExistsLocally(this.#feedId)
+            console.log('------ existsLocally', this.#feedId.slice(0, 6), this.#subfeedHash.slice(0, 6), existsLocally)
             if (existsLocally) {
                 await this.#signedMessagesInterface.initializeFromLocal()
+                console.log('---------------------- test', this.#signedMessagesInterface.getNumMessages())
 
                 // If this is a writeable feed, we also load the access rules into memory
                 this.#isWriteable = await this.#localFeedManager.hasWriteableFeed(this.#feedId)
@@ -751,6 +763,7 @@ class Subfeed {
                 // CHAIN:get_remote_messages:step(4)
                 console.log('-------------------- S4')
                 const initialSignedMessages = await this.#remoteFeedManager.subscribeToRemoteSubfeed(this.#feedId, this.#subfeedHash, subfeedPosition(Number(this.#signedMessagesInterface.getNumMessages())), scaledDurationMsec(30 * 1000))
+                console.log('---- got initial signed messages', initialSignedMessages.length)
                 if (initialSignedMessages.length > 0) {
                     // in this case we got some initial messages
                     return initialSignedMessages
