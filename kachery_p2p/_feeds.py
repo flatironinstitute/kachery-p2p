@@ -156,9 +156,9 @@ class Subfeed:
         except:
             return []
 
-    # CHAIN:get_remote_messages:step(1)
     def get_next_messages(self, *, wait_msec=10, signed=False, max_num_messages=0, advance_position=True):
         if not self.is_snapshot():
+            # CHAIN:get_remote_messages:step(1)
             port = _api_port()
             if signed:
                 url = f'http://localhost:{port}/feed/getSignedMessages'
@@ -253,6 +253,7 @@ class Subfeed:
     def append_messages(self, messages):
         if not self.is_writeable():
             raise Exception('Cannot append messages to a readonly feed')
+        # CHAIN:append_messages:step(1)
         port = _api_port()
         url = f'http://localhost:{port}/feed/appendMessages'
         x = _http_post_json(url, dict(

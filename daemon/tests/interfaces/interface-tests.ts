@@ -48,7 +48,7 @@ const validChannelNodeInfo: ut.ChannelNodeInfo = {
 mocha.describe('Basic type guards', () => {
     describe('JSON Handling', () => {
         // Test fixture for JSON object handling
-        const exampleJSONObject = {example: ['json', {object: 1}, '---']}
+        const exampleJSONObject = {example: ['json', {object: 1}, '___']}
 
         it('JSON object successfully recognized', () => {
             expect(ut.isJSONObject(exampleJSONObject)).to.be.true

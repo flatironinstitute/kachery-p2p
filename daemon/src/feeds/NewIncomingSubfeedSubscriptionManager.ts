@@ -17,7 +17,7 @@ class NewIncomingSubfeedSubscriptionManager {
         if (!S) {
             // CHAIN:get_remote_messages:step(12)
             S = new IncomingSubfeedSubscription(this.node, remoteNodeId, channelName, feedId, subfeedHash)
-            this.#incomingSubscriptions.set(subfeedCode, S)
+            this.#incomingSubscriptions.set(subscriptionCode, S)
         }
         S.renew(position, durationMsec)
         setTimeout(() => {
@@ -26,6 +26,7 @@ class NewIncomingSubfeedSubscriptionManager {
     }
     reportMessagesAdded(feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) {
         const subfeedCode = makeSubfeedCode(feedId, subfeedHash)
+        // CHAIN:append_messages:step(11)
         const x = this.#subscriptionCodesBySubfeedCode.get(subfeedCode) || {}
         for (let subscriptionCode in x) {
             const s = this.#incomingSubscriptions.get(subscriptionCode)

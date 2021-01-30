@@ -58,6 +58,7 @@ class FeedManager {
         const release = await subfeed.acquireLock()
         try {
             // Append the messages
+            // CHAIN:append_messages:step(3)
             await subfeed.appendMessages(args.messages, {metaData: undefined});
         }
         finally {
@@ -282,6 +283,7 @@ class FeedManager {
             // Instantiate and initialize the subfeed
             subfeed = new Subfeed({ remoteFeedManager: this.#remoteFeedManager, feedId, subfeedHash, localFeedManager: this.#localFeedManager, outgoingSubfeedSubscriptionManager: this.#outgoingSubfeedSubscriptionManager })
             subfeed.onMessagesAdded((position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) => {
+                // CHAIN:append_messages:step(10)
                 this.#incomingSubfeedSubscriptionManager.reportMessagesAdded(feedId, subfeedHash, position, signedMessages)
             })
             // Store in memory for future access (the order is important here, see waitUntilInitialized above)
@@ -376,6 +378,14 @@ class RemoteFeedManager {
         if (!channelName) throw Error('Unexpected channelName is null')
         // CHAIN:get_remote_messages:step(5)
         const initialSignedMessages = await this.outgoingSubfeedSubscriptionManager.createOrRenewOutgoingSubscription(remoteNodeId, channelName, feedId, subfeedHash, position, durationMsec)
+        if (initialSignedMessages.length > 0) {
+            // we got some initial messages, let's report them
+            // CHAIN:get_remote_messages:step(5b)
+            this.node.feedManager().reportRemoteSubfeedMessages(
+                feedId, subfeedHash, position, initialSignedMessages
+            )
+        }
+        this.outgoingSubfeedSubscriptionManager
         return initialSignedMessages
     }
 
@@ -578,6 +588,7 @@ class LocalSubfeedSignedMessagesInterface {
         }
         if (this.#appending) throw Error('Cannot append messages while messages are being appended.')
         this.#appending = true
+        // CHAIN:append_messages:step(6)
         await this.localFeedManager.appendSignedMessagesToSubfeed(this.feedId, this.subfeedHash, signedMessagesToAppend)
         for (let sm of signedMessagesToAppend) {
             this.#signedMessages.push(sm)
@@ -820,6 +831,7 @@ class Subfeed {
             previousSignature = signedMessage.signature
             messageNumber ++;
         }
+        // CHAIN:append_messages:step(4)
         await this.appendSignedMessages(signedMessagesToAppend)
     }
     async appendSignedMessages(signedMessages: SignedSubfeedMessage[]) {
@@ -852,6 +864,7 @@ class Subfeed {
             messageNumber ++;
             signedMessagesToAppend.push(signedMessage)
         }
+        // CHAIN:append_messages:step(5)
         await this.#signedMessagesInterface.appendSignedMessages(signedMessagesToAppend);
         nextTick(() => {
             // CHAIN:get_remote_messages:step(17)
@@ -860,6 +873,7 @@ class Subfeed {
             })
             this.#onMessagesAddedCallbacks.forEach(cb => {
                 if (!this.#signedMessagesInterface.isInitialized()) throw Error('Unexpected in appendSignedMessages')
+                // CHAIN:append_messages:step(9)
                 cb(subfeedPosition(Number(this.#signedMessagesInterface.getNumMessages()) - signedMessagesToAppend.length), signedMessagesToAppend)
             })
         })

@@ -751,6 +751,7 @@ export default class DaemonApiServer {
         if (!isFeedApiAppendMessagesRequest(reqData)) throw Error('Invalid request in _feedApiAppendMessages')
         const { feedId, subfeedHash, messages } = reqData
 
+        // CHAIN:append_messages:step(2)
         await this.#node.feedManager().appendMessages({
             feedId, subfeedHash, messages
         });
