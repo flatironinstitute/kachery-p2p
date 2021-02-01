@@ -39,14 +39,14 @@ class CLIError extends Error {
 }
 
 interface YamlConfigTrustedNode {
-  label: string,
+  nodeLabel: string,
   nodeId: NodeId
 }
 const isYamlConfigTrustedNode = (x: any): x is YamlConfigTrustedNode => {
   return _validateObject(x, {
-    label: isString,
+    nodeLabel: isString,
     nodeId: isNodeId
-  })
+  }, (errMsg) => {console.warn(errMsg)})
 }
 
 interface YamlConfigChannel {
@@ -57,7 +57,7 @@ const isYamlConfigChannel = (x: any): x is YamlConfigChannel => {
   return _validateObject(x, {
     channelName: isChannelName,
     trustedNodes: optional(isArrayOf(isYamlConfigTrustedNode))
-  })
+  }, (errMsg) => {console.warn(errMsg)})
 }
 
 interface YamlConfig {
@@ -69,7 +69,7 @@ const isYamlConfig = (x: any): x is YamlConfig => {
   return _validateObject(x, {
     bootstrapAddresses: optional(isArrayOf(isAddress)),
     channels: optional(isArrayOf(isYamlConfigChannel))
-  })
+  }, (errMsg) => {console.warn(errMsg)})
 }
 
 function main() {
@@ -83,10 +83,6 @@ function main() {
           describe: 'File path or URL of the .yaml configuration file to use',
           type: 'string',
           default: ''
-        })
-        y.option('channel', {
-          describe: 'Name of a kachery-p2p channel to join (you can join more than one)',
-          type: 'array',
         })
         y.option('verbose', {
           describe: 'Verbosity level.',
@@ -132,6 +128,10 @@ function main() {
           describe: 'Mark this node as a bootstrap node',
           type: 'boolean'
         })
+        y.option('noudp', {
+          describe: 'Do not use a udp socket',
+          type: 'boolean'
+        })
         y.option('ismessageproxy', {
           describe: 'Allow this node to be used as a message proxy node for the channels it is in',
           type: 'boolean'
@@ -150,12 +150,17 @@ function main() {
         const hostName = argv.host || null;
         const publicUrl = argv['public-url'] || null;
         const httpListenPort = argv['http-port'] ? Number(argv['http-port']) || null : 14507
-        const udpSocketPort: number | null = argv['udp-port'] === '0' ? null : ((argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort) || await findAvailableUdpPort())
+        const noUdp = argv['noudp'] ? true : false
+        if (noUdp) {
+          if (argv['udp-port']) throw Error('Cannot specify a --udp-port with the --noudp option')
+        }
+        const udpSocketPort: number | null = (!noUdp) ? ((argv['udp-port'] ? Number(argv['udp-port']) : httpListenPort) || await findAvailableUdpPort()) : null
         const webSocketListenPort = argv['websocket-port'] ? Number(argv['websocket-port']) : null
         const daemonApiPort = Number(process.env.KACHERY_P2P_API_PORT || 20431)
         const label = nodeLabel(argv.label as string)
         const noBootstrap = argv['nobootstrap'] ? true : false
         const isBootstrapNode = argv['isbootstrap'] ? true : false
+        
         const isMessageProxy = argv['ismessageproxy'] ? true : false
         const isDataProxy = argv['isdataproxy'] ? true : false
         const noMulticast = argv['nomulticast'] ? true : false
@@ -171,20 +176,14 @@ function main() {
         if (argv.config) {
           const c = await loadConfig(argv.config as any as string)
           if (!isYamlConfig(c)) {
-            console.warn(c)
+            console.warn(JSON.stringify(c, null, 4))
             throw Error('Invalid .yaml configuration')
           }
           yamlConfig = c
         }
 
         const trustedNodesInChannels = new GarbageMap<ChannelName, NodeId[]>(null)
-        const channelNames = ((argv.channel || []) as ChannelName[]).map(ch => {
-          if (!isChannelName(ch)) throw new CLIError('Invalid channel name');
-          return ch;
-        })
-        channelNames.forEach(ch => {
-          trustedNodesInChannels.set(ch, [])
-        })
+        const channelNames: ChannelName[] = []
         if (yamlConfig.channels) {
           yamlConfig.channels.forEach(ch => {
             channelNames.push(ch.channelName)
@@ -303,9 +302,9 @@ function main() {
                 discover: true,
                 bootstrap: noBootstrap ? false : true,
                 proxyClient: true,
-                multicast: noMulticast ? false : true,
+                multicast: (!noUdp) ? ((!noMulticast) ? true : false) : false,
                 display: true,
-                udpSocket: udpSocketPort !== null,
+                udpSocket: !noUdp,
                 webSocketServer: webSocketListenPort ? true : false,
                 httpServer: true,
                 daemonServer: true

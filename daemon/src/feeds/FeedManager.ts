@@ -186,7 +186,7 @@ class FeedManager {
     }): Promise<Map<SubfeedWatchName, (SubfeedMessage[])>> {
         // assert(typeof(waitMsec) === 'number');
         // assert(typeof(waxNumMessages) === 'number');
-        return new Promise((resolve, reject) => {
+        return new Promise<Map<SubfeedWatchName, (SubfeedMessage[])>>((resolve, reject) => {
             // Wait until new messages are received on one or more subfeeds, and return information on which watches were triggered
 
             let finished = false;
@@ -686,7 +686,7 @@ class Subfeed {
     }
     async waitUntilInitialized(): Promise<void> {
         if (this.#initialized) return
-        return new Promise((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => {
             this.#onInitializeErrorCallbacks.push((err: Error) => {
                 reject(err)
             })

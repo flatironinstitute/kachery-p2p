@@ -194,7 +194,7 @@ export class ProxyWebsocketConnection {
         }
         this.#remoteNodeId = remoteNodeId;
         if (!address.hostName) throw Error('Unexpected in initializeConnectionToServer')
-        return new Promise((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => {
             const url = `ws://${address.hostName}:${address.port}`;
             this.#ws = this.#node.externalInterface().createWebSocket(url, {timeoutMsec: opts.timeoutMsec})
             this.#ws.onClose((code, reason) => {
@@ -306,7 +306,7 @@ export class ProxyWebsocketConnection {
         if (this.type !== 'connectionToClient') {
             throw Error('Unexpected type in initializeConnectionToClient')
         }
-        return new Promise((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => {
             this.#ws = ws
             this.#ws.onClose((code, reason) => {
                 /////////////////////////////////////////////////////////////////////////
@@ -585,7 +585,7 @@ export class ProxyWebsocketConnection {
         this.#ws.send(messageSerialized)
     }
     async _waitForResponse(requestId: RequestId, {timeoutMsec, requestType}: {timeoutMsec: DurationMsec, requestType: string}): Promise<NodeToNodeResponse> {
-        return new Promise((resolve, reject) => {
+        return new Promise<NodeToNodeResponse>((resolve, reject) => {
             let completed = false;
             this.#responseListeners.set(requestId, (response: NodeToNodeResponse) => {
                 if (!completed) {

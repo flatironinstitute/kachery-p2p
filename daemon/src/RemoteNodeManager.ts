@@ -47,7 +47,16 @@ class RemoteNodeManager {
             throw Error('Cannot set channel node info for self')
         }
         if (!this.#remoteNodes.has(body.nodeId)) {
-            this.#remoteNodes.set(body.nodeId, new RemoteNode(this.#node, body.nodeId))
+            const remoteNodeOpts = {
+                isBootstrap: false,
+                isBootstrapMessageProxy: false,
+                isBootstrapDataProxy: false,
+                isTrusted: this.#node.trustedNodesInChannel(body.channelName).includes(body.nodeId),
+                bootstrapAddress: null,
+                bootstrapWebSocketAddress: null,
+                bootstrapUdpSocketAddress: null
+            }
+            this.#remoteNodes.set(body.nodeId, new RemoteNode(this.#node, body.nodeId, remoteNodeOpts))
         }
         const n = this.#remoteNodes.get(body.nodeId)
         /* istanbul ignore next */
@@ -60,7 +69,7 @@ class RemoteNodeManager {
             })
         }
     }
-    async setBootstrapNode(remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, udpSocketAddress: Address | null, o: {isMessageProxy: boolean, isDataProxy: boolean}) {
+    async setBootstrapNode(remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, udpSocketAddress: Address | null, o: {isMessageProxy: boolean, isDataProxy: boolean, isTrusted: boolean}) {
         const n = this.#remoteNodes.get(remoteNodeId)
         if (n) {
             if ((!n.isBootstrap()) || (!jsonObjectsMatch(n.bootstrapAddress(), address))) {
@@ -75,6 +84,7 @@ class RemoteNodeManager {
                     isBootstrap: true,
                     isBootstrapMessageProxy: o.isMessageProxy,
                     isBootstrapDataProxy: o.isDataProxy,
+                    isTrusted: o.isTrusted,
                     bootstrapAddress: address,
                     bootstrapWebSocketAddress: webSocketAddress,
                     bootstrapUdpSocketAddress: udpSocketAddress

@@ -322,16 +322,26 @@ class KacheryP2PNode {
         return this.#publicUdpSocketServer
     }
     getChannelNodeInfo(channelName: ChannelName): ChannelNodeInfo {
-        const proxyHttpAddresses: Address[] = []
+        // const proxyHttpAddresses: Address[] = []
+        // this.#proxyConnectionsToServers.forEach((c, remoteNodeId) => {
+        //     const remoteNode = this.#remoteNodeManager.getRemoteNode(remoteNodeId)
+        //     if (remoteNode) {
+        //         const httpAddress = remoteNode.getRemoteNodeHttpAddress()
+        //         if (httpAddress) {
+        //             proxyHttpAddresses.push(httpAddress)
+        //         }
+        //     }
+        // })
+        const allProxyWebsocketNodeIds: NodeId[] = []
         this.#proxyConnectionsToServers.forEach((c, remoteNodeId) => {
             const remoteNode = this.#remoteNodeManager.getRemoteNode(remoteNodeId)
             if (remoteNode) {
-                const httpAddress = remoteNode.getRemoteNodeHttpAddress()
-                if (httpAddress) {
-                    proxyHttpAddresses.push(httpAddress)
-                }
+                allProxyWebsocketNodeIds.push(remoteNodeId)
             }
         })
+        // if any of our proxyWebsocketNodeIds are trusted nodeIds then only use those
+        const trustedNodeIds = this.trustedNodesInChannel(channelName)
+        const trustedWebsocketNodeIds = allProxyWebsocketNodeIds.filter(n => (trustedNodeIds.includes(n)))
         const body = {
             channelName,
             nodeId: this.#nodeId,
@@ -341,7 +351,8 @@ class KacheryP2PNode {
             publicUdpSocketAddress: this.#publicUdpSocketAddress,
             isMessageProxy: this.p.opts.isMessageProxy,
             isDataProxy: this.p.opts.isDataProxy,
-            proxyWebsocketNodeIds: Array.from(this.#proxyConnectionsToServers.keys()),
+            // if any of our proxyWebsocketNodeIds are trusted nodeIds then only use those, otherwise report all of them
+            proxyWebsocketNodeIds: trustedWebsocketNodeIds.length > 0 ? trustedWebsocketNodeIds : allProxyWebsocketNodeIds,
             timestamp: nowTimestamp()
         }
         return {
@@ -516,7 +527,7 @@ class KacheryP2PNode {
     receiveFallbackUdpPacket(fromNodeId: NodeId, packetId: PacketId, packet: Buffer): void {
         if (!this.#publicUdpSocketServer) {
             /* istanbul ignore next */
-            throw Error('Cannot receive fallback udp packet. No public udp socket server set.')
+            throw Error(`Cannot receive fallback udp packet from ${fromNodeId.slice(0, 6)}. No public udp socket server set.`)
         }
         this.#publicUdpSocketServer.receiveFallbackUdpPacket(fromNodeId, packetId, packet)
     }

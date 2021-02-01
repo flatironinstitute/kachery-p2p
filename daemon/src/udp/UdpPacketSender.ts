@@ -145,7 +145,7 @@ class OutgoingPacket {
     async _trySend(timeoutMsec: DurationMsec) {
         const socket = this.#packetSender.socket()
         const b = this.#buffer
-        return new Promise((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => {
             /* istanbul ignore next */
             if (this.#confirmed) {
                 resolve()

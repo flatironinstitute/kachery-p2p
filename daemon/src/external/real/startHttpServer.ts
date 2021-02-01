@@ -28,7 +28,7 @@ const startHttpServer = async (app: ExpressInterface, listenPort: Port): Promise
         server = http.createServer(app as http.RequestListener);
     }
     server.listen(portToNumber(listenPort));
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
         server.on('listening', () => {
             resolve()
         })

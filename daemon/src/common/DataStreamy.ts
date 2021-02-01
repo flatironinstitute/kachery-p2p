@@ -127,7 +127,7 @@ export default class DataStreamy {
         this.#onDataCallbacks.push(callback)
     }
     async allData(): Promise<Buffer> {
-        return new Promise((resolve, reject) => {
+        return new Promise<Buffer>((resolve, reject) => {
             const buffers: Buffer[] = []
             this.onData(buf => buffers.push(buf))
             this.onFinished(() => {

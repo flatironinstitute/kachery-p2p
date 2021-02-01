@@ -184,7 +184,7 @@ const mockWebSocketManager = new MockWebSocketManager()
 
 export const mockStartWebSocketServer = async (port: Port, nodeId: NodeId): Promise<WebSocketServerInterface> => {
     const wss = new MockWebSocketServer(port, nodeId)
-    return new Promise((resolve, reject) => {
+    return new Promise<WebSocketServerInterface>((resolve, reject) => {
         wss.onListening(() => {
             resolve(wss)
         })

@@ -92,7 +92,7 @@ export default class PublicUdpSocketServer {
         }
     }
     startListening(listenPort: Port) {
-        return new Promise((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => {
             try {
                 this.#socket = this.#node.externalInterface().dgramCreateSocket({ type: "udp4", reuseAddr: false, nodeId: this.#node.nodeId(), firewalled: this.firewalled })
                 this.#socket.bind(portToNumber(listenPort))

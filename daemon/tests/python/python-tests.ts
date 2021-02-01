@@ -48,7 +48,7 @@ const daemonContext = async (o: DaemonContextOpts[], testFunction: (daemons: Dae
     }
 
     for (let oo of o) {
-        await new Promise((next) => {
+        await new Promise<void>((next) => {
             const configDir = localFilePath(tempPath + '/' + randomAlphaString(10))
             mkdirSync(configDir.toString())
             const externalInterface = realExternalInterface(configDir, configDir)

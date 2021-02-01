@@ -31,7 +31,7 @@ const loadFileAsync = async (node: KacheryP2PNode, fileKey: FileKey, opts: {from
 }
 
 async function asyncLoop<T>(list: T[], func: (item: T, index: number) => Promise<void>, opts: {numSimultaneous: number}) {
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
         let i = 0
         let numComplete = 0
         let numRunning = 0
@@ -152,7 +152,7 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
                     const label0 = `${opts.label} ch ${chunkIndex}`
                     const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel, label: label0, _numRetries: 2})
                     chunkDataStreams.push(ds)
-                    return new Promise((resolve, reject) => {
+                    return new Promise<void>((resolve, reject) => {
                         ds.onError(err => {
                             errored = true
                             reject(err)

@@ -34,6 +34,7 @@ class RemoteNode {
     #isBootstrap: boolean
     #isBootstrapMessageProxy: boolean
     #isBootstrapDataProxy: boolean
+    #isTrusted: boolean
     #bootstrapAddress: Address | null
     #bootstrapWebSocketAddress: Address | null
     #bootstrapUdpSocketAddress: Address | null
@@ -50,15 +51,17 @@ class RemoteNode {
         isBootstrap: boolean,
         isBootstrapMessageProxy: boolean,
         isBootstrapDataProxy: boolean,
+        isTrusted: boolean,
         bootstrapAddress: Address | null,
         bootstrapWebSocketAddress: Address | null,
         bootstrapUdpSocketAddress: Address | null,
-    } = {isBootstrap: false, isBootstrapMessageProxy: false, isBootstrapDataProxy: false, bootstrapAddress: null, bootstrapWebSocketAddress: null, bootstrapUdpSocketAddress: null}) {
+    }) {
         this.#node = node
         this.#remoteNodeId = remoteNodeId;
         this.#isBootstrap = opts.isBootstrap
         this.#isBootstrapMessageProxy = opts.isBootstrapMessageProxy,
         this.#isBootstrapDataProxy = opts.isBootstrapDataProxy,
+        this.#isTrusted = opts.isTrusted
         this.#bootstrapAddress = opts.bootstrapAddress
         this.#bootstrapWebSocketAddress = opts.bootstrapWebSocketAddress
         this.#bootstrapUdpSocketAddress = opts.bootstrapUdpSocketAddress
@@ -74,6 +77,9 @@ class RemoteNode {
     }
     isBootstrap() {
         return this.#isBootstrap
+    }
+    isTrusted() {
+        return this.#isTrusted
     }
     isMessageProxy(channelName: ChannelName | null) {
         if (channelName === null) {

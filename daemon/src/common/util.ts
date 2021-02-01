@@ -103,7 +103,7 @@ export const sleepMsecNum = async (msec: number, continueFunction: (() => boolea
             await sleepMsec(unscaledDurationMsec(m - elapsedSince(timer)))
         }
     }
-    else return new Promise((resolve, reject) => {
+    else return new Promise<void>((resolve, reject) => {
         setTimeout(() => {
             resolve()
         }, m)

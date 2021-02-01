@@ -90,6 +90,7 @@ def log():
 @click.option('--bootstrap', multiple=True, help='Override the default bootstrap node(s). Use --bootstrap ip:port')
 @click.option('--nobootstrap', is_flag=True, help='Do not use bootstrap nodes')
 @click.option('--isbootstrap', is_flag=True, help='This is a bootstrap node')
+@click.option('--noudp', is_flag=True, help='Do not use a udp socket')
 @click.option('--ismessageproxy', is_flag=True, help='This node can serve as a message proxy')
 @click.option('--isdataproxy', is_flag=True, help='This node can serve as a data transfer proxy')
 @click.option('--nomulticast', is_flag=True, help='Do not use multicast udp')
@@ -101,7 +102,7 @@ def log():
 @click.option('--udp-port', default=None, help='Override the udp listen port (by default equals the http port)')
 @click.option('--websocket-port', default=0, help='Port for websocket server')
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
-def start_daemon(config, label, method, channel, verbose, host, public_url, port, udp_port, websocket_port, bootstrap, nobootstrap, isbootstrap, ismessageproxy, isdataproxy, nomulticast, node_arg):
+def start_daemon(config, label, method, channel, verbose, host, public_url, port, udp_port, websocket_port, bootstrap, nobootstrap, isbootstrap, noudp, ismessageproxy, isdataproxy, nomulticast, node_arg):
     kp.start_daemon(
         config_path_or_url=config,
         label=label if label else None,
@@ -115,6 +116,7 @@ def start_daemon(config, label, method, channel, verbose, host, public_url, port
         websocket_port=websocket_port,
         nobootstrap=nobootstrap,
         isbootstrap=isbootstrap,
+        noudp=noudp,
         ismessageproxy=ismessageproxy,
         isdataproxy=isdataproxy,
         bootstrap=bootstrap,

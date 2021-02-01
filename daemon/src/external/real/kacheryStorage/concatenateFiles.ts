@@ -4,7 +4,7 @@ import { randomAlphaString } from '../../../common/util'
 import { localFilePath, LocalFilePath, Sha1Hash } from '../../../interfaces/core'
 
 export const concatenateFilesIntoTemporaryFile = async (paths: LocalFilePath[]): Promise<{sha1: Sha1Hash, path: LocalFilePath}> => {
-    return new Promise((resolve, reject) => {
+    return new Promise<{sha1: Sha1Hash, path: LocalFilePath}>((resolve, reject) => {
         const tmpPath = createTemporaryFilePath({prefix: 'kachery-p2p-concat-'})
         const writeStream = fs.createWriteStream(tmpPath)
         const sha = crypto.createHash('sha1')

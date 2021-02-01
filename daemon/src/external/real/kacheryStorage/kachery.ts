@@ -48,7 +48,7 @@ export const kacheryStoreWithHardLink = async (path: string) => {
 // }
 
 const executeAndGetStdout = async (command: string) => {
-    return new Promise((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
         exec(command, function(error, stdout, stderr) {
             if (error) {
                 reject(error);

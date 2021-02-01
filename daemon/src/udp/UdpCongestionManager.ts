@@ -73,7 +73,7 @@ export default class UdpCongestionManager {
     #queuedPackets = new Queue<QueuedPacket>()
     constructor() {}
     async sendPacket(packetId: PacketId, packetSize: ByteCount, send: SendCallback): Promise<void> {
-        return new Promise((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => {
             this.#queuedPackets.enqueue({
                 internalId: createInternalId(),
                 packetId,

@@ -386,7 +386,7 @@ const testFindFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon) =>
         timeoutMsec: scaledDurationMsec(5000),
         fromChannel: null
     })
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
         a.onFinished(() => {
             expect(numFound).equals(1)
             resolve()
@@ -411,7 +411,7 @@ const testLoadFile = async (daemon1: MockNodeDaemon, daemon2: MockNodeDaemon, fi
         fromNode: null
     }
     const x = await daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
         x.onError(err => {
             reject(err)
         })
@@ -451,7 +451,7 @@ const testLoadFileWithDefects = async (daemon1: MockNodeDaemon, daemon2: MockNod
         }
         const x = await daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
         try {
-            await new Promise((resolve, reject) => {
+            await new Promise<void>((resolve, reject) => {
                 x.onError(err => {
                     reject(err)
                 })
@@ -481,7 +481,7 @@ const testLoadFileWithDefects = async (daemon1: MockNodeDaemon, daemon2: MockNod
         }
         const x = await daemon2.mockDaemonApiServer().mockPostLoadFile(reqData as any as JSONObject)
         try {
-            await new Promise((resolve, reject) => {
+            await new Promise<void>((resolve, reject) => {
                 x.onError(err => {
                     reject(err)
                 })

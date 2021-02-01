@@ -54,7 +54,7 @@ const webSocketServerInterfaceFromWebSocketServer = (S: WebSocket.Server): WebSo
 export const startWebSocketServer = async (port: Port, nodeId: NodeId): Promise<WebSocketServerInterface> => {
     const S = new WebSocket.Server({ port: port as any as number })
     const wsi = webSocketServerInterfaceFromWebSocketServer(S)
-    return new Promise((resolve, reject) => {
+    return new Promise<WebSocketServerInterface>((resolve, reject) => {
         S.on('listening', () => {
             resolve(wsi)
         })

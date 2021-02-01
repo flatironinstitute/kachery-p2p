@@ -72,7 +72,7 @@ export class KacheryStorageManager {
         const shasum = crypto.createHash('sha1')
         for (let chunkSha1 of chunkSha1s) {
             const readStream = await this.getFileReadStream({sha1: chunkSha1})
-            await new Promise((resolve, reject) => {
+            await new Promise<void>((resolve, reject) => {
                 readStream.onData(buf => {
                     shasum.update(buf)
                     writeStream.write(buf)
@@ -85,7 +85,7 @@ export class KacheryStorageManager {
                 })
             })
         }
-        await new Promise((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
             writeStream.end(() => {
                 const sha1Computed = shasum.digest('hex') as any as Sha1Hash
                 if (sha1Computed !== sha1) {

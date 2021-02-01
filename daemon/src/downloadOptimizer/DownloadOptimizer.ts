@@ -32,7 +32,7 @@ export default class DownloadOptimizer {
     async waitForReady() {
         let numActiveFileDownloads = Array.from(this.#jobs.values()).filter(file => (file.isDownloading())).length
         if (numActiveFileDownloads < this.#maxNumSimultaneousFileDownloads) return
-        return new Promise((resolve) => {
+        return new Promise<void>((resolve) => {
             const id = randomAlphaString(10)
             this.#onReadyListeners.set(id, () => {
                 // self-destruct

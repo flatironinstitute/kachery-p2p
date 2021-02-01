@@ -75,7 +75,11 @@ const getConnectionString = (rn: RemoteNode, channelName: ChannelName | null) =>
     const onlineString = rn.isOnline() ? '' : '[offline] '
     const candidateMethods: SendRequestMethod[] = ['udp', 'http', 'http-proxy']
     const methods: SendRequestMethod[] = candidateMethods.filter(method => (channelName && rn.canSendRequest(method, channelName)))
-    return `${onlineString}${methods.join(' ')}`
+    const other: string[] = []
+    if (rn.isTrusted()) other.push('trusted')
+    if (rn.isBootstrap()) other.push('bootstrap')
+    const x = [...methods, ...other]
+    return `${onlineString}${x.join(' ')}`
 }
 
 const formatMB = (numBytes: number) => {

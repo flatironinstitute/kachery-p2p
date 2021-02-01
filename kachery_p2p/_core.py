@@ -334,7 +334,7 @@ def _probe_daemon(api_port=None):
 def start_daemon(*,
     config_path_or_url: str='',
     port: int=0,
-    udp_port: Union[int, None]=None,
+    udp_port: int=0,
     websocket_port: int=0,
     label: Union[str, None]=None,
     method: str='npx',
@@ -344,6 +344,7 @@ def start_daemon(*,
     public_url: str='',
     bootstrap: List[str],
     nobootstrap: bool=False,
+    noudp: bool=False,
     isbootstrap: bool=False,
     ismessageproxy: bool=False,
     isdataproxy: bool=False,
@@ -371,6 +372,8 @@ def start_daemon(*,
         start_args.append(f'--nobootstrap')
     if isbootstrap:
         start_args.append(f'--isbootstrap')
+    if noudp:
+        start_args.append(f'--noudp')
     if ismessageproxy:
         start_args.append(f'--ismessageproxy')
     if isdataproxy:
@@ -406,7 +409,7 @@ def start_daemon(*,
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.5.22'
+                npm_package = 'kachery-p2p-daemon@0.5.23'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''
