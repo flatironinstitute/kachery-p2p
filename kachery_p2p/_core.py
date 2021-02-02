@@ -32,9 +32,13 @@ def _experimental_config(*, nop2p: Union[None, bool]=None, file_server_urls: Uni
 def _api_port():
     return os.getenv('KACHERY_P2P_API_PORT', 20431)
 
+def _api_host():
+    return os.getenv('KACHERY_P2P_API_HOST', 'localhost')
+
 def _get_channels() -> List[str]:
     port = _api_port()
-    url = f'http://localhost:{port}/probe'
+    host = _api_host()
+    url = f'http://{host}:{port}/probe'
     resp = _http_post_json(url, dict())
     # if not resp['success']:
     #     raise Exception(resp['error'])
@@ -58,7 +62,8 @@ def _find_file(uri: str, timeout_sec: float) -> Iterable[dict]:
                 raise StopIteration
         return empty_iterator()
     port = _api_port()
-    url = f'http://localhost:{port}/findFile'
+    host = _api_host()
+    url = f'http://{host}:{port}/findFile'
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     assert algorithm == 'sha1'
     file_key = _create_file_key(sha1=hash0, query=query)
@@ -97,7 +102,8 @@ def _load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node:
     if try_p2p:
         try:
             port = _api_port()
-            url = f'http://localhost:{port}/loadFile' # todo: finish
+            host = _api_host()
+            url = f'http://{host}:{port}/loadFile' # todo: finish
             protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
             assert algorithm == 'sha1'
             file_key = _create_file_key(sha1=hash0, query=query)
@@ -319,12 +325,16 @@ def _get_node_id(api_port=None) -> str:
     assert x is not None, 'Unable to connect to daemon.'
     return x['nodeId']
 
-def _probe_daemon(api_port=None):
+def _probe_daemon(api_port=None, api_host=None):
     if api_port is not None:
         port = api_port
     else:
         port = _api_port()
-    url = f'http://localhost:{port}/probe'
+    if api_host is not None:
+        host = api_host
+    else:
+        host = _api_host()
+    url = f'http://{host}:{port}/probe'
     try:
         x = _http_get_json(url)
     except:
@@ -359,6 +369,7 @@ def start_daemon(*,
         raise Exception('Cannot start daemon. Already running.')
 
     api_port = _api_port()
+    api_host = _api_host()
     config_dir = os.getenv('KACHERY_P2P_CONFIG_DIR', f'{pathlib.Path.home()}/.kachery-p2p')
 
     start_args = []
@@ -409,7 +420,7 @@ def start_daemon(*,
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.5.23'
+                npm_package = 'kachery-p2p-daemon@0.5.24'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''
@@ -417,6 +428,7 @@ def start_daemon(*,
                 set -ex
 
                 export KACHERY_P2P_API_PORT="{api_port}"
+                export KACHERY_P2P_API_HOST="{api_host}"
                 export KACHERY_P2P_CONFIG_DIR="{config_dir}"
                 exec npx {npm_package} start {' '.join(start_args)}
                 ''')
@@ -426,6 +438,7 @@ def start_daemon(*,
                 set -ex
 
                 export KACHERY_P2P_API_PORT="{api_port}"
+                export KACHERY_P2P_API_HOST="{api_host}"
                 export KACHERY_P2P_CONFIG_DIR="{config_dir}"
                 # npm install -g {npm_package}
                 exec kachery-p2p-daemon start {' '.join(start_args)}
@@ -473,6 +486,7 @@ def start_daemon(*,
         set -ex
 
         export KACHERY_P2P_API_PORT="{api_port}"
+        export KACHERY_P2P_API_HOST="{api_host}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
         cd {thisdir}/../daemon
         # exec node_modules/ts-node/dist/bin.js {' '.join(node_arg)} ./src/cli.ts start {' '.join(start_args)}
@@ -494,7 +508,7 @@ def _check_latest_npm_package_version(package_name):
     latest_version = versions[-1]
     return latest_version
 
-def stop_daemon(api_port=None):
+def stop_daemon(api_port=None, api_host=None):
     """Stop the kachery daemon (take the node offline)
 
     Args:
@@ -504,7 +518,11 @@ def stop_daemon(api_port=None):
         port = api_port
     else:
         port = _api_port()
-    url = f'http://localhost:{port}/halt'
+    if api_host is not None:
+        host = api_host
+    else:
+        host = _api_host()
+    url = f'http://{host}:{port}/halt'
     try:
         x = _http_get_json(url)
     except:
