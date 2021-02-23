@@ -1,8 +1,8 @@
-import { ChannelName, errorMessage, NodeId } from '../interfaces/core'
+import { errorMessage, NodeId } from '../interfaces/core'
 import { SubscribeToSubfeedRequestData, SubscribeToSubfeedResponseData } from '../interfaces/NodeToNodeRequest'
 import KacheryP2PNode from '../KacheryP2PNode'
 
-export const handleSubscribeToSubfeed = async (node: KacheryP2PNode, fromNodeId: NodeId, channelName: ChannelName, requestData: SubscribeToSubfeedRequestData): Promise<SubscribeToSubfeedResponseData> => {
+export const handleSubscribeToSubfeed = async (node: KacheryP2PNode, fromNodeId: NodeId, requestData: SubscribeToSubfeedRequestData): Promise<SubscribeToSubfeedResponseData> => {
     // CHAIN:get_remote_messages:step(8)
     const { feedId, subfeedHash, position, durationMsec } = requestData
     if (!node.feedManager().hasWriteableFeed(feedId)) {
@@ -15,7 +15,7 @@ export const handleSubscribeToSubfeed = async (node: KacheryP2PNode, fromNodeId:
     }
     try {
         // CHAIN:get_remote_messages:step(9)
-        const initialSignedMessages = await node.feedManager().renewIncomingSubfeedSubscription(fromNodeId, channelName, feedId, subfeedHash, position, durationMsec)
+        const initialSignedMessages = await node.feedManager().renewIncomingSubfeedSubscription(fromNodeId, feedId, subfeedHash, position, durationMsec)
         return {
             requestType: 'subscribeToSubfeed',
             success: true,

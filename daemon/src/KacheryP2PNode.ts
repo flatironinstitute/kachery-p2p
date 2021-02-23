@@ -1,4 +1,6 @@
 import fs from 'fs'
+import ChannelConfigManager from './ChannelConfigManager'
+import { ChannelConfig } from './cli'
 import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util'
 import DataStreamy from './common/DataStreamy'
 import GarbageMap from './common/GarbageMap'
@@ -7,7 +9,7 @@ import ExternalInterface, { KacheryStorageManagerInterface } from './external/Ex
 import { MockNodeDefects } from './external/mock/MockNodeDaemon'
 import FeedManager from './feeds/FeedManager'
 import { getStats, GetStatsOpts } from './getStats'
-import { addDurations, Address, ChannelName, ChannelNodeInfo, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SubfeedHash, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
+import { addDurations, Address, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, ChannelNodeInfoBody, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SubfeedHash, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
 import { CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isReportSubfeedMessagesRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import NodeStats from './NodeStats'
 import { handleCheckAliveRequest } from './nodeToNodeRequestHandlers/handleCheckAliveRequest'
@@ -22,6 +24,7 @@ import { handleSubmitMessageToLiveFeedRequest } from './nodeToNodeRequestHandler
 import { handleSubscribeToSubfeed } from './nodeToNodeRequestHandlers/handleSubscribeToSubfeed'
 import { protocolVersion } from './protocolVersion'
 import { ProxyWebsocketConnection } from './proxyConnections/ProxyWebsocketConnection'
+import RemoteNode from './RemoteNode'
 import RemoteNodeManager from './RemoteNodeManager'
 import PublicUdpSocketServer from './services/PublicUdpSocketServer'
 import { PacketId } from './udp/UdpPacketSender'
@@ -37,9 +40,11 @@ export interface KacheryP2PNodeOpts {
 class KacheryP2PNode {
     #keyPair: KeyPair
     #nodeId: NodeId
+    #joinedChannelConfigUrls: ChannelConfigUrl[] = []
     #feedManager: FeedManager
     #remoteNodeManager: RemoteNodeManager
     #kacheryStorageManager: KacheryStorageManagerInterface
+    #channelConfigManager = new ChannelConfigManager()
     #proxyConnectionsToClients = new Map<NodeId, ProxyWebsocketConnection>()
     #proxyConnectionsToServers = new Map<NodeId, ProxyWebsocketConnection>()
     #downloadStreamManager = new DownloadStreamManager
@@ -57,9 +62,6 @@ class KacheryP2PNode {
         udpSocketPort: Port | null,
         webSocketListenPort: Port | null,
         label: NodeLabel,
-        bootstrapAddresses: Address[],
-        channelNames: ChannelName[],
-        trustedNodesInChannels: GarbageMap<ChannelName, NodeId[]>,
         externalInterface: ExternalInterface,
         opts: KacheryP2PNodeOpts
     }) {
@@ -78,20 +80,17 @@ class KacheryP2PNode {
     nodeId() {
         return this.#nodeId
     }
-    channelNames() {
-        return [...this.p.channelNames]
-    }
     keyPair() {
         return this.#keyPair
     }
+    joinedChannelConfigUrls() {
+        return this.#joinedChannelConfigUrls
+    }
+    setJoinedChannelConfigUrls(x: ChannelConfigUrl[]) {
+        return this.#joinedChannelConfigUrls = x
+    }
     remoteNodeManager() {
         return this.#remoteNodeManager
-    }
-    bootstrapAddresses() {
-        return [...this.p.bootstrapAddresses]
-    }
-    trustedNodesInChannel(channelName: ChannelName) {
-        return this.p.trustedNodesInChannels.getWithDefault(channelName, [])
     }
     isBootstrapNode() {
         return this.p.opts.isBootstrapNode
@@ -120,7 +119,17 @@ class KacheryP2PNode {
     stats() {
         return this.#stats
     }
-    findFile(args: { fileKey: FileKey, timeoutMsec: DurationMsec, fromChannel: ChannelName | null }): {
+    async getChannelConfig(channelConfigUrl: ChannelConfigUrl): Promise<ChannelConfig | null> {
+        return await this.#channelConfigManager.getChannelConfig(channelConfigUrl)
+    }
+    async nodeIsAuthorizedForChannel(nodeId: NodeId, channelConfigUrl: ChannelConfigUrl) {
+        const c = await this.getChannelConfig(channelConfigUrl)
+        if (!c) return false
+        const x = c.authorizedNodes.filter(n => (n.nodeId === nodeId))[0]
+        if (x) return true
+        else return false
+    }
+    findFile(args: { fileKey: FileKey, timeoutMsec: DurationMsec}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
         onFinished: (callback: () => void) => void,
         cancel: () => void
@@ -143,17 +152,15 @@ class KacheryP2PNode {
                     onFoundCallbacks.forEach(cb => {
                         cb({
                             nodeId: this.#nodeId,
-                            channelName: null,
                             fileKey: args.fileKey,
                             fileSize: s
                         })
                     })
                 }
 
-                const channelNames = args.fromChannel ? [args.fromChannel] : this.p.channelNames
-                const { onResponse, onFinished, onErrorResponse, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec: args.timeoutMsec, channelNames })
+                const { onResponse, onFinished, onErrorResponse, cancel } = this.#remoteNodeManager.sendRequestToAllNodes(requestData, { timeoutMsec: args.timeoutMsec })
                 handleCancel = cancel
-                onResponse((nodeId: NodeId, channelName: ChannelName, responseData: NodeToNodeResponseData) => {
+                onResponse((nodeId: NodeId, responseData: NodeToNodeResponseData) => {
                     if (!isCheckForFileResponseData(responseData)) {
                         /* istanbul ignore next */
                         throw Error(`Unexpected response type: ${responseData.requestType} <> 'checkForFile'`)
@@ -163,7 +170,6 @@ class KacheryP2PNode {
                         onFoundCallbacks.forEach(cb => {
                             cb({
                                 nodeId,
-                                channelName,
                                 fileKey: args.fileKey,
                                 fileSize: size
                             })
@@ -248,21 +254,21 @@ class KacheryP2PNode {
     getProxyConnectionToClient(nodeId: NodeId) {
         return this.#proxyConnectionsToClients.get(nodeId) || null
     }
-    // getChannelInfo(channelName: ChannelName): ChannelInfo {
-    //     const remoteNodesInChannel: RemoteNode[] = this.#remoteNodeManager.getRemoteNodesInChannel(channelName)
-    //     const x: ChannelInfo = {
-    //         nodes: remoteNodesInChannel.map(n => {
-    //             return n.getChannelNodeInfo(channelName)
-    //         }).filter(channelInfo => (channelInfo !== null))
-    //         .map(channelInfo => {
-    //             if (channelInfo === null) {
-    //                 throw Error('Unexpected channelInfo === null should have been filtered out')
-    //             }
-    //             return channelInfo
-    //         })
-    //     }
-    //     return x
-    // }
+    getChannelInfo(channelConfigUrl: ChannelConfigUrl): ChannelInfo {
+        const remoteNodesInChannel: RemoteNode[] = this.#remoteNodeManager.getRemoteNodesInChannel(channelConfigUrl, {includeOffline: false})
+        const x: ChannelInfo = {
+            nodes: remoteNodesInChannel.map(n => {
+                return n.getChannelNodeInfo(channelConfigUrl)
+            }).filter(channelInfo => (channelInfo !== null))
+            .map(channelInfo => {
+                if (channelInfo === null) {
+                    throw Error('Unexpected channelInfo === null should have been filtered out')
+                }
+                return channelInfo
+            })
+        }
+        return x
+    }
     hostName(): HostName | null {
         if (this.p.hostName) return this.p.hostName
         if (this.p.externalInterface.isMock) {
@@ -321,7 +327,7 @@ class KacheryP2PNode {
     publicUdpSocketServer() {
         return this.#publicUdpSocketServer
     }
-    getChannelNodeInfo(channelName: ChannelName): ChannelNodeInfo {
+    getChannelNodeInfo(channelConfigUrl: ChannelConfigUrl): ChannelNodeInfo {
         // const proxyHttpAddresses: Address[] = []
         // this.#proxyConnectionsToServers.forEach((c, remoteNodeId) => {
         //     const remoteNode = this.#remoteNodeManager.getRemoteNode(remoteNodeId)
@@ -332,27 +338,31 @@ class KacheryP2PNode {
         //         }
         //     }
         // })
-        const allProxyWebsocketNodeIds: NodeId[] = []
+        const messageProxyWebsocketNodeIds: NodeId[] = []
+        const dataProxyWebsocketNodeIds: NodeId[] = []
         this.#proxyConnectionsToServers.forEach((c, remoteNodeId) => {
             const remoteNode = this.#remoteNodeManager.getRemoteNode(remoteNodeId)
             if (remoteNode) {
-                allProxyWebsocketNodeIds.push(remoteNodeId)
+                if (remoteNode.getJoinedChannelConfigUrls().includes(channelConfigUrl)) {
+                    if (c.isMessageProxy()) {
+                        messageProxyWebsocketNodeIds.push(remoteNodeId)
+                    }
+                    if (c.isDataProxy()) {
+                        dataProxyWebsocketNodeIds.push(remoteNodeId)
+                    }
+                }
             }
         })
         // if any of our proxyWebsocketNodeIds are trusted nodeIds then only use those
-        const trustedNodeIds = this.trustedNodesInChannel(channelName)
-        const trustedWebsocketNodeIds = allProxyWebsocketNodeIds.filter(n => (trustedNodeIds.includes(n)))
-        const body = {
-            channelName,
+        const body: ChannelNodeInfoBody = {
+            channelConfigUrl,
             nodeId: this.#nodeId,
             nodeLabel: this.p.label,
             httpAddress: this.httpAddress(),
             webSocketAddress: this.webSocketAddress(),
             publicUdpSocketAddress: this.#publicUdpSocketAddress,
-            isMessageProxy: this.p.opts.isMessageProxy,
-            isDataProxy: this.p.opts.isDataProxy,
-            // if any of our proxyWebsocketNodeIds are trusted nodeIds then only use those, otherwise report all of them
-            proxyWebsocketNodeIds: trustedWebsocketNodeIds.length > 0 ? trustedWebsocketNodeIds : allProxyWebsocketNodeIds,
+            messageProxyWebsocketNodeIds,
+            dataProxyWebsocketNodeIds,
             timestamp: nowTimestamp()
         }
         return {
@@ -360,9 +370,8 @@ class KacheryP2PNode {
             signature: getSignature(body, this.#keyPair)
         }
     }
-    async submitMessageToRemoteLiveFeed({ nodeId, channelName, feedId, subfeedHash, message, timeoutMsec }: {
+    async submitMessageToRemoteLiveFeed({ nodeId, feedId, subfeedHash, message, timeoutMsec }: {
         nodeId: NodeId,
-        channelName: ChannelName,
         feedId: FeedId,
         subfeedHash: SubfeedHash,
         message: SubmittedSubfeedMessage,
@@ -374,7 +383,7 @@ class KacheryP2PNode {
             subfeedHash,
             message
         }
-        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, channelName, requestData, { timeoutMsec: timeoutMsec, method: 'default' })
+        const responseData = await this.#remoteNodeManager.sendRequestToNode(nodeId, requestData, { timeoutMsec: timeoutMsec, method: 'default' })
         if (!isSubmitMessageToLiveFeedResponseData(responseData)) {
             /* istanbul ignore next */
             throw Error(`Error submitting message to remote live feed: Unexpected response data.`)
@@ -393,9 +402,9 @@ class KacheryP2PNode {
                 requestType: 'checkForLiveFeed',
                 feedId
             }
-            const { onResponse, onFinished, onErrorResponse, cancel } = this.#remoteNodeManager.sendRequestToNodesInChannels(requestData, { timeoutMsec, channelNames: this.p.channelNames })
+            const { onResponse, onFinished, onErrorResponse, cancel } = this.#remoteNodeManager.sendRequestToAllNodes(requestData, { timeoutMsec })
             let found = false
-            onResponse((nodeId, channelName, responseData) => {
+            onResponse((nodeId, responseData) => {
                 if (found) return
                 if (!isCheckForLiveFeedResponseData(responseData)) {
                     /* istanbul ignore next */
@@ -404,8 +413,7 @@ class KacheryP2PNode {
                 if (responseData.found) {
                     found = true
                     resolve({
-                        nodeId,
-                        channelName
+                        nodeId
                     })
                 }
             })
@@ -452,7 +460,7 @@ class KacheryP2PNode {
             responseData = await handleCheckForLiveFeedRequest(this, fromNodeId, requestData)
         }
         else if (isSubscribeToSubfeedRequestData(requestData)) {
-            responseData = await handleSubscribeToSubfeed(this, fromNodeId, request.body.channelName, requestData)
+            responseData = await handleSubscribeToSubfeed(this, fromNodeId, requestData)
         }
         else if (isReportSubfeedMessagesRequestData(requestData)) {
             responseData = await handleReportSubfeedMessages(this, fromNodeId, requestData)
@@ -464,7 +472,7 @@ class KacheryP2PNode {
             responseData = await handleSubmitMessageToLiveFeedRequest(this, fromNodeId, requestData)
         }
         else if (isStartStreamViaUdpRequestData(requestData)) {
-            responseData = await handleStartStreamViaUdpRequest(this, fromNodeId, requestData, request.body.channelName)
+            responseData = await handleStartStreamViaUdpRequest(this, fromNodeId, requestData)
         }
         else if (isFallbackUdpPacketRequestData(requestData)) {
             responseData = await handleFallbackUdpPacketRequest(this, fromNodeId, requestData)

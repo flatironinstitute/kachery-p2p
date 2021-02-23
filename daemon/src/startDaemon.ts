@@ -1,10 +1,10 @@
-import GarbageMap from './common/GarbageMap';
 import ExternalInterface from './external/ExternalInterface';
 import { MockNodeDefects } from './external/mock/MockNodeDaemon';
-import { Address, ChannelName, HostName, LocalFilePath, NodeId, NodeLabel, Port, scaledDurationMsec, unscaledDurationMsec, UrlString } from './interfaces/core';
+import { Address, HostName, LocalFilePath, NodeLabel, Port, scaledDurationMsec, unscaledDurationMsec, UrlString } from './interfaces/core';
 import KacheryP2PNode from './KacheryP2PNode';
 import AnnounceService from './services/AnnounceService';
 import BootstrapService from './services/BootstrapService';
+import ConfigUpdateService from './services/ConfigUpdateService';
 import DaemonApiServer from './services/DaemonApiServer';
 import DiscoverService from './services/DiscoverService';
 import DisplayStateService from './services/DisplayStateService';
@@ -15,12 +15,9 @@ import PublicUdpSocketServer from './services/PublicUdpSocketServer';
 import PublicWebSocketServer from './services/PublicWebSocketServer';
 
 export interface StartDaemonOpts {
-    bootstrapAddresses: Address[],
     isBootstrap: boolean,
     isMessageProxy: boolean,
     isDataProxy: boolean,
-    channelNames: ChannelName[],
-    trustedNodesInChannels: GarbageMap<ChannelName, NodeId[]>,
     multicastUdpAddress: Address | null,
     udpSocketPort: Port | null,
     webSocketListenPort: Port | null,
@@ -30,6 +27,7 @@ export interface StartDaemonOpts {
         discover?: boolean,
         bootstrap?: boolean,
         proxyClient?: boolean,
+        configUpdate?: boolean,
         multicast?: boolean,
         display?: boolean,
         udpSocket?: boolean,
@@ -48,6 +46,7 @@ export interface DaemonInterface {
     discoverService: DiscoverService | null,
     bootstrapService: BootstrapService | null,
     proxyClientService: ProxyClientService | null,
+    configUpdateService: ConfigUpdateService | null,
     multicastService: MulticastService | null,
     displayService: DisplayStateService | null,
     node: KacheryP2PNode,
@@ -86,9 +85,6 @@ const startDaemon = async (args: {
         webSocketListenPort: opts.webSocketListenPort,
         udpSocketPort: opts.udpSocketPort,
         label,
-        bootstrapAddresses: opts.bootstrapAddresses,
-        channelNames: opts.channelNames,
-        trustedNodesInChannels: opts.trustedNodesInChannels,
         externalInterface,
         opts: {
             isBootstrapNode: opts.isBootstrap,
@@ -148,6 +144,9 @@ const startDaemon = async (args: {
     const proxyClientService = opts.services.proxyClient ? new ProxyClientService(kNode, {
         intervalMsec: scaledDurationMsec(3000)
     }) : null
+    const configUpdateService = opts.services.configUpdate ? new ConfigUpdateService(kNode, {
+        intervalMsec: scaledDurationMsec(5000)
+    }) : null
     let multicastService = (opts.services.multicast && (opts.multicastUdpAddress !== null)) ? new MulticastService(kNode, {
         intervalMsec: scaledDurationMsec(12000),
         multicastAddress: opts.multicastUdpAddress
@@ -168,6 +167,7 @@ const startDaemon = async (args: {
         discoverService && discoverService.stop()
         bootstrapService && bootstrapService.stop()
         proxyClientService && proxyClientService.stop()
+        configUpdateService && configUpdateService.stop()
         multicastService && multicastService.stop()
         displayService && displayService.stop()
         // wait a bit after stopping services before cleaning up the rest (for clean exit of services)
@@ -191,6 +191,7 @@ const startDaemon = async (args: {
         discoverService,
         bootstrapService,
         proxyClientService,
+        configUpdateService,
         multicastService,
         displayService,
         node: kNode,

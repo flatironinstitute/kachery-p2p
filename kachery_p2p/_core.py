@@ -42,7 +42,7 @@ def _get_channels() -> List[str]:
     resp = _http_post_json(url, dict())
     # if not resp['success']:
     #     raise Exception(resp['error'])
-    return resp['channels']
+    return resp['joinedChannels']
 
 def _find_file(uri: str, timeout_sec: float) -> Iterable[dict]:
     if uri.startswith('sha1dir://'):
@@ -67,7 +67,7 @@ def _find_file(uri: str, timeout_sec: float) -> Iterable[dict]:
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     assert algorithm == 'sha1'
     file_key = _create_file_key(sha1=hash0, query=query)
-    return _http_post_json_receive_json_socket(url, dict(fileKey=file_key, timeoutMsec=timeout_sec * 1000, fromChannel=None))
+    return _http_post_json_receive_json_socket(url, dict(fileKey=file_key, timeoutMsec=timeout_sec * 1000))
 
 def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str, dict]:
     listA = uri.split('?')
@@ -109,8 +109,7 @@ def _load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node:
             file_key = _create_file_key(sha1=hash0, query=query)
             sock = _http_post_json_receive_json_socket(url, dict(
                 fileKey=file_key,
-                fromNode=from_node,
-                fromChannel=from_channel
+                fromNode=from_node
             ))
             for r in sock:
                 try:
@@ -342,17 +341,14 @@ def _probe_daemon(api_port=None, api_host=None):
     return x
 
 def start_daemon(*,
-    config_path_or_url: str='',
     port: int=0,
     udp_port: int=0,
     websocket_port: int=0,
-    label: Union[str, None]=None,
+    label: str,
     method: str='npx',
-    channels: List[str]=[],
     verbose: int=0,
     host: str='',
     public_url: str='',
-    bootstrap: List[str],
     nobootstrap: bool=False,
     noudp: bool=False,
     isbootstrap: bool=False,
@@ -373,12 +369,6 @@ def start_daemon(*,
     config_dir = os.getenv('KACHERY_P2P_CONFIG_DIR', f'{pathlib.Path.home()}/.kachery-p2p')
 
     start_args = []
-    if config_path_or_url != '':
-        start_args.append(f'--config {config_path_or_url}')
-    for ch in channels:
-        start_args.append(f'--channel {ch}')
-    for b in bootstrap:
-        start_args.append(f'--bootstrap {b}')
     if nobootstrap:
         start_args.append(f'--nobootstrap')
     if isbootstrap:
@@ -400,8 +390,7 @@ def start_daemon(*,
         start_args.append(f'--websocket-port {websocket_port}')
     if udp_port is not None:
         start_args.append(f'--udp-port {udp_port}')
-    if label is not None:
-        start_args.append(f'--label {label}')
+    start_args.append(f'--label {label}')
     start_args.append(f'--http-port {port}')
 
     # Note that npx-latest/npm-latest uses the latest version of the daemon on npm, which may be desireable for some bootstrap nodes, but not adviseable if you want to be sure that kachery-p2p is constistent with the node daemon
@@ -420,7 +409,7 @@ def start_daemon(*,
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.5.24'
+                npm_package = 'kachery-p2p-daemon@0.6.0'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''

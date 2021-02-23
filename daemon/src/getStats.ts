@@ -1,10 +1,10 @@
-import { ByteCount, ChannelName, isEqualTo, isOneOf, JSONObject, NodeId, optional, _validateObject } from "./interfaces/core";
+import { ByteCount, ChannelConfigUrl, isEqualTo, isOneOf, JSONObject, NodeId, optional, _validateObject } from "./interfaces/core";
 import KacheryP2PNode from "./KacheryP2PNode";
 import { RemoteNodeStats } from './RemoteNode';
 
 export interface NodeStatsInterface {
     nodeId: NodeId,
-    channelNames: ChannelName[]
+    joinedChannelConfigUrls: ChannelConfigUrl[]
     remoteNodes: RemoteNodeStats[]
     totalBytesSent: {
         total: ByteCount,
@@ -36,7 +36,7 @@ export const getStats = (node: KacheryP2PNode, o: GetStatsOpts): NodeStatsInterf
     const s = node.publicUdpSocketServer()
     const ret: NodeStatsInterface = {
         nodeId: node.nodeId(),
-        channelNames: node.channelNames(),
+        joinedChannelConfigUrls: node.joinedChannelConfigUrls(),
         totalBytesSent: node.stats().totalBytesSent(),
         totalBytesReceived: node.stats().totalBytesReceived(),
         remoteNodes: []

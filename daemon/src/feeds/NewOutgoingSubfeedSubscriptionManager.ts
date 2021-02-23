@@ -1,6 +1,6 @@
 import { TIMEOUTS } from "../common/constants"
 import GarbageMap from "../common/GarbageMap"
-import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, FeedId, NodeId, nowTimestamp, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, zeroTimestamp } from "../interfaces/core"
+import { DurationMsec, durationMsecToNumber, elapsedSince, FeedId, NodeId, nowTimestamp, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, zeroTimestamp } from "../interfaces/core"
 import { isSubscribeToSubfeedResponseData, SubscribeToSubfeedRequestData } from "../interfaces/NodeToNodeRequest"
 import KacheryP2PNode from "../KacheryP2PNode"
 
@@ -8,22 +8,22 @@ class NewOutgoingSubfeedSubscriptionManager {
     #outgoingSubscriptions = new GarbageMap<string, OutgoingSubfeedSubscription>(scaledDurationMsec(300 * 60 * 1000))
     constructor(private node: KacheryP2PNode) {
     }
-    async createOrRenewOutgoingSubscription(remoteNodeId: NodeId, channelName: ChannelName, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, durationMsec: DurationMsec): Promise<SignedSubfeedMessage[]> {
-        const subfeedCode = makeSubscriptionCode(remoteNodeId, channelName, feedId, subfeedHash)
+    async createOrRenewOutgoingSubscription(remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, durationMsec: DurationMsec): Promise<SignedSubfeedMessage[]> {
+        const subfeedCode = makeSubscriptionCode(remoteNodeId, feedId, subfeedHash)
         let S = this.#outgoingSubscriptions.get(subfeedCode)
         if (!S) {
-            S = new OutgoingSubfeedSubscription(this.node, remoteNodeId, channelName, feedId, subfeedHash)
+            S = new OutgoingSubfeedSubscription(this.node, remoteNodeId, feedId, subfeedHash)
             this.#outgoingSubscriptions.set(subfeedCode, S)
         }
         // CHAIN:get_remote_messages:step(6)
         const initialSignedMessages = await S.renew(position, durationMsec)
         setTimeout(() => {
-            this._checkRemove(remoteNodeId, channelName, feedId, subfeedHash)
+            this._checkRemove(remoteNodeId, feedId, subfeedHash)
         }, durationMsecToNumber(durationMsec) + durationMsecToNumber(scaledDurationMsec(5000)))
         return initialSignedMessages
     }
-    _checkRemove(remoteNodeId: NodeId, channelName: ChannelName, feedId: FeedId, subfeedHash: SubfeedHash) {
-        const subfeedCode = makeSubscriptionCode(remoteNodeId, channelName, feedId, subfeedHash)
+    _checkRemove(remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash) {
+        const subfeedCode = makeSubscriptionCode(remoteNodeId, feedId, subfeedHash)
         const S = this.#outgoingSubscriptions.get(subfeedCode)
         if (!S) return
         const elapsedMsec = S.elapsedMsecSinceLastRenew()
@@ -33,15 +33,15 @@ class NewOutgoingSubfeedSubscriptionManager {
     }
 }
 
-const makeSubscriptionCode = (remoteNodeId: NodeId, channelName: ChannelName, feedId: FeedId, subfeedHash: SubfeedHash) => {
-    return remoteNodeId + ':' + channelName + ':' + feedId.toString() + ':' + subfeedHash.toString()
+const makeSubscriptionCode = (remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash) => {
+    return remoteNodeId + ':' + feedId.toString() + ':' + subfeedHash.toString()
 }
 
 class OutgoingSubfeedSubscription {
     #lastRenewTimestamp = zeroTimestamp()
     #lastRenewDurationMsec: DurationMsec = scaledDurationMsec(1000 * 60)
     #initialMessageSent = false
-    constructor(private node: KacheryP2PNode, private remoteNodeId: NodeId, private channelName: ChannelName, private feedId: FeedId, private subfeedHash: SubfeedHash) {
+    constructor(private node: KacheryP2PNode, private remoteNodeId: NodeId, private feedId: FeedId, private subfeedHash: SubfeedHash) {
     }
     // todo: this needs to be async and returns the intial messages
     async renew(position: SubfeedPosition, durationMsec: DurationMsec): Promise<SignedSubfeedMessage[]> {
@@ -61,7 +61,6 @@ class OutgoingSubfeedSubscription {
         }
         const responseData = await this.node.remoteNodeManager().sendRequestToNode(
             this.remoteNodeId,
-            this.channelName,
             requestData,
             {
                 timeoutMsec: TIMEOUTS.defaultRequest,

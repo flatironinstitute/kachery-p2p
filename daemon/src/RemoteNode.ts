@@ -1,7 +1,7 @@
 import { TIMEOUTS } from "./common/constants";
 import { getSignature, verifySignature } from "./common/crypto_util";
 import DataStreamy from "./common/DataStreamy";
-import { addByteCount, Address, byteCount, ByteCount, ChannelName, ChannelNodeInfo, createRequestId, durationGreaterThan, DurationMsec, elapsedSince, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec, unscaledDurationMsec, urlPath } from "./interfaces/core";
+import { addByteCount, Address, byteCount, ByteCount, ChannelConfigUrl, ChannelNodeInfo, createRequestId, durationGreaterThan, DurationMsec, elapsedSince, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec, unscaledDurationMsec, urlPath } from "./interfaces/core";
 import { CheckAliveRequestData, DownloadFileDataRequestData, isCheckAliveResponseData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, isStopStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StopStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import DownloadFileDataMethodOptimizer, { DownloadFileDataMethod } from "./methodOptimizers/DownloadFileDataMethodOptimizer";
@@ -30,11 +30,10 @@ export interface RemoteNodeStats {
 class RemoteNode {
     #node: KacheryP2PNode
     #remoteNodeId: NodeId
-    #channelNodeInfoByChannel = new Map<ChannelName, ChannelNodeInfo>()
+    #channelNodeInfoByChannel = new Map<ChannelConfigUrl, ChannelNodeInfo>()
     #isBootstrap: boolean
     #isBootstrapMessageProxy: boolean
     #isBootstrapDataProxy: boolean
-    #isTrusted: boolean
     #bootstrapAddress: Address | null
     #bootstrapWebSocketAddress: Address | null
     #bootstrapUdpSocketAddress: Address | null
@@ -51,7 +50,6 @@ class RemoteNode {
         isBootstrap: boolean,
         isBootstrapMessageProxy: boolean,
         isBootstrapDataProxy: boolean,
-        isTrusted: boolean,
         bootstrapAddress: Address | null,
         bootstrapWebSocketAddress: Address | null,
         bootstrapUdpSocketAddress: Address | null,
@@ -61,7 +59,6 @@ class RemoteNode {
         this.#isBootstrap = opts.isBootstrap
         this.#isBootstrapMessageProxy = opts.isBootstrapMessageProxy,
         this.#isBootstrapDataProxy = opts.isBootstrapDataProxy,
-        this.#isTrusted = opts.isTrusted
         this.#bootstrapAddress = opts.bootstrapAddress
         this.#bootstrapWebSocketAddress = opts.bootstrapWebSocketAddress
         this.#bootstrapUdpSocketAddress = opts.bootstrapUdpSocketAddress
@@ -78,44 +75,16 @@ class RemoteNode {
     isBootstrap() {
         return this.#isBootstrap
     }
-    isTrusted() {
-        return this.#isTrusted
-    }
-    isMessageProxy(channelName: ChannelName | null) {
-        if (channelName === null) {
-            if (this.#isBootstrapMessageProxy) return true
-            for (let cn of this.#node.channelNames()) {
-                if (this.isMessageProxy(cn)) return true
-            }
-            return false
-        }
-        if (this.#isBootstrapMessageProxy) return true
-        const cni = this.getChannelNodeInfo(channelName)
-        if (!cni) return false
-        return cni.body.isMessageProxy
-    }
-    isDataProxy(channelName: ChannelName | null) {
-        if (channelName === null) {
-            if (this.#isBootstrapDataProxy) return true
-            for (let cn of this.#node.channelNames()) {
-                if (this.isDataProxy(cn)) return true
-            }
-            return false
-        }
-        const cni = this.getChannelNodeInfo(channelName)
-        if (!cni) return false
-        return cni.body.isDataProxy
-    }
     bootstrapAddress() {
         return this.#bootstrapAddress
     }
     bootstrapWebSocketAddress() {
         return this.#bootstrapWebSocketAddress
     }
-    setChannelNodeInfoIfMoreRecent(channelName: ChannelName, channelNodeInfo: ChannelNodeInfo) {
+    setChannelNodeInfoIfMoreRecent(channelConfigUrl: ChannelConfigUrl, channelNodeInfo: ChannelNodeInfo) {
         if (channelNodeInfoIsExpired(channelNodeInfo)) return
-        if (this.#channelNodeInfoByChannel.has(channelName)) {
-            const x = this.#channelNodeInfoByChannel.get(channelName);
+        if (this.#channelNodeInfoByChannel.has(channelConfigUrl)) {
+            const x = this.#channelNodeInfoByChannel.get(channelConfigUrl);
             if (!x) throw Error('Unexpected.');
             if (x.body.timestamp > channelNodeInfo.body.timestamp) {
                 // already have more recent
@@ -127,7 +96,7 @@ class RemoteNode {
             const requestData: CheckAliveRequestData = {
                 requestType: 'checkAlive'
             }
-            this.sendRequest(requestData, channelName, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'}).then(responseData => {
+            this.sendRequest(requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'}).then(responseData => {
                 if (!isCheckAliveResponseData(responseData)) throw Error('Unexpected response for checkAlive request')
                 if (responseData.alive) {
                     this._setOnline(true)
@@ -136,22 +105,22 @@ class RemoteNode {
                 // maybe not online
             })
         }
-        this.#channelNodeInfoByChannel.set(channelName, channelNodeInfo)
+        this.#channelNodeInfoByChannel.set(channelConfigUrl, channelNodeInfo)
     }
-    getChannelNames() {
-        let ret: ChannelName[] = [];
-        this.#channelNodeInfoByChannel.forEach((channelNodeInfo, channelName) => {
-            ret.push(channelName);
+    getJoinedChannelConfigUrls() {
+        let ret: ChannelConfigUrl[] = [];
+        this.#channelNodeInfoByChannel.forEach((channelNodeInfo, channelConfigUrl) => {
+            ret.push(channelConfigUrl);
         });
         return ret
     }
-    getChannelNodeInfo(channelName: ChannelName): ChannelNodeInfo | null {
-        return this.#channelNodeInfoByChannel.get(channelName) || null
+    getChannelNodeInfo(channelConfigUrl: ChannelConfigUrl): ChannelNodeInfo | null {
+        return this.#channelNodeInfoByChannel.get(channelConfigUrl) || null
     }
     getRemoteNodeWebSocketAddress(): Address | null {
         let ret = this.bootstrapWebSocketAddress()
         if (ret) return ret
-        this.#channelNodeInfoByChannel.forEach((cni, channelName) => {
+        this.#channelNodeInfoByChannel.forEach((cni) => {
             if (cni.body.webSocketAddress) {
                 ret = cni.body.webSocketAddress
             }
@@ -166,7 +135,7 @@ class RemoteNode {
     }
     getPublicUdpAddressForRemoteNode(): Address | null {
         let ret: Address | null = null
-        this.#channelNodeInfoByChannel.forEach((channelNodeInfo, channelName) => {
+        this.#channelNodeInfoByChannel.forEach((channelNodeInfo) => {
             if (ret === null) {
                 if (channelNodeInfo.body.publicUdpSocketAddress) {
                     ret = channelNodeInfo.body.publicUdpSocketAddress
@@ -199,29 +168,28 @@ class RemoteNode {
         }
         return s
     }
-    ageOfChannelNodeInfo(channelName: ChannelName): DurationMsec | null {
-        const cni = this.#channelNodeInfoByChannel.get(channelName)
+    ageOfChannelNodeInfo(channelConfigUrl: ChannelConfigUrl): DurationMsec | null {
+        const cni = this.#channelNodeInfoByChannel.get(channelConfigUrl)
         if (!cni) return null
         return unscaledDurationMsec(elapsedSince(cni.body.timestamp))
     }
     pruneChannelNodeInfos() {
-        const channelNames = this.#channelNodeInfoByChannel.keys()
-        for (let channelName of channelNames) {
-            const cni = this.#channelNodeInfoByChannel.get(channelName)
+        const channelConfigUrls = this.#channelNodeInfoByChannel.keys()
+        for (let channelConfigUrl of channelConfigUrls) {
+            const cni = this.#channelNodeInfoByChannel.get(channelConfigUrl)
             /* istanbul ignore next */
             if (!cni) throw Error('Unexpected in pruneChannelNodeInfos')
             if (channelNodeInfoIsExpired(cni)) {
-                this.#channelNodeInfoByChannel.delete(channelName)
+                this.#channelNodeInfoByChannel.delete(channelConfigUrl)
             }
         }
     }
-    _formRequestFromRequestData(requestData: NodeToNodeRequestData, channelName: ChannelName, opts: {timeoutMsec: DurationMsec}): NodeToNodeRequest {
+    _formRequestFromRequestData(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec}): NodeToNodeRequest {
         const requestId = createRequestId()
         const requestBody = {
             protocolVersion: protocolVersion(),
             requestId,
             fromNodeId: this.#node.nodeId(),
-            channelName,
             toNodeId: this.#remoteNodeId,
             timestamp: nowTimestamp(),
             timeoutMsec: opts.timeoutMsec,
@@ -251,17 +219,19 @@ class RemoteNode {
             }
         }
     }
-    getRemoteNodeMessageProxyNode(channelName: ChannelName): RemoteNode | null {
-        const channelNodeInfo = this.#channelNodeInfoByChannel.get(channelName)
-        if (!channelNodeInfo) return null
-        for (let proxyNodeId of channelNodeInfo.body.proxyWebsocketNodeIds) {
-            if (proxyNodeId !== this.#remoteNodeId) {
-                const prn = this.#node.remoteNodeManager().getRemoteNode(proxyNodeId)
-                if (prn) {
-                    if (prn.isMessageProxy(channelName)) { /////////////////////////// message proxy
-                        if (prn.isOnline()) {
-                            if (prn.getRemoteNodeHttpAddress()) {
-                                return prn
+    getRemoteNodeMessageProxyNode(): RemoteNode | null {
+        const channelConfigUrls = this.getJoinedChannelConfigUrls()
+        for (let channelConfigUrl of channelConfigUrls) {
+            const channelNodeInfo = this.#channelNodeInfoByChannel.get(channelConfigUrl)
+            if (channelNodeInfo) {
+                for (let proxyNodeId of channelNodeInfo.body.messageProxyWebsocketNodeIds) {
+                    if (proxyNodeId !== this.#remoteNodeId) {
+                        const prn = this.#node.remoteNodeManager().getRemoteNode(proxyNodeId)
+                        if (prn) {
+                            if (prn.isOnline()) {
+                                if (prn.getRemoteNodeHttpAddress()) {
+                                    return prn
+                                }
                             }
                         }
                     }
@@ -270,17 +240,19 @@ class RemoteNode {
         }
         return null
     }
-    getRemoteNodeDataProxyNode(channelName: ChannelName): RemoteNode | null {
-        const channelNodeInfo = this.#channelNodeInfoByChannel.get(channelName)
-        if (!channelNodeInfo) return null
-        for (let proxyNodeId of channelNodeInfo.body.proxyWebsocketNodeIds) {
-            if (proxyNodeId !== this.#remoteNodeId) {
-                const prn = this.#node.remoteNodeManager().getRemoteNode(proxyNodeId)
-                if (prn) {
-                    if (prn.isDataProxy(channelName)) { /////////////////////////// data proxy
-                        if (prn.isOnline()) {
-                            if (prn.getRemoteNodeHttpAddress()) {
-                                return prn
+    getRemoteNodeDataProxyNode(): RemoteNode | null {
+        const channelConfigUrls = this.getJoinedChannelConfigUrls()
+        for (let channelConfigUrl of channelConfigUrls) {
+            const channelNodeInfo = this.#channelNodeInfoByChannel.get(channelConfigUrl)
+            if (channelNodeInfo) {
+                for (let proxyNodeId of channelNodeInfo.body.dataProxyWebsocketNodeIds) {
+                    if (proxyNodeId !== this.#remoteNodeId) {
+                        const prn = this.#node.remoteNodeManager().getRemoteNode(proxyNodeId)
+                        if (prn) {
+                            if (prn.isOnline()) {
+                                if (prn.getRemoteNodeHttpAddress()) {
+                                    return prn
+                                }
                             }
                         }
                     }
@@ -289,12 +261,12 @@ class RemoteNode {
         }
         return null
     }
-    canSendRequest(method: SendRequestMethod, channelName: ChannelName): boolean {
-        let method2 = this.#sendMessageMethodOptimizer.determineSendRequestMethod(method, channelName)
+    canSendRequest(method: SendRequestMethod): boolean {
+        let method2 = this.#sendMessageMethodOptimizer.determineSendRequestMethod(method)
         return method2 === null ? false : true
     }
-    async downloadFileData(streamId: StreamId, channelName: ChannelName, opts: {method: DownloadFileDataMethod}): Promise<{dataStream: DataStreamy, method: DownloadFileDataMethod}> {
-        const method = this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(opts.method, channelName)
+    async downloadFileData(streamId: StreamId, opts: {method: DownloadFileDataMethod}): Promise<{dataStream: DataStreamy, method: DownloadFileDataMethod}> {
+        const method = this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(opts.method)
         if (method === null) {
             throw Error('No method available to download stream')
         }
@@ -310,7 +282,7 @@ class RemoteNode {
             }
         }
         else if (method === 'http-proxy') {
-            const proxyRemoteNode = this.getRemoteNodeDataProxyNode(channelName)
+            const proxyRemoteNode = this.getRemoteNodeDataProxyNode()
             if (!proxyRemoteNode) {
                 /* istanbul ignore next */
                 throw Error('Unexpected. Unable to download file data... no proxy remote node found.')
@@ -327,7 +299,7 @@ class RemoteNode {
             }
         }
         else if (method === 'udp') {
-            const ds = await this._streamDataViaUdpFromRemoteNode(streamId, channelName)
+            const ds = await this._streamDataViaUdpFromRemoteNode(streamId)
             return {
                 method,
                 dataStream: ds
@@ -338,7 +310,7 @@ class RemoteNode {
             throw Error ('Unexpected')
         }
     }
-    async _streamDataViaUdpFromRemoteNode(streamId: StreamId, channelName: ChannelName): Promise<DataStreamy> {
+    async _streamDataViaUdpFromRemoteNode(streamId: StreamId): Promise<DataStreamy> {
         const udpS = this.#node.publicUdpSocketServer()
         if (!udpS) {
             /* istanbul ignore next */
@@ -354,7 +326,7 @@ class RemoteNode {
                 requestType: "stopStreamViaUdp",
                 streamId
             }
-            this.sendRequest(stopReqData, channelName, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'}).then(stopResponseData => {
+            this.sendRequest(stopReqData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'}).then(stopResponseData => {
                 /* istanbul ignore next */
                 if (!isStopStreamViaUdpResponseData(stopResponseData)) throw Error('Unexpected in _streamDataViaUdpFromRemoteNode')
                 // okay
@@ -363,7 +335,7 @@ class RemoteNode {
             })
         })
         try {
-            const responseData = await this.sendRequest(requestData, channelName, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
+            const responseData = await this.sendRequest(requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
             /* istanbul ignore next */
             if (!isStartStreamViaUdpResponseData(responseData)) throw Error('Unexpected in _streamDataViaUdpFromRemoteNode')
             /* istanbul ignore next */
@@ -374,7 +346,7 @@ class RemoteNode {
         }
         return incomingDataStream
     }
-    async startStreamViaUdpToRemoteNode(streamId: StreamId, channelName: ChannelName): Promise<void> {
+    async startStreamViaUdpToRemoteNode(streamId: StreamId): Promise<void> {
         const r: DownloadFileDataRequestData | null = this.#node.downloadStreamManager().get(streamId)
         if (r === null) {
             /* istanbul ignore next */
@@ -390,11 +362,11 @@ class RemoteNode {
 
         const ds = await this.#node.kacheryStorageManager().getFileReadStream(r.fileKey)
         const fallbackAddress = nodeIdFallbackAddress(this.#remoteNodeId)
-        udpS.setOutgoingDataStream(udpA, fallbackAddress, streamId, ds, channelName, {toNodeId: this.#remoteNodeId})
+        udpS.setOutgoingDataStream(udpA, fallbackAddress, streamId, ds, {toNodeId: this.#remoteNodeId})
     }
-    async sendRequest(requestData: NodeToNodeRequestData, channelName: ChannelName, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
+    async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
         try {
-            const ret = await this._trySendRequest(requestData, channelName, opts)
+            const ret = await this._trySendRequest(requestData, opts)
             this._setOnline(true)
             return ret
         }
@@ -410,11 +382,11 @@ class RemoteNode {
     isOnline() {
         return this.#isOnline
     }
-    async _trySendRequest(requestData: NodeToNodeRequestData, channelName: ChannelName, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
-        const request = this._formRequestFromRequestData(requestData, channelName, {timeoutMsec: opts.timeoutMsec});
+    async _trySendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
+        const request = this._formRequestFromRequestData(requestData, {timeoutMsec: opts.timeoutMsec});
         const requestId = request.body.requestId;
 
-        const method = this.#sendMessageMethodOptimizer.determineSendRequestMethod(opts.method, channelName)
+        const method = this.#sendMessageMethodOptimizer.determineSendRequestMethod(opts.method)
         if (method === null) {
             /* istanbul ignore next */
             throw Error(`Method not available for sending request ${requestData.requestType}: ${opts.method} (from ${this.#node.nodeId().slice(0, 6)} to ${this.#remoteNodeId.slice(0, 6)})`)
@@ -433,7 +405,7 @@ class RemoteNode {
                 }
             }
             else if (method === 'http-proxy') {
-                const proxyRemoteNode = this.getRemoteNodeMessageProxyNode(channelName)
+                const proxyRemoteNode = this.getRemoteNodeMessageProxyNode()
                 if (!proxyRemoteNode) {
                     /* istanbul ignore next */
                     throw Error('Unexpected. Unable to send request... no proxy remote node found.')
@@ -473,7 +445,7 @@ class RemoteNode {
             }
             this.#numUdpBytesSent = addByteCount(this.#numUdpBytesSent, requestSize)
             this.#numRequestsSent ++
-            const R = await udpS.sendRequest(udpA, request, channelName, {timeoutMsec: opts.timeoutMsec})
+            const R = await udpS.sendRequest(udpA, request, {timeoutMsec: opts.timeoutMsec})
             this.#numResponsesReceived ++
             response = R.response
             const udpHeader = R.header
@@ -532,7 +504,7 @@ class RemoteNode {
     }
     _getMostRecentChannelNodeInfo(): ChannelNodeInfo | null {
         let result: ChannelNodeInfo | null = null;
-        this.#channelNodeInfoByChannel.forEach((channelNodeInfo, channelName) => {
+        this.#channelNodeInfoByChannel.forEach((channelNodeInfo) => {
             if ((result === null) || (channelNodeInfo.body.timestamp > result.body.timestamp)) {
                 result = channelNodeInfo;
             }

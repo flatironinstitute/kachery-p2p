@@ -455,6 +455,10 @@ export const isSubfeedHash = (x: any): x is SubfeedHash => {
     if (!isString(x)) return false;
     return (/^[0-9a-fA-F]{40}?$/.test(x));
 }
+export const subfeedHash = (x: Sha1Hash): SubfeedHash => {
+    if (isSubfeedHash(x)) return x
+    else throw Error(`Invalid subfeed hash: ${x}`)
+}
 // ErrorMessage
 export interface ErrorMessage extends String {
     __errorMessage__: never; // phantom
@@ -557,27 +561,23 @@ export const publicKeyHexToNodeId = (x: PublicKeyHex) : NodeId => {
 
 // FindLiveFeedResult
 export interface FindLiveFeedResult {
-    nodeId: NodeId,
-    channelName: ChannelName | null // null if nodeId is this local nodeId
+    nodeId: NodeId
 }
 export const isFindLiveFeedResult = (x: any): x is FindLiveFeedResult => {
     return _validateObject(x, {
-        nodeId: isNodeId,
-        channelName: isChannelName
+        nodeId: isNodeId
     });
 }
 
 // FindFileResults
 export interface FindFileResult {
     nodeId: NodeId,
-    channelName: ChannelName | null,
     fileKey: FileKey,
     fileSize: ByteCount
 }
 export const isFindFileResult = (x: any): x is FindFileResult => {
     if (!_validateObject(x, {
         nodeId: isNodeId,
-        channelName: isOneOf([isNull, isChannelName]),
         fileKey: isFileKey,
         fileSize: isByteCount
     })) return false;
@@ -599,32 +599,31 @@ export const createRequestId = () => {
 
 
 
-// ChannelName
-export interface ChannelName extends String {
-    __channelName__: never // phantom type
+// ChannelLabel
+export interface ChannelLabel extends String {
+    __channelLabel__: never // phantom type
 }
-export const isChannelName = (x: any): x is ChannelName => {
+export const isChannelLabel = (x: any): x is ChannelLabel => {
     if (!isString(x)) return false;
     return (/^[0-9a-zA-Z_\-\.]{4,160}?$/.test(x));
 }
-export const channelName = (x: string) => {
-    if (!isChannelName(x)) {
-        throw Error(`Invalid channel name: ${x}`)
+export const channelLabel = (x: string) => {
+    if (!isChannelLabel(x)) {
+        throw Error(`Invalid channel label: ${x}`)
     }
     return x
 }
 
 // ChannelNodeInfo
 export interface ChannelNodeInfoBody {
-    channelName: ChannelName,
+    channelConfigUrl: ChannelConfigUrl,
     nodeId: NodeId,
     nodeLabel: NodeLabel,
     httpAddress: Address | null,
     webSocketAddress: Address | null,
     publicUdpSocketAddress: Address | null,
-    isMessageProxy: boolean,
-    isDataProxy: boolean,
-    proxyWebsocketNodeIds: NodeId[],
+    messageProxyWebsocketNodeIds: NodeId[],
+    dataProxyWebsocketNodeIds: NodeId[],
     timestamp: Timestamp
 }
 export interface ChannelNodeInfo {
@@ -634,15 +633,14 @@ export interface ChannelNodeInfo {
 
 export const isChannelNodeInfoBody = (x: any): x is ChannelNodeInfoBody => {
     if (!_validateObject(x, {
-        channelName: isChannelName,
+        channelConfigUrl: isChannelConfigUrl,
         nodeId: isNodeId,
         nodeLabel: isNodeLabel,
         httpAddress: isOneOf([isNull, isAddress]),
         webSocketAddress: isOneOf([isNull, isAddress]),
         publicUdpSocketAddress: isOneOf([isNull, isAddress]),
-        isMessageProxy: isBoolean,
-        isDataProxy: isBoolean,
-        proxyWebsocketNodeIds: isArrayOf(isNodeId),
+        messageProxyWebsocketNodeIds: isArrayOf(isNodeId),
+        dataProxyWebsocketNodeIds: isArrayOf(isNodeId),
         timestamp: isTimestamp
     })) return false
     return true
@@ -671,7 +669,11 @@ export interface FeedName extends String {
 }
 export const isFeedName = (x: any): x is FeedName => {
     if (!isString(x)) return false;
-    return(x.length > 0);
+    return ((x.length > 0) && (x.length <= 100));
+}
+export const feedName = (x: string): FeedName => {
+    if (isFeedName(x)) return x
+    else throw Error(`Invalid feed name: ${x}`)
 }
 
 // FeedSubfeedId
@@ -927,4 +929,23 @@ export const isFileManifest = (x: any): x is FileManifest => {
         sha1: isSha1Hash,
         chunks: isArrayOf(isFileManifestChunk)
     })
+}
+
+// ChannelConfigUrl
+export interface ChannelConfigUrl extends String {
+    __channelConfigUrl__: never
+}
+export const isChannelConfigUrl = (x: any): x is ChannelConfigUrl => {
+    if (!isString(x)) return false;
+    if ((x.startsWith('http://') || (x.startsWith('https://')))) {
+        if (x.length > 500) return false
+        return true
+    }
+    else {
+        return false
+    }
+}
+export const channelConfigUrl = (x: string): ChannelConfigUrl => {
+    if (!isChannelConfigUrl(x)) throw Error(`Not a valid channel config url string: ${x}`)
+    return x
 }

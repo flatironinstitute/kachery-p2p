@@ -1,5 +1,5 @@
 import { verifySignature } from './common/crypto_util';
-import { Address, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, durationMsecToNumber, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey } from './interfaces/core';
+import { Address, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, DurationMsec, durationMsecToNumber, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey } from './interfaces/core';
 import { AnnounceRequestData, AnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest';
 import KacheryP2PNode from './KacheryP2PNode';
 import RemoteNode, { channelNodeInfoIsExpired, SendRequestMethod } from './RemoteNode';
@@ -7,7 +7,7 @@ import RemoteNode, { channelNodeInfoIsExpired, SendRequestMethod } from './Remot
 class RemoteNodeManager {
     #node: KacheryP2PNode
     #remoteNodes = new Map<NodeId, RemoteNode>()
-    #onNodeChannelAddedCallbacks: ((remoteNodeId: NodeId, channelName: ChannelName) => void)[] = []
+    #onNodeChannelAddedCallbacks: ((remoteNodeId: NodeId, channelConfigUrl: ChannelConfigUrl) => void)[] = []
     #onBootstrapNodeAddedCallbacks: ((bootstrapNodeId: NodeId) => void)[] = []
     constructor(node: KacheryP2PNode) {
         this.#node = node;
@@ -15,7 +15,7 @@ class RemoteNodeManager {
     async handleAnnounceRequest({fromNodeId, requestData, localUdpAddress}: {fromNodeId: NodeId, requestData: AnnounceRequestData, localUdpAddress: Address | null}): Promise<AnnounceResponseData> {
         // only handle this if we belong to this channel or we are a bootstrap node
         if (!this.#node.isBootstrapNode()) {
-            if (!this.#node.channelNames().includes(requestData.channelNodeInfo.body.channelName)) {
+            if (!this.#node.joinedChannelConfigUrls().includes(requestData.channelNodeInfo.body.channelConfigUrl)) {
                 return {
                     requestType: 'announce',
                     success: false,
@@ -24,7 +24,7 @@ class RemoteNodeManager {
             }
         }
         const { channelNodeInfo } = requestData;
-        this.setChannelNodeInfo(channelNodeInfo);
+        await this.setChannelNodeInfo(channelNodeInfo);
         if (localUdpAddress) {
             const n = this.#remoteNodes.get(channelNodeInfo.body.nodeId)
             if (n) {
@@ -37,11 +37,14 @@ class RemoteNodeManager {
             errorMessage: null
         }
     }
-    setChannelNodeInfo(channelNodeInfo: ChannelNodeInfo) {
+    async setChannelNodeInfo(channelNodeInfo: ChannelNodeInfo) {
         const { body, signature } = channelNodeInfo;
         if (channelNodeInfoIsExpired(channelNodeInfo)) return
         if (!verifySignature(body, signature, nodeIdToPublicKey(channelNodeInfo.body.nodeId))) {
-            throw Error('Invalid signature for channelNodeInfo.');
+            throw Error(`Invalid signature for channelNodeInfo: : ${body.nodeId} ${body.channelConfigUrl}`);
+        }
+        if (!await this.#node.nodeIsAuthorizedForChannel(body.nodeId, body.channelConfigUrl)) {
+            throw Error(`Unauthorized node for channelNodeInfo: ${body.nodeId} ${body.channelConfigUrl}`)
         }
         if (body.nodeId === this.#node.nodeId()) {
             throw Error('Cannot set channel node info for self')
@@ -51,7 +54,6 @@ class RemoteNodeManager {
                 isBootstrap: false,
                 isBootstrapMessageProxy: false,
                 isBootstrapDataProxy: false,
-                isTrusted: this.#node.trustedNodesInChannel(body.channelName).includes(body.nodeId),
                 bootstrapAddress: null,
                 bootstrapWebSocketAddress: null,
                 bootstrapUdpSocketAddress: null
@@ -61,15 +63,15 @@ class RemoteNodeManager {
         const n = this.#remoteNodes.get(body.nodeId)
         /* istanbul ignore next */
         if (!n) throw Error('Unexpected in setChannelNodeInfo')
-        const newChannel = (!n.getChannelNames().includes(channelNodeInfo.body.channelName))
-        n.setChannelNodeInfoIfMoreRecent(channelNodeInfo.body.channelName, channelNodeInfo)
+        const newChannel = (!n.getJoinedChannelConfigUrls().includes(channelNodeInfo.body.channelConfigUrl))
+        n.setChannelNodeInfoIfMoreRecent(channelNodeInfo.body.channelConfigUrl, channelNodeInfo)
         if (newChannel) {
             this.#onNodeChannelAddedCallbacks.forEach(cb => {
-                cb(n.remoteNodeId(), channelNodeInfo.body.channelName)
+                cb(n.remoteNodeId(), channelNodeInfo.body.channelConfigUrl)
             })
         }
     }
-    async setBootstrapNode(remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, udpSocketAddress: Address | null, o: {isMessageProxy: boolean, isDataProxy: boolean, isTrusted: boolean}) {
+    async setBootstrapNode(remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, udpSocketAddress: Address | null, o: {isMessageProxy: boolean, isDataProxy: boolean}) {
         const n = this.#remoteNodes.get(remoteNodeId)
         if (n) {
             if ((!n.isBootstrap()) || (!jsonObjectsMatch(n.bootstrapAddress(), address))) {
@@ -84,7 +86,6 @@ class RemoteNodeManager {
                     isBootstrap: true,
                     isBootstrapMessageProxy: o.isMessageProxy,
                     isBootstrapDataProxy: o.isDataProxy,
-                    isTrusted: o.isTrusted,
                     bootstrapAddress: address,
                     bootstrapWebSocketAddress: webSocketAddress,
                     bootstrapUdpSocketAddress: udpSocketAddress
@@ -96,51 +97,51 @@ class RemoteNodeManager {
             })
         }
     }
-    async getChannelInfo(channelName: ChannelName): Promise<ChannelInfo> {
+    async getChannelInfo(channelConfigUrl: ChannelConfigUrl): Promise<ChannelInfo> {
         const nodes: ChannelNodeInfo[] = []
         this.#remoteNodes.forEach(n => {
-            const cni = n.getChannelNodeInfo(channelName)
+            const cni = n.getChannelNodeInfo(channelConfigUrl)
             if (cni !== null) {
                 nodes.push(cni)
             }
         })
-        if (this.#node.channelNames().includes(channelName)) {
-            nodes.push(this.#node.getChannelNodeInfo(channelName))
+        if (this.#node.joinedChannelConfigUrls().includes(channelConfigUrl)) {
+            nodes.push(this.#node.getChannelNodeInfo(channelConfigUrl))
         }
         return {
             nodes
         }
     }
-    canSendRequestToNode(nodeId: NodeId, channelName: ChannelName, method: SendRequestMethod) {
+    canSendRequestToNode(nodeId: NodeId, method: SendRequestMethod) {
         const remoteNode = this.#remoteNodes.get(nodeId)
         if (!remoteNode) {
             return false
         }
-        return remoteNode.canSendRequest(method, channelName)
+        return remoteNode.canSendRequest(method)
     }
     canReceiveMessagesFromNode(nodeId: NodeId): boolean {
         const n = this.getRemoteNode(nodeId)
         return n ? true : false
     }
-    async sendRequestToNode(nodeId: NodeId, channelName: ChannelName, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}): Promise<NodeToNodeResponseData> {
+    async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}): Promise<NodeToNodeResponseData> {
         const remoteNode = this.#remoteNodes.get(nodeId)
         if (!remoteNode) {
             throw Error(`Cannot send request to node: node with ID ${nodeId} not found.`)
         }
-        return await remoteNode.sendRequest(requestData, channelName, {timeoutMsec: opts.timeoutMsec, method: opts.method})
+        return await remoteNode.sendRequest(requestData, {timeoutMsec: opts.timeoutMsec, method: opts.method})
     }
-    onNodeChannelAdded(callback: (remoteNodeId: NodeId, channelName: ChannelName) => void) {
+    onNodeChannelAdded(callback: (remoteNodeId: NodeId, channelConfigUrl: ChannelConfigUrl) => void) {
         this.#onNodeChannelAddedCallbacks.push(callback)
     }
     onBootstrapNodeAdded(callback: (bootstrapNodeId: NodeId) => void) {
         this.#onBootstrapNodeAddedCallbacks.push(callback)
     }
-    getRemoteNodesInChannel(channelName: ChannelName, args: {includeOffline: boolean}): RemoteNode[] {
+    getRemoteNodesInChannel(channelConfigUrl: ChannelConfigUrl, args: {includeOffline: boolean}): RemoteNode[] {
         this._pruneRemoteNodes()
         const ret: RemoteNode[] = []
         this.#remoteNodes.forEach((n, nodeId) => {
             if ((args.includeOffline) || (n.isOnline())) {
-                if (n.getChannelNames().includes(channelName)) {
+                if (n.getJoinedChannelConfigUrls().includes(channelConfigUrl)) {
                     ret.push(n)
                 }
             }
@@ -172,28 +173,20 @@ class RemoteNodeManager {
     getRemoteNode(remoteNodeId: NodeId): RemoteNode | null {
         return this.#remoteNodes.get(remoteNodeId) || null
     }
-    sendRequestToNodesInChannels(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, channelNames: ChannelName[]}) {
+    sendRequestToAllNodes(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec}) {
         let finished = false
         let numComplete = 0
         let numTotal = 0
-        const _onResponseCallbacks: ((nodeId: NodeId, channelName: ChannelName, responseData: NodeToNodeResponseData) => void)[] = [];
+        const _onResponseCallbacks: ((nodeId: NodeId, responseData: NodeToNodeResponseData) => void)[] = [];
         const _onErrorResponseCallbacks: ((nodeId: NodeId, reason: any) => void)[] = [];
         const _onFinishedCallbacks: (() => void)[] = [];
         this.#remoteNodes.forEach(n => {
-            const nodeChannelNames = n.getChannelNames()
-            let okay = false
-            let channelNameToUse: ChannelName | null = null
-            opts.channelNames.forEach(channelName => {
-                if (nodeChannelNames.includes(channelName)) {
-                    channelNameToUse = channelName
-                }
-            })
-            if ((channelNameToUse) && (this.canSendRequestToNode(n.remoteNodeId(), channelNameToUse, 'default'))) {
+            if (this.canSendRequestToNode(n.remoteNodeId(), 'default')) {
                 numTotal ++
                 ;(async () => {
                     let responseData: NodeToNodeResponseData
                     try {
-                        responseData = await this.sendRequestToNode(n.remoteNodeId(), channelNameToUse, requestData, {timeoutMsec: opts.timeoutMsec, method: 'default'})
+                        responseData = await this.sendRequestToNode(n.remoteNodeId(), requestData, {timeoutMsec: opts.timeoutMsec, method: 'default'})
                     }
                     catch(err) {
                         _onErrorResponseCallbacks.forEach(cb => {
@@ -205,8 +198,7 @@ class RemoteNodeManager {
                     }
                     if (finished) return;
                     _onResponseCallbacks.forEach(cb => {
-                        if (!channelNameToUse) throw Error('Unexpected channelNameToUse is null')
-                        cb(n.remoteNodeId(), channelNameToUse, responseData)
+                        cb(n.remoteNodeId(), responseData)
                     });
                     numComplete ++
                     _checkComplete()
@@ -223,7 +215,7 @@ class RemoteNodeManager {
             // at some point in the future - cancel the pending requests
             _finalize()
         }
-        const onResponse = (callback: (nodeId: NodeId, channelName: ChannelName, responseData: NodeToNodeResponseData) => void) => {
+        const onResponse = (callback: (nodeId: NodeId, responseData: NodeToNodeResponseData) => void) => {
             _onResponseCallbacks.push(callback)
         }
         const onErrorResponse = (callback: (nodeId: NodeId, error: Error) => void) => {
@@ -261,7 +253,7 @@ class RemoteNodeManager {
             if (!rn) throw Error('Unexpected in _pruneRemoteNodes')
             rn.pruneChannelNodeInfos()
             if (!rn.isBootstrap()) {
-                if (rn.getChannelNames().length === 0) {
+                if (rn.getJoinedChannelConfigUrls().length === 0) {
                     this.#remoteNodes.delete(nodeId)
                 }
             }

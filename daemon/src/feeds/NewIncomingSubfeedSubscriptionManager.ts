@@ -1,6 +1,6 @@
 import { TIMEOUTS } from "../common/constants"
 import GarbageMap from "../common/GarbageMap"
-import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, FeedId, NodeId, nowTimestamp, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, subfeedPosition, SubfeedPosition, zeroTimestamp } from "../interfaces/core"
+import { DurationMsec, durationMsecToNumber, elapsedSince, FeedId, NodeId, nowTimestamp, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, subfeedPosition, SubfeedPosition, zeroTimestamp } from "../interfaces/core"
 import { isReportSubfeedMessagesResponseData, ReportSubfeedMessagesRequestData } from "../interfaces/NodeToNodeRequest"
 import KacheryP2PNode from "../KacheryP2PNode"
 
@@ -9,19 +9,19 @@ class NewIncomingSubfeedSubscriptionManager {
     #subscriptionCodesBySubfeedCode = new GarbageMap<string, { [key: string]: boolean }>(scaledDurationMsec(300 * 60 * 1000))
     constructor(private node: KacheryP2PNode) {
     }
-    createOrRenewIncomingSubscription(remoteNodeId: NodeId, channelName: ChannelName, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, durationMsec: DurationMsec) {
-        const subscriptionCode = makeSubscriptionCode(remoteNodeId, channelName, feedId, subfeedHash)
+    createOrRenewIncomingSubscription(remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, durationMsec: DurationMsec) {
+        const subscriptionCode = makeSubscriptionCode(remoteNodeId, feedId, subfeedHash)
         const subfeedCode = makeSubfeedCode(feedId, subfeedHash)
         this.#subscriptionCodesBySubfeedCode.set(subfeedCode, {...this.#subscriptionCodesBySubfeedCode.get(subfeedCode) || {}, [subscriptionCode]: true})
         let S = this.#incomingSubscriptions.get(subfeedCode)
         if (!S) {
             // CHAIN:get_remote_messages:step(12)
-            S = new IncomingSubfeedSubscription(this.node, remoteNodeId, channelName, feedId, subfeedHash)
+            S = new IncomingSubfeedSubscription(this.node, remoteNodeId, feedId, subfeedHash)
             this.#incomingSubscriptions.set(subscriptionCode, S)
         }
         S.renew(position, durationMsec)
         setTimeout(() => {
-            this._checkRemove(remoteNodeId, channelName, feedId, subfeedHash)
+            this._checkRemove(remoteNodeId, feedId, subfeedHash)
         }, durationMsecToNumber(durationMsec) + durationMsecToNumber(scaledDurationMsec(5000)))
     }
     reportMessagesAdded(feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) {
@@ -32,13 +32,13 @@ class NewIncomingSubfeedSubscriptionManager {
             const s = this.#incomingSubscriptions.get(subscriptionCode)
             if (s) {
                 // CHAIN:get_remote_messages:step(13)
-                this._sendMessages(s.remoteNodeId, s.channelName, s.feedId, s.subfeedHash, position, signedMessages).then(() => {}).catch((err: Error) => {
+                this._sendMessages(s.remoteNodeId, s.feedId, s.subfeedHash, position, signedMessages).then(() => {}).catch((err: Error) => {
                     console.warn(`Problem sending subfeed messages to remote node: ${err.message}`)
                 })
             }
         }
     }
-    async _sendMessages(toNodeId: NodeId, channelName: ChannelName, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) {
+    async _sendMessages(toNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) {
         // CHAIN:get_remote_messages:step(14)
         const requestData: ReportSubfeedMessagesRequestData = {
             requestType: 'reportSubfeedMessages',
@@ -47,7 +47,7 @@ class NewIncomingSubfeedSubscriptionManager {
             position,
             signedMessages
         }
-        const responseData = await this.node.remoteNodeManager().sendRequestToNode(toNodeId, channelName, requestData, { timeoutMsec: TIMEOUTS.defaultRequest, method: 'default' })
+        const responseData = await this.node.remoteNodeManager().sendRequestToNode(toNodeId, requestData, { timeoutMsec: TIMEOUTS.defaultRequest, method: 'default' })
         if (!isReportSubfeedMessagesResponseData(responseData)) {
             throw Error('Unexpected response to reportSubfeedMessages request')
         }
@@ -55,8 +55,8 @@ class NewIncomingSubfeedSubscriptionManager {
             throw Error(`Error in reportSubfeedMessages: ${responseData.errorMessage}`)
         }
     }
-    _checkRemove(remoteNodeId: NodeId, channelName: ChannelName, feedId: FeedId, subfeedHash: SubfeedHash) {
-        const subfeedCode = makeSubscriptionCode(remoteNodeId, channelName, feedId, subfeedHash)
+    _checkRemove(remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash) {
+        const subfeedCode = makeSubscriptionCode(remoteNodeId, feedId, subfeedHash)
         const S = this.#incomingSubscriptions.get(subfeedCode)
         if (!S) return
         const elapsedMsec = S.elapsedMsecSinceLastRenew()
@@ -66,8 +66,8 @@ class NewIncomingSubfeedSubscriptionManager {
     }
 }
 
-const makeSubscriptionCode = (remoteNodeId: NodeId, channelName: ChannelName, feedId: FeedId, subfeedHash: SubfeedHash) => {
-    return remoteNodeId + ':' + channelName + ':' + feedId.toString() + ':' + subfeedHash.toString()
+const makeSubscriptionCode = (remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash) => {
+    return remoteNodeId + ':' + feedId.toString() + ':' + subfeedHash.toString()
 }
 
 const makeSubfeedCode = (feedId: FeedId, subfeedHash: SubfeedHash) => {
@@ -79,7 +79,7 @@ class IncomingSubfeedSubscription {
     #lastRenewDurationMsec: DurationMsec = 0 as any as DurationMsec
     #lastRenewSubfeedPosition: SubfeedPosition = subfeedPosition(0)
     #active = true
-    constructor(private node: KacheryP2PNode, public remoteNodeId: NodeId, public channelName: ChannelName, public feedId: FeedId, public subfeedHash: SubfeedHash) {
+    constructor(private node: KacheryP2PNode, public remoteNodeId: NodeId, public feedId: FeedId, public subfeedHash: SubfeedHash) {
     }
     renew(position: SubfeedPosition, durationMsec: DurationMsec) {
         this.#lastRenewTimestamp = nowTimestamp()

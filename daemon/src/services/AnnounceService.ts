@@ -3,7 +3,7 @@ import { TIMEOUTS } from "../common/constants"
 import GarbageMap from "../common/GarbageMap"
 import { RequestTimeoutError, sleepMsec, sleepMsecNum } from "../common/util"
 import { HttpPostJsonError } from "../external/real/httpRequests"
-import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core"
+import { ChannelConfigUrl, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core"
 import { AnnounceRequestData, isAnnounceResponseData } from "../interfaces/NodeToNodeRequest"
 import KacheryP2PNode from "../KacheryP2PNode"
 import RemoteNode, { SendRequestMethod } from "../RemoteNode"
@@ -18,20 +18,20 @@ export default class AnnounceService {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
         // announce self when a new node-channel has been added
-        this.#remoteNodeManager.onNodeChannelAdded(async (remoteNodeId: NodeId, channelName: ChannelName) => {
+        this.#remoteNodeManager.onNodeChannelAdded(async (remoteNodeId: NodeId, channelConfigUrl: ChannelConfigUrl) => {
             if (this.#halted) return
             // check if we can send message to node, if not, delay a bit
             let numPasses = 0
-            while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, channelName, 'default')) {
+            while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
                 if (numPasses > 3) return
                 numPasses ++
                 await sleepMsec(scaledDurationMsec(1000))
             }
-            if (this.#node.channelNames().includes(channelName)) { // only if we belong to this channel
+            if (this.#node.joinedChannelConfigUrls().includes(channelConfigUrl)) { // only if we belong to this channel
 
                 /////////////////////////////////////////////////////////////////////////
-                action('announceToNewNode', {context: 'AnnounceService', remoteNodeId, channelName}, async () => {
-                    await this._announceToNode(remoteNodeId, channelName)
+                action('announceToNewNode', {context: 'AnnounceService', remoteNodeId}, async () => {
+                    await this._announceToNode(remoteNodeId, channelConfigUrl)
                 }, null)
                 /////////////////////////////////////////////////////////////////////////
             }
@@ -40,11 +40,11 @@ export default class AnnounceService {
 
         this.#remoteNodeManager.onBootstrapNodeAdded((bootstrapNodeId) => {
             if (this.#halted) return
-            const channelNames = this.#node.channelNames()
-            for (let channelName of channelNames) {
+            const channelConfigUrls = this.#node.joinedChannelConfigUrls()
+            for (let channelConfigUrl of channelConfigUrls) {
                 /////////////////////////////////////////////////////////////////////////
-                action('announceToNewBootstrap', {context: 'AnnounceService', bootstrapNodeId, channelName}, async () => {
-                    await this._announceToNode(bootstrapNodeId, channelName)
+                action('announceToNewBootstrap', {context: 'AnnounceService', bootstrapNodeId, channelConfigUrl}, async () => {
+                    await this._announceToNode(bootstrapNodeId, channelConfigUrl)
                 }, null)
                 /////////////////////////////////////////////////////////////////////////
             }
@@ -60,21 +60,21 @@ export default class AnnounceService {
     stop() {
         this.#halted = true
     }
-    async _announceToNode(remoteNodeId: NodeId, channelName: ChannelName) {
+    async _announceToNode(remoteNodeId: NodeId, channelConfigUrl: ChannelConfigUrl) {
         let numPasses = 0
-        while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, channelName, 'default')) {
+        while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
             numPasses ++
             if (numPasses > 3) return
             await sleepMsec(scaledDurationMsec(1500))
         }
         const requestData: AnnounceRequestData = {
             requestType: 'announce',
-            channelNodeInfo: this.#node.getChannelNodeInfo(channelName)
+            channelNodeInfo: this.#node.getChannelNodeInfo(channelConfigUrl)
         }
         let method: SendRequestMethod = 'prefer-udp' // we prefer to send via udp so that we can discover our own public udp address when we get the response
         let responseData
         try {
-            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, channelName, requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method})
+            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method})
         }
         catch(err) {
             if ((err instanceof HttpPostJsonError) || (err instanceof RequestTimeoutError)) {
@@ -95,13 +95,13 @@ export default class AnnounceService {
     }
     async _announceToAllBootstrapNodes() {
         const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes({includeOffline: false})
-        const channelNames = this.#node.channelNames()
+        const channelConfigUrls = this.#node.joinedChannelConfigUrls()
         for (let bootstrapNode of bootstrapNodes) {
-            for (let channelName of channelNames) {
+            for (let channelConfigUrl of channelConfigUrls) {
                 if (bootstrapNode.isOnline()) {
                     /////////////////////////////////////////////////////////////////////////
-                    await action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
-                        await this._announceToNode(bootstrapNode.remoteNodeId(), channelName)
+                    await action('announceToNode', {context: 'AnnounceService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelConfigUrl}, async () => {
+                        await this._announceToNode(bootstrapNode.remoteNodeId(), channelConfigUrl)
                     }, async (err: Error) => {
                         console.warn(`Problem announcing to bootstrap node ${bootstrapNode.remoteNodeId().slice(0, 6)} (${err.message})`)
                     });
@@ -127,16 +127,16 @@ export default class AnnounceService {
             const elapsedSinceLastIndividualNodeAnnounce = elapsedSince(lastIndividualNodeAnnounceTimestamp)
             if (elapsedSinceLastIndividualNodeAnnounce > durationMsecToNumber(this.opts.announceToIndividualNodeIntervalMsec)) {
                 // for each channel, choose a node and announce to that node
-                const channelNames = this.#node.channelNames()
-                for (let channelName of channelNames) {
-                    let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName, {includeOffline: false})
+                const channelConfigUrls = this.#node.joinedChannelConfigUrls()
+                for (let channelConfigUrl of channelConfigUrls) {
+                    let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelConfigUrl, {includeOffline: false})
                     if (nodes.length > 0) {
                         var individualNode = selectNode(nodes, this.#announceHistoryTimestamps)
                         this.#announceHistoryTimestamps.set(individualNode.remoteNodeId(), nowTimestamp())
 
                         /////////////////////////////////////////////////////////////////////////
-                        await action('announceToIndividualNode', {context: 'AnnounceService', remoteNodeId: individualNode.remoteNodeId(), channelName}, async () => {
-                            await this._announceToNode(individualNode.remoteNodeId(), channelName)
+                        await action('announceToIndividualNode', {context: 'AnnounceService', remoteNodeId: individualNode.remoteNodeId(), channelConfigUrl}, async () => {
+                            await this._announceToNode(individualNode.remoteNodeId(), channelConfigUrl)
                         }, async (err: Error) => {
                             console.warn(`Problem announcing to individual node ${individualNode.remoteNodeId().slice(0, 6)} (${err.message})`)
                         })

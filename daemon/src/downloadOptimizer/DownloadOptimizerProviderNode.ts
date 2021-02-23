@@ -1,19 +1,14 @@
-import { ByteCount, ChannelName, NodeId } from "../interfaces/core";
+import { ByteCount, NodeId } from "../interfaces/core";
 import RateEstimator from "./RateEstimator";
 
 class DownloadOptimizerProviderNode {
     #nodeId: NodeId
-    #channelName: ChannelName
     #rateEstimator = new RateEstimator();
-    constructor(nodeId: NodeId, channelName: ChannelName) {
+    constructor(nodeId: NodeId) {
         this.#nodeId = nodeId
-        this.#channelName = channelName
     }
     nodeId() {
         return this.#nodeId
-    }
-    channelName() {
-        return this.#channelName
     }
     estimatedRateBps() {
         return this.#rateEstimator.estimatedRateBps()

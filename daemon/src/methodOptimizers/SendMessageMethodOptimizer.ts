@@ -1,5 +1,5 @@
 import GarbageMap from "../common/GarbageMap";
-import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, nowTimestamp, RequestId, scaledDurationMsec, Timestamp } from "../interfaces/core";
+import { DurationMsec, durationMsecToNumber, elapsedSince, nowTimestamp, RequestId, scaledDurationMsec, Timestamp } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import RemoteNode, { SendRequestMethod } from "../RemoteNode";
 
@@ -30,11 +30,11 @@ export default class SendMessageMethodOptimizer {
             throw Error('Unexpected method ${method} in reportSendRequestEnd')
         }
     }
-    determineSendRequestMethod(method: SendRequestMethod, channelName: ChannelName): SendRequestMethod | null {
+    determineSendRequestMethod(method: SendRequestMethod): SendRequestMethod | null {
         const websocketAvailable = (this.node.getProxyConnectionToClient(this.remoteNode.remoteNodeId()) || this.node.getProxyConnectionToServer(this.remoteNode.remoteNodeId())) ? true : false
         const availableMethods = {
             'http': this.remoteNode.getRemoteNodeHttpAddress() ? true : false,
-            'http-proxy': this.remoteNode.getRemoteNodeMessageProxyNode(channelName) ? true : false,
+            'http-proxy': this.remoteNode.getRemoteNodeMessageProxyNode() ? true : false,
             'udp': ((this.node.publicUdpSocketServer()) && (this.remoteNode.getUdpAddressForRemoteNode())),
             'websocket': websocketAvailable
         }
@@ -53,7 +53,7 @@ export default class SendMessageMethodOptimizer {
             }
         }
         else if (method === 'default') {
-            return this.determineSendRequestMethod('prefer-http', channelName)
+            return this.determineSendRequestMethod('prefer-http')
         }
         else if (method === 'prefer-http') {
             if (availableMethods['http']) {
@@ -88,7 +88,7 @@ export default class SendMessageMethodOptimizer {
                 return 'udp'
             }
             else {
-                return this.determineSendRequestMethod('prefer-http', channelName)
+                return this.determineSendRequestMethod('prefer-http')
             }
         }
         else if ((method === 'http') || (method === 'websocket') || (method === 'udp') || (method === 'http-proxy')) {

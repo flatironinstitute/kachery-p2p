@@ -1,5 +1,6 @@
 import { action } from "../common/action";
 import { TIMEOUTS } from "../common/constants";
+import { JSONStringifyDeterministic } from "../common/crypto_util";
 import { sleepMsec, sleepMsecNum } from "../common/util";
 import { Address, DurationMsec, JSONObject, urlPath, UrlPath } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
@@ -38,15 +39,26 @@ export default class BootstrapService {
             throw Error('isBootstrapNode is false in probe response from bootstrap node.')
         }
         const publicUdpSocketAddress = response.publicUdpSocketAddress
-        this.#remoteNodeManager.setBootstrapNode(remoteNodeId, address, webSocketAddress, publicUdpSocketAddress, {isMessageProxy, isDataProxy, isTrusted: true})
+        this.#remoteNodeManager.setBootstrapNode(remoteNodeId, address, webSocketAddress, publicUdpSocketAddress, {isMessageProxy, isDataProxy})
     }
     async _start() {
         await sleepMsecNum(2) // important for tests
         // probe the bootstrap nodes periodically
         while (true) {
             if (this.#halted) return
-            for (let address of this.#node.bootstrapAddresses()) {
+            const allBootstrapAddresses: Address[] = []
+            const channelConfigUrls = this.#node.joinedChannelConfigUrls()
+            for (let channelConfigUrl of channelConfigUrls) {
+                const channelConfig = await this.#node.getChannelConfig(channelConfigUrl)
+                if (channelConfig) {
+                    for (let address of channelConfig.bootstrapAddresses) {
+                        allBootstrapAddresses.push(address)
+                    }
+                }
+            }
 
+            const uniqueBootstrapAddresses = getUniqueAddresses(allBootstrapAddresses)
+            for (let address of uniqueBootstrapAddresses) {
                 /////////////////////////////////////////////////////////////////////////
                 await action('probeBootstrapNode', {context: 'BootstrapService', address}, async () => {
                     await this._probeBootstrapNode(address)
@@ -54,10 +66,22 @@ export default class BootstrapService {
                     console.warn(`Problem probing bootstrap node ${address} (${err.message})`)
                 })
                 /////////////////////////////////////////////////////////////////////////
-                
             }
             
             await sleepMsec(this.opts.probeIntervalMsec, () => {return !this.#halted})
         }
     }
+}
+
+const getUniqueAddresses = (addresses: Address[]) => {
+    const used = new Set<String>()
+    const ret: Address[] = []
+    addresses.forEach(a => {
+        const code = JSONStringifyDeterministic(a)
+        if (!used.has(code)) {
+            ret.push(a)
+            used.add(code)
+        }
+    })
+    return ret
 }

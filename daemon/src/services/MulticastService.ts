@@ -68,10 +68,10 @@ export default class MulticastService {
         await sleepMsec(minDuration(scaledDurationMsec(1000), this.opts.intervalMsec))
         while (true) {
             if (this.#halted) return
-            for (let channelName of this.#node.channelNames()) {
+            for (let channelConfigUrl of this.#node.joinedChannelConfigUrls()) {
                 const requestData: AnnounceRequestData = {
                     requestType: 'announce',
-                    channelNodeInfo: this.#node.getChannelNodeInfo(channelName)
+                    channelNodeInfo: this.#node.getChannelNodeInfo(channelConfigUrl)
                 }
                 const body: MulticastAnnounceMessageBody = {
                     protocolVersion: protocolVersion(),

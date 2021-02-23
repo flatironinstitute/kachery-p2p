@@ -1,12 +1,13 @@
 import express, { Express } from 'express';
 import JsonSocket from 'json-socket';
 import { Socket } from 'net';
+import { ChannelConfig, isChannelConfig } from '../cli';
 import { action } from '../common/action';
 import DataStreamy from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
 import { isGetStatsOpts, NodeStatsInterface } from '../getStats';
-import { Address, ChannelName, DaemonVersion, DurationMsec, durationMsecToNumber, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelName, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
+import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToNumber, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelConfigUrl, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -20,8 +21,14 @@ export interface DaemonApiProbeResponse {
     isBootstrapNode: boolean,
     webSocketAddress: Address | null,
     publicUdpSocketAddress: Address | null,
-    channels: ChannelName[]
+    joinedChannels: {channelConfig: ChannelConfig, channelConfigUrl: ChannelConfigUrl}[]
 };
+export const isDaemonApiProbeResponseJoinedChannels = (x: any): x is {channelConfig: ChannelConfig, channelConfigUrl: ChannelConfigUrl} => {
+    return _validateObject(x, {
+        channelConfig: isChannelConfig,
+        channelConfigUrl: isChannelConfigUrl
+    });
+}
 export const isDaemonApiProbeResponse = (x: any): x is PublicApiProbeResponse => {
     return _validateObject(x, {
         success: isBoolean,
@@ -31,7 +38,7 @@ export const isDaemonApiProbeResponse = (x: any): x is PublicApiProbeResponse =>
         isBootstrapNode: isBoolean,
         webSocketAddress: isOneOf([isNull, isAddress]),
         publicUdpSocketAddress: isOneOf([isNull, isAddress]),
-        channels: isArrayOf(isChannelName)
+        joinedChannels: isArrayOf(isDaemonApiProbeResponseJoinedChannels)
     });
 }
 
@@ -52,27 +59,23 @@ interface Res {
 
 export interface ApiFindFileRequest {
     fileKey: FileKey,
-    timeoutMsec: DurationMsec,
-    fromChannel: ChannelName | null
+    timeoutMsec: DurationMsec
 }
 const isApiFindFileRequest = (x: any): x is ApiFindFileRequest => {
     return _validateObject(x, {
         fileKey: isFileKey,
-        timeoutMsec: isDurationMsec,
-        fromChannel: isOneOf([isNull, isChannelName])
+        timeoutMsec: isDurationMsec
     });
 }
 
 export interface ApiLoadFileRequest {
     fileKey: FileKey,
-    fromNode: NodeId | null,
-    fromChannel: ChannelName | null
+    fromNode: NodeId | null
 }
 const isApiLoadFileRequest = (x: any): x is ApiLoadFileRequest => {
     return _validateObject(x, {
         fileKey: isFileKey,
-        fromNode: isOneOf([isNull, isNodeId]),
-        fromChannel: isOneOf([isNull, isChannelName])
+        fromNode: isOneOf([isNull, isNodeId])
     });
 }
 
@@ -565,6 +568,16 @@ export default class DaemonApiServer {
     // /probe - check whether the daemon is up and running and return info such as the node ID
     /* istanbul ignore next */
     async _handleProbe(): Promise<JSONObject> {
+        const joinedChannels: {channelConfigUrl: ChannelConfigUrl, channelConfig: ChannelConfig}[] = []
+        for (let channelConfigUrl of this.#node.joinedChannelConfigUrls()) {
+            const channelConfig = await this.#node.getChannelConfig(channelConfigUrl)
+            if (channelConfig) {
+                joinedChannels.push({
+                    channelConfigUrl,
+                    channelConfig
+                })
+            }
+        }
         const response: DaemonApiProbeResponse = {
             success: true,
             protocolVersion: protocolVersion(),
@@ -573,7 +586,7 @@ export default class DaemonApiServer {
             isBootstrapNode: this.#node.isBootstrapNode(),
             webSocketAddress: this.#node.webSocketAddress(),
             publicUdpSocketAddress: this.#node.publicUdpSocketAddress(),
-            channels: this.#node.channelNames()
+            joinedChannels
         }
         /* istanbul ignore next */
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
@@ -645,8 +658,8 @@ export default class DaemonApiServer {
         });
     }
     async _findFile(reqData: ApiFindFileRequest) {
-        const { fileKey, timeoutMsec, fromChannel } = reqData
-        return this.#node.findFile({fileKey, timeoutMsec, fromChannel})
+        const { fileKey, timeoutMsec } = reqData
+        return this.#node.findFile({fileKey, timeoutMsec})
     }
     // /loadFile - load a file from remote kachery node(s) and store in kachery storage
     /* istanbul ignore next */
@@ -692,7 +705,7 @@ export default class DaemonApiServer {
         /* istanbul ignore next */
         if (!isApiLoadFileRequest(reqData)) throw Error('Invalid request in _apiLoadFile');
 
-        const { fileKey, fromNode, fromChannel } = reqData;
+        const { fileKey, fromNode } = reqData;
         if (fileKey.manifestSha1) {
             console.info(`Loading file: sha1://${fileKey.sha1}?manifest=${fileKey.manifestSha1}`)
         }
@@ -702,7 +715,7 @@ export default class DaemonApiServer {
         const x = await loadFile(
             this.#node,
             fileKey,
-            {fromNode, fromChannel, label: fileKey.sha1.toString().slice(0, 5)}
+            {fromNode, label: fileKey.sha1.toString().slice(0, 5)}
         )
         return x
     }

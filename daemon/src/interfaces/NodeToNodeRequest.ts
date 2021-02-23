@@ -2,7 +2,7 @@ import assert from 'assert'
 import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
 import { isPacketId, PacketId } from '../udp/UdpPacketSender'
-import { ByteCount, ChannelInfo, ChannelName, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isByteCount, isChannelInfo, isChannelName, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isNodeId, isNull, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubfeedPosition, isSubmittedSubfeedMessage, isTimestamp, NodeId, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
+import { ByteCount, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isArrayOf, isBoolean, isByteCount, isChannelConfigUrl, isChannelInfo, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isNodeId, isNull, isOneOf, isRequestId, isSignature, isSignedSubfeedMessage, isString, isSubfeedHash, isSubfeedPosition, isSubmittedSubfeedMessage, isTimestamp, NodeId, ProtocolVersion, RequestId, Signature, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
 
@@ -25,7 +25,6 @@ export interface NodeToNodeRequest {
         protocolVersion: ProtocolVersion,
         requestId: RequestId,
         fromNodeId: NodeId,
-        channelName: ChannelName,
         toNodeId: NodeId,
         timestamp: Timestamp,
         requestData: NodeToNodeRequestData,
@@ -38,7 +37,6 @@ export const isNodeToNodeRequestBody = (x: any): boolean => {
         protocolVersion: isEqualTo(protocolVersion()),
         requestId: isRequestId,
         fromNodeId: isNodeId,
-        channelName: isChannelName,
         toNodeId: isNodeId,
         timestamp: isTimestamp,
         requestData: isNodeToNodeRequestData,
@@ -184,13 +182,13 @@ export const isCheckAliveResponseData = (x: any): x is CheckAliveResponseData =>
 
 // getChannelInfo
 export interface GetChannelInfoRequestData {
-    requestType: 'getChannelInfo',
-    channelName: ChannelName
+    requestType: 'getChannelInfo'
+    channelConfigUrl: ChannelConfigUrl
 }
 export const isGetChannelInfoRequestData = (x: any): x is GetChannelInfoRequestData => {
     return _validateObject(x, {
         requestType: isEqualTo('getChannelInfo'),
-        channelName: isChannelName
+        channelConfigUrl: isChannelConfigUrl
     })
 }
 export interface GetChannelInfoResponseData {

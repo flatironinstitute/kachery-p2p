@@ -2,7 +2,7 @@ import { TIMEOUTS } from "../common/constants";
 import DataStreamy, { DataStreamyProgress } from "../common/DataStreamy";
 import GarbageMap from "../common/GarbageMap";
 import { randomAlphaString } from "../common/util";
-import { ByteCount, ChannelName, FileKey, fileKeyHash, FileKeyHash, NodeId, scaledDurationMsec } from "../interfaces/core";
+import { ByteCount, FileKey, fileKeyHash, FileKeyHash, NodeId, scaledDurationMsec } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import createDownloader from "./createDownloader";
 import DownloadOptimizerJob from "./DownloadOptimizerJob";
@@ -41,7 +41,7 @@ export default class DownloadOptimizer {
             })
         })
     }
-    createTask(fileKey: FileKey, fileSize: ByteCount | null, label: string, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null, numRetries: number}): DataStreamy {
+    createTask(fileKey: FileKey, fileSize: ByteCount | null, label: string, opts: {fromNode: NodeId | null, numRetries: number}): DataStreamy {
         const taskId = randomAlphaString(10)
         const fkh = fileKeyHash(fileKey)
         const t: DownloadOptimizerTask = {
@@ -55,19 +55,14 @@ export default class DownloadOptimizer {
             const findProviders: FindProvidersFunction = (onFound: (providerNode: DownloadOptimizerProviderNode) => void, onFinished: () => void) => {
                 // todo: what happens if we create 2 tasks, with different opts?
                 if (opts.fromNode) {
-                    if (!opts.fromChannel) {
-                        throw Error('When specifying fromNode, you must also specify fromChannel')
-                    }
-                    const pn = this._getProviderNode(opts.fromNode, opts.fromChannel)
+                    const pn = this._getProviderNode(opts.fromNode)
                     onFound(pn)
                 }
                 else {
-                    const ff = this.node.findFile({fileKey, timeoutMsec: TIMEOUTS.loadFileFindFile, fromChannel: opts.fromChannel})
+                    const ff = this.node.findFile({fileKey, timeoutMsec: TIMEOUTS.loadFileFindFile})
                     ff.onFound(result => {
                         if (result.nodeId !== this.node.nodeId()) {
-                            const channelName = result.channelName
-                            if (!channelName) throw Error('Unexpected channelName is null in findFile result')
-                            const pn = this._getProviderNode(result.nodeId, channelName)
+                            const pn = this._getProviderNode(result.nodeId)
                             onFound(pn)
                         }
                     })
@@ -123,10 +118,10 @@ export default class DownloadOptimizer {
         }
         this._scheduleUpdate()
     }
-    _getProviderNode(nodeId: NodeId, channelName: ChannelName): DownloadOptimizerProviderNode {
+    _getProviderNode(nodeId: NodeId): DownloadOptimizerProviderNode {
         let p = this.#providerNodes.get(nodeId)
         if (p) return p
-        const pNew = new DownloadOptimizerProviderNode(nodeId, channelName)
+        const pNew = new DownloadOptimizerProviderNode(nodeId)
         this.#providerNodes.set(nodeId, pNew)
         return pNew
     }

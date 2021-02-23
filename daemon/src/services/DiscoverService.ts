@@ -3,7 +3,7 @@ import { TIMEOUTS } from "../common/constants";
 import GarbageMap from "../common/GarbageMap";
 import { sleepMsec } from "../common/util";
 import { HttpPostJsonError } from "../external/real/httpRequests";
-import { ChannelName, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core";
+import { ChannelConfigUrl, DurationMsec, durationMsecToNumber, elapsedSince, NodeId, nowTimestamp, scaledDurationMsec, Timestamp, zeroTimestamp } from "../interfaces/core";
 import { GetChannelInfoRequestData, isGetChannelInfoResponseData } from "../interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "../KacheryP2PNode";
 import RemoteNode from "../RemoteNode";
@@ -20,11 +20,11 @@ export default class DiscoverService {
 
         this.#remoteNodeManager.onBootstrapNodeAdded((bootstrapNodeId) => {
             if (this.#halted) return
-            const channelNames = this.#node.channelNames()
-            for (let channelName of channelNames) {
+            const channelConfigUrls = this.#node.joinedChannelConfigUrls()
+            for (let channelConfigUrl of channelConfigUrls) {
                 /////////////////////////////////////////////////////////////////////////
-                action('discoverFromNewBootstrap', {context: 'DiscoverService', bootstrapNodeId, channelName}, async () => {
-                    await this._getChannelInfoFromNode(bootstrapNodeId, channelName)
+                action('discoverFromNewBootstrap', {context: 'DiscoverService', bootstrapNodeId, channelConfigUrl}, async () => {
+                    await this._getChannelInfoFromNode(bootstrapNodeId, channelConfigUrl)
                 }, null)
                 /////////////////////////////////////////////////////////////////////////
             }
@@ -35,20 +35,20 @@ export default class DiscoverService {
     stop() {
         this.#halted = true
     }
-    async _getChannelInfoFromNode(remoteNodeId: NodeId, channelName: ChannelName) {
+    async _getChannelInfoFromNode(remoteNodeId: NodeId, channelConfigUrl: ChannelConfigUrl) {
         let numPasses = 0
-        while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, channelName, 'default')) {
+        while (!this.#remoteNodeManager.canSendRequestToNode(remoteNodeId, 'default')) {
             numPasses ++
             if (numPasses > 3) return
             await sleepMsec(scaledDurationMsec(1500))
         }
         const requestData: GetChannelInfoRequestData = {
             requestType: 'getChannelInfo',
-            channelName
+            channelConfigUrl
         }
         let responseData
         try {
-            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, channelName, requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
+            responseData = await this.#remoteNodeManager.sendRequestToNode(remoteNodeId, requestData, {timeoutMsec: TIMEOUTS.defaultRequest, method: 'default'})
         }
         catch(err) {
             if (err instanceof HttpPostJsonError) {
@@ -63,11 +63,11 @@ export default class DiscoverService {
             throw Error(`Unexpected GetChannelInfoResponseData from node: ${remoteNodeId.slice(0, 6)}`);
         }
         const { channelInfo } = responseData;
-        channelInfo.nodes.forEach(channelNodeInfo => {
+        for (let channelNodeInfo of channelInfo.nodes) {
             if (channelNodeInfo.body.nodeId !== this.#node.nodeId()) {
-                this.#remoteNodeManager.setChannelNodeInfo(channelNodeInfo)
+                await this.#remoteNodeManager.setChannelNodeInfo(channelNodeInfo)
             }
-        })
+        }
     }
     async _start() {
         // Get channel info from other nodes in our channels
@@ -79,12 +79,12 @@ export default class DiscoverService {
             const elapsedSinceLastBootstrapDiscover = elapsedSince(lastBootstrapDiscoverTimestamp);
             if (elapsedSinceLastBootstrapDiscover > durationMsecToNumber(this.opts.discoverBootstrapIntervalMsec)) {
                 const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes({includeOffline: false});
-                const channelNames = this.#node.channelNames();
+                const channelConfigUrls = this.#node.joinedChannelConfigUrls();
                 for (let bootstrapNode of bootstrapNodes) {
-                    for (let channelName of channelNames) {
+                    for (let channelConfigUrl of channelConfigUrls) {
                         /////////////////////////////////////////////////////////////////////////
-                        await action('discoverFromBootstrapNode', {context: 'DiscoverService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelName}, async () => {
-                            await this._getChannelInfoFromNode(bootstrapNode.remoteNodeId(), channelName)
+                        await action('discoverFromBootstrapNode', {context: 'DiscoverService', bootstrapNodeId: bootstrapNode.remoteNodeId(), channelConfigUrl}, async () => {
+                            await this._getChannelInfoFromNode(bootstrapNode.remoteNodeId(), channelConfigUrl)
                         }, async (err: Error) => {
                             console.warn(`Problem discovering from bootstrap node ${bootstrapNode.remoteNodeId().slice(0, 6)} (${err.message})`)
                         });
@@ -97,16 +97,16 @@ export default class DiscoverService {
             const elapsedSinceLastIndividualNodeDiscover = elapsedSince(lastIndividualNodeDiscoverTimestamp)
             if (elapsedSinceLastIndividualNodeDiscover > durationMsecToNumber(this.opts.discoverIndividualNodeIntervalMsec)) {
                 // for each channel, choose node with longest elapsed time of their channel node info and get the channel info from that node
-                const channelNames = this.#node.channelNames();
-                for (let channelName of channelNames) {
-                    let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelName, {includeOffline: false})
+                const channelConfigUrls = this.#node.joinedChannelConfigUrls()
+                for (let channelConfigUrl of channelConfigUrls) {
+                    let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelConfigUrl, {includeOffline: false})
                     if (nodes.length > 0) {
                         var individualNode = selectNode(nodes, this.#discoverHistoryTimestamps)
                         this.#discoverHistoryTimestamps.set(individualNode.remoteNodeId(), nowTimestamp())
 
                         /////////////////////////////////////////////////////////////////////////
-                        await action('discoverFromIndividualNode', {context: 'DiscoverService', remoteNodeId: individualNode.remoteNodeId(), channelName}, async () => {
-                            await this._getChannelInfoFromNode(individualNode.remoteNodeId(), channelName)
+                        await action('discoverFromIndividualNode', {context: 'DiscoverService', remoteNodeId: individualNode.remoteNodeId(), channelConfigUrl}, async () => {
+                            await this._getChannelInfoFromNode(individualNode.remoteNodeId(), channelConfigUrl)
                         }, async (err: Error) => {
                             console.warn(`Problem discovering from individual node ${individualNode.remoteNodeId().slice(0, 6)} (${err.message})`)
                         });

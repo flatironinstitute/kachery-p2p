@@ -2,8 +2,8 @@
 .. include:: ./documentation.md
 """
 
-__version__ = "0.5.24"
-__protocol_version__ = "0.5.11p"
+__version__ = "0.6.0"
+__protocol_version__ = "0.6.0p"
 
 from typing import Iterable, List, Union
 
@@ -73,10 +73,10 @@ def find_file(uri: str, timeout_sec: float=5) -> Iterable[dict]:
     return _find_file(uri=uri, timeout_sec=timeout_sec)
 
 def get_channels() -> List[str]:
-    """Returns the list of names of channels that this node belongs to
+    """Returns the list channels that this node belongs to
 
     Returns:
-        List[str]: The list of channel names
+        List[dict]: The list of channel objects
     """
     return _get_channels()
 

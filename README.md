@@ -4,8 +4,8 @@
 
 **This project is still at an early stage of development. We welcome contributors and testers**
 
-Current version: `kachery-p2p 0.5.24`
-Current protocol version: `kachery-p2p 0.5.11p`
+Current version: `kachery-p2p 0.6.0`
+Current protocol version: `kachery-p2p 0.6.0p`
 
 Kachery-p2p is a **peer-to-peer, content-addressable file storage and distribution framework** which can operate with minimal infrastructural requirements and offers both command-line and programmatic interfaces to file distribution. In short, it’s a way for you to distribute your data to collaborators with minimal fuss.
 

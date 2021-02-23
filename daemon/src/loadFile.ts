@@ -1,11 +1,11 @@
 import DataStreamy, { DataStreamyProgress } from './common/DataStreamy'
 import { sha1MatchesFileKey } from './common/util'
 import { formatByteCount } from './downloadOptimizer/createDownloader'
-import { byteCount, ByteCount, byteCountToNumber, ChannelName, elapsedSince, FileKey, FileManifestChunk, isFileManifest, NodeId, nowTimestamp, Sha1Hash } from './interfaces/core'
+import { byteCount, ByteCount, byteCountToNumber, elapsedSince, FileKey, FileManifestChunk, isFileManifest, NodeId, nowTimestamp, Sha1Hash } from './interfaces/core'
 import KacheryP2PNode from './KacheryP2PNode'
 
 
-const loadFileAsync = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null, label: string}): Promise<{found: boolean, size: ByteCount}> => {
+const loadFileAsync = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, label: string}): Promise<{found: boolean, size: ByteCount}> => {
     const r = await node.kacheryStorageManager().findFile(fileKey)
     if (r.found) {
         return r
@@ -63,8 +63,8 @@ async function asyncLoop<T>(list: T[], func: (item: T, index: number) => Promise
     })
 }
 
-export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, fromChannel: ChannelName | null, label: string, _numRetries?: number}): Promise<DataStreamy> => {
-    const { fromNode, fromChannel } = opts
+export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, label: string, _numRetries?: number}): Promise<DataStreamy> => {
+    const { fromNode } = opts
 
     const r = await node.kacheryStorageManager().findFile(fileKey)
     if (r.found) {
@@ -81,7 +81,7 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
         const manifestFileKey = {sha1: manifestSha1}
         let manifestR
         try {
-            manifestR = await loadFileAsync(node, manifestFileKey, {fromNode, fromChannel, label: `${opts.label} manifest`})
+            manifestR = await loadFileAsync(node, manifestFileKey, {fromNode, label: `${opts.label} manifest`})
         }
         catch(err) {
             ret.producer().error(err)
@@ -150,7 +150,7 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
                     }
                     console.info(`${opts.label}: Handling chunk ${chunkIndex} of ${manifest.chunks.length}`)
                     const label0 = `${opts.label} ch ${chunkIndex}`
-                    const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, fromChannel: opts.fromChannel, label: label0, _numRetries: 2})
+                    const ds = await loadFile(node, chunkFileKey, {fromNode: opts.fromNode, label: label0, _numRetries: 2})
                     chunkDataStreams.push(ds)
                     return new Promise<void>((resolve, reject) => {
                         ds.onError(err => {
@@ -192,7 +192,7 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
         const ret = new DataStreamy()
         let fileSize = fileKey.chunkOf ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : null
         const numRetries = opts._numRetries === undefined ? 0 : opts._numRetries
-        const task = node.downloadOptimizer().createTask(fileKey, fileSize, opts.label, {fromNode: opts.fromNode, fromChannel: opts.fromChannel, numRetries})
+        const task = node.downloadOptimizer().createTask(fileKey, fileSize, opts.label, {fromNode: opts.fromNode, numRetries})
         task.onError(err => {
             ret.producer().error(err)
         })

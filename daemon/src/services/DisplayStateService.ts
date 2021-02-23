@@ -1,6 +1,6 @@
 import { sleepMsec } from "../common/util";
 import { formatByteCount } from "../downloadOptimizer/createDownloader";
-import { byteCount, ChannelName, durationGreaterThan, DurationMsec, elapsedSince, nowTimestamp, Port, unscaledDurationMsec } from "../interfaces/core";
+import { byteCount, durationGreaterThan, DurationMsec, elapsedSince, nowTimestamp, Port, unscaledDurationMsec } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import RemoteNode, { SendRequestMethod } from "../RemoteNode";
 import RemoteNodeManager from "../RemoteNodeManager";
@@ -24,8 +24,8 @@ export default class DisplayStateService {
             console.info(`Bootstrap node added: ${bootstrapNodeId.slice(0, 6)}`) // to print label
             this._updateDisplay()
         })
-        this.#remoteNodeManager.onNodeChannelAdded((remoteNodeId, channelName) => {
-            console.info(`Node added to channel ${channelName}: ${remoteNodeId.slice(0, 6)}`)
+        this.#remoteNodeManager.onNodeChannelAdded((remoteNodeId, channelConfigUrl) => {
+            console.info(`Node added to channel ${channelConfigUrl}: ${remoteNodeId.slice(0, 6)}`)
             this._updateDisplay()
         })
 
@@ -36,18 +36,16 @@ export default class DisplayStateService {
     }
     _updateDisplay() {
         const lines: string[] = []
+        lines.push('')
         lines.push('=======================================')
         lines.push(`NODE ${this.#node.nodeId().slice(0, 6)} (${this.#node.nodeLabel()})`)
         this.#remoteNodeManager.getBootstrapRemoteNodes({includeOffline: true}).forEach(rn => {
-            const connectionString = getConnectionString(rn, null)
+            const connectionString = getConnectionString(rn)
             lines.push(`BOOTSTRAP ${rn.remoteNodeId().slice(0, 6)} ${connectionString} (${rn.remoteNodeLabel() || ''})`)
         })
-        this.#node.channelNames().forEach(channelName => {
-            lines.push(`CHANNEL ${channelName}`)
-            this.#remoteNodeManager.getRemoteNodesInChannel(channelName, {includeOffline: true}).forEach(rn => {
-                const connectionString = getConnectionString(rn, channelName)
-                lines.push(`    ${rn.remoteNodeId().slice(0, 6)} ${connectionString} (${rn.remoteNodeLabel() || ''})`)
-            })
+        this.#remoteNodeManager.getAllRemoteNodes({includeOffline: true}).forEach((rn) => {
+            const connectionString = getConnectionString(rn)
+            lines.push(`    ${rn.remoteNodeId().slice(0, 6)} ${connectionString} (${rn.remoteNodeLabel() || ''})`)
         })
         if (this.opts.daemonApiPort)
             lines.push(`http://localhost:${this.opts.daemonApiPort}/stats?format=html`)
@@ -71,12 +69,11 @@ export default class DisplayStateService {
     }
 }
 
-const getConnectionString = (rn: RemoteNode, channelName: ChannelName | null) => {
+const getConnectionString = (rn: RemoteNode) => {
     const onlineString = rn.isOnline() ? '' : '[offline] '
     const candidateMethods: SendRequestMethod[] = ['udp', 'http', 'http-proxy']
-    const methods: SendRequestMethod[] = candidateMethods.filter(method => (channelName && rn.canSendRequest(method, channelName)))
+    const methods: SendRequestMethod[] = candidateMethods.filter(method => (rn.canSendRequest(method)))
     const other: string[] = []
-    if (rn.isTrusted()) other.push('trusted')
     if (rn.isBootstrap()) other.push('bootstrap')
     const x = [...methods, ...other]
     return `${onlineString}${x.join(' ')}`
