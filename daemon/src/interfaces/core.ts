@@ -143,36 +143,39 @@ export const isObjectOf = (keyTestFunction: (x: any) => boolean, valueTestFuncti
 
 export type ValidateObjectSpec = {[key: string]: ValidateObjectSpec | (Function & ((a: any) => any))}
 
-export const _validateObject = (x: any, spec: ValidateObjectSpec, callback?: (x: string) => any): boolean => {
+export const _validateObject = (x: any, spec: ValidateObjectSpec, opts?: {callback?: (x: string) => any, allowAdditionalFields?: boolean}): boolean => {
+    const o = opts || {}
     if (!x) {
-        callback && callback('x is undefined/null.')
+        o.callback && o.callback('x is undefined/null.')
         return false;
     }
     if (!isObject(x)) {
-        callback && callback('x is not an Object.')
+        o.callback && o.callback('x is not an Object.')
         return false;
     }
     for (let k in x) {
         if (!(k in spec)) {
-            callback && callback(`Key not in spec: ${k}`)
-            return false;
+            if (!o.allowAdditionalFields) {
+                o.callback && o.callback(`Key not in spec: ${k}`)
+                return false;
+            }
         }
     }
     for (let k in spec) {
         const specK = spec[k];
         if (isFunction(specK)) {
             if (!specK(x[k])) {
-                callback && callback(`Problem validating: ${k}`)
+                o.callback && o.callback(`Problem validating: ${k}`)
                 return false;
             }
         }
         else {
             if (!(k in x)) {
-                callback && callback(`Key not in x: ${k}`)
+                o.callback && o.callback(`Key not in x: ${k}`)
                 return false;
             }
-            if (!_validateObject(x[k], specK as ValidateObjectSpec, callback)) {
-                callback && callback(`Value of key > ${k} < itself failed validation.`)
+            if (!_validateObject(x[k], specK as ValidateObjectSpec, {callback: o.callback})) {
+                o.callback && o.callback(`Value of key > ${k} < itself failed validation.`)
                 return false;
             }
         }

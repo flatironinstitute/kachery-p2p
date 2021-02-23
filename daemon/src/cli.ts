@@ -49,7 +49,7 @@ export const isChannelConfigAuthorizedNode = (x: any): x is ChannelConfigAuthori
     admin: optional(isBoolean),
     isMessageProxy: optional(isBoolean),
     isDataProxy: optional(isBoolean),
-  })
+  }, {allowAdditionalFields: true})
 }
 
 export interface ChannelConfig {
@@ -63,7 +63,7 @@ export const isChannelConfig = (x: any): x is ChannelConfig => {
     channelLabel: isChannelLabel,
     bootstrapAddresses: isArrayOf(isAddress),
     authorizedNodes: isArrayOf(isChannelConfigAuthorizedNode)
-  })
+  }, {allowAdditionalFields: true})
 }
 
 function main() {

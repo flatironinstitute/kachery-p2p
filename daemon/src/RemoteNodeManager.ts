@@ -1,5 +1,6 @@
 import { verifySignature } from './common/crypto_util';
-import { Address, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, DurationMsec, durationMsecToNumber, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey } from './interfaces/core';
+import GarbageMap from './common/GarbageMap';
+import { Address, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, DurationMsec, durationMsecToNumber, errorMessage, jsonObjectsMatch, NodeId, nodeIdToPublicKey, scaledDurationMsec } from './interfaces/core';
 import { AnnounceRequestData, AnnounceResponseData, NodeToNodeRequestData, NodeToNodeResponseData } from './interfaces/NodeToNodeRequest';
 import KacheryP2PNode from './KacheryP2PNode';
 import RemoteNode, { channelNodeInfoIsExpired, SendRequestMethod } from './RemoteNode';
@@ -9,6 +10,7 @@ class RemoteNodeManager {
     #remoteNodes = new Map<NodeId, RemoteNode>()
     #onNodeChannelAddedCallbacks: ((remoteNodeId: NodeId, channelConfigUrl: ChannelConfigUrl) => void)[] = []
     #onBootstrapNodeAddedCallbacks: ((bootstrapNodeId: NodeId) => void)[] = []
+    #recentWarnings = new GarbageMap<String, boolean>(scaledDurationMsec(1000 * 30))
     constructor(node: KacheryP2PNode) {
         this.#node = node;
     }
@@ -37,6 +39,11 @@ class RemoteNodeManager {
             errorMessage: null
         }
     }
+    _printWarning(w: string) {
+        if (this.#recentWarnings.has(w)) return
+        this.#recentWarnings.set(w, true)
+        console.warn(w)
+    }
     async setChannelNodeInfo(channelNodeInfo: ChannelNodeInfo) {
         const { body, signature } = channelNodeInfo;
         if (channelNodeInfoIsExpired(channelNodeInfo)) return
@@ -44,7 +51,8 @@ class RemoteNodeManager {
             throw Error(`Invalid signature for channelNodeInfo: : ${body.nodeId} ${body.channelConfigUrl}`);
         }
         if (!await this.#node.nodeIsAuthorizedForChannel(body.nodeId, body.channelConfigUrl)) {
-            throw Error(`Unauthorized node for channelNodeInfo: ${body.nodeId} ${body.channelConfigUrl}`)
+            this._printWarning(`Unauthorized node for channelNodeInfo: ${body.nodeId} ${body.channelConfigUrl}`)
+            return
         }
         if (body.nodeId === this.#node.nodeId()) {
             throw Error('Cannot set channel node info for self')

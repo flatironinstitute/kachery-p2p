@@ -12,6 +12,8 @@ Open a terminal and verify that you have the following commands available:
 kachery-store
 kachery-p2p-load
 kachery-p2p-start-daemon
+kachery-p2p-join-channel
+kachery-p2p-leave-channel
 kachery-p2p-find
 kachery-p2p-load
 kachery-p2p-cat
@@ -23,21 +25,29 @@ Check the version by running:
 kachery-p2p version
 ```
 
-The current version should be `0.6.0` and the current protocol version should be `0.6.0p`.
+The current version should be `0.6.1` and the current protocol version should be `0.6.0p`.
 
 ## Start a daemon
 
 By running a daemon on your computer you are creating a node on the kachery-p2p network.
 
-In a new terminal (activate the conda environment), start the daemon and join the example channel:
+In a new terminal (activate the conda environment), start the daemon.
 
 ```
-kachery-p2p-start-daemon --label <node-label> --config https://gist.githubusercontent.com/magland/9b858ee9dae97db9879826316fa2ba52/raw/kachery-example1.yaml
+kachery-p2p-start-daemon --label <node-label>
 ```
 
 where `<node-label>` is a display name you choose for your new node. This name will be visible to others.
 
-Keep this program running in a terminal (you may want to use [tmux](https://github.com/tmux/tmux/wiki) or screen). While this daemon is running, other members of this example channel have access to any file that you store in your local kachery database (provided they know the SHA-1 hash).
+Keep this program running in a terminal (you may want to use [tmux](https://github.com/tmux/tmux/wiki) or screen).
+
+Join the test channel by running the following in a separate terminal:
+
+```
+kachery-p2p-join-channel https://gist.githubusercontent.com/magland/542b2ef7c268eb99d87d7b965567ece0/raw/ccm-test-channel.yaml
+```
+
+While this daemon is running, other members of this example channel have access to any file that you store in your local kachery database (provided they know the SHA-1 hash).
 
 If you are able to do so, please keep this daemon open even after you have run the tests, so that testing may continue by others with your node on the system. Note that if files are downloaded by others from your computer, you will experience outgoing network traffic on your computer.
 

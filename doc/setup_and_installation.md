@@ -34,17 +34,29 @@ It is also possible to install without conda. Just make sure that the above requ
 Ensure you are in the correct conda environment, then:
 
 ```bash
-kachery-p2p-start-daemon --label <name-of-node> --config <url-or-path-to-yaml-file>
+kachery-p2p-start-daemon --label <name-of-node>
 ```
 
-where `<name-of-node>` is a node label for display purposes and `<url-or-path-to-yaml-file>` points to a configuration file. To get started you may use this example configuration file:
-`https://gist.githubusercontent.com/magland/9b858ee9dae97db9879826316fa2ba52/raw/kachery-example1.yaml`
+where `<name-of-node>` is a node label for display purposes.
 
-This example configuration points to a couple of bootstrap nodes which are used to assist with node discovery and specifies that we join a couple of channels including the `example1-zXk8tk` channel. Any other node configured with this same file will become a member of these same channels.
 
 Keep this daemon running in a terminal. You may want to use [tmux](https://github.com/tmux/tmux/wiki) or a similar tool to keep this daemon running even if the terminal is closed.
 
 Other more advanced options are available, such as specifying listen ports (see below).
+
+## Joining a channel
+
+A channel is defined by a github gist. Anyone with a github account can create a channel. You can join a channel by running the following command:
+
+```bash
+kachery-p2p-join-channel https://gist.githubusercontent.com/<user>/<id>/raw/<file-name>.yaml
+```
+
+where `<user>`, `<id>` and `<file-name>` should be filled in to point to your gist. You can get this URL from github by clicking on the "Raw" button when viewing the gist.
+
+Here is an example gist defining the `ccm-test` channel: https://gist.githubusercontent.com/magland/542b2ef7c268eb99d87d7b965567ece0/raw/ccm-test-channel.yaml
+
+The channel config file contains the channel label (for display purposes), a set of bootstrap servers (for peer discovery) and a list of authorized nodes. Your node ID must appear on this list of authorized nodes in order to join the channel.
 
 ## Advanced configuration
 
@@ -65,6 +77,6 @@ kachery-p2p-start-daemon --label <bootstrap-label> --isbootstrap --i
 smessageproxy --host <ip-or-hostname> --port <http-listen-port> --websocket-port <websocket-listen-port>
 ```
 
-You can then create a .yaml configuration file github gist (as above) that points to this node as a bootstrap, using the `<ip-or-hostname>` and the `<listen-port>`.
+You can then create a channel .yaml configuration file github gist (as above) that points to this node as a bootstrap, using the `<ip-or-hostname>` and the `<http-listen-port>`.
 
 You may want to use [tmux](https://github.com/tmux/tmux/wiki) or a similar tool to keep this daemon running even if the terminal is closed. This gives you the ability to reattach from a different terminal at a later time.
