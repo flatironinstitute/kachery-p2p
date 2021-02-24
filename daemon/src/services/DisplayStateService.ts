@@ -1,8 +1,8 @@
 import { sleepMsec } from "../common/util";
 import { formatByteCount } from "../downloadOptimizer/createDownloader";
-import { byteCount, durationGreaterThan, DurationMsec, elapsedSince, nowTimestamp, Port, unscaledDurationMsec } from "../interfaces/core";
+import { byteCount, ChannelLabel, durationGreaterThan, DurationMsec, elapsedSince, nowTimestamp, Port, unscaledDurationMsec } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
-import RemoteNode, { SendRequestMethod } from "../RemoteNode";
+import RemoteNode from "../RemoteNode";
 import RemoteNodeManager from "../RemoteNodeManager";
 
 export default class DisplayStateService {
@@ -40,11 +40,11 @@ export default class DisplayStateService {
         lines.push('=======================================')
         lines.push(`NODE ${this.#node.nodeId().slice(0, 6)} (${this.#node.nodeLabel()})`)
         this.#remoteNodeManager.getBootstrapRemoteNodes({includeOffline: true}).forEach(rn => {
-            const connectionString = getConnectionString(rn)
+            const connectionString = getConnectionString(this.#node, rn)
             lines.push(`BOOTSTRAP ${rn.remoteNodeId().slice(0, 6)} ${connectionString} (${rn.remoteNodeLabel() || ''})`)
         })
         this.#remoteNodeManager.getAllRemoteNodes({includeOffline: true}).forEach((rn) => {
-            const connectionString = getConnectionString(rn)
+            const connectionString = getConnectionString(this.#node, rn)
             lines.push(`    ${rn.remoteNodeId().slice(0, 6)} ${connectionString} (${rn.remoteNodeLabel() || ''})`)
         })
         if (this.opts.daemonApiPort)
@@ -69,13 +69,18 @@ export default class DisplayStateService {
     }
 }
 
-const getConnectionString = (rn: RemoteNode) => {
+const getConnectionString = (node: KacheryP2PNode, rn: RemoteNode) => {
     const onlineString = rn.isOnline() ? '' : '[offline] '
-    const candidateMethods: SendRequestMethod[] = ['udp', 'http', 'http-proxy']
-    const methods: SendRequestMethod[] = candidateMethods.filter(method => (rn.canSendRequest(method)))
+    const candidateMethods: ('udp' | 'http' | 'http-proxy')[] = ['udp', 'http', 'http-proxy']
+    const methods = candidateMethods.filter(method => (rn.canSendRequest(method)))
+    const channelLabels: ChannelLabel[] = []
+    for (let channelConfigUrl of rn.getJoinedChannelConfigUrls()) {
+        const c = node.getChannelConfigSync(channelConfigUrl)
+        if (c) channelLabels.push(c.channelLabel)
+    }
     const other: string[] = []
     if (rn.isBootstrap()) other.push('bootstrap')
-    const x = [...methods, ...other]
+    const x = [...methods.map(m => rn.canSendData(m) ? m : m + '-'), ...channelLabels.map(cl => `ch:${cl}`), ...other]
     return `${onlineString}${x.join(' ')}`
 }
 

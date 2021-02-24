@@ -217,16 +217,18 @@ class RemoteNode {
         const channelConfigUrls = this.getJoinedChannelConfigUrls()
         for (let channelConfigUrl of channelConfigUrls) {
             const channelNodeInfo = this.#channelNodeInfoByChannel.get(channelConfigUrl)
-            const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl)
-            const channelConfigNode = (channelConfig?.authorizedNodes || []).filter(an => (an.nodeId === this.#remoteNodeId))[0]
-            if ((channelNodeInfo) && (channelConfigNode) && (channelNodeInfo.body.isMessageProxy) && (channelConfigNode.isMessageProxy)) {    
+            if (channelNodeInfo) {
                 for (let proxyNodeId of channelNodeInfo.body.messageProxyWebsocketNodeIds) {
                     if (proxyNodeId !== this.#remoteNodeId) {
                         const prn = this.#node.remoteNodeManager().getRemoteNode(proxyNodeId)
                         if (prn) {
-                            if (prn.isOnline()) {
-                                if (prn.getRemoteNodeHttpAddress()) {
-                                    return prn
+                            if ((prn.isOnline()) && (prn.getRemoteNodeHttpAddress())) {
+                                const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl)
+                                const channelConfigNode = (channelConfig?.authorizedNodes || []).filter(an => (an.nodeId === this.#remoteNodeId))[0]
+                                if (channelConfigNode) {
+                                    if (channelConfigNode.isMessageProxy) {
+                                        return prn
+                                    }
                                 }
                             }
                         }
@@ -240,16 +242,18 @@ class RemoteNode {
         const channelConfigUrls = this.getJoinedChannelConfigUrls()
         for (let channelConfigUrl of channelConfigUrls) {
             const channelNodeInfo = this.#channelNodeInfoByChannel.get(channelConfigUrl)
-            const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl)
-            const channelConfigNode = (channelConfig?.authorizedNodes || []).filter(an => (an.nodeId === this.#remoteNodeId))[0]
-            if ((channelNodeInfo) && (channelConfigNode) && (channelNodeInfo.body.isDataProxy) && (channelConfigNode.isDataProxy)) {    
+            if (channelNodeInfo) {
                 for (let proxyNodeId of channelNodeInfo.body.dataProxyWebsocketNodeIds) {
                     if (proxyNodeId !== this.#remoteNodeId) {
                         const prn = this.#node.remoteNodeManager().getRemoteNode(proxyNodeId)
                         if (prn) {
-                            if (prn.isOnline()) {
-                                if (prn.getRemoteNodeHttpAddress()) {
-                                    return prn
+                            if ((prn.isOnline()) && (prn.getRemoteNodeHttpAddress())) {
+                                const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl)
+                                const channelConfigNode = (channelConfig?.authorizedNodes || []).filter(an => (an.nodeId === this.#remoteNodeId))[0]
+                                if (channelConfigNode) {
+                                    if (channelConfigNode.isDataProxy) {
+                                        return prn
+                                    }
                                 }
                             }
                         }
@@ -263,8 +267,11 @@ class RemoteNode {
         let method2 = this.#sendMessageMethodOptimizer.determineSendRequestMethod(method)
         return method2 === null ? false : true
     }
+    canSendData(method: DownloadFileDataMethod) {
+        return this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(method) ? true : false
+    }
     async downloadFileData(streamId: StreamId, opts: {method: DownloadFileDataMethod}): Promise<{dataStream: DataStreamy, method: DownloadFileDataMethod}> {
-        const method = await this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(opts.method)
+        const method = this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(opts.method)
         if (method === null) {
             throw Error('No method available to download stream')
         }
