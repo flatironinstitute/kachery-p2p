@@ -17,7 +17,7 @@ class RemoteNodeManager {
     async handleAnnounceRequest({fromNodeId, requestData, localUdpAddress}: {fromNodeId: NodeId, requestData: AnnounceRequestData, localUdpAddress: Address | null}): Promise<AnnounceResponseData> {
         // only handle this if we belong to this channel or we are a bootstrap node
         if (!this.#node.isBootstrapNode()) {
-            if (!this.#node.joinedChannelConfigUrls().includes(requestData.channelNodeInfo.body.channelConfigUrl)) {
+            if (!this.#node.hasJoinedChannel(requestData.channelNodeInfo.body.channelConfigUrl)) {
                 return {
                     requestType: 'announce',
                     success: false,
@@ -79,7 +79,7 @@ class RemoteNodeManager {
             })
         }
     }
-    async setBootstrapNode(remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, udpSocketAddress: Address | null, o: {isMessageProxy: boolean, isDataProxy: boolean}) {
+    async setBootstrapNode(remoteNodeId: NodeId, address: Address, webSocketAddress: Address | null, udpSocketAddress: Address | null) {
         const n = this.#remoteNodes.get(remoteNodeId)
         if (n) {
             if ((!n.isBootstrap()) || (!jsonObjectsMatch(n.bootstrapAddress(), address))) {
@@ -92,8 +92,6 @@ class RemoteNodeManager {
                 remoteNodeId,
                 {
                     isBootstrap: true,
-                    isBootstrapMessageProxy: o.isMessageProxy,
-                    isBootstrapDataProxy: o.isDataProxy,
                     bootstrapAddress: address,
                     bootstrapWebSocketAddress: webSocketAddress,
                     bootstrapUdpSocketAddress: udpSocketAddress
@@ -113,8 +111,8 @@ class RemoteNodeManager {
                 nodes.push(cni)
             }
         })
-        if (this.#node.joinedChannelConfigUrls().includes(channelConfigUrl)) {
-            nodes.push(this.#node.getChannelNodeInfo(channelConfigUrl))
+        if (this.#node.hasJoinedChannel(channelConfigUrl)) {
+            nodes.push(await this.#node.getChannelNodeInfo(channelConfigUrl))
         }
         return {
             nodes

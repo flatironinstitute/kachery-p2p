@@ -16,10 +16,13 @@ def cli():
 def get_channels():
     joined_channels = kp.get_channels()
     for a in joined_channels:
-        config = a['channelConfig']
         url = a['channelConfigUrl']
-        channel_label = config['channelLabel']
-        print(f'{channel_label}: {url}')
+        optstrings = []
+        if a.get('isMessageProxy', False):
+            optstrings.append('(message-proxy)')
+        if a.get('isDataProxy', False):
+            optstrings.append('(data-proxy)')
+        print(f'{url} {" ".join(optstrings)}')
 
 def _get_joined_channels_config() -> dict:
     f = kp.load_feed('_kachery_p2p_config', create=True)
@@ -41,7 +44,9 @@ def _set_joined_channels_config(joined_channels_config: dict):
 
 @click.command(help="Join a kachery-p2p channel")
 @click.argument('channel_config_url')
-def join_channel(channel_config_url):
+@click.option('--message-proxy', is_flag=True, help='Serve as a message proxy in this channel')
+@click.option('--data-proxy', is_flag=True, help='Serve as a data proxy in this channel')
+def join_channel(channel_config_url: str, message_proxy: bool, data_proxy: bool):
     # handle this URL
     # https://gist.githubusercontent.com/magland/542b2ef7c268eb99d87d7b965567ece0/raw/0c1a9671b37ca117f7c0d4f2e6057a9a8eeb75b2/ccm-test-channel.yaml
     if channel_config_url.startswith('https://gist.githubusercontent.com/'):
@@ -53,12 +58,27 @@ def join_channel(channel_config_url):
 
     joined_channels_config = _get_joined_channels_config()
     joined_channels = joined_channels_config['joinedChannels']
-    if channel_config_url in [c['channelConfigUrl'] for c in joined_channels]:
-        print(f'Already joined channel: {channel_config_url}')
+    new_joined_channel_config = {
+        'channelConfigUrl': channel_config_url,
+        'isMessageProxy': message_proxy,
+        'isDataProxy': data_proxy
+    }
+    new_joined_channels = []
+    updated_existing = False
+    for a in joined_channels:
+        if a['channelConfigUrl'] == channel_config_url:
+            updated_existing = True
+            new_joined_channels.append(new_joined_channel_config)
+        else:
+            new_joined_channels.append(a)
+    if not updated_existing:
+        new_joined_channels.append(new_joined_channel_config)
+    joined_channels_config['joinedChannels'] = new_joined_channels
+    _set_joined_channels_config(joined_channels_config)
+    if updated_existing:
+        print('Updated existing channel configuration')
     else:
-        joined_channels.append({'channelConfigUrl': channel_config_url})
-        _set_joined_channels_config(joined_channels_config)
-        print(f'Joined channel: {channel_config_url}')
+        print('Joined channel')
 
 @click.command(help="Leave a kachery-p2p channel")
 @click.argument('channel_config_url')
@@ -141,11 +161,8 @@ def log():
 
 @click.command(help="Start the daemon.")
 @click.option('--label', required=True, help='Label for this node')
-@click.option('--nobootstrap', is_flag=True, help='Do not use bootstrap nodes')
 @click.option('--isbootstrap', is_flag=True, help='This is a bootstrap node')
 @click.option('--noudp', is_flag=True, help='Do not use a udp socket')
-@click.option('--ismessageproxy', is_flag=True, help='This node can serve as a message proxy')
-@click.option('--isdataproxy', is_flag=True, help='This node can serve as a data transfer proxy')
 @click.option('--nomulticast', is_flag=True, help='Do not use multicast udp')
 @click.option('--verbose', default=0, help='Verbosity level')
 @click.option('--method', default='npx', help='Method for starting daemon: npx (default), npx-latest, npm, npm-latest or dev')
@@ -155,7 +172,7 @@ def log():
 @click.option('--udp-port', default=None, help='Override the udp listen port (by default equals the http port)')
 @click.option('--websocket-port', default=0, help='Port for websocket server')
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
-def start_daemon(label, method, verbose, host, public_url, port, udp_port, websocket_port, nobootstrap, isbootstrap, noudp, ismessageproxy, isdataproxy, nomulticast, node_arg):
+def start_daemon(label, method, verbose, host, public_url, port, udp_port, websocket_port, isbootstrap, noudp, nomulticast, node_arg):
     kp.start_daemon(
         label=label,
         method=method,
@@ -165,11 +182,8 @@ def start_daemon(label, method, verbose, host, public_url, port, udp_port, webso
         port=port,
         udp_port=udp_port,
         websocket_port=websocket_port,
-        nobootstrap=nobootstrap,
         isbootstrap=isbootstrap,
         noudp=noudp,
-        ismessageproxy=ismessageproxy,
-        isdataproxy=isdataproxy,
         nomulticast=nomulticast,
         node_arg=node_arg
     )

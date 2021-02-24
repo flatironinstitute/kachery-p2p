@@ -26,21 +26,20 @@ import { protocolVersion } from './protocolVersion'
 import { ProxyWebsocketConnection } from './proxyConnections/ProxyWebsocketConnection'
 import RemoteNode from './RemoteNode'
 import RemoteNodeManager from './RemoteNodeManager'
+import { JoinedChannelConfig } from './services/ConfigUpdateService'
 import PublicUdpSocketServer from './services/PublicUdpSocketServer'
 import { PacketId } from './udp/UdpPacketSender'
 
 export interface KacheryP2PNodeOpts {
-    isBootstrapNode: boolean,
-    isMessageProxy: boolean,
-    isDataProxy: boolean,
-    multicastUdpAddress: Address | null,
+    isBootstrapNode: boolean
+    multicastUdpAddress: Address | null
     getDefects: () => MockNodeDefects
 }
 
 class KacheryP2PNode {
     #keyPair: KeyPair
     #nodeId: NodeId
-    #joinedChannelConfigUrls: ChannelConfigUrl[] = []
+    #joinedChannels: JoinedChannelConfig[] = []
     #feedManager: FeedManager
     #remoteNodeManager: RemoteNodeManager
     #kacheryStorageManager: KacheryStorageManagerInterface
@@ -83,23 +82,23 @@ class KacheryP2PNode {
     keyPair() {
         return this.#keyPair
     }
-    joinedChannelConfigUrls() {
-        return this.#joinedChannelConfigUrls
+    joinedChannels() {
+        return [...this.#joinedChannels]
     }
-    setJoinedChannelConfigUrls(x: ChannelConfigUrl[]) {
-        return this.#joinedChannelConfigUrls = x
+    joinedChannelConfigUrls() {
+        return this.#joinedChannels.map(x => (x.channelConfigUrl))
+    }
+    hasJoinedChannel(channelConfigUrl: ChannelConfigUrl) {
+        return (this.#joinedChannels.filter(x => (x.channelConfigUrl === channelConfigUrl)).length > 0)
+    }
+    setJoinedChannels(x: JoinedChannelConfig[]) {
+        return this.#joinedChannels = x
     }
     remoteNodeManager() {
         return this.#remoteNodeManager
     }
     isBootstrapNode() {
         return this.p.opts.isBootstrapNode
-    }
-    isMessageProxy() {
-        return this.p.opts.isMessageProxy
-    }
-    isDataProxy() {
-        return this.p.opts.isDataProxy
     }
     useMulticastUdp() {
         return (this.p.opts.multicastUdpAddress !== null)
@@ -327,33 +326,34 @@ class KacheryP2PNode {
     publicUdpSocketServer() {
         return this.#publicUdpSocketServer
     }
-    getChannelNodeInfo(channelConfigUrl: ChannelConfigUrl): ChannelNodeInfo {
-        // const proxyHttpAddresses: Address[] = []
-        // this.#proxyConnectionsToServers.forEach((c, remoteNodeId) => {
-        //     const remoteNode = this.#remoteNodeManager.getRemoteNode(remoteNodeId)
-        //     if (remoteNode) {
-        //         const httpAddress = remoteNode.getRemoteNodeHttpAddress()
-        //         if (httpAddress) {
-        //             proxyHttpAddresses.push(httpAddress)
-        //         }
-        //     }
-        // })
+    async getChannelNodeInfo(channelConfigUrl: ChannelConfigUrl): Promise<ChannelNodeInfo> {
+        const channelConfig = await this.getChannelConfig(channelConfigUrl)
+        const joinedChannelConfig = this.#joinedChannels.filter(x => (x.channelConfigUrl === channelConfigUrl))[0]
+        if (!joinedChannelConfig) {
+            console.warn('Unexpected: joinedChannelConfig is not defined in getChannelNodeInfo')
+        }
         const messageProxyWebsocketNodeIds: NodeId[] = []
         const dataProxyWebsocketNodeIds: NodeId[] = []
-        this.#proxyConnectionsToServers.forEach((c, remoteNodeId) => {
-            const remoteNode = this.#remoteNodeManager.getRemoteNode(remoteNodeId)
-            if (remoteNode) {
-                if (remoteNode.getJoinedChannelConfigUrls().includes(channelConfigUrl)) {
-                    if (c.isMessageProxy()) {
-                        messageProxyWebsocketNodeIds.push(remoteNodeId)
-                    }
-                    if (c.isDataProxy()) {
-                        dataProxyWebsocketNodeIds.push(remoteNodeId)
+        if (channelConfig) {
+            channelConfig.authorizedNodes.forEach(an => {
+                if ((an.isMessageProxy) || (an.isDataProxy)) {
+                    const rn = this.#remoteNodeManager.getRemoteNode(an.nodeId)
+                    if (rn) {
+                        const cni = rn.getChannelNodeInfo(channelConfigUrl)
+                        if ((cni) && (cni.body.isMessageProxy) && (an.isMessageProxy)) {
+                            if (this.#proxyConnectionsToServers.has(an.nodeId)) {
+                                messageProxyWebsocketNodeIds.push(an.nodeId)
+                            }
+                        }
+                        if ((cni) && (cni.body.isDataProxy) && (an.isDataProxy)) {
+                            if (this.#proxyConnectionsToServers.has(an.nodeId)) {
+                                dataProxyWebsocketNodeIds.push(an.nodeId)
+                            }
+                        }
                     }
                 }
-            }
-        })
-        // if any of our proxyWebsocketNodeIds are trusted nodeIds then only use those
+            })
+        }
         const body: ChannelNodeInfoBody = {
             channelConfigUrl,
             nodeId: this.#nodeId,
@@ -361,6 +361,8 @@ class KacheryP2PNode {
             httpAddress: this.httpAddress(),
             webSocketAddress: this.webSocketAddress(),
             publicUdpSocketAddress: this.#publicUdpSocketAddress,
+            isMessageProxy: joinedChannelConfig?.isMessageProxy,
+            isDataProxy: joinedChannelConfig?.isDataProxy,
             messageProxyWebsocketNodeIds,
             dataProxyWebsocketNodeIds,
             timestamp: nowTimestamp()

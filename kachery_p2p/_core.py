@@ -42,7 +42,8 @@ def _get_channels() -> List[str]:
     resp = _http_post_json(url, dict())
     # if not resp['success']:
     #     raise Exception(resp['error'])
-    return resp['joinedChannels']
+    jc = resp['joinedChannels']
+    return jc
 
 def _find_file(uri: str, timeout_sec: float) -> Iterable[dict]:
     if uri.startswith('sha1dir://'):
@@ -349,11 +350,8 @@ def start_daemon(*,
     verbose: int=0,
     host: str='',
     public_url: str='',
-    nobootstrap: bool=False,
     noudp: bool=False,
     isbootstrap: bool=False,
-    ismessageproxy: bool=False,
-    isdataproxy: bool=False,
     nomulticast: bool=False,
     node_arg: List[str]=[]
 ):
@@ -369,16 +367,10 @@ def start_daemon(*,
     config_dir = os.getenv('KACHERY_P2P_CONFIG_DIR', f'{pathlib.Path.home()}/.kachery-p2p')
 
     start_args = []
-    if nobootstrap:
-        start_args.append(f'--nobootstrap')
     if isbootstrap:
         start_args.append(f'--isbootstrap')
     if noudp:
         start_args.append(f'--noudp')
-    if ismessageproxy:
-        start_args.append(f'--ismessageproxy')
-    if isdataproxy:
-        start_args.append(f'--isdataproxy')
     if nomulticast:
         start_args.append(f'--nomulticast')
     start_args.append(f'--verbose {verbose}')
@@ -409,7 +401,7 @@ def start_daemon(*,
             if use_latest:    
                 npm_package = 'kachery-p2p-daemon'
             else:
-                npm_package = 'kachery-p2p-daemon@0.6.1'
+                npm_package = 'kachery-p2p-daemon@0.6.2'
 
             if method == 'npx' or method == 'npx-latest':
                 ss = ShellScript(f'''

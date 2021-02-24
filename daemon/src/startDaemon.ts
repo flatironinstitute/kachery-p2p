@@ -16,8 +16,6 @@ import PublicWebSocketServer from './services/PublicWebSocketServer';
 
 export interface StartDaemonOpts {
     isBootstrap: boolean,
-    isMessageProxy: boolean,
-    isDataProxy: boolean,
     multicastUdpAddress: Address | null,
     udpSocketPort: Port | null,
     webSocketListenPort: Port | null,
@@ -88,8 +86,6 @@ const startDaemon = async (args: {
         externalInterface,
         opts: {
             isBootstrapNode: opts.isBootstrap,
-            isMessageProxy: opts.isMessageProxy,
-            isDataProxy: opts.isDataProxy,
             multicastUdpAddress: opts.services.multicast ? opts.multicastUdpAddress : null,
             getDefects: args.getDefects
         }

@@ -1,24 +1,29 @@
+import { IsDataProxy, IsMessageProxy } from "../cli";
 import { sleepMsec } from "../common/util";
-import { ChannelConfigUrl, DurationMsec, feedName, isArrayOf, isChannelConfigUrl, sha1OfString, subfeedHash, _validateObject } from "../interfaces/core";
+import { ChannelConfigUrl, DurationMsec, feedName, isArrayOf, isBoolean, isChannelConfigUrl, optional, sha1OfString, subfeedHash, _validateObject } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 
-interface JoinedChannelsConfigChannel {
+export interface JoinedChannelConfig {
     channelConfigUrl: ChannelConfigUrl
+    isMessageProxy?: IsMessageProxy
+    isDataProxy?: IsDataProxy
 }
 
-const isJoinedChannelsConfigChannel = (x: any): x is JoinedChannelsConfigChannel => {
+export const isJoinedChannelConfig = (x: any): x is JoinedChannelConfig => {
     return _validateObject(x, {
-        channelConfigUrl: isChannelConfigUrl
+        channelConfigUrl: isChannelConfigUrl,
+        isMessageProxy: optional(isBoolean),
+        isDataProxy: optional(isBoolean)
     })
 }
 
 interface JoinedChannelsConfig {
-    joinedChannels: JoinedChannelsConfigChannel[]
+    joinedChannels: JoinedChannelConfig[]
 }
 
 const isJoinedChannelsConfig = (x: any): x is JoinedChannelsConfig => {
     return _validateObject(x, {
-        joinedChannels: isArrayOf(isJoinedChannelsConfigChannel)
+        joinedChannels: isArrayOf(isJoinedChannelConfig)
     })
 }
 
@@ -42,7 +47,7 @@ export default class ConfigUpdateService {
                 const joinedChannelsConfig = await this.#node.feedManager().getFinalMessage({feedId: configFeedId, subfeedHash: joinedChannelsSubfeedHash})
                 if (joinedChannelsConfig) {
                     if (isJoinedChannelsConfig(joinedChannelsConfig)) {
-                        const joinedChannels: JoinedChannelsConfigChannel[] = []
+                        const joinedChannels: JoinedChannelConfig[] = []
                         for (let joinedChannel of joinedChannelsConfig.joinedChannels) {
                             if (await this.#node.nodeIsAuthorizedForChannel(this.#node.nodeId(), joinedChannel.channelConfigUrl)) {
                                 joinedChannels.push(joinedChannel)
@@ -51,8 +56,7 @@ export default class ConfigUpdateService {
                                 console.warn(`Not authorized to join channel: ${joinedChannel.channelConfigUrl}`)
                             }
                         }
-                        const channelConfigUrls = joinedChannels.map(a => a.channelConfigUrl)
-                        this.#node.setJoinedChannelConfigUrls(channelConfigUrls)
+                        this.#node.setJoinedChannels(joinedChannels)
                     }
                     else {
                         console.warn(joinedChannelsConfig)

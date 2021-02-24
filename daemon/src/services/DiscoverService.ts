@@ -79,7 +79,7 @@ export default class DiscoverService {
             const elapsedSinceLastBootstrapDiscover = elapsedSince(lastBootstrapDiscoverTimestamp);
             if (elapsedSinceLastBootstrapDiscover > durationMsecToNumber(this.opts.discoverBootstrapIntervalMsec)) {
                 const bootstrapNodes: RemoteNode[] = this.#remoteNodeManager.getBootstrapRemoteNodes({includeOffline: false});
-                const channelConfigUrls = this.#node.joinedChannelConfigUrls();
+                const channelConfigUrls = this.#node.joinedChannelConfigUrls()
                 for (let bootstrapNode of bootstrapNodes) {
                     for (let channelConfigUrl of channelConfigUrls) {
                         /////////////////////////////////////////////////////////////////////////

@@ -62,7 +62,7 @@ export default class ProxyClientService {
                             if (durationGreaterThan(elapsedMsec, scaledDurationMsec(15000))) {
                                 ///////////////////////////////////////////////////////////////////////
                                 await action('tryOutgoingProxyConnection', {context: 'ProxyClientService', remoteNodeId}, async () => {
-                                    await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: TIMEOUTS.websocketConnect, isMessageProxy, isDataProxy});
+                                    await this.#proxyClientManager.tryConnection(remoteNodeId, {timeoutMsec: TIMEOUTS.websocketConnect});
                                 }, async (err: Error) => {
                                     console.warn(`Problem establishing outgoing proxy connection to ${remoteNode.remoteNodeId().slice(0, 6)} (${err.message})`)
                                 })
@@ -84,7 +84,7 @@ class ProxyClientManager {
     constructor(node: KacheryP2PNode) {
         this.#node = node
     }
-    async tryConnection(remoteNodeId: NodeId, opts: {timeoutMsec: DurationMsec, isMessageProxy: boolean, isDataProxy: boolean}) {
+    async tryConnection(remoteNodeId: NodeId, opts: {timeoutMsec: DurationMsec}) {
         const remoteNode = this.#node.remoteNodeManager().getRemoteNode(remoteNodeId)
         if (!remoteNode) return
         const webSocketAddress = remoteNode.getRemoteNodeWebSocketAddress()
@@ -92,7 +92,7 @@ class ProxyClientManager {
             return;
         }
         try {
-            const c = new ProxyWebsocketConnection(this.#node, {connectionType: 'connectionToServer', isMessageProxy: opts.isMessageProxy, isDataProxy: opts.isDataProxy})
+            const c = new ProxyWebsocketConnection(this.#node, {connectionType: 'connectionToServer'})
             await c.initializeConnectionToServer(remoteNodeId, webSocketAddress, {timeoutMsec: opts.timeoutMsec});
             this.#node.setProxyConnectionToServer(remoteNodeId, c)
         }

@@ -11,6 +11,7 @@ import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToN
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
+import { isJoinedChannelConfig, JoinedChannelConfig } from './ConfigUpdateService';
 import { PublicApiProbeResponse } from './PublicApiServer';
 
 export interface DaemonApiProbeResponse {
@@ -21,7 +22,7 @@ export interface DaemonApiProbeResponse {
     isBootstrapNode: boolean,
     webSocketAddress: Address | null,
     publicUdpSocketAddress: Address | null,
-    joinedChannels: {channelConfig: ChannelConfig, channelConfigUrl: ChannelConfigUrl}[]
+    joinedChannels: JoinedChannelConfig[]
 };
 export const isDaemonApiProbeResponseJoinedChannels = (x: any): x is {channelConfig: ChannelConfig, channelConfigUrl: ChannelConfigUrl} => {
     return _validateObject(x, {
@@ -38,7 +39,7 @@ export const isDaemonApiProbeResponse = (x: any): x is PublicApiProbeResponse =>
         isBootstrapNode: isBoolean,
         webSocketAddress: isOneOf([isNull, isAddress]),
         publicUdpSocketAddress: isOneOf([isNull, isAddress]),
-        joinedChannels: isArrayOf(isDaemonApiProbeResponseJoinedChannels)
+        joinedChannels: isArrayOf(isJoinedChannelConfig)
     });
 }
 
@@ -568,16 +569,7 @@ export default class DaemonApiServer {
     // /probe - check whether the daemon is up and running and return info such as the node ID
     /* istanbul ignore next */
     async _handleProbe(): Promise<JSONObject> {
-        const joinedChannels: {channelConfigUrl: ChannelConfigUrl, channelConfig: ChannelConfig}[] = []
-        for (let channelConfigUrl of this.#node.joinedChannelConfigUrls()) {
-            const channelConfig = await this.#node.getChannelConfig(channelConfigUrl)
-            if (channelConfig) {
-                joinedChannels.push({
-                    channelConfigUrl,
-                    channelConfig
-                })
-            }
-        }
+        const joinedChannels = this.#node.joinedChannels()
         const response: DaemonApiProbeResponse = {
             success: true,
             protocolVersion: protocolVersion(),

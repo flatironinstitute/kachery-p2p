@@ -22,7 +22,7 @@ class PublicWebSocketServer {
         this.#webSocketServer.onConnection((ws: WebSocketInterface) => {
             /////////////////////////////////////////////////////////////////////////
             action('newProxyConnectionToClient', {context: 'PublicWebSocketServer'}, async () => {
-                const X = new ProxyWebsocketConnection(this.#node, {connectionType: 'connectionToClient', isMessageProxy: this.#node.isMessageProxy(), isDataProxy: this.#node.isDataProxy()});
+                const X = new ProxyWebsocketConnection(this.#node, {connectionType: 'connectionToClient'});
                 await X.initializeConnectionToClient(ws);
                 this.#node.setProxyConnectionToClient(X.remoteNodeId(), X);
 

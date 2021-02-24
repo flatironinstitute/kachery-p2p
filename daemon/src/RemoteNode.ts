@@ -32,8 +32,6 @@ class RemoteNode {
     #remoteNodeId: NodeId
     #channelNodeInfoByChannel = new Map<ChannelConfigUrl, ChannelNodeInfo>()
     #isBootstrap: boolean
-    #isBootstrapMessageProxy: boolean
-    #isBootstrapDataProxy: boolean
     #bootstrapAddress: Address | null
     #bootstrapWebSocketAddress: Address | null
     #bootstrapUdpSocketAddress: Address | null
@@ -48,8 +46,6 @@ class RemoteNode {
     #downloadFileDataMethodOptimizer: DownloadFileDataMethodOptimizer
     constructor(node: KacheryP2PNode, remoteNodeId: NodeId, opts: {
         isBootstrap: boolean,
-        isBootstrapMessageProxy: boolean,
-        isBootstrapDataProxy: boolean,
         bootstrapAddress: Address | null,
         bootstrapWebSocketAddress: Address | null,
         bootstrapUdpSocketAddress: Address | null,
@@ -57,8 +53,6 @@ class RemoteNode {
         this.#node = node
         this.#remoteNodeId = remoteNodeId;
         this.#isBootstrap = opts.isBootstrap
-        this.#isBootstrapMessageProxy = opts.isBootstrapMessageProxy,
-        this.#isBootstrapDataProxy = opts.isBootstrapDataProxy,
         this.#bootstrapAddress = opts.bootstrapAddress
         this.#bootstrapWebSocketAddress = opts.bootstrapWebSocketAddress
         this.#bootstrapUdpSocketAddress = opts.bootstrapUdpSocketAddress

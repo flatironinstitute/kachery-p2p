@@ -185,7 +185,7 @@ export class ProxyWebsocketConnection {
     #proxyStreamFileDataCancelCallbacks = new GarbageMap<ProxyStreamFileDataRequestId, () => void>(scaledDurationMsec(30 * 60 * 1000))
     #responseListeners = new GarbageMap<RequestId, ((response: NodeToNodeResponse) => void)>(scaledDurationMsec(5 * 60 * 1000))
     #proxyStreamFileDataResponseMessageListeners = new GarbageMap<ProxyStreamFileDataRequestId, (msg: ProxyStreamFileDataResponseMessage) => void>(scaledDurationMsec(30 * 60 * 1000))
-    constructor(node: KacheryP2PNode, private opts: {connectionType: 'connectionToClient' | 'connectionToServer', isMessageProxy: boolean, isDataProxy: boolean}) {
+    constructor(node: KacheryP2PNode, private opts: {connectionType: 'connectionToClient' | 'connectionToServer'}) {
         this.#node = node
     }
     async initializeConnectionToServer(remoteNodeId: NodeId, address: Address, opts: {timeoutMsec: DurationMsec}) {
@@ -412,12 +412,6 @@ export class ProxyWebsocketConnection {
                 /////////////////////////////////////////////////////////////////////////
             });
         });
-    }
-    isMessageProxy() {
-        return this.opts.isMessageProxy
-    }
-    isDataProxy() {
-        return this.opts.isDataProxy
     }
     streamFileData(streamId: StreamId): DataStreamy {
         if (this.opts.connectionType !== 'connectionToClient') {

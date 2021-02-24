@@ -34,12 +34,12 @@ export default class BootstrapService {
             }
             throw Error('Invalid probe response from bootstrap node.')
         }
-        const {nodeId: remoteNodeId, isBootstrapNode, isMessageProxy, isDataProxy, webSocketAddress} = response
+        const {nodeId: remoteNodeId, isBootstrapNode, webSocketAddress} = response
         if (!isBootstrapNode) {
             throw Error('isBootstrapNode is false in probe response from bootstrap node.')
         }
         const publicUdpSocketAddress = response.publicUdpSocketAddress
-        this.#remoteNodeManager.setBootstrapNode(remoteNodeId, address, webSocketAddress, publicUdpSocketAddress, {isMessageProxy, isDataProxy})
+        this.#remoteNodeManager.setBootstrapNode(remoteNodeId, address, webSocketAddress, publicUdpSocketAddress)
     }
     async _start() {
         await sleepMsecNum(2) // important for tests

@@ -27,7 +27,7 @@ export default class AnnounceService {
                 numPasses ++
                 await sleepMsec(scaledDurationMsec(1000))
             }
-            if (this.#node.joinedChannelConfigUrls().includes(channelConfigUrl)) { // only if we belong to this channel
+            if (this.#node.hasJoinedChannel(channelConfigUrl)) { // only if we belong to this channel
 
                 /////////////////////////////////////////////////////////////////////////
                 action('announceToNewNode', {context: 'AnnounceService', remoteNodeId}, async () => {
@@ -69,7 +69,7 @@ export default class AnnounceService {
         }
         const requestData: AnnounceRequestData = {
             requestType: 'announce',
-            channelNodeInfo: this.#node.getChannelNodeInfo(channelConfigUrl)
+            channelNodeInfo: await this.#node.getChannelNodeInfo(channelConfigUrl)
         }
         let method: SendRequestMethod = 'prefer-udp' // we prefer to send via udp so that we can discover our own public udp address when we get the response
         let responseData

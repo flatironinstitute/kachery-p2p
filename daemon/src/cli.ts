@@ -34,19 +34,29 @@ class CLIError extends Error {
   }
 }
 
+export interface IsAdmin extends Boolean {
+  __isAdmin__: never; // phantom
+}
+export interface IsMessageProxy extends Boolean {
+  __isMessageProxy__: never; // phantom
+}
+export interface IsDataProxy extends Boolean {
+  __isDataProxy__: never; // phantom
+}
+
 export interface ChannelConfigAuthorizedNode {
   nodeId: NodeId
   nodeLabel: NodeLabel
-  admin?: boolean
-  isMessageProxy?: boolean
-  isDataProxy?: boolean
+  isAdmin?: IsAdmin
+  isMessageProxy?: IsMessageProxy
+  isDataProxy?: IsDataProxy
 }
 
 export const isChannelConfigAuthorizedNode = (x: any): x is ChannelConfigAuthorizedNode => {
   return _validateObject(x, {
     nodeId: isNodeId,
     nodeLabel: isNodeLabel,
-    admin: optional(isBoolean),
+    isAdmin: optional(isBoolean),
     isMessageProxy: optional(isBoolean),
     isDataProxy: optional(isBoolean),
   }, {allowAdditionalFields: true})
@@ -101,7 +111,7 @@ function main() {
           type: 'string'
         })
         y.option('websocket-port', {
-          describe: 'Specify the websocket port to listen on (required for ismessageproxy and/or isdataproxy).',
+          describe: 'Specify the websocket port to listen on (required message proxy and/or data proxy nodes).',
           type: 'string'
         })
         y.option('isbootstrap', {
@@ -110,14 +120,6 @@ function main() {
         })
         y.option('noudp', {
           describe: 'Do not use a udp socket',
-          type: 'boolean'
-        })
-        y.option('ismessageproxy', {
-          describe: 'Allow this node to be used as a message proxy node for the channels it is in',
-          type: 'boolean'
-        })
-        y.option('isdataproxy', {
-          describe: 'Allow this node to be used as a data proxy node for the channels it is in',
           type: 'boolean'
         })
         y.option('nomulticast', {
@@ -140,16 +142,8 @@ function main() {
         const label = nodeLabel(argv.label as string)
         const isBootstrapNode = argv['isbootstrap'] ? true : false
         
-        const isMessageProxy = argv['ismessageproxy'] ? true : false
-        const isDataProxy = argv['isdataproxy'] ? true : false
         const noMulticast = argv['nomulticast'] ? true : false
         const verbose = Number(argv.verbose || 0)
-
-        if ((isMessageProxy) || (isDataProxy)) {
-          if (webSocketListenPort === null) {
-            throw Error('You must specify a websocket-port when using --ismessageproxy or --isdataproxy')
-          }
-        }
 
         const configDir = (process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`) as any as LocalFilePath
         if (!fs.existsSync(configDir.toString())) {
@@ -204,8 +198,6 @@ function main() {
           getDefects: () => {return {}}, // no defects
           opts: {
             isBootstrap: isBootstrapNode,
-            isMessageProxy,
-            isDataProxy,
             multicastUdpAddress: {hostName: '237.0.0.0' as any as HostName, port: toPort(21010)}, // how to choose this?
             udpSocketPort,
             webSocketListenPort,
