@@ -217,7 +217,9 @@ class RemoteNode {
         const channelConfigUrls = this.getJoinedChannelConfigUrls()
         for (let channelConfigUrl of channelConfigUrls) {
             const channelNodeInfo = this.#channelNodeInfoByChannel.get(channelConfigUrl)
-            if (channelNodeInfo) {
+            const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl)
+            const channelConfigNode = (channelConfig?.authorizedNodes || []).filter(an => (an.nodeId === this.#remoteNodeId))[0]
+            if ((channelNodeInfo) && (channelConfigNode) && (channelNodeInfo.body.isMessageProxy) && (channelConfigNode.isMessageProxy)) {    
                 for (let proxyNodeId of channelNodeInfo.body.messageProxyWebsocketNodeIds) {
                     if (proxyNodeId !== this.#remoteNodeId) {
                         const prn = this.#node.remoteNodeManager().getRemoteNode(proxyNodeId)
@@ -238,7 +240,9 @@ class RemoteNode {
         const channelConfigUrls = this.getJoinedChannelConfigUrls()
         for (let channelConfigUrl of channelConfigUrls) {
             const channelNodeInfo = this.#channelNodeInfoByChannel.get(channelConfigUrl)
-            if (channelNodeInfo) {
+            const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl)
+            const channelConfigNode = (channelConfig?.authorizedNodes || []).filter(an => (an.nodeId === this.#remoteNodeId))[0]
+            if ((channelNodeInfo) && (channelConfigNode) && (channelNodeInfo.body.isDataProxy) && (channelConfigNode.isDataProxy)) {    
                 for (let proxyNodeId of channelNodeInfo.body.dataProxyWebsocketNodeIds) {
                     if (proxyNodeId !== this.#remoteNodeId) {
                         const prn = this.#node.remoteNodeManager().getRemoteNode(proxyNodeId)
@@ -260,7 +264,7 @@ class RemoteNode {
         return method2 === null ? false : true
     }
     async downloadFileData(streamId: StreamId, opts: {method: DownloadFileDataMethod}): Promise<{dataStream: DataStreamy, method: DownloadFileDataMethod}> {
-        const method = this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(opts.method)
+        const method = await this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(opts.method)
         if (method === null) {
             throw Error('No method available to download stream')
         }
@@ -276,7 +280,7 @@ class RemoteNode {
             }
         }
         else if (method === 'http-proxy') {
-            const proxyRemoteNode = this.getRemoteNodeDataProxyNode()
+            const proxyRemoteNode = await this.getRemoteNodeDataProxyNode()
             if (!proxyRemoteNode) {
                 /* istanbul ignore next */
                 throw Error('Unexpected. Unable to download file data... no proxy remote node found.')
@@ -380,7 +384,7 @@ class RemoteNode {
         const request = this._formRequestFromRequestData(requestData, {timeoutMsec: opts.timeoutMsec});
         const requestId = request.body.requestId;
 
-        const method = this.#sendMessageMethodOptimizer.determineSendRequestMethod(opts.method)
+        const method = await this.#sendMessageMethodOptimizer.determineSendRequestMethod(opts.method)
         if (method === null) {
             /* istanbul ignore next */
             throw Error(`Method not available for sending request ${requestData.requestType}: ${opts.method} (from ${this.#node.nodeId().slice(0, 6)} to ${this.#remoteNodeId.slice(0, 6)})`)
@@ -399,7 +403,7 @@ class RemoteNode {
                 }
             }
             else if (method === 'http-proxy') {
-                const proxyRemoteNode = this.getRemoteNodeMessageProxyNode()
+                const proxyRemoteNode = await this.getRemoteNodeMessageProxyNode()
                 if (!proxyRemoteNode) {
                     /* istanbul ignore next */
                     throw Error('Unexpected. Unable to send request... no proxy remote node found.')

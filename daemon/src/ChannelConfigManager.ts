@@ -34,6 +34,14 @@ class ChannelConfigManager {
             else return null
         }
     }
+    getChannelConfigSync(channelConfigUrl: ChannelConfigUrl): ChannelConfig | null {
+        this.getChannelConfig(channelConfigUrl) // trigger a get
+        const a = this.#records.get(channelConfigUrl)
+        if (a) {
+            return a.channelConfig
+        }
+        else return null
+    }
     async _fetchChannelConfigRecord(channelConfigUrl: ChannelConfigUrl): Promise<ChannelConfigRecord | null> {
         try {
             const config = await loadConfig(channelConfigUrl.toString())

@@ -121,6 +121,9 @@ class KacheryP2PNode {
     async getChannelConfig(channelConfigUrl: ChannelConfigUrl): Promise<ChannelConfig | null> {
         return await this.#channelConfigManager.getChannelConfig(channelConfigUrl)
     }
+    getChannelConfigSync(channelConfigUrl: ChannelConfigUrl): ChannelConfig | null {
+        return this.#channelConfigManager.getChannelConfigSync(channelConfigUrl)
+    }
     async nodeIsAuthorizedForChannel(nodeId: NodeId, channelConfigUrl: ChannelConfigUrl) {
         const c = await this.getChannelConfig(channelConfigUrl)
         if (!c) return false
