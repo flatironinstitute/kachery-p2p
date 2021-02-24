@@ -56,7 +56,7 @@ where `<user>`, `<id>` and `<file-name>` should be filled in to point to your gi
 
 Here is an example gist defining the `ccm-test` channel: https://gist.githubusercontent.com/magland/542b2ef7c268eb99d87d7b965567ece0/raw/ccm-test-channel.yaml
 
-The channel config file contains the channel label (for display purposes), a set of bootstrap servers (for peer discovery) and a list of authorized nodes. Your node ID must appear on this list of authorized nodes in order to join the channel.
+The channel config file contains the channel label (for display purposes), a set of bootstrap servers (for peer discovery) and a list of authorized nodes. Your node ID must appear on this list of authorized nodes in order to join the channel. To allow a colleague to join the channel, you can add their node information to the config gist.
 
 ## Advanced configuration
 
@@ -73,8 +73,7 @@ In order for peers to find one another, they need to connect to a common bootstr
 To create your own bootstrap node, install kachery-p2p on a computer in the cloud with two accessible ports, one for http and one for websocket. The ports must be open to tcp connections and the http port must also accept udp connections. Start the bootstrap daemon with the following command:
 
 ```bash
-kachery-p2p-start-daemon --label <bootstrap-label> --isbootstrap --i
-smessageproxy --host <ip-or-hostname> --port <http-listen-port> --websocket-port <websocket-listen-port>
+kachery-p2p-start-daemon --label <bootstrap-label> --isbootstrap --host <ip-or-hostname> --port <http-listen-port> --websocket-port <websocket-listen-port>
 ```
 
 You can then create a channel .yaml configuration file github gist (as above) that points to this node as a bootstrap, using the `<ip-or-hostname>` and the `<http-listen-port>`.
