@@ -2,9 +2,15 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Generate html docs",
+            "label": "Build daemon",
             "type": "shell",
-            "command": "cd doc && pdoc --html --force kachery_p2p"
+            
+            "command": "bash -ic .vscode/tasks/build_daemon.sh"
+        },
+        {
+            "label": "Publish PyPI",
+            "type": "shell",
+            "command": "bash -ic .vscode/tasks/publish_pypi.sh"
         }
     ]
 }

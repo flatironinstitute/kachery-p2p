@@ -150,22 +150,13 @@ def print_messages(uri):
     sf = kp.load_subfeed(uri)
     sf.print_messages()
 
-@click.command(help="Print messages in a subfeed.")
-def log():
-    f = kp.load_feed('kachery-p2p-daemon-log')
-    sf = f.get_subfeed('default')
-    sf.print_messages()
-
-
-# Note that npx-latest/npm-latest uses the latest version of the daemon on npm, which may be desireable for some bootstrap nodes, but not adviseable if you want to be sure that kachery-p2p is constistent with the node daemon
-
 @click.command(help="Start the daemon.")
 @click.option('--label', required=True, help='Label for this node')
 @click.option('--isbootstrap', is_flag=True, help='This is a bootstrap node')
 @click.option('--noudp', is_flag=True, help='Do not use a udp socket')
 @click.option('--nomulticast', is_flag=True, help='Do not use multicast udp')
 @click.option('--verbose', default=0, help='Verbosity level')
-@click.option('--method', default='npx', help='Method for starting daemon: npx (default), npx-latest, npm, npm-latest or dev')
+@click.option('--method', default='npx', help='Method for starting daemon: npx (default) or dev')
 @click.option('--host', default='', help='IP for connecting to this daemon')
 @click.option('--public-url', default='', help='Base URL for public http access')
 @click.option('--port', default=0, help='Public http port to listen on')
@@ -208,7 +199,6 @@ cli.add_command(get_channels)
 cli.add_command(join_channel)
 cli.add_command(leave_channel)
 cli.add_command(load_file)
-cli.add_command(log)
 cli.add_command(node_info)
 cli.add_command(print_messages)
 cli.add_command(start_daemon)

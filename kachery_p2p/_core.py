@@ -385,83 +385,39 @@ def start_daemon(*,
     start_args.append(f'--label {label}')
     start_args.append(f'--http-port {port}')
 
-    # Note that npx-latest/npm-latest uses the latest version of the daemon on npm, which may be desireable for some bootstrap nodes, but not adviseable if you want to be sure that kachery-p2p is constistent with the node daemon
-    if (method == 'npx') or (method == 'npx-latest') or (method == 'npm') or (method == 'npm-latest'):
+    assert method in ['npx', 'dev'], f'Invalid method for start_daemon: {method}'
+
+    thisdir = os.path.dirname(os.path.realpath(__file__))
+    if method == 'npx':
         try:
             subprocess.check_call(['npx', 'check-node-version', '--print', '--node', '>=12'])
         except:
             raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
         
+        
         for na in node_arg:
             start_args.append(f'--node-arg={na}')
 
-        while True:
-            restarting = False
-            use_latest = (method == 'npx-latest') or (method == 'npm-latest')
-            if use_latest:    
-                npm_package = 'kachery-p2p-daemon'
-            else:
-                npm_package = 'kachery-p2p-daemon@0.6.2'
+        npm_package = f'{thisdir}/kachery-p2p-daemon-0.6.3.tgz'
+        if not os.path.exists(npm_package):
+            raise Exception(f'No such file: {npm_package}')
+    
+        ss = ShellScript(f'''
+        #!/bin/bash
+        set -ex
 
-            if method == 'npx' or method == 'npx-latest':
-                ss = ShellScript(f'''
-                #!/bin/bash
-                set -ex
-
-                export KACHERY_P2P_API_PORT="{api_port}"
-                export KACHERY_P2P_API_HOST="{api_host}"
-                export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-                exec npx {npm_package} start {' '.join(start_args)}
-                ''')
-            elif method == 'npm' or method == 'npm-latest':
-                ss = ShellScript(f'''
-                #!/bin/bash
-                set -ex
-
-                export KACHERY_P2P_API_PORT="{api_port}"
-                export KACHERY_P2P_API_HOST="{api_host}"
-                export KACHERY_P2P_CONFIG_DIR="{config_dir}"
-                # npm install -g {npm_package}
-                exec kachery-p2p-daemon start {' '.join(start_args)}
-                ''')
-            else:
-                raise Exception(f'Unexpected method: {method}')
-            ss.start()
-            if use_latest:
-                original_latest_version = None
-                for passnum in [1, 2]:
-                    try:
-                        original_latest_version = _check_latest_npm_package_version('kachery-p2p-daemon')
-                    except:
-                        if passnum == 1:
-                            print('Unable to find latest version of package. Retrying in 60 seconds')
-                            time.sleep(60)
-                assert original_latest_version is not None, 'Unable to get latest version of daemon'
-                print(f'Latest version of daemon is: {original_latest_version}')
-            else:
-                original_latest_version = None
-            try:
-                while True:
-                    retcode = ss.wait(timeout = 120)
-                    if retcode is not None:
-                        break
-                    if use_latest:
-                        try:
-                            latest_version = _check_latest_npm_package_version('kachery-p2p-daemon')
-                        except:
-                            print('WARNING: unable to determine latest version of kachery-p2p-daemon')
-                            latest_version = None
-                        if (latest_version is not None) and (latest_version is not original_latest_version):
-                            print(f'New version of kachery-p2p daemon available ({latest_version} <> {original_latest_version}). Restarting.')
-                            ss.stop()
-                            restarting = True
-            finally:
-                ss.stop()
-                ss.kill()
-            if not restarting:
-                return
+        export KACHERY_P2P_API_PORT="{api_port}"
+        export KACHERY_P2P_API_HOST="{api_host}"
+        export KACHERY_P2P_CONFIG_DIR="{config_dir}"
+        exec npx -y {npm_package} start {' '.join(start_args)}
+        ''')
+        ss.start()
+        try:
+            retcode = ss.wait(timeout = 120)
+        finally:
+            ss.stop()
+            ss.kill()
     elif method == 'dev':
-        thisdir = os.path.dirname(os.path.realpath(__file__))
         ss = ShellScript(f'''
         #!/bin/bash
         set -ex

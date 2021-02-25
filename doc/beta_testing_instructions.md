@@ -25,7 +25,7 @@ Check the version by running:
 kachery-p2p version
 ```
 
-The current version should be `0.6.2` and the current protocol version should be `0.6.1p`.
+The current version should be `0.6.3` and the current protocol version should be `0.6.1p`.
 
 ## Start a daemon
 

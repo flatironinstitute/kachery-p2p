@@ -12,6 +12,8 @@ daemon/lib
 daemon/.nyc_output
 daemon/package-lock.json
 daemon/yarn.lock
+daemon/*.tgz
+kachery_p2p/*.tgz
 dist
 
 
