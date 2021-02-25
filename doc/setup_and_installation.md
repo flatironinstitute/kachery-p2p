@@ -2,11 +2,11 @@
 
 ## Requirements
 
-POSIX environment (Linux or Mac--currently tested with Ubuntu 16.04 and 18.04)
+Tested on Linux, should also work on macOS and Windows Subsystem for Linux
 
 We recommend that you use a Conda environment with
 
-* Python >= 3.7
+* Python 3.8
 * NumPy
 * Nodejs >=12 (available on conda-forge)
 
@@ -16,8 +16,8 @@ We recommend that you use a Conda environment with
 export KACHERY_STORAGE_DIR=/desired/file/storage/location
 # also add that to .bashrc or wherever you keep your env vars
 
-conda create --name MYENV python=3.8 numpy>=1.19.0
-conda activate MYENV
+conda create --name kachery-p2p-env python=3.8 numpy>=1.19.0
+conda activate kachery-p2p-env
 conda install -c conda-forge nodejs
 pip install --upgrade kachery_p2p
 ```

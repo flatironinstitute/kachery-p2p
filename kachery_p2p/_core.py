@@ -398,7 +398,7 @@ def start_daemon(*,
         for na in node_arg:
             start_args.append(f'--node-arg={na}')
 
-        npm_package = f'{thisdir}/kachery-p2p-daemon-0.6.3.tgz'
+        npm_package = f'{thisdir}/kachery-p2p-daemon-0.6.4.tgz'
         if not os.path.exists(npm_package):
             raise Exception(f'No such file: {npm_package}')
     
