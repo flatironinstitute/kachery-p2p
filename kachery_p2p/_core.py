@@ -401,7 +401,7 @@ def start_daemon(*,
         for na in node_arg:
             start_args.append(f'--node-arg={na}')
 
-        npm_package = f'{thisdir}/kachery-p2p-daemon-0.6.6.tgz'
+        npm_package = f'{thisdir}/kachery-p2p-daemon-0.6.7.tgz'
         if not os.path.exists(npm_package):
             raise Exception(f'No such file: {npm_package}')
     
@@ -413,11 +413,11 @@ def start_daemon(*,
         export KACHERY_P2P_API_HOST="{api_host}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
         npm install -g -y {npm_package}
-        kachery-p2p-daemon start {' '.join(start_args)}
+        exec kachery-p2p-daemon start {' '.join(start_args)}
         ''')
         ss.start()
         try:
-            retcode = ss.wait(timeout = 120)
+            retcode = ss.wait()
         finally:
             ss.stop()
             ss.kill()
