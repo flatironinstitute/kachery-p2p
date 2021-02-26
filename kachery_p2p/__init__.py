@@ -2,7 +2,7 @@
 .. include:: ./documentation.md
 """
 
-__version__ = "0.6.4"
+__version__ = "0.6.5"
 __protocol_version__ = "0.6.1p"
 
 from typing import Iterable, List, Union
@@ -18,6 +18,7 @@ from ._exceptions import LoadFileError
 from ._feeds import (_create_feed, _delete_feed, _get_feed_id, _load_feed,
                      _load_subfeed, _watch_for_new_messages, Feed, Subfeed)
 from ._testdaemon import TestDaemon
+from .cli import cli
 
 
 def load_file(
