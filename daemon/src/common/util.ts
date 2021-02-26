@@ -1,7 +1,11 @@
 import assert from 'assert';
+import axios from 'axios';
 // somehow it doesn't work to use the default import from bson
 import { Binary as bsonBinary, deserialize as bsonDeserialize, serialize as bsonSerialize } from 'bson';
+import fs from 'fs';
+import yaml from 'js-yaml';
 import { Address, DurationMsec, durationMsecToNumber, elapsedSince, FileKey, isAddress, nowTimestamp, scaledDurationMsec, Sha1Hash, unscaledDurationMsec } from '../interfaces/core';
+
 
 export const randomAlphaString = (num_chars: number) => {
     if (!num_chars) {
@@ -134,4 +138,34 @@ export const parseBootstrapInfo = (x: string): Address => {
         throw new StringParseError('Improper bootstrap info.');
     }
     return b
+}
+
+const cacheBust = (url: string) => {
+    if (url.includes('?')) {
+        return url + `&cb=${randomAlphaString(10)}`
+    }
+    else {
+        return url + `?cb=${randomAlphaString(10)}`
+    }
+}
+
+export const loadYamlFromUrl = async (url: string): Promise<object> => {
+    let txt: string
+    txt = (await axios.get(cacheBust(url))).data
+    return yaml.safeLoad(txt) as object
+}
+
+export const loadYamlFromPath = async (path: string): Promise<object> => {
+    let txt: string
+    txt = await fs.promises.readFile(path, 'utf-8')
+    return yaml.safeLoad(txt) as object
+}
+
+export const loadYamlFromPathOrUrl = async (pathOrUrl: string): Promise<object> => {
+    if ((pathOrUrl.startsWith('http://')) || (pathOrUrl.startsWith('https://'))) {
+        return await loadYamlFromUrl(pathOrUrl)
+    }
+    else {
+        return await loadYamlFromPath(pathOrUrl)
+    }   
 }

@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from typing import List, Union
 
 import click
 import kachery_p2p as kp
@@ -160,8 +161,9 @@ def print_messages(uri):
 @click.option('--port', default=0, help='Public http port to listen on')
 @click.option('--udp-port', default=None, help='Override the udp listen port (by default equals the http port)')
 @click.option('--websocket-port', default=0, help='Port for websocket server')
+@click.option('--static-config', default='', help='A URL or path to a configuration file for static configuration')
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
-def start_daemon(label, method, verbose, host, public_url, port, udp_port, websocket_port, isbootstrap, noudp, nomulticast, node_arg):
+def start_daemon(label: str, method: str, verbose: int, host: str, public_url: str, port: int, udp_port: Union[int, None], websocket_port: int, isbootstrap: bool, noudp: bool, nomulticast: bool, static_config: str, node_arg: List[str]):
     kp.start_daemon(
         label=label,
         method=method,
@@ -174,6 +176,7 @@ def start_daemon(label, method, verbose, host, public_url, port, udp_port, webso
         isbootstrap=isbootstrap,
         noudp=noudp,
         nomulticast=nomulticast,
+        static_config=static_config,
         node_arg=node_arg
     )
 

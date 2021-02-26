@@ -126,6 +126,10 @@ function main() {
           describe: 'Do not use multicast udp',
           type: 'boolean'
         })
+        y.option('static-config', {
+          describe: 'Path or URL to a config file for static configuration',
+          type: 'string'
+        })
         return y
       },
       handler: async (argv) => {
@@ -144,6 +148,7 @@ function main() {
         
         const noMulticast = argv['nomulticast'] ? true : false
         const verbose = Number(argv.verbose || 0)
+        const staticConfigPathOrUrl: string | null = argv['static-config'] ? argv['static-config'] + '' : null 
 
         const configDir = (process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`) as any as LocalFilePath
         if (!fs.existsSync(configDir.toString())) {
@@ -202,6 +207,7 @@ function main() {
             udpSocketPort,
             webSocketListenPort,
             firewalled: false,
+            staticConfigPathOrUrl,
             services: {
                 announce: true,
                 discover: true,

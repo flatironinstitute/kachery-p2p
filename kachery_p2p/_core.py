@@ -353,6 +353,7 @@ def start_daemon(*,
     noudp: bool=False,
     isbootstrap: bool=False,
     nomulticast: bool=False,
+    static_config: str='',
     node_arg: List[str]=[]
 ):
     """Used internally. Use the kachery-p2p-start-daemon command in the terminal.
@@ -382,6 +383,8 @@ def start_daemon(*,
         start_args.append(f'--websocket-port {websocket_port}')
     if udp_port is not None:
         start_args.append(f'--udp-port {udp_port}')
+    if static_config:
+        start_args.append(f'--static-config {static_config}')
     start_args.append(f'--label {label}')
     start_args.append(f'--http-port {port}')
 
@@ -398,7 +401,7 @@ def start_daemon(*,
         for na in node_arg:
             start_args.append(f'--node-arg={na}')
 
-        npm_package = f'{thisdir}/kachery-p2p-daemon-0.6.5.tgz'
+        npm_package = f'{thisdir}/kachery-p2p-daemon-0.6.6.tgz'
         if not os.path.exists(npm_package):
             raise Exception(f'No such file: {npm_package}')
     

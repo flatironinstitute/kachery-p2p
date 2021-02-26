@@ -20,6 +20,7 @@ export interface StartDaemonOpts {
     udpSocketPort: Port | null,
     webSocketListenPort: Port | null,
     firewalled: boolean,
+    staticConfigPathOrUrl: string | null,
     services: {
         announce?: boolean,
         discover?: boolean,
@@ -141,7 +142,8 @@ const startDaemon = async (args: {
         intervalMsec: scaledDurationMsec(3000)
     }) : null
     const configUpdateService = opts.services.configUpdate ? new ConfigUpdateService(kNode, {
-        intervalMsec: scaledDurationMsec(5000)
+        intervalMsec: scaledDurationMsec(5000),
+        staticConfigPathOrUrl: opts.staticConfigPathOrUrl
     }) : null
     let multicastService = (opts.services.multicast && (opts.multicastUdpAddress !== null)) ? new MulticastService(kNode, {
         intervalMsec: scaledDurationMsec(12000),

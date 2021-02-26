@@ -1,8 +1,6 @@
-import axios from 'axios';
-import yaml from 'js-yaml';
 import { ChannelConfig, isChannelConfig } from "./cli";
 import GarbageMap from "./common/GarbageMap";
-import { randomAlphaString } from "./common/util";
+import { loadYamlFromUrl } from './common/util';
 import { ChannelConfigUrl, elapsedSince, nowTimestamp, scaledDurationMsec, Timestamp } from "./interfaces/core";
 
 type ChannelConfigRecord = {
@@ -68,19 +66,8 @@ class ChannelConfigManager {
     }
 }
 
-const cacheBust = (url: string) => {
-    if (url.includes('?')) {
-        return url + `&cb=${randomAlphaString(10)}`
-    }
-    else {
-        return url + `?cb=${randomAlphaString(10)}`
-    }
-}
-
 const loadConfig = async (url: string) => {
-    let txt: string
-    txt = (await axios.get(cacheBust(url))).data
-    return yaml.safeLoad(txt)
+    return await loadYamlFromUrl(url)
 }
 
 export default ChannelConfigManager
