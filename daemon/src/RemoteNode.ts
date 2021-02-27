@@ -224,9 +224,9 @@ class RemoteNode {
                         if (prn) {
                             if ((prn.isOnline()) && (prn.getRemoteNodeHttpAddress())) {
                                 const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl)
-                                const channelConfigNode = ((channelConfig || {}).authorizedNodes || []).filter(an => (an.nodeId === this.#remoteNodeId))[0]
-                                if (channelConfigNode) {
-                                    if (channelConfigNode.isMessageProxy) {
+                                const channelConfigProxyNode = ((channelConfig || {}).authorizedNodes || []).filter(an => (an.nodeId === prn.remoteNodeId()))[0]
+                                if (channelConfigProxyNode) {
+                                    if (channelConfigProxyNode.isMessageProxy) {
                                         return prn
                                     }
                                 }
@@ -249,9 +249,9 @@ class RemoteNode {
                         if (prn) {
                             if ((prn.isOnline()) && (prn.getRemoteNodeHttpAddress())) {
                                 const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl)
-                                const channelConfigNode = ((channelConfig || {}).authorizedNodes || []).filter(an => (an.nodeId === this.#remoteNodeId))[0]
-                                if (channelConfigNode) {
-                                    if (channelConfigNode.isDataProxy) {
+                                const channelConfigProxyNode = ((channelConfig || {}).authorizedNodes || []).filter(an => (an.nodeId === prn.remoteNodeId()))[0]
+                                if (channelConfigProxyNode) {
+                                    if (channelConfigProxyNode.isDataProxy) {
                                         return prn
                                     }
                                 }

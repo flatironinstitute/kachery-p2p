@@ -84,6 +84,7 @@ export const loadFile = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fr
             manifestR = await loadFileAsync(node, manifestFileKey, {fromNode, label: `${opts.label} manifest`})
         }
         catch(err) {
+            console.warn(`Manifest not found: ${manifestSha1}`)
             ret.producer().error(err)
             return ret
         }
