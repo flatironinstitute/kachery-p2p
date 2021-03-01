@@ -267,24 +267,28 @@ class RemoteNode {
         if (this.#node.isBootstrapNode()) return true
         if (this.#isBootstrap) return true
         // Other than bootstrap, there are two ways we can be authorized to communicate with the remote node
-        // (1) we are joined to a channel where the remote node is an authorized node
+        // (1) we are joined to a channel where this node and the remote node are both authorized nodes
         // (2) we are a public node on a channel where the remote node has joined
+        // (3) the remote node is a public node on a channel where we have joined
         const channelConfigUrls = this.#node.joinedChannelConfigUrls()
         for (let channelConfigUrl of channelConfigUrls) { // loop through the joined channels
-            if (this.#channelNodeInfoByChannel.has(channelConfigUrl)) { // the remote node is in this channel
-                const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl) // the config for the channel in the gist
-                const joinedChannelConfig = this.#node.getJoinedChannelConfig(channelConfigUrl) // our joined channel config
-                if ((channelConfig) && (joinedChannelConfig)) {
-                    const localNodeChannelConfig = channelConfig.authorizedNodes.find(an => (an.nodeId === this.#node.nodeId()))
-                    const remoteNodeChannelConfig = channelConfig.authorizedNodes.find(an => (an.nodeId === this.#remoteNodeId))
-                    if (remoteNodeChannelConfig) {
-                        // (1) we are joined to a channel where the remote node is an authorized node
-                        return true
-                    }
-                    if ((joinedChannelConfig.isPublic) && (localNodeChannelConfig) && (localNodeChannelConfig.isPublic)) {
-                        // (2) we are a public node on a channel where the remote node has joined
-                        return true
-                    }
+            const localJoinedChannelConfig = this.#node.getJoinedChannelConfig(channelConfigUrl) // our joined channel config
+            const remoteChannelNodeInfo = this.#channelNodeInfoByChannel.get(channelConfigUrl)
+            const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl) // the config for the channel in the gist
+            if ((localJoinedChannelConfig) && (remoteChannelNodeInfo) && (channelConfig)) { // the remote node is in this channel
+                const localNodeChannelConfig = channelConfig.authorizedNodes.find(an => (an.nodeId === this.#node.nodeId()))
+                const remoteNodeChannelConfig = channelConfig.authorizedNodes.find(an => (an.nodeId === this.#remoteNodeId))
+                if ((localNodeChannelConfig) && (remoteNodeChannelConfig)) {
+                    // (1) we are joined to a channel where this node and the remote node are both authorized nodes
+                    return true
+                }
+                if ((localJoinedChannelConfig.isPublic) && (localNodeChannelConfig) && (localNodeChannelConfig.isPublic)) {
+                    // (2) we are a public node on a channel where the remote node has joined
+                    return true
+                }
+                if ((remoteChannelNodeInfo.body.isPublic) && (remoteNodeChannelConfig) && (remoteNodeChannelConfig.isPublic)) {
+                    // (3) the remote node is a public node on a channel where we have joined
+                    return true
                 }
             }
         }
