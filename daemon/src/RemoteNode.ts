@@ -280,17 +280,17 @@ class RemoteNode {
         for (let channelConfigUrl of channelConfigUrls) { // loop through the joined channels
 
             // (1) we are joined to a channel where this node and the remote node are both authorized nodes
-            if (this.#node.nodeIsAuthorizedOnChannel(this.#node.nodeId(), channelConfigUrl) && (this.#node.nodeIsAuthorizedOnChannel(this.remoteNodeId, channelConfigUrl))) {
+            if (this.#node.nodeIsAuthorizedOnChannel(this.#node.nodeId(), channelConfigUrl) && (this.#node.nodeIsAuthorizedOnChannel(this.#remoteNodeId, channelConfigUrl))) {
                 return true
             }
 
             // (2) we are a public node on a channel where the remote node has joined
-            if ((this.#node.nodeIsPublicOnChannel(this.#node.nodeId, channelConfigUrl)) && (this.#node.nodeIsOnChannel(this.#remoteNodeId, channelConfigUrl))) {
+            if ((this.#node.nodeIsPublicOnChannel(this.#node.nodeId(), channelConfigUrl)) && (this.#node.nodeIsOnChannel(this.#remoteNodeId, channelConfigUrl))) {
                 return true
             }
 
             // (3) the remote node is a public node on a channel where we have joined
-            if ((this.#node.nodeIsPublicOnChannel(this.#remoteNodeId, channelConfigUrl)) {
+            if (this.#node.nodeIsPublicOnChannel(this.#remoteNodeId, channelConfigUrl)) {
                 return true
             }
         }

@@ -130,6 +130,16 @@ class KacheryP2PNode {
         if (channelConfig.authorizedNodes.find(an => (an.nodeId === nodeId))) return true
         else return false
     }
+    nodeIsOnChannel(nodeId: NodeId, channelConfigUrl: ChannelConfigUrl): boolean {
+        if (nodeId === this.#nodeId) {
+            return this.#joinedChannels.find(a => (a.channelConfigUrl === channelConfigUrl)) ? true : false
+        }
+        else {
+            const rn = this.#remoteNodeManager.getRemoteNode(nodeId)
+            if (!rn) return false
+            return rn.getJoinedChannelConfigUrls().find(u => (u === channelConfigUrl)) ? true : false
+        }
+    }
     nodeIsPublicOnChannel(nodeId: NodeId, channelConfigUrl: ChannelConfigUrl): boolean {
         const channelConfig = this.getChannelConfigSync(channelConfigUrl)
         if (!channelConfig) return false
