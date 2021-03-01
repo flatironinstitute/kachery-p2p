@@ -28,6 +28,8 @@ export default class AnnounceService {
                 await sleepMsec(scaledDurationMsec(1000))
             }
             if (this.#node.hasJoinedChannel(channelConfigUrl)) { // only if we belong to this channel
+                const rn = this.#remoteNodeManager.getRemoteNode(remoteNodeId)
+                if ((!rn) || (!rn.isAuthorizedToCommunicate())) return
 
                 /////////////////////////////////////////////////////////////////////////
                 action('announceToNewNode', {context: 'AnnounceService', remoteNodeId}, async () => {
