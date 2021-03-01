@@ -103,7 +103,7 @@ class RemoteNodeManager {
     async getChannelInfo(channelConfigUrl: ChannelConfigUrl): Promise<ChannelInfo> {
         const nodes: ChannelNodeInfo[] = []
         this.#remoteNodes.forEach(n => {
-            const cni = n.getChannelNodeInfo(channelConfigUrl)
+            const cni = n.getRemoteChannelNodeInfo(channelConfigUrl)
             if (cni !== null) {
                 nodes.push(cni)
             }

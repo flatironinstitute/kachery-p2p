@@ -70,7 +70,7 @@ export default class DisplayStateService {
 }
 
 const getConnectionString = (node: KacheryP2PNode, rn: RemoteNode) => {
-    const onlineString = rn.isOnline() ? '' : '[offline] '
+    const onlineString = rn.isAuthorizedToCommunicate() ? (rn.isOnline() ? '' : '[offline] ') : '[no-auth] '
     const candidateMethods: ('udp' | 'http' | 'http-proxy')[] = ['udp', 'http', 'http-proxy']
     const methods = candidateMethods.filter(method => (rn.canSendRequest(method)))
     const channelLabels: ChannelLabel[] = []

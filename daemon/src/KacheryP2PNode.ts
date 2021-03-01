@@ -124,6 +124,30 @@ class KacheryP2PNode {
     getChannelConfigSync(channelConfigUrl: ChannelConfigUrl): ChannelConfig | null {
         return this.#channelConfigManager.getChannelConfigSync(channelConfigUrl)
     }
+    nodeIsAuthorizedOnChannel(nodeId: NodeId, channelConfigUrl: ChannelConfigUrl): boolean {
+        const channelConfig = this.getChannelConfigSync(channelConfigUrl)
+        if (!channelConfig) return false
+        if (channelConfig.authorizedNodes.find(an => (an.nodeId === nodeId))) return true
+        else return false
+    }
+    nodeIsPublicOnChannel(nodeId: NodeId, channelConfigUrl: ChannelConfigUrl): boolean {
+        const channelConfig = this.getChannelConfigSync(channelConfigUrl)
+        if (!channelConfig) return false
+        const x = channelConfig.authorizedNodes.find(an => (an.nodeId === nodeId))
+        if (!x) return false
+        if (!x.isPublic) return false
+        if (nodeId === this.#nodeId) {
+            const joinedChannelConfig = this.#joinedChannels.find(a => (a.channelConfigUrl === channelConfigUrl))
+            if (!joinedChannelConfig) return false
+            return joinedChannelConfig.isPublic ? true : false
+        }
+        else {
+            const remoteChannelNodeInfo = this.getRemoteChannelNodeInfo(nodeId, channelConfigUrl)
+            if (!remoteChannelNodeInfo) return false
+            if (remoteChannelNodeInfo.body.isPublic) return true
+        }
+        return false
+    }
     findFile(args: { fileKey: FileKey, timeoutMsec: DurationMsec}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
         onFinished: (callback: () => void) => void,
@@ -253,7 +277,7 @@ class KacheryP2PNode {
         const remoteNodesInChannel: RemoteNode[] = this.#remoteNodeManager.getRemoteNodesInChannel(channelConfigUrl, {includeOffline: false})
         const x: ChannelInfo = {
             nodes: remoteNodesInChannel.map(n => {
-                return n.getChannelNodeInfo(channelConfigUrl)
+                return n.getRemoteChannelNodeInfo(channelConfigUrl)
             }).filter(channelInfo => (channelInfo !== null))
             .map(channelInfo => {
                 if (channelInfo === null) {
@@ -325,6 +349,11 @@ class KacheryP2PNode {
     getJoinedChannelConfig(channelConfigUrl: ChannelConfigUrl): JoinedChannelConfig | undefined {
         return this.#joinedChannels.find(x => (x.channelConfigUrl === channelConfigUrl))
     }
+    getRemoteChannelNodeInfo(nodeId: NodeId, channelConfigUrl: ChannelConfigUrl): ChannelNodeInfo | null {
+        const rn = this.#remoteNodeManager.getRemoteNode(nodeId)
+        if (!rn) return null
+        return rn.getRemoteChannelNodeInfo(channelConfigUrl)
+    }
     async getChannelNodeInfo(channelConfigUrl: ChannelConfigUrl): Promise<ChannelNodeInfo> {
         const channelConfig = await this.getChannelConfig(channelConfigUrl)
         const joinedChannelConfig = this.getJoinedChannelConfig(channelConfigUrl)
@@ -336,15 +365,14 @@ class KacheryP2PNode {
         if (channelConfig) {
             channelConfig.authorizedNodes.forEach(an => {
                 if ((an.isMessageProxy) || (an.isDataProxy)) {
-                    const rn = this.#remoteNodeManager.getRemoteNode(an.nodeId)
-                    if (rn) {
-                        const cni = rn.getChannelNodeInfo(channelConfigUrl)
-                        if ((cni) && (cni.body.isMessageProxy) && (an.isMessageProxy)) {
+                    const rcni = this.getRemoteChannelNodeInfo(an.nodeId, channelConfigUrl)
+                    if (rcni) {
+                        if ((rcni.body.isMessageProxy) && (an.isMessageProxy)) {
                             if (this.#proxyConnectionsToServers.has(an.nodeId)) {
                                 messageProxyWebsocketNodeIds.push(an.nodeId)
                             }
                         }
-                        if ((cni) && (cni.body.isDataProxy) && (an.isDataProxy)) {
+                        if ((rcni.body.isDataProxy) && (an.isDataProxy)) {
                             if (this.#proxyConnectionsToServers.has(an.nodeId)) {
                                 dataProxyWebsocketNodeIds.push(an.nodeId)
                             }
