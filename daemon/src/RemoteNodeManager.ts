@@ -50,17 +50,7 @@ class RemoteNodeManager {
         if (!verifySignature(body, signature, nodeIdToPublicKey(channelNodeInfo.body.nodeId))) {
             throw Error(`Invalid signature for channelNodeInfo: : ${body.nodeId} ${body.channelConfigUrl}`);
         }
-        // const localNodeChannelNodeInfo = await this.#node.getChannelNodeInfo(channelNodeInfo.body.channelConfigUrl)
-        // if (!localNodeChannelNodeInfo.body.isPublic) {
-        //     if (!channelNodeInfo.body.isPublic) {
-        //         if (!this.#node.isBootstrapNode()) {
-        //             if (!await this.#node.nodeIsAuthorizedForChannel(body.nodeId, body.channelConfigUrl)) {
-        //                 this._printWarning(`Unauthorized node for channelNodeInfo: ${body.nodeId} ${body.channelConfigUrl}`)
-        //                 return
-        //             }
-        //         }
-        //     }
-        // }
+        
         if (body.nodeId === this.#node.nodeId()) {
             throw Error('Cannot set channel node info for self')
         }

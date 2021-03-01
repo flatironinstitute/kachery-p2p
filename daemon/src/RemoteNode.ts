@@ -264,7 +264,9 @@ class RemoteNode {
         return null
     }
     isAuthorizedToCommunicate() {
-        // There are two ways we can be authorized to communicate with the remote node
+        if (this.#node.isBootstrapNode()) return true
+        if (this.#isBootstrap) return true
+        // Other than bootstrap, there are two ways we can be authorized to communicate with the remote node
         // (1) we are joined to a channel where the remote node is an authorized node
         // (2) we are a public node on a channel where the remote node has joined
         const channelConfigUrls = this.#node.joinedChannelConfigUrls()
