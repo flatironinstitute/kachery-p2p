@@ -1,6 +1,6 @@
 import assert from 'assert';
 import crypto from 'crypto';
-import { IsDataProxy, IsMessageProxy } from '../cli';
+import { IsDataProxy, IsMessageProxy, IsPublic } from '../cli';
 import { hexToPublicKey, JSONStringifyDeterministic } from "../common/crypto_util";
 import { randomAlphaString } from "../common/util";
 import { protocolVersion } from '../protocolVersion';
@@ -628,6 +628,7 @@ export interface ChannelNodeInfoBody {
     publicUdpSocketAddress: Address | null,
     isMessageProxy?: IsMessageProxy,
     isDataProxy?: IsDataProxy,
+    isPublic?: IsPublic,
     messageProxyWebsocketNodeIds: NodeId[],
     dataProxyWebsocketNodeIds: NodeId[],
     timestamp: Timestamp
@@ -647,6 +648,7 @@ export const isChannelNodeInfoBody = (x: any): x is ChannelNodeInfoBody => {
         publicUdpSocketAddress: isOneOf([isNull, isAddress]),
         isMessageProxy: optional(isBoolean),
         isDataProxy: optional(isBoolean),
+        isPublic: optional(isBoolean),
         messageProxyWebsocketNodeIds: isArrayOf(isNodeId),
         dataProxyWebsocketNodeIds: isArrayOf(isNodeId),
         timestamp: isTimestamp

@@ -43,6 +43,9 @@ export interface IsMessageProxy extends Boolean {
 export interface IsDataProxy extends Boolean {
   __isDataProxy__: never; // phantom
 }
+export interface IsPublic extends Boolean {
+  __isPublic__: never; // phantom
+}
 
 export interface ChannelConfigAuthorizedNode {
   nodeId: NodeId
@@ -50,6 +53,7 @@ export interface ChannelConfigAuthorizedNode {
   isAdmin?: IsAdmin
   isMessageProxy?: IsMessageProxy
   isDataProxy?: IsDataProxy
+  isPublic?: IsPublic
 }
 
 export const isChannelConfigAuthorizedNode = (x: any): x is ChannelConfigAuthorizedNode => {
@@ -59,6 +63,7 @@ export const isChannelConfigAuthorizedNode = (x: any): x is ChannelConfigAuthori
     isAdmin: optional(isBoolean),
     isMessageProxy: optional(isBoolean),
     isDataProxy: optional(isBoolean),
+    isPublic: optional(isBoolean)
   }, {allowAdditionalFields: true})
 }
 

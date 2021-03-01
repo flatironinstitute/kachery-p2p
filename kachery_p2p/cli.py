@@ -21,6 +21,8 @@ def get_channels():
             optstrings.append('(message-proxy)')
         if a.get('isDataProxy', False):
             optstrings.append('(data-proxy)')
+        if a.get('isPublic', False):
+            optstrings.append('(public)')
         print(f'{url} {" ".join(optstrings)}')
 
 def _get_joined_channels_config() -> dict:
@@ -45,7 +47,8 @@ def _set_joined_channels_config(joined_channels_config: dict):
 @click.argument('channel_config_url')
 @click.option('--message-proxy', is_flag=True, help='Serve as a message proxy in this channel')
 @click.option('--data-proxy', is_flag=True, help='Serve as a data proxy in this channel')
-def join_channel(channel_config_url: str, message_proxy: bool, data_proxy: bool):
+@click.option('--public', is_flag=True, help='Serve as a public node in this channel')
+def join_channel(channel_config_url: str, message_proxy: bool, data_proxy: bool, public: bool):
     # handle this URL
     # https://gist.githubusercontent.com/magland/542b2ef7c268eb99d87d7b965567ece0/raw/0c1a9671b37ca117f7c0d4f2e6057a9a8eeb75b2/ccm-test-channel.yaml
     if channel_config_url.startswith('https://gist.githubusercontent.com/'):
@@ -60,7 +63,8 @@ def join_channel(channel_config_url: str, message_proxy: bool, data_proxy: bool)
     new_joined_channel_config = {
         'channelConfigUrl': channel_config_url,
         'isMessageProxy': message_proxy,
-        'isDataProxy': data_proxy
+        'isDataProxy': data_proxy,
+        'isPublic': public
     }
     new_joined_channels = []
     updated_existing = False

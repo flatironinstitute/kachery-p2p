@@ -1,4 +1,4 @@
-import { IsDataProxy, IsMessageProxy } from "../cli";
+import { IsDataProxy, IsMessageProxy, IsPublic } from "../cli";
 import { loadYamlFromPathOrUrl, sleepMsec } from "../common/util";
 import { ChannelConfigUrl, DurationMsec, feedName, isArrayOf, isBoolean, isChannelConfigUrl, optional, sha1OfString, subfeedHash, _validateObject } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
@@ -7,13 +7,15 @@ export interface JoinedChannelConfig {
     channelConfigUrl: ChannelConfigUrl
     isMessageProxy?: IsMessageProxy
     isDataProxy?: IsDataProxy
+    isPublic?: IsPublic
 }
 
 export const isJoinedChannelConfig = (x: any): x is JoinedChannelConfig => {
     return _validateObject(x, {
         channelConfigUrl: isChannelConfigUrl,
         isMessageProxy: optional(isBoolean),
-        isDataProxy: optional(isBoolean)
+        isDataProxy: optional(isBoolean),
+        isPublic: optional(isBoolean)
     })
 }
 
@@ -67,12 +69,13 @@ export default class ConfigUpdateService {
                         if (isJoinedChannelsConfig(joinedChannelsConfig)) {
                             const joinedChannels: JoinedChannelConfig[] = []
                             for (let joinedChannel of joinedChannelsConfig.joinedChannels) {
-                                if (await this.#node.nodeIsAuthorizedForChannel(this.#node.nodeId(), joinedChannel.channelConfigUrl)) {
-                                    joinedChannels.push(joinedChannel)
-                                }
-                                else {
-                                    console.warn(`Not authorized to join channel: ${joinedChannel.channelConfigUrl}`)
-                                }
+                                joinedChannels.push(joinedChannel)
+                                // if (await this.#node.nodeIsAuthorizedForChannel(this.#node.nodeId(), joinedChannel.channelConfigUrl)) {
+                                //     joinedChannels.push(joinedChannel)
+                                // }
+                                // else {
+                                //     console.warn(`Not authorized to join channel: ${joinedChannel.channelConfigUrl}`)
+                                // }
                             }
                             this.#node.setJoinedChannels(joinedChannels)
                         }

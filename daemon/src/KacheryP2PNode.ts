@@ -366,6 +366,7 @@ class KacheryP2PNode {
             publicUdpSocketAddress: this.#publicUdpSocketAddress,
             isMessageProxy: joinedChannelConfig ? joinedChannelConfig.isMessageProxy : undefined,
             isDataProxy: joinedChannelConfig ? joinedChannelConfig.isDataProxy : undefined,
+            isPublic: joinedChannelConfig ? joinedChannelConfig.isPublic : undefined,
             messageProxyWebsocketNodeIds,
             dataProxyWebsocketNodeIds,
             timestamp: nowTimestamp()
