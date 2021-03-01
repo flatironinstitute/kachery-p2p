@@ -137,6 +137,9 @@ class RemoteNodeManager {
         return n ? true : false
     }
     async sendRequestToNode(nodeId: NodeId, requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod}): Promise<NodeToNodeResponseData> {
+        if (!this.canSendRequestToNode(nodeId, opts.method)) {
+            throw Error(`Cannot send request to node: ${nodeId}`)
+        }
         const remoteNode = this.#remoteNodes.get(nodeId)
         if (!remoteNode) {
             throw Error(`Cannot send request to node: node with ID ${nodeId} not found.`)

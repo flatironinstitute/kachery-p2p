@@ -85,7 +85,7 @@ class RemoteNode {
                 return;
             }
         }
-        if (!this.#isOnline) {
+        if ((!this.#isOnline) && (this.isAuthorizedToCommunicate())) {
             // let's check to see if it is online
             const requestData: CheckAliveRequestData = {
                 requestType: 'checkAlive'
@@ -224,7 +224,7 @@ class RemoteNode {
                         if (prn) {
                             if ((prn.isOnline()) && (prn.getRemoteNodeHttpAddress())) {
                                 const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl)
-                                const channelConfigProxyNode = ((channelConfig || {}).authorizedNodes || []).filter(an => (an.nodeId === prn.remoteNodeId()))[0]
+                                const channelConfigProxyNode = ((channelConfig || {}).authorizedNodes || []).find(an => (an.nodeId === prn.remoteNodeId()))
                                 if (channelConfigProxyNode) {
                                     if (channelConfigProxyNode.isMessageProxy) {
                                         return prn
@@ -249,7 +249,7 @@ class RemoteNode {
                         if (prn) {
                             if ((prn.isOnline()) && (prn.getRemoteNodeHttpAddress())) {
                                 const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl)
-                                const channelConfigProxyNode = ((channelConfig || {}).authorizedNodes || []).filter(an => (an.nodeId === prn.remoteNodeId()))[0]
+                                const channelConfigProxyNode = ((channelConfig || {}).authorizedNodes || []).find(an => (an.nodeId === prn.remoteNodeId()))
                                 if (channelConfigProxyNode) {
                                     if (channelConfigProxyNode.isDataProxy) {
                                         return prn
@@ -263,14 +263,48 @@ class RemoteNode {
         }
         return null
     }
+    isAuthorizedToCommunicate() {
+        // There are two ways we can be authorized to communicate with the remote node
+        // (1) we are joined to a channel where the remote node is an authorized node
+        // (2) we are a public node on a channel where the remote node has joined
+        const channelConfigUrls = this.#node.joinedChannelConfigUrls()
+        for (let channelConfigUrl of channelConfigUrls) { // loop through the joined channels
+            if (this.#channelNodeInfoByChannel.has(channelConfigUrl)) { // the remote node is in this channel
+                const channelConfig = this.#node.getChannelConfigSync(channelConfigUrl) // the config for the channel in the gist
+                const joinedChannelConfig = this.#node.getJoinedChannelConfig(channelConfigUrl) // our joined channel config
+                if ((channelConfig) && (joinedChannelConfig)) {
+                    const localNodeChannelConfig = channelConfig.authorizedNodes.find(an => (an.nodeId === this.#node.nodeId()))
+                    const remoteNodeChannelConfig = channelConfig.authorizedNodes.find(an => (an.nodeId === this.#remoteNodeId))
+                    if (remoteNodeChannelConfig) {
+                        // (1) we are joined to a channel where the remote node is an authorized node
+                        return true
+                    }
+                    if ((joinedChannelConfig.isPublic) && (localNodeChannelConfig) && (localNodeChannelConfig.isPublic)) {
+                        // (2) we are a public node on a channel where the remote node has joined
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
     canSendRequest(method: SendRequestMethod): boolean {
+        if (!this.isAuthorizedToCommunicate()) {
+            return false
+        }
         let method2 = this.#sendMessageMethodOptimizer.determineSendRequestMethod(method)
         return method2 === null ? false : true
     }
     canSendData(method: DownloadFileDataMethod) {
+        if (!this.isAuthorizedToCommunicate()) {
+            return false
+        }
         return this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(method) ? true : false
     }
     async downloadFileData(streamId: StreamId, opts: {method: DownloadFileDataMethod}): Promise<{dataStream: DataStreamy, method: DownloadFileDataMethod}> {
+        if (!this.isAuthorizedToCommunicate()) {
+            throw Error('Cannot download file data. Not authorized to communicate.')
+        }
         const method = this.#downloadFileDataMethodOptimizer.determineDownloadFileDataMethod(opts.method)
         if (method === null) {
             throw Error('No method available to download stream')
@@ -316,6 +350,9 @@ class RemoteNode {
         }
     }
     async _streamDataViaUdpFromRemoteNode(streamId: StreamId): Promise<DataStreamy> {
+        if (!this.isAuthorizedToCommunicate()) {
+            throw Error('In _streamDataViaUdpFromRemoteNode: Not authorized to communicate.')
+        }
         const udpS = this.#node.publicUdpSocketServer()
         if (!udpS) {
             /* istanbul ignore next */
@@ -352,6 +389,9 @@ class RemoteNode {
         return incomingDataStream
     }
     async startStreamViaUdpToRemoteNode(streamId: StreamId): Promise<void> {
+        if (!this.isAuthorizedToCommunicate()) {
+            throw Error('In startStreamViaUdpToRemoteNode: Not authorized to communicate.')
+        }
         const r: DownloadFileDataRequestData | null = this.#node.downloadStreamManager().get(streamId)
         if (r === null) {
             /* istanbul ignore next */
@@ -370,6 +410,9 @@ class RemoteNode {
         udpS.setOutgoingDataStream(udpA, fallbackAddress, streamId, ds, {toNodeId: this.#remoteNodeId})
     }
     async sendRequest(requestData: NodeToNodeRequestData, opts: {timeoutMsec: DurationMsec, method: SendRequestMethod }): Promise<NodeToNodeResponseData> {
+        if (!this.isAuthorizedToCommunicate()) {
+            throw Error('In sendRequest: Not authorized to communicate.')
+        }
         try {
             const ret = await this._trySendRequest(requestData, opts)
             this._setOnline(true)

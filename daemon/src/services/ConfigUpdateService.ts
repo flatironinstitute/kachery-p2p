@@ -67,17 +67,7 @@ export default class ConfigUpdateService {
                     const joinedChannelsConfig = await this.#node.feedManager().getFinalMessage({feedId: configFeedId, subfeedHash: joinedChannelsSubfeedHash})
                     if (joinedChannelsConfig) {
                         if (isJoinedChannelsConfig(joinedChannelsConfig)) {
-                            const joinedChannels: JoinedChannelConfig[] = []
-                            for (let joinedChannel of joinedChannelsConfig.joinedChannels) {
-                                joinedChannels.push(joinedChannel)
-                                // if (await this.#node.nodeIsAuthorizedForChannel(this.#node.nodeId(), joinedChannel.channelConfigUrl)) {
-                                //     joinedChannels.push(joinedChannel)
-                                // }
-                                // else {
-                                //     console.warn(`Not authorized to join channel: ${joinedChannel.channelConfigUrl}`)
-                                // }
-                            }
-                            this.#node.setJoinedChannels(joinedChannels)
+                            this.#node.setJoinedChannels(joinedChannelsConfig.joinedChannels)
                         }
                         else {
                             console.warn(joinedChannelsConfig)

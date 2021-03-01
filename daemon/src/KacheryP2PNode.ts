@@ -124,13 +124,6 @@ class KacheryP2PNode {
     getChannelConfigSync(channelConfigUrl: ChannelConfigUrl): ChannelConfig | null {
         return this.#channelConfigManager.getChannelConfigSync(channelConfigUrl)
     }
-    async nodeIsAuthorizedForChannel(nodeId: NodeId, channelConfigUrl: ChannelConfigUrl) {
-        const c = await this.getChannelConfig(channelConfigUrl)
-        if (!c) return false
-        const x = c.authorizedNodes.filter(n => (n.nodeId === nodeId))[0]
-        if (x) return true
-        else return false
-    }
     findFile(args: { fileKey: FileKey, timeoutMsec: DurationMsec}): {
         onFound: (callback: (result: FindFileResult) => void) => void,
         onFinished: (callback: () => void) => void,
@@ -329,9 +322,12 @@ class KacheryP2PNode {
     publicUdpSocketServer() {
         return this.#publicUdpSocketServer
     }
+    getJoinedChannelConfig(channelConfigUrl: ChannelConfigUrl): JoinedChannelConfig | undefined {
+        return this.#joinedChannels.find(x => (x.channelConfigUrl === channelConfigUrl))
+    }
     async getChannelNodeInfo(channelConfigUrl: ChannelConfigUrl): Promise<ChannelNodeInfo> {
         const channelConfig = await this.getChannelConfig(channelConfigUrl)
-        const joinedChannelConfig = this.#joinedChannels.filter(x => (x.channelConfigUrl === channelConfigUrl))[0]
+        const joinedChannelConfig = this.getJoinedChannelConfig(channelConfigUrl)
         if (!joinedChannelConfig) {
             console.warn('Unexpected: joinedChannelConfig is not defined in getChannelNodeInfo')
         }
