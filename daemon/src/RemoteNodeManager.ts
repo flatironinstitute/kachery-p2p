@@ -53,9 +53,11 @@ class RemoteNodeManager {
         const localNodeChannelNodeInfo = await this.#node.getChannelNodeInfo(channelNodeInfo.body.channelConfigUrl)
         if (!localNodeChannelNodeInfo.body.isPublic) {
             if (!channelNodeInfo.body.isPublic) {
-                if (!await this.#node.nodeIsAuthorizedForChannel(body.nodeId, body.channelConfigUrl)) {
-                    this._printWarning(`Unauthorized node for channelNodeInfo: ${body.nodeId} ${body.channelConfigUrl}`)
-                    return
+                if (!this.#node.isBootstrapNode()) {
+                    if (!await this.#node.nodeIsAuthorizedForChannel(body.nodeId, body.channelConfigUrl)) {
+                        this._printWarning(`Unauthorized node for channelNodeInfo: ${body.nodeId} ${body.channelConfigUrl}`)
+                        return
+                    }
                 }
             }
         }
