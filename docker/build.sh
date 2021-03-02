@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker build -t magland/kachery-p2p:0.6.10 -t magland/kachery-p2p:latest .
+docker build -t magland/kachery-p2p:0.6.11 -t magland/kachery-p2p:latest .
