@@ -11,7 +11,7 @@ import { MockNodeDefects } from './external/mock/MockNodeDaemon'
 import FeedManager from './feeds/FeedManager'
 import Subfeed from './feeds/Subfeed'
 import { getStats, GetStatsOpts } from './getStats'
-import { addDurations, Address, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, ChannelNodeInfoBody, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, messageCountToNumber, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, subfeedPositionToNumber, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
+import { addDurations, Address, byteCount, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, ChannelNodeInfoBody, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, messageCountToNumber, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, subfeedPositionToNumber, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
 import { CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, DownloadSubfeedMessagesRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isDownloadSubfeedMessagesRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isReportNewSubfeedMessagesRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import NodeStats from './NodeStats'
 import { handleCheckAliveRequest } from './nodeToNodeRequestHandlers/handleCheckAliveRequest'
@@ -604,7 +604,9 @@ class KacheryP2PNode {
                 return ret
             }
             nextTick(() => {
-                ret.producer().data(Buffer.from(JSONStringifyDeterministic(signedMessages)))
+                const x = Buffer.from(JSONStringifyDeterministic(signedMessages))
+                ret.producer().start(byteCount(x.byteLength))
+                ret.producer().data(x)
                 ret.producer().end()
             })
             return ret
