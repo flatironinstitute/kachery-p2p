@@ -247,8 +247,9 @@ class FeedManager {
             // Instantiate and initialize the subfeed
             subfeed = new Subfeed(this.#node, feedId, subfeedHash, this.#localFeedManager, this.#remoteFeedManager)
             subfeed.onMessagesAdded(() => {
+                if (!subfeed) throw Error('Unexpected')
                 // CHAIN:append_messages:step(10)
-                this.#incomingSubfeedSubscriptionManager.reportMessagesAdded(feedId, subfeedHash, subfeed?.getNumLocalMessages() || messageCount(0))
+                this.#incomingSubfeedSubscriptionManager.reportMessagesAdded(feedId, subfeedHash, subfeed.getNumLocalMessages() || messageCount(0))
             })
             // Store in memory for future access (the order is important here, see waitUntilInitialized above)
             this.#subfeeds.set(k, subfeed)
