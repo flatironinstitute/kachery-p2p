@@ -6,7 +6,7 @@ export const handleReportNewSubfeedMessages = async (node: KacheryP2PNode, fromN
     const { feedId, subfeedHash, numMessages } = requestData
     try {
         // CHAIN:get_remote_messages:step(15)
-        await node.feedManager().reportRemoteSubfeedNumMessages(feedId, subfeedHash, numMessages)
+        await node.feedManager().reportNumRemoteMessages(fromNodeId, feedId, subfeedHash, numMessages)
         return {
             requestType: 'reportNewSubfeedMessages',
             success: true,

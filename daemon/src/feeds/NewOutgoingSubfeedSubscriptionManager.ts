@@ -63,9 +63,9 @@ class OutgoingSubfeedSubscription {
         )
         if (!isSubscribeToSubfeedResponseData(responseData)) throw Error('Unexpected response to subscribeToSubfeed')
         if (!responseData.success) throw Error(`Error in response to subscribeToSubfeed: ${responseData.errorMessage}`)
-        const numMessages = responseData.numMessages
-        if (numMessages !== null) {
-            this.node.feedManager().reportRemoteSubfeedNumMessages(this.feedId, this.subfeedHash, numMessages)
+        const numRemoteMessages = responseData.numMessages
+        if (numRemoteMessages !== null) {
+            this.node.feedManager().reportNumRemoteMessages(this.remoteNodeId, this.feedId, this.subfeedHash, numRemoteMessages)
         }
     }
     elapsedMsecSinceLastRenew() {

@@ -4,22 +4,20 @@ import { nextTick } from 'process';
 import { getSignatureJson, hexToPublicKey, verifySignatureJson } from '../common/crypto_util';
 import { randomAlphaString } from '../common/util';
 import { LocalFeedManagerInterface } from '../external/ExternalInterface';
-import { DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, JSONObject, messageCount, MessageCount, messageCountToNumber, nowTimestamp, PrivateKey, PublicKey, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, subfeedPositionToNumber } from '../interfaces/core';
+import { DurationMsec, durationMsecToNumber, FeedId, feedIdToPublicKeyHex, JSONObject, messageCount, MessageCount, messageCountToNumber, NodeId, nowTimestamp, PrivateKey, PublicKey, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, subfeedPositionToNumber } from '../interfaces/core';
+import KacheryP2PNode from '../KacheryP2PNode';
 import LocalSubfeedSignedMessagesManager from './LocalSubfeedSignedMessagesManager';
 import RemoteFeedManager from './RemoteFeedManager';
+import RemoteSubfeedMessageDownloader from './RemoteSubfeedMessageDownloader';
 // import NewOutgoingSubfeedSubscriptionManager from './NewOutgoingSubfeedSubscriptionManager';
 
 class Subfeed {
     // Represents a subfeed, which may or may not be writeable on this node
-    #localFeedManager: LocalFeedManagerInterface
-    #feedId: FeedId // The ID of the feed
     #publicKey: PublicKey // The public key of the feed (which is determined by the feed ID)
     #privateKey: PrivateKey | null // The private key (or null if this is not writeable on the local node) -- set below
-    #subfeedHash: SubfeedHash // The hash of the subfeed
     #localSubfeedSignedMessagesManager: LocalSubfeedSignedMessagesManager // The signed messages loaded from the messages file (in-memory cache)
     #accessRules: SubfeedAccessRules | null = null // Access rules for this subfeed -- like which nodes on the p2p network have permission to submit messages
     #isWriteable: boolean | null = null
-    #remoteFeedManager: RemoteFeedManager // The remote feed manager, allowing us to subscribe to remote feeds and submit messages to remote feeds
     // #outgoingSubfeedSubscriptionManager: NewOutgoingSubfeedSubscriptionManager
     
     #initialized: boolean = false;
@@ -31,17 +29,13 @@ class Subfeed {
 
     #onMessagesAddedCallbacks: (() => void)[] = []
 
-    #remoteNumMessages: MessageCount = messageCount(0)
-
     #mutex = new Mutex()
+    #remoteSubfeedMessageDownloader: RemoteSubfeedMessageDownloader
 
-    constructor(params: SubfeedParams) {
-        this.#feedId = params.feedId; // The ID of the feed
-        this.#publicKey = hexToPublicKey(feedIdToPublicKeyHex(this.#feedId)); // The public key of the feed (which is determined by the feed ID)
-        this.#subfeedHash = params.subfeedHash; // The hash of the subfeed
-        this.#localFeedManager = params.localFeedManager
-        this.#remoteFeedManager = params.remoteFeedManager // The remote feed manager, allowing us to retrieve data from remote nodes
-        this.#localSubfeedSignedMessagesManager = new LocalSubfeedSignedMessagesManager(this.#localFeedManager, this.#feedId, this.#subfeedHash, this.#publicKey)
+    constructor(private node: KacheryP2PNode, private feedId: FeedId, private subfeedHash: SubfeedHash, private localFeedManager: LocalFeedManagerInterface, private remoteFeedManager: RemoteFeedManager) {
+        this.#publicKey = hexToPublicKey(feedIdToPublicKeyHex(feedId)); // The public key of the feed (which is determined by the feed ID)
+        this.#localSubfeedSignedMessagesManager = new LocalSubfeedSignedMessagesManager(localFeedManager, feedId, subfeedHash, this.#publicKey)
+        this.#remoteSubfeedMessageDownloader = new RemoteSubfeedMessageDownloader(node, this)
     }
     async acquireLock() {
         return await this.#mutex.acquire()
@@ -56,14 +50,14 @@ class Subfeed {
         try {
             this.#initializing = true
             // Check whether we have the feed locally (may or may not be locally writeable)
-            const existsLocally = await this.#localFeedManager.feedExistsLocally(this.#feedId)
+            const existsLocally = await this.localFeedManager.feedExistsLocally(this.feedId)
             if (existsLocally) {
                 await this.#localSubfeedSignedMessagesManager.initializeFromLocal()
 
                 // If this is a writeable feed, we also load the access rules into memory
-                this.#isWriteable = await this.#localFeedManager.hasWriteableFeed(this.#feedId)
+                this.#isWriteable = await this.localFeedManager.hasWriteableFeed(this.feedId)
                 if (this.#isWriteable) {
-                    const accessRules = await this.#localFeedManager.getSubfeedAccessRules(this.#feedId, this.#subfeedHash)
+                    const accessRules = await this.localFeedManager.getSubfeedAccessRules(this.feedId, this.subfeedHash)
                     if (accessRules) {
                         this.#accessRules = accessRules
                     }
@@ -77,7 +71,7 @@ class Subfeed {
 
                 // Otherwise, we don't have it locally -- so let's just initialize things
                 this.#localSubfeedSignedMessagesManager.initializeEmptyMessageList()
-                const messages = await this.#localFeedManager.getSignedSubfeedMessages(this.#feedId, this.#subfeedHash)
+                const messages = await this.localFeedManager.getSignedSubfeedMessages(this.feedId, this.subfeedHash)
                 assert(messages.length === 0)
 
                 this.#accessRules = null
@@ -110,11 +104,11 @@ class Subfeed {
             })
         });
     }
-    reportRemoteNumMessages(numMessages: MessageCount) {
-        if (messageCountToNumber(numMessages) > messageCountToNumber(this.#remoteNumMessages)) {
-            this.#remoteNumMessages = numMessages
-        }
-        // todo: implement remote message downloader here
+    getFeedId() {
+        return this.feedId
+    }
+    getSubfeedHash() {
+        return this.subfeedHash
     }
     getNumLocalMessages(): MessageCount {
         // Return the number of messages that are currently loaded into memory
@@ -142,7 +136,7 @@ class Subfeed {
         const messages = check()
         if (messages.length > 0) return messages
         if (durationMsecToNumber(waitMsec) > 0) {
-            this.#remoteFeedManager.subscribeToRemoteSubfeed(this.#feedId, this.#subfeedHash)
+            this.remoteFeedManager.subscribeToRemoteSubfeed(this.feedId, this.subfeedHash)
             return new Promise((resolve, reject) => {
                 const listenerId = createListenerId()
                 let completed = false
@@ -246,14 +240,14 @@ class Subfeed {
             const body = signedMessage.body;
             const signature = signedMessage.signature;
             if (!verifySignatureJson(body as any as JSONObject, signature, this.#publicKey)) {
-                throw Error(`Error verifying signature when appending signed message for: ${this.#feedId} ${this.#subfeedHash} ${signature}`);
+                throw Error(`Error verifying signature when appending signed message for: ${this.feedId} ${this.subfeedHash} ${signature}`);
             }
             if ((body.previousSignature || null) !== (previousSignature || null)) {
-                throw Error(`Error in previousSignature when appending signed message for: ${this.#feedId} ${this.#subfeedHash} ${body.previousSignature} <> ${previousSignature}`);
+                throw Error(`Error in previousSignature when appending signed message for: ${this.feedId} ${this.subfeedHash} ${body.previousSignature} <> ${previousSignature}`);
             }
             if (body.messageNumber !== messageNumber) {
                 // problem here
-                throw Error(`Error in messageNumber when appending signed message for: ${this.#feedId} ${this.#subfeedHash} ${body.messageNumber} <> ${messageNumber}`);
+                throw Error(`Error in messageNumber when appending signed message for: ${this.feedId} ${this.subfeedHash} ${body.messageNumber} <> ${messageNumber}`);
             }
             previousSignature = signedMessage.signature;
             messageNumber ++;
@@ -280,11 +274,14 @@ class Subfeed {
             /* istanbul ignore next */
             throw Error(`Cannot set access rules for not writeable subfeed.`);
         }
-        await this.#localFeedManager.setSubfeedAccessRules(this.#feedId, this.#subfeedHash, accessRules)
+        await this.localFeedManager.setSubfeedAccessRules(this.feedId, this.subfeedHash, accessRules)
         this.#accessRules = accessRules
     }
     onMessagesAdded(callback: () => void) {
         this.#onMessagesAddedCallbacks.push(callback)
+    }
+    reportNumRemoteMessages(remoteNodeId: NodeId, numRemoteMessages: MessageCount) {
+        this.#remoteSubfeedMessageDownloader.reportNumRemoteMessages(remoteNodeId, numRemoteMessages)
     }
 }
 
@@ -293,13 +290,6 @@ interface ListenerId extends String {
 }
 const createListenerId = (): ListenerId => {
     return randomAlphaString(10) as any as ListenerId;
-}
-
-interface SubfeedParams {
-    localFeedManager: LocalFeedManagerInterface,
-    remoteFeedManager: RemoteFeedManager,
-    feedId: FeedId,
-    subfeedHash: SubfeedHash
 }
 
 export default Subfeed

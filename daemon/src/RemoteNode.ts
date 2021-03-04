@@ -2,7 +2,7 @@ import { TIMEOUTS } from "./common/constants";
 import { getSignature, verifySignature } from "./common/crypto_util";
 import DataStreamy from "./common/DataStreamy";
 import { addByteCount, Address, byteCount, ByteCount, ChannelConfigUrl, ChannelNodeInfo, createRequestId, durationGreaterThan, DurationMsec, elapsedSince, NodeId, nodeIdToPublicKey, nowTimestamp, scaledDurationMsec, unscaledDurationMsec, urlPath } from "./interfaces/core";
-import { CheckAliveRequestData, DownloadFileDataRequestData, isCheckAliveResponseData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, isStopStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StopStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
+import { CheckAliveRequestData, DownloadFileDataRequestData, DownloadSubfeedMessagesRequestData, isCheckAliveResponseData, isNodeToNodeResponse, isStartStreamViaUdpResponseData, isStopStreamViaUdpResponseData, NodeToNodeRequest, NodeToNodeRequestData, NodeToNodeResponse, NodeToNodeResponseData, StartStreamViaUdpRequestData, StopStreamViaUdpRequestData, StreamId } from "./interfaces/NodeToNodeRequest";
 import KacheryP2PNode from "./KacheryP2PNode";
 import DownloadFileDataMethodOptimizer, { DownloadFileDataMethod } from "./methodOptimizers/DownloadFileDataMethodOptimizer";
 import SendMessageMethodOptimizer from './methodOptimizers/SendMessageMethodOptimizer';
@@ -400,7 +400,7 @@ class RemoteNode {
         if (!this.isAuthorizedToCommunicate()) {
             throw Error('In startStreamViaUdpToRemoteNode: Not authorized to communicate.')
         }
-        const r: DownloadFileDataRequestData | null = this.#node.downloadStreamManager().get(streamId)
+        const r: DownloadFileDataRequestData | DownloadSubfeedMessagesRequestData | null = this.#node.downloadStreamManager().get(streamId)
         if (r === null) {
             /* istanbul ignore next */
             throw Error('Stream not found')
@@ -413,7 +413,7 @@ class RemoteNode {
         /* istanbul ignore next */
         if (!udpA) throw Error('Cannot stream via udp when there is no udp address')
 
-        const ds = await this.#node.kacheryStorageManager().getFileReadStream(r.fileKey)
+        let ds: DataStreamy = await this.#node.streamDataForStreamId(this.#node.nodeId(), streamId)
         const fallbackAddress = nodeIdFallbackAddress(this.#remoteNodeId)
         udpS.setOutgoingDataStream(udpA, fallbackAddress, streamId, ds, {toNodeId: this.#remoteNodeId})
     }

@@ -2,7 +2,7 @@ import assert from 'assert'
 import { randomAlphaString } from "../common/util"
 import { protocolVersion } from "../protocolVersion"
 import { isPacketId, PacketId } from '../udp/UdpPacketSender'
-import { ByteCount, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isBoolean, isByteCount, isChannelConfigUrl, isChannelInfo, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isMessageCount, isNodeId, isNull, isOneOf, isRequestId, isSignature, isString, isSubfeedHash, isSubmittedSubfeedMessage, isTimestamp, MessageCount, NodeId, ProtocolVersion, RequestId, Signature, SubfeedHash, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
+import { ByteCount, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, DurationMsec, ErrorMessage, FeedId, FileKey, isBoolean, isByteCount, isChannelConfigUrl, isChannelInfo, isChannelNodeInfo, isDurationMsec, isEqualTo, isErrorMessage, isFeedId, isFileKey, isMessageCount, isNodeId, isNull, isOneOf, isRequestId, isSignature, isString, isSubfeedHash, isSubfeedPosition, isSubmittedSubfeedMessage, isTimestamp, MessageCount, NodeId, ProtocolVersion, RequestId, Signature, SubfeedHash, SubfeedPosition, SubmittedSubfeedMessage, Timestamp, _validateObject } from "./core"
 
 export const _tests: {[key: string]: () => void} = {}
 
@@ -89,6 +89,7 @@ export type NodeToNodeRequestData = (
     ReportNewSubfeedMessagesRequestData |
     SubmitMessageToLiveFeedRequestData |
     DownloadFileDataRequestData |
+    DownloadSubfeedMessagesRequestData |
     StartStreamViaUdpRequestData |
     StopStreamViaUdpRequestData |
     FallbackUdpPacketRequestData
@@ -104,6 +105,7 @@ export const isNodeToNodeRequestData = (x: any): x is NodeToNodeRequestData => {
         isReportNewSubfeedMessagesResponseData,
         isSubmitMessageToLiveFeedRequestData,
         isDownloadFileDataRequestData,
+        isDownloadSubfeedMessagesRequestData,
         isStartStreamViaUdpRequestData,
         isStopStreamViaUdpRequestData,
         isFallbackUdpPacketRequestData
@@ -119,6 +121,7 @@ export type NodeToNodeResponseData = (
     ReportNewSubfeedMessagesResponseData |
     SubmitMessageToLiveFeedResponseData |
     DownloadFileDataResponseData |
+    DownloadSubfeedMessagesResponseData |
     StartStreamViaUdpResponseData |
     StopStreamViaUdpResponseData |
     FallbackUdpPacketResponseData
@@ -134,6 +137,7 @@ export const isNodeToNodeResponseData = (x: any): x is NodeToNodeResponseData =>
         isReportNewSubfeedMessagesResponseData,
         isSubmitMessageToLiveFeedResponseData,
         isDownloadFileDataResponseData,
+        isDownloadSubfeedMessagesResponseData,
         isStartStreamViaUdpResponseData,
         isStopStreamViaUdpResponseData,
         isFallbackUdpPacketResponseData
@@ -386,6 +390,37 @@ export const isDownloadFileDataResponseData = (x: any): x is DownloadFileDataRes
         fileKey: isFileKey,
         startByte: isByteCount,
         endByte: isByteCount,
+        success: isBoolean,
+        streamId: isOneOf([isNull, isStreamId]),
+        errorMessage: isOneOf([isNull, isErrorMessage])
+    })
+}
+
+export interface DownloadSubfeedMessagesRequestData {
+    requestType: 'downloadSubfeedMessages',
+    feedId: FeedId,
+    subfeedHash: SubfeedHash,
+    position: SubfeedPosition,
+    numMessages: MessageCount
+}
+export const isDownloadSubfeedMessagesRequestData = (x: any): x is DownloadSubfeedMessagesRequestData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('downloadSubfeedMessages'),
+        feedId: isFeedId,
+        subfeedHash: isSubfeedHash,
+        position: isSubfeedPosition,
+        numMessages: isMessageCount
+    })
+}
+export interface DownloadSubfeedMessagesResponseData {
+    requestType: 'downloadSubfeedMessages',
+    success: boolean,
+    streamId: StreamId | null,
+    errorMessage: ErrorMessage | null
+}
+export const isDownloadSubfeedMessagesResponseData = (x: any): x is DownloadSubfeedMessagesResponseData => {
+    return _validateObject(x, {
+        requestType: isEqualTo('downloadSubfeedMessages'),
         success: isBoolean,
         streamId: isOneOf([isNull, isStreamId]),
         errorMessage: isOneOf([isNull, isErrorMessage])

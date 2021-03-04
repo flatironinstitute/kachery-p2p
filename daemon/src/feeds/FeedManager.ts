@@ -228,9 +228,9 @@ class FeedManager {
         this.#incomingSubfeedSubscriptionManager.createOrRenewIncomingSubscription(fromNodeId, feedId, subfeedHash)
         return subfeed.getNumLocalMessages()
     }
-    async reportRemoteSubfeedNumMessages(feedId: FeedId, subfeedHash: SubfeedHash, numMessages: MessageCount) {
-        const sf = await this._loadSubfeed(feedId, subfeedHash)
-        sf.reportRemoteNumMessages(numMessages)
+    async reportNumRemoteMessages(remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash, numRemoteMessages: MessageCount) {
+        const subfeed = await this._loadSubfeed(feedId, subfeedHash)
+        subfeed.reportNumRemoteMessages(remoteNodeId, numRemoteMessages)
     }
     async _loadSubfeed(feedId: FeedId, subfeedHash: SubfeedHash): Promise<Subfeed> {
         const timer = nowTimestamp()
@@ -245,7 +245,7 @@ class FeedManager {
         }
         else {
             // Instantiate and initialize the subfeed
-            subfeed = new Subfeed({ feedId, subfeedHash, localFeedManager: this.#localFeedManager, remoteFeedManager: this.#remoteFeedManager })
+            subfeed = new Subfeed(this.#node, feedId, subfeedHash, this.#localFeedManager, this.#remoteFeedManager)
             subfeed.onMessagesAdded(() => {
                 // CHAIN:append_messages:step(10)
                 this.#incomingSubfeedSubscriptionManager.reportMessagesAdded(feedId, subfeedHash, subfeed?.getNumLocalMessages() || messageCount(0))
