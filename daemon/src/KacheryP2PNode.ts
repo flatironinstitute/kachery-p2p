@@ -18,7 +18,7 @@ import { handleCheckAliveRequest } from './nodeToNodeRequestHandlers/handleCheck
 import { handleCheckForFileRequest } from './nodeToNodeRequestHandlers/handleCheckForFileRequest'
 import { handleCheckForLiveFeedRequest } from './nodeToNodeRequestHandlers/handleCheckForLiveFeedRequest'
 import { handleDownloadFileDataRequest } from './nodeToNodeRequestHandlers/handleDownloadFileDataRequest'
-import { handleDownloadSubfeedMessagesRequest } from './nodeToNodeRequestHandlers/handleDownloadSubfeedMessagesReqeust'
+import { handleDownloadSubfeedMessagesRequest } from './nodeToNodeRequestHandlers/handleDownloadSubfeedMessagesRequest'
 import { handleFallbackUdpPacketRequest } from './nodeToNodeRequestHandlers/handleFallbackUdpPacketRequest'
 import { handleGetChannelInfoRequest } from './nodeToNodeRequestHandlers/handleGetChannelInfoRequest'
 import { handleReportNewSubfeedMessages } from './nodeToNodeRequestHandlers/handleReportSubfeedMessages'
