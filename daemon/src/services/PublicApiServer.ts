@@ -183,7 +183,7 @@ export default class PublicApiServer {
                 /* istanbul ignore next */
                 throw Error('Invalid stream id in mock /download')
             }
-            const ds = await this.#node.streamFileData(fromNodeId, streamId)
+            const ds = await this.#node.streamDataForStreamId(fromNodeId, streamId)
             ds.onData(d => {
                 this.#node.stats().reportBytesSent('http', fromNodeId, byteCount(d.length))
             })
@@ -224,7 +224,7 @@ export default class PublicApiServer {
     }
     // /download
     async _apiDownload(fromNodeId: NodeId, toNodeId: NodeId, streamId: StreamId, req: Req, res: Res) {
-        const ds = await this.#node.streamFileData(fromNodeId, streamId)
+        const ds = await this.#node.streamDataForStreamId(fromNodeId, streamId)
         let started = false
         ds.onStarted((size: ByteCount) => {
             started = true

@@ -1,24 +1,27 @@
 import fs from 'fs'
+import { nextTick } from 'process'
 import ChannelConfigManager from './ChannelConfigManager'
 import { ChannelConfig } from './cli'
-import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util'
+import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, JSONStringifyDeterministic, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util'
 import DataStreamy from './common/DataStreamy'
 import GarbageMap from './common/GarbageMap'
 import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import ExternalInterface, { KacheryStorageManagerInterface } from './external/ExternalInterface'
 import { MockNodeDefects } from './external/mock/MockNodeDaemon'
 import FeedManager from './feeds/FeedManager'
+import Subfeed from './feeds/Subfeed'
 import { getStats, GetStatsOpts } from './getStats'
-import { addDurations, Address, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, ChannelNodeInfoBody, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SubfeedHash, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
-import { CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isReportSubfeedMessagesRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
+import { addDurations, Address, byteCount, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, ChannelNodeInfoBody, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, messageCountToNumber, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, subfeedPositionToNumber, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
+import { CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, DownloadSubfeedMessagesRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isDownloadSubfeedMessagesRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isReportNewSubfeedMessagesRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import NodeStats from './NodeStats'
 import { handleCheckAliveRequest } from './nodeToNodeRequestHandlers/handleCheckAliveRequest'
 import { handleCheckForFileRequest } from './nodeToNodeRequestHandlers/handleCheckForFileRequest'
 import { handleCheckForLiveFeedRequest } from './nodeToNodeRequestHandlers/handleCheckForLiveFeedRequest'
 import { handleDownloadFileDataRequest } from './nodeToNodeRequestHandlers/handleDownloadFileDataRequest'
+import { handleDownloadSubfeedMessagesRequest } from './nodeToNodeRequestHandlers/handleDownloadSubfeedMessagesRequest'
 import { handleFallbackUdpPacketRequest } from './nodeToNodeRequestHandlers/handleFallbackUdpPacketRequest'
 import { handleGetChannelInfoRequest } from './nodeToNodeRequestHandlers/handleGetChannelInfoRequest'
-import { handleReportSubfeedMessages } from './nodeToNodeRequestHandlers/handleReportSubfeedMessages'
+import { handleReportNewSubfeedMessages } from './nodeToNodeRequestHandlers/handleReportSubfeedMessages'
 import { handleStartStreamViaUdpRequest } from './nodeToNodeRequestHandlers/handleStartStreamViaUdpRequest'
 import { handleSubmitMessageToLiveFeedRequest } from './nodeToNodeRequestHandlers/handleSubmitMessageToLiveFeedRequest'
 import { handleSubscribeToSubfeed } from './nodeToNodeRequestHandlers/handleSubscribeToSubfeed'
@@ -502,11 +505,14 @@ class KacheryP2PNode {
         else if (isSubscribeToSubfeedRequestData(requestData)) {
             responseData = await handleSubscribeToSubfeed(this, fromNodeId, requestData)
         }
-        else if (isReportSubfeedMessagesRequestData(requestData)) {
-            responseData = await handleReportSubfeedMessages(this, fromNodeId, requestData)
+        else if (isReportNewSubfeedMessagesRequestData(requestData)) {
+            responseData = await handleReportNewSubfeedMessages(this, fromNodeId, requestData)
         }
         else if (isDownloadFileDataRequestData(requestData)) {
             responseData = await handleDownloadFileDataRequest(this, fromNodeId, requestData)
+        }
+        else if (isDownloadSubfeedMessagesRequestData(requestData)) {
+            responseData = await handleDownloadSubfeedMessagesRequest(this, fromNodeId, requestData)
         }
         else if (isSubmitMessageToLiveFeedRequestData(requestData)) {
             responseData = await handleSubmitMessageToLiveFeedRequest(this, fromNodeId, requestData)
@@ -537,7 +543,7 @@ class KacheryP2PNode {
             signature: getSignature(body, this.#keyPair)
         }
     }
-    async streamFileData(fromNodeId: NodeId, streamId: StreamId): Promise<DataStreamy> {
+    async streamDataForStreamId(fromNodeId: NodeId, streamId: StreamId): Promise<DataStreamy> {
         if (fromNodeId !== this.#nodeId) {
             // redirect to a different node
             const p = this.#proxyConnectionsToClients.get(fromNodeId)
@@ -545,7 +551,7 @@ class KacheryP2PNode {
                 /* istanbul ignore next */
                 throw Error(`No proxy connection to node: ${fromNodeId.slice(0, 6)} <> ${this.#nodeId.slice(0, 6)}`)
             }
-            return p.streamFileData(streamId)
+            return p.streamDataForStreamId(streamId)
         }
 
         const s = this.#downloadStreamManager.get(streamId)
@@ -553,24 +559,61 @@ class KacheryP2PNode {
             /* istanbul ignore next */
             throw Error(`Unable to find download info for stream: ${streamId}: (node: ${this.#nodeId.slice(0, 6)})`)
         }
-        const { startByte, endByte } = s
-        /* istanbul ignore next */
-        if (endByte === null) throw Error('Unexpected in streamFileData')
-        const ret = new DataStreamy();
-        const dataStream = await this.#kacheryStorageManager.getFileReadStream(s.fileKey)
-        ret.producer().onCancelled(() => {
-            dataStream.cancel()
-        })
-        try {
-            dataStream.onStarted(size => { ret.producer().start(size) })
-            dataStream.onData(b => { ret.producer().data(b) })
-            dataStream.onFinished(() => { ret.producer().end() })
-            dataStream.onError(err => { ret.producer().error(err) })
+        if (isDownloadFileDataRequestData(s)) {
+            const { startByte, endByte } = s
+            /* istanbul ignore next */
+            if (endByte === null) throw Error('Unexpected in streamDataForStreamId')
+            const ret = new DataStreamy();
+            const dataStream = await this.#kacheryStorageManager.getFileReadStream(s.fileKey)
+            ret.producer().onCancelled(() => {
+                dataStream.cancel()
+            })
+            try {
+                dataStream.onStarted(size => { ret.producer().start(size) })
+                dataStream.onData(b => { ret.producer().data(b) })
+                dataStream.onFinished(() => { ret.producer().end() })
+                dataStream.onError(err => { ret.producer().error(err) })
+            }
+            catch (err) {
+                ret.producer().error(err)
+            }
+            return ret
         }
-        catch (err) {
-            ret.producer().error(err)
+        else if (isDownloadSubfeedMessagesRequestData(s)) {
+            const ret = new DataStreamy();
+            const { feedId, subfeedHash, position, numMessages } = s
+            let subfeed: Subfeed
+            try {
+                subfeed = await this.feedManager()._loadSubfeed(feedId, subfeedHash)
+            }
+            catch(err) {
+                ret.producer().error(new Error('Problem loading subfeed'))
+                return ret
+            }
+            const numLocalMessages = subfeed.getNumLocalMessages()
+            if (messageCountToNumber(numLocalMessages) < subfeedPositionToNumber(s.position) + messageCountToNumber(s.numMessages)) {
+                ret.producer().error(new Error('Not enough subfeed messages locally'))
+                return ret
+            }
+            let signedMessages: SignedSubfeedMessage[]
+            try {
+                signedMessages = subfeed.getLocalSignedMessages({position, numMessages})
+            }
+            catch(err) {
+                ret.producer().error(new Error('Problem loading signed messages'))
+                return ret
+            }
+            nextTick(() => {
+                const x = Buffer.from(JSONStringifyDeterministic(signedMessages))
+                ret.producer().start(byteCount(x.byteLength))
+                ret.producer().data(x)
+                ret.producer().end()
+            })
+            return ret
         }
-        return ret
+        else {
+            throw Error('Unexpected')
+        }
     }
     receiveFallbackUdpPacket(fromNodeId: NodeId, packetId: PacketId, packet: Buffer): void {
         if (!this.#publicUdpSocketServer) {
@@ -588,11 +631,11 @@ class KacheryP2PNode {
 }
 
 class DownloadStreamManager {
-    #downloadStreamInfos = new GarbageMap<StreamId, DownloadFileDataRequestData>(scaledDurationMsec(30 * 60 * 1000))
-    set(streamId: StreamId, info: DownloadFileDataRequestData) {
+    #downloadStreamInfos = new GarbageMap<StreamId, DownloadFileDataRequestData | DownloadSubfeedMessagesRequestData>(scaledDurationMsec(30 * 60 * 1000))
+    set(streamId: StreamId, info: DownloadFileDataRequestData | DownloadSubfeedMessagesRequestData) {
         this.#downloadStreamInfos.set(streamId, info)
     }
-    get(streamId: StreamId): DownloadFileDataRequestData | null {
+    get(streamId: StreamId): DownloadFileDataRequestData | DownloadSubfeedMessagesRequestData | null {
         return this.#downloadStreamInfos.get(streamId) || null
     }
 }

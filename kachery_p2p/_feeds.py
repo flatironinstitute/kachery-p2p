@@ -136,10 +136,14 @@ class Subfeed:
         self._position = position
 
     def get_num_messages(self):
+        print('WARNING: use get_num_local_messages instead of get_num_messages')
+        return self.get_num_local_messages()
+    
+    def get_num_local_messages(self):
         if not self.is_snapshot():
             port = _api_port()
             host = _api_host()
-            url = f'http://{host}:{port}/feed/getNumMessages'
+            url = f'http://{host}:{port}/feed/getNumLocalMessages'
             x = _http_post_json(url, dict(
                 feedId=self._feed_id,
                 subfeedHash=self._subfeed_hash
@@ -160,33 +164,18 @@ class Subfeed:
 
     def get_next_messages(self, *, wait_msec=10, signed=False, max_num_messages=0, advance_position=True):
         if not self.is_snapshot():
-            # CHAIN:get_remote_messages:step(1)
-            port = _api_port()
-            host = _api_host()
-            if signed:
-                url = f'http://{host}:{port}/feed/getSignedMessages'
-            else:
-                url = f'http://{host}:{port}/feed/getMessages'
-            x = _http_post_json(url, dict(
-                feedId=self._feed_id,
-                subfeedHash=self._subfeed_hash,
-                position=self._position,
-                maxNumMessages=max_num_messages,
-                waitMsec=wait_msec
-            ))
-            if not x['success']:
-                raise Exception(f'Error getting next messages: {x.get("error")}')
-            messages = []
-            if signed:
-                for msg in x['signedMessages']:
-                    messages.append(msg)
-            else:
-                for msg in x['messages']:
-                    messages.append(msg)
+            subfeed_watches = {
+                'watch': {
+                    'feedId': self._feed_id,
+                    'subfeedHash': self._subfeed_hash,
+                    'position': self._position
+                }
+            }
+            x = _watch_for_new_messages(subfeed_watches, wait_msec=wait_msec, signed=signed, max_num_messages=max_num_messages)
+            y = x.get('watch', [])
             if advance_position:
-                self._position = self._position + len(messages)
-            # CHAIN:get_remote_messages:step(21)
-            return messages
+                self._position = self._position + len(y)
+            return y
         else:
             messages = self._get_snapshot_messages()
             position = self._position
@@ -415,7 +404,7 @@ def _load_feed(feed_name_or_uri, *, timeout_sec: Union[None, float]=None, create
         feed_id = _get_feed_id(feed_name, create=create)
         return _load_feed(f'feed://{feed_id}')
 
-def _watch_for_new_messages(subfeed_watches, *, wait_msec):
+def _watch_for_new_messages(subfeed_watches, *, wait_msec, signed=False, max_num_messages=0):
     port = _api_port()
     host = _api_host()
     url = f'http://{host}:{port}/feed/watchForNewMessages'
@@ -428,7 +417,9 @@ def _watch_for_new_messages(subfeed_watches, *, wait_msec):
         }
     x = _http_post_json(url, dict(
         subfeedWatches=subfeed_watches2,
-        waitMsec=wait_msec
+        waitMsec=wait_msec,
+        signed=signed,
+        maxNumMessages=max_num_messages
     ))
     if not x['success']:
         raise Exception(f'Unable to watch for new messages.')

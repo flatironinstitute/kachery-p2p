@@ -29,6 +29,10 @@ export default class UdpPacketReceiver {
             if (header === null) {
                 return;
             }
+            if ((header.protocolVersion + '') !== protocolVersion() + '') {
+                // just ignore if incorrect protocol version
+                return
+            }
             if (!isUdpPacketSenderHeader(header)) {
                 console.warn('Unexpected udp packet header')
                 return;

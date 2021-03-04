@@ -4,7 +4,7 @@ import GarbageMap from '../../src/common/GarbageMap';
 import { randomAlphaString, sleepMsec } from '../../src/common/util';
 import MockNodeDaemon, { MockNodeDaemonGroup, MockNodeDefects } from '../../src/external/mock/MockNodeDaemon';
 import { byteCount, ByteCount, byteCountToNumber, ChannelName, DurationMsec, durationMsecToNumber, FeedId, FeedName, HostName, JSONObject, MessageCount, messageCount, NodeId, scaledDurationMsec, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, subfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toPort } from '../../src/interfaces/core';
-import { ApiLoadFileRequest, FeedApiAppendMessagesRequest, FeedApiCreateFeedRequest, FeedApiDeleteFeedRequest, FeedApiGetAccessRulesRequest, FeedApiGetFeedIdRequest, FeedApiGetFeedInfoRequest, FeedApiGetMessagesRequest, FeedApiGetNumMessagesRequest, FeedApiGetSignedMessagesRequest, FeedApiSetAccessRulesRequest, FeedApiSubmitMessageRequest, FeedApiWatchForNewMessagesRequest, isFeedApiAppendMessagesResponse, isFeedApiCreateFeedResponse, isFeedApiDeleteFeedResponse, isFeedApiGetAccessRulesResponse, isFeedApiGetFeedIdResponse, isFeedApiGetFeedInfoResponse, isFeedApiGetMessagesResponse, isFeedApiGetNumMessagesResponse, isFeedApiGetSignedMessagesResponse, isFeedApiSetAccessRulesResponse, isFeedApiSubmitMessageResponse, isFeedApiWatchForNewMessagesResponse } from '../../src/services/DaemonApiServer';
+import { ApiLoadFileRequest, FeedApiAppendMessagesRequest, FeedApiCreateFeedRequest, FeedApiDeleteFeedRequest, FeedApiGetAccessRulesRequest, FeedApiGetFeedIdRequest, FeedApiGetFeedInfoRequest, FeedApiGetMessagesRequest, FeedApiGetNumMessagesRequest, FeedApiGetSignedMessagesRequest, FeedApiSetAccessRulesRequest, FeedApiSubmitMessageRequest, FeedApiWatchForNewMessagesRequest, isFeedApiAppendMessagesResponse, isFeedApiCreateFeedResponse, isFeedApiDeleteFeedResponse, isFeedApiGetAccessRulesResponse, isFeedApiGetFeedIdResponse, isFeedApiGetFeedInfoResponse, isFeedApiGetMessagesResponse, isFeedApiGetSignedMessagesResponse, isFeedApiSetAccessRulesResponse, isFeedApiSubmitMessageResponse, isFeedApiWatchForNewMessagesResponse } from '../../src/services/DaemonApiServer';
 import { StartDaemonOpts } from '../../src/startDaemon';
 
 const mockChannelName = 'mock-channel' as any as ChannelName
@@ -553,12 +553,12 @@ const getSignedMessages = async (daemon: MockNodeDaemon, feedId: FeedId, subfeed
     return res.signedMessages
 }
 
-const getNumMessages = async (daemon: MockNodeDaemon, feedId: FeedId, subfeedHash: SubfeedHash) => {
+const getNumLocalMessages = async (daemon: MockNodeDaemon, feedId: FeedId, subfeedHash: SubfeedHash) => {
     const req: FeedApiGetNumMessagesRequest = {
         feedId, subfeedHash
     }
-    const res = await daemon.mockDaemonApiPost('/feed/getNumMessages', req as any as JSONObject)
-    if (!isFeedApiGetNumMessagesResponse(res)) throw Error('Unexpected')
+    const res = await daemon.mockDaemonApiPost('/feed/getNumLocalMessages', req as any as JSONObject)
+    if (!isFeedApiGetNumLocalMessagesResponse(res)) throw Error('Unexpected')
     if (!res.success) throw Error('Error getting messages')
     return res.numMessages
 }

@@ -14,6 +14,7 @@ export default class BootstrapService {
     #node: KacheryP2PNode
     #remoteNodeManager: RemoteNodeManager
     #halted = false
+    #printedWarnings = new Set<string>()
     constructor(node: KacheryP2PNode, private opts: {probeIntervalMsec: DurationMsec}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
@@ -26,10 +27,14 @@ export default class BootstrapService {
         const response = await this.#node.externalInterface().httpPostJson(address, urlPath('/probe'), {}, {timeoutMsec: TIMEOUTS.defaultRequest});
         if (!isPublicApiProbeResponse(response)) {
             if ((response.protocolVersion) && (response.protocolVersion !== protocolVersion().toString())) {
-                console.warn('############################')
-                console.warn(`Protocol version does not match with bootstrap node ${address.hostName}:${address.port}: ${protocolVersion()} <> ${response.protocolVersion}`)
-                console.warn('You may need to update one or both of these nodes to the latest version of kachery-p2p')
-                console.warn('')
+                const warningCode = JSONStringifyDeterministic(address)
+                if (!this.#printedWarnings.has(warningCode)) {
+                    this.#printedWarnings.add(warningCode)
+                    console.warn('############################')
+                    console.warn(`Protocol version does not match with bootstrap node ${address.hostName}:${address.port}: ${protocolVersion()} <> ${response.protocolVersion}`)
+                    console.warn('You may need to update one or both of these nodes to the latest version of kachery-p2p')
+                    console.warn('')
+                }
                 return
             }
             throw Error('Invalid probe response from bootstrap node.')

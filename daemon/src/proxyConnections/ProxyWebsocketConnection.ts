@@ -413,9 +413,9 @@ export class ProxyWebsocketConnection {
             });
         });
     }
-    streamFileData(streamId: StreamId): DataStreamy {
+    streamDataForStreamId(streamId: StreamId): DataStreamy {
         if (this.opts.connectionType !== 'connectionToClient') {
-            throw Error('Unexpected type in streamFileData')
+            throw Error('Unexpected type in streamDataForStreamId')
         }
         const ret = new DataStreamy()
 
@@ -531,7 +531,7 @@ export class ProxyWebsocketConnection {
         if (this.opts.connectionType !== 'connectionToServer') throw Error('Unexpected type in _handleProxyStreamFileDataRequest')
         // the server is requesting to stream file data up from the client
         const {streamId} = request
-        const s = await this.#node.streamFileData(this.#node.nodeId(), streamId)
+        const s = await this.#node.streamDataForStreamId(this.#node.nodeId(), streamId)
         s.onStarted(size => {
             if (size === null) {
                 /* istanbul ignore next */

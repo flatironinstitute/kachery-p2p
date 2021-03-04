@@ -83,23 +83,25 @@ const isApiLoadFileRequest = (x: any): x is ApiLoadFileRequest => {
 export interface FeedApiWatchForNewMessagesRequest {
     subfeedWatches: SubfeedWatches,
     waitMsec: DurationMsec,
-    maxNumMessages?: MessageCount
+    maxNumMessages?: MessageCount,
+    signed?: boolean
 }
 export const isFeedApiWatchForNewMessagesRequest = (x: any): x is FeedApiWatchForNewMessagesRequest => {
     return _validateObject(x, {
         subfeedWatches: isSubfeedWatches,
         waitMsec: isDurationMsec,
+        signed: optional(isBoolean),
         maxNumMessages: optional(isMessageCount)
     })
 }
 export interface FeedApiWatchForNewMessagesResponse {
     success: boolean,
-    messages: {[key: string]: SubfeedMessage[]}
+    messages: {[key: string]: SubfeedMessage[]} | {[key: string]: SignedSubfeedMessage[]}
 }
 export const isFeedApiWatchForNewMessagesResponse = (x: any): x is FeedApiWatchForNewMessagesResponse => {
     return _validateObject(x, {
         success: isBoolean,
-        messages: isObjectOf(isString, isArrayOf(isSubfeedMessage))
+        messages: isOneOf([isObjectOf(isString, isArrayOf(isSubfeedMessage)), isObjectOf(isString, isArrayOf(isSignedSubfeedMessage))])
     })
 }
 
@@ -220,21 +222,21 @@ export const isFeedApiSubmitMessageResponse = (x: any): x is FeedApiSubmitMessag
     })
 }
 
-export interface FeedApiGetNumMessagesRequest {
+export interface FeedApiGetNumLocalMessagesRequest {
     feedId: FeedId,
     subfeedHash: SubfeedHash
 }
-export const isFeedApiGetNumMessagesRequest = (x: any): x is FeedApiGetNumMessagesRequest => {
+export const isFeedApiGetNumLocalMessagesRequest = (x: any): x is FeedApiGetNumLocalMessagesRequest => {
     return _validateObject(x, {
         feedId: isFeedId,
         subfeedHash: isSubfeedHash
     });
 }
-export interface FeedApiGetNumMessagesResponse {
+export interface FeedApiGetNumLocalMessagesResponse {
     success: boolean,
     numMessages: MessageCount
 }
-export const isFeedApiGetNumMessagesResponse = (x: any): x is FeedApiGetNumMessagesResponse => {
+export const isFeedApiGetNumLocalMessagesResponse = (x: any): x is FeedApiGetNumLocalMessagesResponse => {
     return _validateObject(x, {
         success: isBoolean,
         numMessages: isMessageCount
@@ -412,19 +414,9 @@ export default class DaemonApiServer {
             handler: async (reqData: JSONObject) => {return await this._handleFeedApiSubmitMessage(reqData)}
         },
         {
-            // /feed/getMessages - get messages from a local or remote subfeed
-            path: '/feed/getMessages',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetMessages(reqData)}
-        },
-        {
-            // /feed/getSignedMessages - get signed messages from a local or remote subfeed
-            path: '/feed/getSignedMessages',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetSignedMessages(reqData)}
-        },
-        {
-            // /feed/getNumMessages - get number of messages in a subfeed
-            path: '/feed/getNumMessages',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetNumMessages(reqData)}
+            // /feed/getNumLocalMessages - get number of messages in a subfeed
+            path: '/feed/getNumLocalMessages',
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetNumLocalMessages(reqData)}
         },
         {
             // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
@@ -778,54 +770,18 @@ export default class DaemonApiServer {
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         return response
     }
-    // /feed/getMessages - get messages from a local or remote subfeed
-    async _handleFeedApiGetMessages(reqData: JSONObject) {
+    // /feed/getNumLocalMessages - get number of messages in a subfeed
+    async _handleFeedApiGetNumLocalMessages(reqData: JSONObject) {
         /* istanbul ignore next */
-        if (!isFeedApiGetMessagesRequest(reqData)) throw Error('Invalid request in _feedApiGetMessages');
-
-        const response = await this._getMessages(reqData)
-        return response
-    }
-    async _getMessages(reqData: FeedApiGetMessagesRequest): Promise<JSONObject & {success: boolean}> {
-        const { feedId, subfeedHash, position, maxNumMessages, waitMsec } = reqData;
-
-        const messages = await this.#node.feedManager().getMessages({
-            feedId, subfeedHash, position, maxNumMessages, waitMsec
-        });
-
-        const response: FeedApiGetMessagesResponse = {success: true, messages}
-        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object')
-        return response
-    }
-    // /feed/getSignedMessages - get signed messages from a local or remote subfeed
-    async _handleFeedApiGetSignedMessages(reqData: JSONObject) {
-        /* istanbul ignore next */
-        if (!isFeedApiGetSignedMessagesRequest(reqData)) throw Error('Invalid request in _feedApiGetSignedMessages');
-
-        const { feedId, subfeedHash, position, maxNumMessages, waitMsec } = reqData;
-
-        // CHAIN:get_remote_messages:step(2)
-        const signedMessages = await this.#node.feedManager().getSignedMessages({
-            feedId, subfeedHash, position, maxNumMessages, waitMsec
-        });
-        // CHAIN:get_remote_messages:step(21)
-
-        const response: FeedApiGetSignedMessagesResponse = {success: true, signedMessages}
-        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
-        return response
-    }
-    // /feed/getNumMessages - get number of messages in a subfeed
-    async _handleFeedApiGetNumMessages(reqData: JSONObject) {
-        /* istanbul ignore next */
-        if (!isFeedApiGetNumMessagesRequest(reqData)) throw Error('Invalid request in _feedApiGetNumMessages');
+        if (!isFeedApiGetNumLocalMessagesRequest(reqData)) throw Error('Invalid request in _feedApiGetNumLocalMessages');
 
         const { feedId, subfeedHash } = reqData;
 
-        const numMessages = await this.#node.feedManager().getNumMessages({
+        const numMessages = await this.#node.feedManager().getNumLocalMessages({
             feedId, subfeedHash
         });
 
-        const response: FeedApiGetNumMessagesResponse = {success: true, numMessages}
+        const response: FeedApiGetNumLocalMessagesResponse = {success: true, numMessages}
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
         return response
     }
@@ -877,10 +833,10 @@ export default class DaemonApiServer {
         /* istanbul ignore next */
         if (!isFeedApiWatchForNewMessagesRequest(reqData)) throw Error('Invalid request in _feedApiWatchForNewMessages')
 
-        const { subfeedWatches, waitMsec, maxNumMessages } = reqData
+        const { subfeedWatches, waitMsec, maxNumMessages, signed } = reqData
 
         const messages = await this.#node.feedManager().watchForNewMessages({
-            subfeedWatches: toSubfeedWatchesRAM(subfeedWatches), waitMsec, maxNumMessages: maxNumMessages || messageCount(10)
+            subfeedWatches: toSubfeedWatchesRAM(subfeedWatches), waitMsec, maxNumMessages: maxNumMessages || messageCount(0), signed: signed || false
         })
 
         const response: FeedApiWatchForNewMessagesResponse = {success: true, messages: mapToObject(messages)}

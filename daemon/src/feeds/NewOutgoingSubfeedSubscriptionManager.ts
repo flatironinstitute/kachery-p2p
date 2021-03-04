@@ -1,6 +1,6 @@
 import { TIMEOUTS } from "../common/constants"
 import GarbageMap from "../common/GarbageMap"
-import { DurationMsec, durationMsecToNumber, elapsedSince, FeedId, NodeId, nowTimestamp, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, SubfeedPosition, zeroTimestamp } from "../interfaces/core"
+import { DurationMsec, durationMsecToNumber, elapsedSince, FeedId, NodeId, nowTimestamp, scaledDurationMsec, SubfeedHash, zeroTimestamp } from "../interfaces/core"
 import { isSubscribeToSubfeedResponseData, SubscribeToSubfeedRequestData } from "../interfaces/NodeToNodeRequest"
 import KacheryP2PNode from "../KacheryP2PNode"
 
@@ -8,7 +8,7 @@ class NewOutgoingSubfeedSubscriptionManager {
     #outgoingSubscriptions = new GarbageMap<string, OutgoingSubfeedSubscription>(scaledDurationMsec(300 * 60 * 1000))
     constructor(private node: KacheryP2PNode) {
     }
-    async createOrRenewOutgoingSubscription(remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, durationMsec: DurationMsec): Promise<SignedSubfeedMessage[]> {
+    async createOrRenewOutgoingSubscription(remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash): Promise<void> {
         const subfeedCode = makeSubscriptionCode(remoteNodeId, feedId, subfeedHash)
         let S = this.#outgoingSubscriptions.get(subfeedCode)
         if (!S) {
@@ -16,11 +16,10 @@ class NewOutgoingSubfeedSubscriptionManager {
             this.#outgoingSubscriptions.set(subfeedCode, S)
         }
         // CHAIN:get_remote_messages:step(6)
-        const initialSignedMessages = await S.renew(position, durationMsec)
+        await S.renew()
         setTimeout(() => {
             this._checkRemove(remoteNodeId, feedId, subfeedHash)
-        }, durationMsecToNumber(durationMsec) + durationMsecToNumber(scaledDurationMsec(5000)))
-        return initialSignedMessages
+        }, durationMsecToNumber(S.durationMsec()) +  durationMsecToNumber(scaledDurationMsec(5000)))
     }
     _checkRemove(remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash) {
         const subfeedCode = makeSubscriptionCode(remoteNodeId, feedId, subfeedHash)
@@ -43,21 +42,16 @@ class OutgoingSubfeedSubscription {
     #initialMessageSent = false
     constructor(private node: KacheryP2PNode, private remoteNodeId: NodeId, private feedId: FeedId, private subfeedHash: SubfeedHash) {
     }
-    // todo: this needs to be async and returns the intial messages
-    async renew(position: SubfeedPosition, durationMsec: DurationMsec): Promise<SignedSubfeedMessage[]> {
-        if (this.#initialMessageSent) {
-            const elapsedMsec = this.elapsedMsecSinceLastRenew()
-            if (elapsedMsec < durationMsecToNumber(scaledDurationMsec(5000))) return []
+    async renew(): Promise<void> {
+        if (elapsedSince(this.#lastRenewTimestamp) < durationMsecToNumber(this.durationMsec()) / 2) {
+            return
         }
         this.#lastRenewTimestamp = nowTimestamp()
-        this.#initialMessageSent = true
         // CHAIN:get_remote_messages:step(7)
         const requestData: SubscribeToSubfeedRequestData = {
             requestType: 'subscribeToSubfeed',
             feedId: this.feedId,
-            subfeedHash: this.subfeedHash,
-            position,
-            durationMsec: durationMsec
+            subfeedHash: this.subfeedHash
         }
         const responseData = await this.node.remoteNodeManager().sendRequestToNode(
             this.remoteNodeId,
@@ -69,7 +63,10 @@ class OutgoingSubfeedSubscription {
         )
         if (!isSubscribeToSubfeedResponseData(responseData)) throw Error('Unexpected response to subscribeToSubfeed')
         if (!responseData.success) throw Error(`Error in response to subscribeToSubfeed: ${responseData.errorMessage}`)
-        return responseData.initialSignedMessages || []
+        const numRemoteMessages = responseData.numMessages
+        if (numRemoteMessages !== null) {
+            this.node.feedManager().reportNumRemoteMessages(this.remoteNodeId, this.feedId, this.subfeedHash, numRemoteMessages)
+        }
     }
     elapsedMsecSinceLastRenew() {
         return elapsedSince(this.#lastRenewTimestamp)
