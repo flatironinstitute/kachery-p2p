@@ -64,7 +64,7 @@ export default class ConfigUpdateService {
                 const configFeedId = await this.#node.feedManager().getFeedId({feedName: feedName('_kachery_p2p_config')})
                 if (configFeedId) {
                     const joinedChannelsSubfeedHash = subfeedHash(sha1OfString('joined-channels'))
-                    const joinedChannelsConfig = await this.#node.feedManager().getFinalMessage({feedId: configFeedId, subfeedHash: joinedChannelsSubfeedHash})
+                    const joinedChannelsConfig = await this.#node.feedManager().getFinalLocalMessage({feedId: configFeedId, subfeedHash: joinedChannelsSubfeedHash})
                     if (joinedChannelsConfig) {
                         if (isJoinedChannelsConfig(joinedChannelsConfig)) {
                             this.#node.setJoinedChannels(joinedChannelsConfig.joinedChannels)

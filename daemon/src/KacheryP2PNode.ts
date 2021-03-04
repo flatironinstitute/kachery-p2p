@@ -10,7 +10,7 @@ import { MockNodeDefects } from './external/mock/MockNodeDaemon'
 import FeedManager from './feeds/FeedManager'
 import { getStats, GetStatsOpts } from './getStats'
 import { addDurations, Address, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, ChannelNodeInfoBody, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SubfeedHash, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
-import { CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isReportSubfeedMessagesRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
+import { CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isReportNewSubfeedMessagesRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import NodeStats from './NodeStats'
 import { handleCheckAliveRequest } from './nodeToNodeRequestHandlers/handleCheckAliveRequest'
 import { handleCheckForFileRequest } from './nodeToNodeRequestHandlers/handleCheckForFileRequest'
@@ -18,7 +18,7 @@ import { handleCheckForLiveFeedRequest } from './nodeToNodeRequestHandlers/handl
 import { handleDownloadFileDataRequest } from './nodeToNodeRequestHandlers/handleDownloadFileDataRequest'
 import { handleFallbackUdpPacketRequest } from './nodeToNodeRequestHandlers/handleFallbackUdpPacketRequest'
 import { handleGetChannelInfoRequest } from './nodeToNodeRequestHandlers/handleGetChannelInfoRequest'
-import { handleReportSubfeedMessages } from './nodeToNodeRequestHandlers/handleReportSubfeedMessages'
+import { handleReportNewSubfeedMessages } from './nodeToNodeRequestHandlers/handleReportSubfeedMessages'
 import { handleStartStreamViaUdpRequest } from './nodeToNodeRequestHandlers/handleStartStreamViaUdpRequest'
 import { handleSubmitMessageToLiveFeedRequest } from './nodeToNodeRequestHandlers/handleSubmitMessageToLiveFeedRequest'
 import { handleSubscribeToSubfeed } from './nodeToNodeRequestHandlers/handleSubscribeToSubfeed'
@@ -502,8 +502,8 @@ class KacheryP2PNode {
         else if (isSubscribeToSubfeedRequestData(requestData)) {
             responseData = await handleSubscribeToSubfeed(this, fromNodeId, requestData)
         }
-        else if (isReportSubfeedMessagesRequestData(requestData)) {
-            responseData = await handleReportSubfeedMessages(this, fromNodeId, requestData)
+        else if (isReportNewSubfeedMessagesRequestData(requestData)) {
+            responseData = await handleReportNewSubfeedMessages(this, fromNodeId, requestData)
         }
         else if (isDownloadFileDataRequestData(requestData)) {
             responseData = await handleDownloadFileDataRequest(this, fromNodeId, requestData)

@@ -1,21 +1,21 @@
 import { errorMessage, NodeId } from '../interfaces/core'
-import { ReportSubfeedMessagesRequestData, ReportSubfeedMessagesResponseData } from '../interfaces/NodeToNodeRequest'
+import { ReportNewSubfeedMessagesRequestData, ReportNewSubfeedMessagesResponseData } from '../interfaces/NodeToNodeRequest'
 import KacheryP2PNode from '../KacheryP2PNode'
 
-export const handleReportSubfeedMessages = async (node: KacheryP2PNode, fromNodeId: NodeId, requestData: ReportSubfeedMessagesRequestData): Promise<ReportSubfeedMessagesResponseData> => {
-    const { feedId, subfeedHash, position, signedMessages } = requestData
+export const handleReportNewSubfeedMessages = async (node: KacheryP2PNode, fromNodeId: NodeId, requestData: ReportNewSubfeedMessagesRequestData): Promise<ReportNewSubfeedMessagesResponseData> => {
+    const { feedId, subfeedHash, numMessages } = requestData
     try {
         // CHAIN:get_remote_messages:step(15)
-        await node.feedManager().reportRemoteSubfeedMessages(feedId, subfeedHash, position, signedMessages)
+        await node.feedManager().reportRemoteSubfeedNumMessages(feedId, subfeedHash, numMessages)
         return {
-            requestType: 'reportSubfeedMessages',
+            requestType: 'reportNewSubfeedMessages',
             success: true,
             errorMessage: null
         }
     }
     catch(err) {
         return {
-            requestType: 'reportSubfeedMessages',
+            requestType: 'reportNewSubfeedMessages',
             success: false,
             errorMessage: errorMessage(`Error reporting subfeed messages: ${err.message}`)
         }

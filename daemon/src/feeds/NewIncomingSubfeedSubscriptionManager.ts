@@ -1,7 +1,7 @@
 import { TIMEOUTS } from "../common/constants"
 import GarbageMap from "../common/GarbageMap"
-import { DurationMsec, durationMsecToNumber, elapsedSince, FeedId, NodeId, nowTimestamp, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, subfeedPosition, SubfeedPosition, zeroTimestamp } from "../interfaces/core"
-import { isReportSubfeedMessagesResponseData, ReportSubfeedMessagesRequestData } from "../interfaces/NodeToNodeRequest"
+import { durationMsecToNumber, elapsedSince, FeedId, MessageCount, NodeId, nowTimestamp, scaledDurationMsec, SubfeedHash, zeroTimestamp } from "../interfaces/core"
+import { isReportNewSubfeedMessagesResponseData, ReportNewSubfeedMessagesRequestData } from "../interfaces/NodeToNodeRequest"
 import KacheryP2PNode from "../KacheryP2PNode"
 
 class NewIncomingSubfeedSubscriptionManager {
@@ -9,7 +9,7 @@ class NewIncomingSubfeedSubscriptionManager {
     #subscriptionCodesBySubfeedCode = new GarbageMap<string, { [key: string]: boolean }>(scaledDurationMsec(300 * 60 * 1000))
     constructor(private node: KacheryP2PNode) {
     }
-    createOrRenewIncomingSubscription(remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, durationMsec: DurationMsec) {
+    createOrRenewIncomingSubscription(remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash) {
         const subscriptionCode = makeSubscriptionCode(remoteNodeId, feedId, subfeedHash)
         const subfeedCode = makeSubfeedCode(feedId, subfeedHash)
         this.#subscriptionCodesBySubfeedCode.set(subfeedCode, {...this.#subscriptionCodesBySubfeedCode.get(subfeedCode) || {}, [subscriptionCode]: true})
@@ -19,12 +19,12 @@ class NewIncomingSubfeedSubscriptionManager {
             S = new IncomingSubfeedSubscription(this.node, remoteNodeId, feedId, subfeedHash)
             this.#incomingSubscriptions.set(subscriptionCode, S)
         }
-        S.renew(position, durationMsec)
+        S.renew()
         setTimeout(() => {
             this._checkRemove(remoteNodeId, feedId, subfeedHash)
-        }, durationMsecToNumber(durationMsec) + durationMsecToNumber(scaledDurationMsec(5000)))
+        }, durationMsecToNumber(scaledDurationMsec(60000)))
     }
-    reportMessagesAdded(feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) {
+    reportMessagesAdded(feedId: FeedId, subfeedHash: SubfeedHash, numMessages: MessageCount) {
         const subfeedCode = makeSubfeedCode(feedId, subfeedHash)
         // CHAIN:append_messages:step(11)
         const x = this.#subscriptionCodesBySubfeedCode.get(subfeedCode) || {}
@@ -32,27 +32,26 @@ class NewIncomingSubfeedSubscriptionManager {
             const s = this.#incomingSubscriptions.get(subscriptionCode)
             if (s) {
                 // CHAIN:get_remote_messages:step(13)
-                this._sendMessages(s.remoteNodeId, s.feedId, s.subfeedHash, position, signedMessages).then(() => {}).catch((err: Error) => {
-                    console.warn(`Problem sending subfeed messages to remote node: ${err.message}`)
+                this._reportNewSubfeedMessages(s.remoteNodeId, s.feedId, s.subfeedHash, numMessages).then(() => {}).catch((err: Error) => {
+                    console.warn(`Problem reporting new subfeed messages to remote node: ${err.message}`)
                 })
             }
         }
     }
-    async _sendMessages(toNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash, position: SubfeedPosition, signedMessages: SignedSubfeedMessage[]) {
+    async _reportNewSubfeedMessages(toNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash, numMessages: MessageCount) {
         // CHAIN:get_remote_messages:step(14)
-        const requestData: ReportSubfeedMessagesRequestData = {
-            requestType: 'reportSubfeedMessages',
+        const requestData: ReportNewSubfeedMessagesRequestData = {
+            requestType: 'reportNewSubfeedMessages',
             feedId,
             subfeedHash,
-            position,
-            signedMessages
+            numMessages
         }
         const responseData = await this.node.remoteNodeManager().sendRequestToNode(toNodeId, requestData, { timeoutMsec: TIMEOUTS.defaultRequest, method: 'default' })
-        if (!isReportSubfeedMessagesResponseData(responseData)) {
-            throw Error('Unexpected response to reportSubfeedMessages request')
+        if (!isReportNewSubfeedMessagesResponseData(responseData)) {
+            throw Error('Unexpected response to reportNewSubfeedMessages request')
         }
         if (!responseData.success) {
-            throw Error(`Error in reportSubfeedMessages: ${responseData.errorMessage}`)
+            throw Error(`Error in reportNewSubfeedMessages: ${responseData.errorMessage}`)
         }
     }
     _checkRemove(remoteNodeId: NodeId, feedId: FeedId, subfeedHash: SubfeedHash) {
@@ -76,24 +75,16 @@ const makeSubfeedCode = (feedId: FeedId, subfeedHash: SubfeedHash) => {
 
 class IncomingSubfeedSubscription {
     #lastRenewTimestamp = zeroTimestamp()
-    #lastRenewDurationMsec: DurationMsec = 0 as any as DurationMsec
-    #lastRenewSubfeedPosition: SubfeedPosition = subfeedPosition(0)
-    #active = true
     constructor(private node: KacheryP2PNode, public remoteNodeId: NodeId, public feedId: FeedId, public subfeedHash: SubfeedHash) {
     }
-    renew(position: SubfeedPosition, durationMsec: DurationMsec) {
+    renew() {
         this.#lastRenewTimestamp = nowTimestamp()
-        this.#lastRenewDurationMsec = durationMsec
-        this.#lastRenewSubfeedPosition = position
     }
-    deactivate() {
-        this.#active = false
+    durationMsec() {
+        return scaledDurationMsec(60 * 1000)
     }
     elapsedMsecSinceLastRenew() {
         return elapsedSince(this.#lastRenewTimestamp)
-    }
-    durationMsec() {
-        return this.#lastRenewDurationMsec
     }
 }
 
