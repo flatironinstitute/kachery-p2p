@@ -22,8 +22,12 @@ conda install -c conda-forge nodejs
 pip install --upgrade kachery_p2p
 ```
 
+
 Or you could use the `environment.yaml` file included in this repo to create a new conda environment, and then use `pip` to install kachery_p2p as above in the new environment.
 (To create an environment from file, execute `conda env create -f environment.yaml`. The included yaml file will create an environment called `kachery_p2p_env`.)
+
+**For MAC users**: to install the latest version of `nodejs` run: `conda install nodejs -c conda-forge --repodata-fn=repodata.json`
+
 
 ## Installation without conda
 
