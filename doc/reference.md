@@ -35,4 +35,4 @@ The save functions (e.g., `kp.save_file()`) behave differently depending on whet
 
 ## Recommendation for multiple users sharing the same computer
 
-If multiple users are sharing the same machine, then it is recommended that one of the users (or perhaps a service user) maintains the running daemon, and that the KACHERY_STORAGE_DIR is set to a directory that is readable (but not writeable) by all users.
+If multiple users are sharing the same machine, then it is recommended that one of the users (or perhaps a service user) maintains the running daemon, and that the KACHERY_STORAGE_DIR is set to a directory that is readable (but not writeable) by all users. The individual do not need to set any environment variables, and in particular should **not** set the KACHERY_STORAGE_DIR.
