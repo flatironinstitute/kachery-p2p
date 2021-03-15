@@ -4,35 +4,47 @@ Kachery-p2p comprises a Python client, a command-line interface, and a daemon se
 
 ## Kachery-p2p daemon
 
-Although some kachery-p2p client operations can be used without a running daemon, it is recommended that you maintain a running kachery-p2p daemon when using kachery-p2p. Instructions for starting the daemon can be found [here](./setup_and_installation.md).
+Although some kachery-p2p client operations can run in offline mode (see below), it is recommended that you maintain a running kachery-p2p daemon when using kachery-p2p. Instructions for starting the daemon can be found [here](./setup_and_installation.md).
 
-## Python client connecting to the kachery-p2p daemon
+## Online vs offline mode
 
-The Python client can operate in two different situations
+The kachery-p2p client can either operate in online mode (by connecting to a running daemon) or in a limited offline mode by interacting directly with the local file system.
 
-1. Connected to a running daemon (online mode)
-2. Not connected to a running daemon (offline mode)
+If the `KACHERY_P2P_OFFLINE_STORAGE_DIR` environment variable is set, the client will operate in the limited offline mode where it can only load and store static files in the `$KACHERY_P2P_OFFLINE_STORAGE_DIR` directory. It cannot read or write feeds and cannot interact with other nodes in the kachery-p2p network.
 
-Offline mode occurs when the client is not able to connect to a running daemon service (either no daemon is running on the local machine or it is running on a port that is different from the configured port). The kachery-p2p client will check periodically whether a connection can be established. By default it checks for a local daemon process listening on port 20431, but this can be overridden using the `KACHERY_P2P_API_PORT` environment variable.
+By default (if the offline environment variable is not set), kachery-p2p will attempt to connect to a running daemon on the default port 20421, and will raise an exception if this connection fails. This port can be configured using the `KACHERY_P2P_API_PORT` environment variable.
 
-## Offline mode
+When a daemon is running and the client is connected to the daemon (i.e., in online mode), it is not necessary for the `KACHERY_STORAGE_DIR` environment variable to be set because the location of this directory is communicated from the daemon to the client. If this variable *is* set, but is inconsistent with the storage directory of the daemon, then the kachery client will raise a Python exception.
 
-In offline mode, the `KACHERY_STORAGE_DIR` environment variable must be set to the absolute path of an existing directory. This is where all data files will be stored.
+## Loading files
 
-The following kachery-p2p commands **can** be run in offline mode (but will only have access to the data stored in the local `${KACHERY_STORAGE_DIR}`): `kp.store_file()`, `kp.store_text()`, `kp.store_object()`, `kp.store_npy()`, `kp.load_file()`, `kp.load_text()`, `kp.load_object()`, `kp.load_npy()`.
+The following Python client operations can be used to load files and data:
 
-The following kachery-p2p commands **cannot** be run in offline mode: `kp.load_feed()`, `kp.create_feed()`, and all of the other feed operations; `kp.get_node_id()`, `kp.get_channels()`. These functions will all throw exceptions if the client is not connected to a daemon.
+```
+kp.load_file(uri: str) -> local file path OR None
+kp.load_text(uri: str) -> str OR None
+kp.load_object(uri: str) -> dict OR None
+kp.load_npy(uri: str) -> np.ndarray OR None
+kp.load_bytes(uri: str, start: int, end: int)-> bytearray OR None
+```
 
-When in offline mode, the `kp.load_*()` and `kp.store_*()` commands read and write directly to the `$KACHERY_STORAGE_DIR`. If this environment variable is not set, an exception is raised one one of these functions is called.
+Whether in offline or online mode, kachery will first directly check the local kachery storage directory for the file with the given kachery URI. If it is not found, and we are in online mode, then the client will make the load request to the daemon. The daemon will then attempt to load the file from the kachery-p2p network. If the load is successful, then the file content may then be loaded by the Python client from the local kachery storage directory.
 
-## Online mode
+## Storing files
 
-When a daemon is running and the client is connected to the daemon (i.e., in online mode), it is not necessary for the `KACHERY_STORAGE_DIR` environment variable to be set because the location of this directory is communicated from the daemon to the client. If this variable *is* set, but is inconsistent with the storage directory of the daemon, then kachery will raise an exception.
+The following Python client operations can be used to store files and data locally:
 
-When in online mode, the load functions (e.g., `kp.load_file()`) will first check the `$KACHERY_STORAGE_DIR` directly for the file. If not found, it will consult with the daemon, which may retrieve the file from the kachery network.
+```
+kp.store_file(path: str) -> uri
+kp.store_text(txt: str) -> uri
+kp.store_object(x: dict) -> uri
+kp.store_npy(x: np.ndarray) -> uri
+```
 
-The save functions (e.g., `kp.save_file()`) behave differently depending on whether the `KACHERY_STORAGE_DIR` variable is set for the client. In both cases the client will first compute the file hash and check `$KACHERY_STORAGE_DIR` to see if the file is already stored. If so, the function will be a no-op. Otherwise, if the environment variable is set, then the client will attempt to store the file directly to the storage directly without consulting the daemon. If the variable is not set, then the client will first consult with the daemon to determine whether the file needs to be stored. If so, the client will stream the data to the daemon and the daemon will be responsible for storing the data in the proper storage location.
+Kachery will first compute the URI of the data to be stored and check whether it already exists in the local kachery storage. If it already exists, these functions simply return the URI string.
+
+When in offline mode, kachery will store the data directly to the `$KACHERY_P2P_OFFLINE_STORAGE_DIR` directory. Otherwise, it will send data to the daemon, and the daemon will store the file locally.
 
 ## Recommendation for multiple users sharing the same computer
 
-If multiple users are sharing the same machine, then it is recommended that one of the users (or perhaps a service user) maintains the running daemon, and that the KACHERY_STORAGE_DIR is set to a directory that is readable (but not writeable) by all users.
+If multiple users are sharing the same machine, then it is recommended that one of the users (or perhaps a service user) maintains the running daemon, and that the KACHERY_STORAGE_DIR is set to a directory that is readable (but not writeable) by all users. No environment variables need to be set for the users as the location of the kachery storage directory is obtained from the running daemon.
