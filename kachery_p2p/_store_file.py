@@ -16,7 +16,7 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
     if not _is_online_mode():
         raise Exception('Not connected to daemon and not in offline mode.')
     url = f'{_api_url()}/storeFile'
-    resp = _http_post_json(url, {'localFilePath': path})
+    resp = _http_post_json(url, {'localFilePath': os.path.abspath(path)})
     if not resp['success']:
         raise Exception(f'Problem storing file: {resp["error"]}')
     sha1 = resp['sha1']
