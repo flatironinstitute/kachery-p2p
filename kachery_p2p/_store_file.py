@@ -32,7 +32,7 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
 
 def _add_read_permissions(fname: str):
     st = os.stat(fname)
-    os.chmod(fname, st.st_mode | stat.S_IRUSR | stat.S_IRUSR | stat.S_IROTH)
+    os.chmod(fname, st.st_mode | stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
 
 def _store_text(text: str, basename: Union[str, None]=None) -> str:
     if basename is None:
@@ -41,6 +41,7 @@ def _store_text(text: str, basename: Union[str, None]=None) -> str:
         fname = tmpdir + '/text.txt'
         with open(fname, 'w') as f:
             f.write(text)
+        _add_read_permissions(tmpdir)
         _add_read_permissions(fname)
         return _store_file(fname, basename=basename)
 
@@ -56,5 +57,6 @@ def _store_npy(array: np.ndarray, basename: Union[str, None]=None) -> str:
     with TemporaryDirectory() as tmpdir:
         fname = tmpdir + '/array.npy'
         np.save(fname, array)
+        _add_read_permissions(tmpdir)
         _add_read_permissions(fname)
         return _store_file(fname, basename=basename)
