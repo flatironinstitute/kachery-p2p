@@ -28,7 +28,7 @@ def get_channels():
 def _get_joined_channels_config() -> dict:
     f = kp.load_feed('_kachery_p2p_config', create=True)
     sf = f.get_subfeed('joined-channels')
-    num_messages = sf.get_num_messages()
+    num_messages = sf.get_num_local_messages()
     if (num_messages > 0):
         sf.set_position(num_messages - 1)
         joined_channels_config = sf.get_next_message(wait_msec=100)
@@ -112,6 +112,12 @@ def find_file(uri):
 def load_file(uri, dest, from_node, from_channel, exp_nop2p, exp_file_server_url):
     kp._experimental_config(nop2p=exp_nop2p, file_server_urls=list(exp_file_server_url))
     x = kp.load_file(uri, dest=dest, from_node=from_node, from_channel=from_channel)
+    print(x)
+
+@click.command(help="Store a file locally.")
+@click.argument('path')
+def store_file(path: str):
+    x = kp.store_file(path)
     print(x)
 
 @click.command(help="Download a file and write the content to stdout.")
@@ -204,6 +210,7 @@ cli.add_command(get_channels)
 cli.add_command(join_channel)
 cli.add_command(leave_channel)
 cli.add_command(load_file)
+cli.add_command(store_file)
 cli.add_command(node_info)
 cli.add_command(print_messages)
 cli.add_command(start_daemon)

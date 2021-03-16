@@ -1,11 +1,13 @@
 # kachery-p2p
 
-**This project is still at an early stage of development. We welcome contributors and testers**
+**This project is at an early stage of development. We welcome contributors and testers**
 
-Current version: `kachery-p2p 0.7.1`
+Current version: `kachery-p2p 0.8.0`
 Current protocol version: `kachery-p2p 0.7.0p`
 
 Kachery-p2p is a **peer-to-peer, content-addressable file storage and distribution framework** which can operate with minimal infrastructural requirements and offers both command-line and programmatic interfaces to file distribution. In short, it’s a way for you to distribute your data to collaborators with minimal fuss.
+
+**Update (16 March 2021):** It is no longer necessary to use the KACHERY_STORAGE_DIR environment variable. By default, data are stored in `$HOME/kachery-storage`. To override this, you can set KACHERY_STORAGE_DIR when running the daemon (it is not necessary to set it when using the Python client or command-line interface). It is also possible for multiple users to connect to the same running daemon. For more information, see [online and offline modes](./doc/online_and_offline_modes.md).
 
 ## Getting started
 
@@ -20,7 +22,7 @@ Kachery-p2p is a **peer-to-peer, content-addressable file storage and distributi
 Kachery-p2p has advantages for scientific communities that share large datasets. It is often inconvenient (and expensive) for individual labs to host such datasets. The idea of kachery-p2p is to relieve this burden by making it easy to share a data file with a community or individuals by submitting it to the distributed system. The simplest way to share a snapshot (or copy) of a file is:
 
 ```
-kachery-store /my/large-or-small/file.dat
+kachery-p2p-store /my/large-or-small/file.dat
 ```
 
 Then distribute the unique kachery URI (identifier) to colleagues. For example, you could just paste the URI into a python script or a github README file.
@@ -76,7 +78,7 @@ Kachery-p2p can transfer arbitrary files, and also serializes NumPy data from me
 From command line (in a separate terminal):
 
 ```bash
-kachery-store /path/to/your/file.dat
+kachery-p2p-store /path/to/your/file.dat
 ```
 
 This will copy the file to the kachery storage directory and will display a SHA1 URI, which you can then share with your collaborators. The file can then be retrieved from any computer running a kachery-p2p daemon on the same channel:

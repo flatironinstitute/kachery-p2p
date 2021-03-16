@@ -1,21 +1,22 @@
 import os
+import pathlib
 import shutil
 import tempfile
 import time
 
 
 class TemporaryDirectory():
-    def __init__(self, remove: bool=True, prefix: str='tmp'):
+    def __init__(self, *, remove: bool=True, prefix: str='tmp'):
         self._remove = remove
         self._prefix = prefix
 
     def __enter__(self) -> str:
-        if 'KACHERY_STORAGE_DIR' in os.environ:
-            storage_dir = os.getenv('KACHERY_STORAGE_DIR')
+        if 'KACHERY_OFFLINE_STORAGE_DIR' in os.environ:
+            storage_dir = os.getenv('KACHERY_OFFLINE_STORAGE_DIR')
         else:
             storage_dir = None
         if storage_dir is not None:
-            assert os.path.exists(storage_dir), f'Unexpected problem. Storage directory does not exist: {storage_dir}'
+            assert os.path.isdir(storage_dir), f'Unexpected problem. Storage directory does not exist or is not a directory: {storage_dir}'
             dirpath = os.path.join(storage_dir, 'tmp')
             if not os.path.exists(dirpath):
                 for _ in range(1, 3):

@@ -1,7 +1,0 @@
-name: kachery_p2p_env
-channels:
-  - conda-forge
-dependencies:
-  - python=3.8
-  - numpy>=1.19.0
-  - nodejs>=12

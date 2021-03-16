@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 import DataStreamy from "../../common/DataStreamy"
-import { byteCount, ByteCount, byteCountToNumber, FileKey, FileManifest, FileManifestChunk, Sha1Hash } from "../../interfaces/core"
+import { byteCount, ByteCount, byteCountToNumber, FileKey, FileManifest, FileManifestChunk, localFilePath, LocalFilePath, Sha1Hash } from "../../interfaces/core"
 import { MockNodeDefects } from './MockNodeDaemon'
 
 export default class MockKacheryStorageManager {
@@ -8,18 +8,20 @@ export default class MockKacheryStorageManager {
     constructor(private getDefects: () => MockNodeDefects) {
         
     }
-    async findFile(fileKey: FileKey):  Promise<{found: boolean, size: ByteCount}> {
+    async findFile(fileKey: FileKey):  Promise<{found: boolean, size: ByteCount, localFilePath: LocalFilePath | null}> {
         const content = this.#mockFiles.get(fileKey.sha1)
         if (content) {
             return {
                 found: true,
-                size: byteCount(content.length)
+                size: byteCount(content.length),
+                localFilePath: localFilePath('mock-' + fileKey.sha1)
             }
         }
         else {
             return {
                 found: false,
-                size: byteCount(0)
+                size: byteCount(0),
+                localFilePath: null
             }
         }
     }
@@ -47,6 +49,9 @@ export default class MockKacheryStorageManager {
         if (fileKey.sha1 !== sha1) {
             throw Error(`Unexpected hash for storing file: ${fileKey.sha1} <> ${sha1}`)
         }
+    }
+    async storeLocalFile(localFilePath: LocalFilePath): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
+        throw Error('Not implemented in MockKacheryStorageManager')
     }
     async concatenateChunksAndStoreResult(sha1Concat: Sha1Hash, chunkSha1s: Sha1Hash[]): Promise<void> {
         const chunks: Buffer[] = []

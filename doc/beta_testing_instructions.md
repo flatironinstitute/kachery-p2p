@@ -9,13 +9,12 @@ Please install kachery-p2p by following the Conda installation instructions foun
 Open a terminal and verify that you have the following commands available:
 
 ```
-kachery-store
+kachery-p2p-store
 kachery-p2p-load
 kachery-p2p-start-daemon
 kachery-p2p-join-channel
 kachery-p2p-leave-channel
 kachery-p2p-find
-kachery-p2p-load
 kachery-p2p-cat
 ```
 
@@ -25,7 +24,7 @@ Check the version by running:
 kachery-p2p version
 ```
 
-The current version should be `0.7.1` and the current protocol version should be `0.7.0p`.
+The current version should be `0.8.0` and the current protocol version should be `0.7.0p`.
 
 ## Start a daemon
 
@@ -59,7 +58,7 @@ In a new terminal (activate the conda environment), run:
 kachery-p2p-load sha1://c37d2a4b156ff9bcfdbbd2eec12b9c6b74135685/test1.txt
 ```
 
-This will download a small text file from the kachery-p2p network and will display the path where the file is stored inside the $KACHERY_STORAGE_DIR. Verify that the content of the file starts with `"This is an example text file..."`
+This will download a small text file from the kachery-p2p network and will display the path where the file is stored inside the kachery storage directory (`$HOME/kachery-storage` by default). Verify that the content of the file starts with `"This is an example text file..."`
 
 ```
 cat `kachery-p2p-load sha1://c37d2a4b156ff9bcfdbbd2eec12b9c6b74135685/test1.txt`
@@ -111,7 +110,7 @@ This should take around 1-2 minutes (depending on the speed of your internet con
 
 ## Sharing files
 
-Sharing a snapshot of a file on the kachery-p2p network is as simple as storing the file in your local kachery database (located at `$KACHERY_STORAGE_DIR`).
+Sharing a snapshot of a file on the kachery-p2p network is as simple as storing the file in your local kachery database (by default located at $HOME/kachery-storage).
 
 Create a test text file with some unique content
 
@@ -123,7 +122,7 @@ echo -e "My unique content\nwith multiple lines\n" > tmp.txt
 Then store a copy locally:
 
 ```bash
-kachery-store tmp.txt
+kachery-p2p-store tmp.txt
 ```
 
 Copy the URI that is printed it will have the form `sha1://.../tmp.txt`
@@ -142,13 +141,12 @@ You can also store snapshots of items directly from Python.
 
 ```python
 import kachery_p2p as kp
-import kachery as ka
 import numpy as np
 
-uri_txt = ka.store_text('Some test text')
+uri_txt = kp.store_text('Some test text')
 print(uri_txt)
 
-uri_dict = ka.store_object(dict(name='test-dict'))
+uri_dict = kp.store_object(dict(name='test-dict'))
 print(uri_dict)
 
 A = np.random.normal(0, 1, (500, 500, 5));

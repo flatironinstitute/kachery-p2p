@@ -35,6 +35,7 @@ setuptools.setup(
         "bin/kachery-p2p-join-channel",
         "bin/kachery-p2p-leave-channel",
         "bin/kachery-p2p-load",
+        "bin/kachery-p2p-store",
         "bin/kachery-p2p-print-messages",
         "bin/kachery-p2p-start-daemon",
         "bin/kachery-p2p-stop-daemon",
@@ -42,6 +43,7 @@ setuptools.setup(
     ],
     install_requires=[
         "click",
+        "simplejson",
         "kachery>=0.6.7"
     ],
     classifiers=[

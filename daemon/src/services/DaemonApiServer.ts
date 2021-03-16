@@ -7,7 +7,7 @@ import DataStreamy from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
 import { isGetStatsOpts, NodeStatsInterface } from '../getStats';
-import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToNumber, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelConfigUrl, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
+import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToNumber, ErrorMessage, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelConfigUrl, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, LocalFilePath, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -22,7 +22,8 @@ export interface DaemonApiProbeResponse {
     isBootstrapNode: boolean,
     webSocketAddress: Address | null,
     publicUdpSocketAddress: Address | null,
-    joinedChannels: JoinedChannelConfig[]
+    joinedChannels: JoinedChannelConfig[],
+    kacheryStorageDir: LocalFilePath | null
 };
 export const isDaemonApiProbeResponseJoinedChannels = (x: any): x is {channelConfig: ChannelConfig, channelConfigUrl: ChannelConfigUrl} => {
     return _validateObject(x, {
@@ -39,8 +40,24 @@ export const isDaemonApiProbeResponse = (x: any): x is PublicApiProbeResponse =>
         isBootstrapNode: isBoolean,
         webSocketAddress: isOneOf([isNull, isAddress]),
         publicUdpSocketAddress: isOneOf([isNull, isAddress]),
-        joinedChannels: isArrayOf(isJoinedChannelConfig)
+        joinedChannels: isArrayOf(isJoinedChannelConfig),
+        kacheryStorageDir: isOneOf([isNull, isString])
     });
+}
+
+type StoreFileRequestData = {
+    localFilePath: LocalFilePath
+}
+const isStoreFileRequestData = (x: any): x is StoreFileRequestData => {
+    return _validateObject(x, {
+        localFilePath: isString
+    })
+}
+type StoreFileResponseData = {
+    success: boolean
+    error: ErrorMessage | null
+    sha1: Sha1Hash | null
+    manifestSha1: Sha1Hash | null
 }
 
 interface Req {
@@ -389,6 +406,14 @@ export default class DaemonApiServer {
             }
         },
         {
+            // /storeFile - Store a local file in local kachery storage
+            path: '/storeFile',
+            handler: async (reqData: JSONObject) => {
+                /* istanbul ignore next */
+                return await this._handleStoreFile(reqData)
+            }
+        },
+        {
             // /feed/createFeed - create a new writeable feed on this node
             path: '/feed/createFeed',
             handler: async (reqData: JSONObject) => {return await this._handleFeedApiCreateFeed(reqData)}
@@ -451,7 +476,7 @@ export default class DaemonApiServer {
         // this.#app.use(cors()); // in the future, if we want to do this
         this.#app.use(express.json());
 
-        this.#app.all('/*', (req, res, next) => {
+        this.#app.all('/*', (req: any, res: any, next: any) => {
             /* istanbul ignore next */
             if (!isLocalRequest(req)) {
                 console.warn(`Rejecting access to remote request from ${req.connection.remoteAddress}`);
@@ -570,10 +595,27 @@ export default class DaemonApiServer {
             isBootstrapNode: this.#node.isBootstrapNode(),
             webSocketAddress: this.#node.webSocketAddress(),
             publicUdpSocketAddress: this.#node.publicUdpSocketAddress(),
-            joinedChannels
+            joinedChannels,
+            kacheryStorageDir: this.#node.kacheryStorageManager().storageDir()
         }
         /* istanbul ignore next */
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object');
+        return response
+    }
+    // /storeFile - store local file in local kachery storage
+    /* istanbul ignore next */
+    async _handleStoreFile(reqData: JSONObject): Promise<JSONObject> {
+        if (!isStoreFileRequestData(reqData)) throw Error('Unexpected request data for storeFile.')
+        
+        const {sha1, manifestSha1} = await this.#node.kacheryStorageManager().storeLocalFile(reqData.localFilePath)
+        const response: StoreFileResponseData = {
+            success: true,
+            error: null,
+            sha1,
+            manifestSha1
+        }
+        /* istanbul ignore next */
+        if (!isJSONObject(response)) throw Error('Unexpected json object in _handleStoreFile')
         return response
     }
     // /halt - halt the kachery-p2p daemon (stops the server process)
@@ -650,8 +692,14 @@ export default class DaemonApiServer {
     async _apiLoadFile(req: Req, res: Res) {
         const jsonSocket = new JsonSocket(res as any as Socket)
         let x: DataStreamy
+        const apiLoadFileRequest = req.body
+        if (!isApiLoadFileRequest(apiLoadFileRequest)) {
+            jsonSocket.sendMessage({type: 'error', error: 'Invalid api load file request'}, () => {})
+            res.end()
+            return
+        }
         try {
-            x = await this._loadFile(req.body)
+            x = await this._loadFile(apiLoadFileRequest)
         }
         catch(err) {
             jsonSocket.sendMessage({type: 'error', error: err.message}, () => {})
@@ -662,9 +710,27 @@ export default class DaemonApiServer {
         x.onFinished(() => {
             if (isDone) return
             // we are done
-            isDone = true
-            jsonSocket.sendMessage({type: 'finished'}, () => {})
-            res.end()
+            const localFilePath = apiLoadFileRequest.fileKey.sha1
+            this.#node.kacheryStorageManager().findFile(apiLoadFileRequest.fileKey).then(({found, size, localFilePath}) => {
+                if (isDone) return
+                if (found) {
+                    if (localFilePath) {
+                        isDone = true
+                        jsonSocket.sendMessage({type: 'finished', localFilePath}, () => {})
+                        res.end()
+                    }
+                    else {
+                        isDone = true
+                        jsonSocket.sendMessage({type: 'error', error: 'Unexpected: load completed, but localFilePath is null.'}, () => {})
+                        res.end()
+                    }
+                }
+                else {
+                    isDone = true
+                    jsonSocket.sendMessage({type: 'error', error: 'Unexpected: did not find file in local kachery storage even after load completed'}, () => {})
+                    res.end()
+                }
+            })
         });
         x.onError((err) => {
             if (isDone) return

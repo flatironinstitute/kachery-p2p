@@ -21,8 +21,8 @@ def main():
             )
             d1.start()
             with d1.testEnv():
-                import kachery as ka
-                uri = ka.store_text(_randstr(40000000))
+                import kachery_p2p as kp
+                uri = kp.store_text(_randstr(40000000))
             
             d2 = TestDaemon(
                 label='d2',
