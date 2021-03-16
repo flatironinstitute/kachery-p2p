@@ -129,7 +129,7 @@ export class KacheryStorageManager {
                         chunks: manifestChunks
                     }
                     let manifestSha1: Sha1Hash | null = null
-                    if (manifestChunks.length > 0) {
+                    if (manifestChunks.length > 1) {
                         const manifestJson = Buffer.from(JSON.stringify(manifest), 'utf-8')
                         manifestSha1 = computeSha1OfBufferSync(manifestJson)
                         this.storeFile(manifestSha1, manifestJson)

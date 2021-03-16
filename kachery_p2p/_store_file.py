@@ -41,7 +41,7 @@ def _add_exec_permissions(fname: str):
 def _store_text(text: str, basename: Union[str, None]=None) -> str:
     if basename is None:
         basename = 'file.txt'
-    with TemporaryDirectory(remove=False) as tmpdir:
+    with TemporaryDirectory() as tmpdir:
         fname = tmpdir + '/text.txt'
         with open(fname, 'w') as f:
             f.write(text)
@@ -59,7 +59,7 @@ def _store_object(object: dict, basename: Union[str, None]=None, separators=(','
 def _store_npy(array: np.ndarray, basename: Union[str, None]=None) -> str:
     if basename is None:
         basename = 'file.npy'
-    with TemporaryDirectory(remove=False) as tmpdir:
+    with TemporaryDirectory() as tmpdir:
         fname = tmpdir + '/array.npy'
         np.save(fname, array)
         _add_read_permissions(tmpdir)
