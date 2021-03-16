@@ -8,7 +8,7 @@ Although some kachery-p2p client operations can run in offline mode (see below),
 
 ## Online vs offline mode
 
-The kachery-p2p client can either operate in online mode (by connecting to a running daemon) or in a limited offline mode by interacting directly with the local file system.
+The kachery-p2p client can either operate in online mode (by connecting to a running daemon) or in a limited offline mode by interacting directly with the locally-mounted file system.
 
 If the `KACHERY_OFFLINE_STORAGE_DIR` environment variable is set, the client will operate in the limited offline mode where it can only load and store static files in the `$KACHERY_OFFLINE_STORAGE_DIR` directory. It cannot read or write feeds and cannot interact with other nodes in the kachery-p2p network.
 
@@ -23,18 +23,18 @@ Note that if `KACHERY_OFFLINE_STORAGE_DIR` is set, then the client will be in of
 The following Python client operations can be used to load files and data:
 
 ```
-kp.load_file(uri: str) -> local file path OR None
+kp.load_file(uri: str) -> file path on local system OR None
 kp.load_text(uri: str) -> str OR None
 kp.load_object(uri: str) -> dict OR None
 kp.load_npy(uri: str) -> np.ndarray OR None
 kp.load_bytes(uri: str, start: int, end: int)-> bytearray OR None
 ```
 
-Whether in offline or online mode, kachery will first directly check the local kachery storage directory for the file with the given kachery URI. If it is not found, and we are in online mode, then the client will make the load request to the daemon. The daemon will then attempt to load the file from the kachery-p2p network. If the load is successful, then the file content may then be loaded by the Python client from the local kachery storage directory.
+Whether in offline or online mode, kachery will first directly check the storage directory ($KACHERY_OFFLINE_STORAGE_DIR in offline mode, or the one specified by the daemon in online mode) for the file with the given kachery URI. If it is not found, and we are in online mode, then the client will make the load request to the daemon. The daemon will then attempt to load the file from the kachery-p2p network. If the load is successful, then the file content may then be loaded by the Python client from the kachery storage directory.
 
 ## Storing files
 
-The following Python client operations can be used to store files and data locally:
+The following Python client operations can be used to store files and data in the kachery storage for the local node:
 
 ```
 kp.store_file(path: str) -> uri
@@ -43,9 +43,9 @@ kp.store_object(x: dict) -> uri
 kp.store_npy(x: np.ndarray) -> uri
 ```
 
-Kachery will first compute the URI of the data to be stored and check whether it already exists in the local kachery storage. If it already exists, these functions simply return the URI string.
+Kachery will first compute the URI of the data to be stored and check whether it already exists in the kachery storage for the local node. If it already exists, these functions simply return the URI string.
 
-When in offline mode, kachery will store the data directly to the `$KACHERY_OFFLINE_STORAGE_DIR` directory. Otherwise, it will send data to the daemon, and the daemon will store the file locally.
+When in offline mode, kachery will store the data directly to the `$KACHERY_OFFLINE_STORAGE_DIR` directory. Otherwise, it will send data to the daemon, and the daemon will store the file in the storage location for the local node.
 
 ## Recommendation for multiple users sharing the same computer
 
