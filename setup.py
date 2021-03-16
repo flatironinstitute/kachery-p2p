@@ -42,6 +42,7 @@ setuptools.setup(
     ],
     install_requires=[
         "click",
+        "simplejson",
         "kachery>=0.6.7"
     ],
     classifiers=[

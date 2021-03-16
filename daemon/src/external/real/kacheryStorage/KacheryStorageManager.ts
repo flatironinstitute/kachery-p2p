@@ -12,11 +12,11 @@ export class KacheryStorageManager {
         }
         this.#storageDir = storageDir
     }
-    async findFile(fileKey: FileKey): Promise<{ found: boolean, size: ByteCount }> {
+    async findFile(fileKey: FileKey): Promise<{ found: boolean, size: ByteCount, localFilePath: LocalFilePath | null }> {
         if (fileKey.sha1) {
             const { path: filePath, size: fileSize } = await this._getLocalFileInfo(fileKey.sha1);
             if ((filePath) && (fileSize !== null)) {
-                return { found: true, size: fileSize }
+                return { found: true, size: fileSize, localFilePath: filePath }
             }
         }
         if (fileKey.chunkOf) {
@@ -24,10 +24,10 @@ export class KacheryStorageManager {
             if (filePath) {
                 const offset = fileKey.chunkOf.startByte
                 const size = byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte))
-                return { found: true, size }
+                return { found: true, size, localFilePath: null } // in this case it's not the entire file, so we are not going to return the local file path
             }
         }
-        return { found: false, size: byteCount(0) }
+        return { found: false, size: byteCount(0), localFilePath: null }
     }
     async storeFile(sha1: Sha1Hash, data: Buffer) {
         const s = sha1;
@@ -47,6 +47,58 @@ export class KacheryStorageManager {
             }
         }
         fs.renameSync(destPathTmp, destPath)
+    }
+    async storeLocalFile(localFilePath: LocalFilePath): Promise<Sha1Hash> {
+        let stat0: fs.Stats
+        try {
+            stat0 = await fs.promises.stat(localFilePath.toString())
+        }
+        catch (err) {
+            throw Error(`Unable to stat file: ${localFilePath}`)
+        }
+        const fileSize = byteCount(stat0.size)
+        const ds = createDataStreamForFile(localFilePath, byteCount(0), fileSize)
+        const tmpDestPath = `${this.#storageDir}/store.file.${randomAlphaString(10)}.tmp`
+        const writeStream = fs.createWriteStream(tmpDestPath)
+        const shasum = crypto.createHash('sha1')
+        let complete = false
+        return new Promise((resolve, reject) => {
+            const _cleanup = () => {
+                try {
+                    fs.unlinkSync(tmpDestPath)
+                }
+                catch(e) {
+                }
+            }
+            ds.onData(buf => {
+                if (complete) return
+                shasum.update(buf)
+                writeStream.write(buf)
+            })
+            ds.onError(err => {
+                if (complete) return
+                complete = true
+                _cleanup()
+                reject(err)
+            })
+            ds.onFinished(() => {
+                if (complete) return
+                complete = true
+                try {
+                    const sha1Computed = shasum.digest('hex') as any as Sha1Hash
+                    const s = sha1Computed
+                    const destParentPath = `${this.#storageDir}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`
+                    const destPath = `${destParentPath}/${s}`
+                    fs.mkdirSync(destParentPath, {recursive: true});
+                    fs.renameSync(tmpDestPath, destPath)
+                    resolve(sha1Computed)
+                }
+                catch(err2) {
+                    _cleanup()
+                    reject(err2)
+                }
+            })
+        })
     }
     async concatenateChunksAndStoreResult(sha1: Sha1Hash, chunkSha1s: Sha1Hash[]): Promise<void> {
         const s = sha1
@@ -116,7 +168,7 @@ export class KacheryStorageManager {
         if (fileKey.sha1) {
             const { path: filePath, size: fileSize } = await this._getLocalFileInfo(fileKey.sha1);
             if ((filePath) && (fileSize !== null)) {
-                return createDataStreamForFile(localFilePath(filePath), byteCount(0), fileSize)
+                return createDataStreamForFile(filePath, byteCount(0), fileSize)
             }
         }
         if (fileKey.chunkOf) {
@@ -124,17 +176,17 @@ export class KacheryStorageManager {
             if (filePath) {
                 const offset = fileKey.chunkOf.startByte
                 const size = byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte))
-                return createDataStreamForFile(localFilePath(filePath), offset, size)
+                return createDataStreamForFile(filePath, offset, size)
             }
         }
         throw Error('Unable get data read stream for local file.')
     }
-    async _getLocalFileInfo(fileSha1: Sha1Hash): Promise<{ path: string | null, size: ByteCount | null }> {
+    async _getLocalFileInfo(fileSha1: Sha1Hash): Promise<{ path: LocalFilePath | null, size: ByteCount | null }> {
         const s = fileSha1;
-        const path = `${this.#storageDir}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}/${s}`
+        const path = localFilePath(`${this.#storageDir}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}/${s}`)
         let stat0: fs.Stats
         try {
-            stat0 = await fs.promises.stat(path)
+            stat0 = await fs.promises.stat(path.toString())
         }
         catch (err) {
             return { path: null, size: null }

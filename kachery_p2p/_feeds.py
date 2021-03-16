@@ -7,8 +7,9 @@ from typing import Union
 from urllib.parse import quote, unquote
 
 import kachery as ka
-
-from ._core import _api_port, _api_host, _http_post_json, _load_object
+from ._load_file import _load_object
+from ._daemon_connection import _api_url
+from ._misc import _http_post_json, _http_get_json
 
 
 class Feed:
@@ -37,9 +38,8 @@ class Feed:
         else:
             raise Exception(f'Unexpected feed uri: {uri}')
     def _initialize(self):
-        port = _api_port()
-        host = _api_host()
-        url = f'http://{host}:{port}/feed/getFeedInfo'
+        api_url = _api_url()
+        url = f'{api_url}/feed/getFeedInfo'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
             timeoutMsec=(self._timeout_sec if self._timeout_sec is not None else 6) * 1000
@@ -141,9 +141,8 @@ class Subfeed:
     
     def get_num_local_messages(self):
         if not self.is_snapshot():
-            port = _api_port()
-            host = _api_host()
-            url = f'http://{host}:{port}/feed/getNumLocalMessages'
+            api_url = _api_url()
+            url = f'{api_url}/feed/getNumLocalMessages'
             x = _http_post_json(url, dict(
                 feedId=self._feed_id,
                 subfeedHash=self._subfeed_hash
@@ -246,9 +245,8 @@ class Subfeed:
         if not self.is_writeable():
             raise Exception('Cannot append messages to a readonly feed')
         # CHAIN:append_messages:step(1)
-        port = _api_port()
-        host = _api_host()
-        url = f'http://{host}:{port}/feed/appendMessages'
+        api_url = _api_url()
+        url = f'{api_url}/feed/appendMessages'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
             subfeedHash=self._subfeed_hash,
@@ -263,10 +261,9 @@ class Subfeed:
     def submit_messages(self, messages):
         if self.is_snapshot():
             raise Exception('Cannot submit messages to a snapshot')
-        port = _api_port()
-        host = _api_host()
+        api_url = _api_url()
         for message in messages:
-            url = f'http://{host}:{port}/feed/submitMessage'
+            url = f'{api_url}/feed/submitMessage'
             x = _http_post_json(url, dict(
                 feedId=self._feed_id,
                 subfeedHash=self._subfeed_hash,
@@ -279,9 +276,8 @@ class Subfeed:
     def set_access_rules(self, access_rules):
         if not self._is_writeable:
             raise Exception('Cannot set access rules for non-writeable feed')
-        port = _api_port()
-        host = _api_host()
-        url = f'http://{host}:{port}/feed/setAccessRules'
+        api_url = _api_url()
+        url = f'{api_url}/feed/setAccessRules'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
             subfeedHash=self._subfeed_hash,
@@ -293,9 +289,8 @@ class Subfeed:
     def get_access_rules(self):
         if not self._is_writeable:
             raise Exception('Cannot get access rules for non-writeable feed')
-        port = _api_port()
-        host = _api_host()
-        url = f'http://{host}:{port}/feed/getAccessRules'
+        api_url = _api_url()
+        url = f'{api_url}/feed/getAccessRules'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
             subfeedHash=self._subfeed_hash
@@ -336,9 +331,8 @@ class Subfeed:
             self.set_access_rules(access_rules)
 
 def _create_feed(feed_name=None):
-    port = _api_port()
-    host = _api_host()
-    url = f'http://{host}:{port}/feed/createFeed'
+    api_url = _api_url()
+    url = f'{api_url}/feed/createFeed'
     req_data = dict()
     if feed_name is not None:
         req_data['feedName'] = feed_name
@@ -352,9 +346,8 @@ def _delete_feed(feed_name_or_uri):
         feed_uri = feed_name_or_uri
         feed_id, subfeed_name, position = _parse_feed_uri(feed_uri)
         assert subfeed_name is None, 'Cannot specify subfeed name when deleting feed'
-        port = _api_port()
-        host = _api_host()
-        url = f'http://{host}:{port}/feed/deleteFeed'
+        api_url = _api_url()
+        url = f'{api_url}/feed/deleteFeed'
         x = _http_post_json(url, dict(
             feedId=feed_id
         ))
@@ -367,9 +360,8 @@ def _delete_feed(feed_name_or_uri):
         _delete_feed(f'feed://{feed_id}')
 
 def _get_feed_id(feed_name, *, create=False):
-    port = _api_port()
-    host = _api_host()
-    url = f'http://{host}:{port}/feed/getFeedId'
+    api_url = _api_url()
+    url = f'{api_url}/feed/getFeedId'
     x = _http_post_json(url, dict(
         feedName=feed_name
     ))
@@ -405,9 +397,8 @@ def _load_feed(feed_name_or_uri, *, timeout_sec: Union[None, float]=None, create
         return _load_feed(f'feed://{feed_id}')
 
 def _watch_for_new_messages(subfeed_watches, *, wait_msec, signed=False, max_num_messages=0):
-    port = _api_port()
-    host = _api_host()
-    url = f'http://{host}:{port}/feed/watchForNewMessages'
+    api_url = _api_url()
+    url = f'{api_url}/feed/watchForNewMessages'
     subfeed_watches2 = {}
     for key, watch in subfeed_watches.items():
         subfeed_watches2[key] = {
