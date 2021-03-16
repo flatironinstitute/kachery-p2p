@@ -2,6 +2,7 @@ import os
 from typing import Union
 import simplejson
 import numpy as np
+import stat
 from ._daemon_connection import _is_offline_mode, _is_online_mode, _kachery_storage_dir, _api_url
 from ._local_kachery_storage import _local_kachery_storage_store_file
 from ._misc import _http_post_json
@@ -29,6 +30,10 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
     else:
         return f'sha1://{sha1}/{basename}'
 
+def _add_read_permissions(fname: str):
+    st = os.stat(fname)
+    os.chmod(fname, st.st_mode | stat.S_IRUSR | stat.S_IRUSR | stat.S_IROTH)
+
 def _store_text(text: str, basename: Union[str, None]=None) -> str:
     if basename is None:
         basename = 'file.txt'
@@ -36,6 +41,7 @@ def _store_text(text: str, basename: Union[str, None]=None) -> str:
         fname = tmpdir + '/text.txt'
         with open(fname, 'w') as f:
             f.write(text)
+        _add_read_permissions(fname)
         return _store_file(fname, basename=basename)
 
 def _store_object(object: dict, basename: Union[str, None]=None, separators=(',', ':'), indent=None) -> str:
@@ -50,4 +56,5 @@ def _store_npy(array: np.ndarray, basename: Union[str, None]=None) -> str:
     with TemporaryDirectory() as tmpdir:
         fname = tmpdir + '/array.npy'
         np.save(fname, array)
+        _add_read_permissions(fname)
         return _store_file(fname, basename=basename)
