@@ -26,6 +26,10 @@ class _probe_result:
         self.node_id = cast(str, x['nodeId'])
         self.joined_channels = cast(List[dict], x['joinedChannels'])
         self.kachery_storage_dir = cast(Union[str, None], x['kacheryStorageDir'] or None)
+        ksd = os.getenv('KACHERY_STORAGE_DIR', None) 
+        if ksd is not None:
+            if ksd != self.kachery_storage_dir:
+                raise Exception(f'KACHERY_STORAGE_DIR is set, but is inconsistent with the daemon: {ksd} <> {self.kachery_storage_dir}')
 
 class _buffered_probe_data:
     timestamp: float=0
@@ -50,12 +54,12 @@ def _probe_daemon(api_port=None):
     res = _probe_result(x) if x is not None else None
     return res
 
-def _kachery_p2p_offline_storage_dir_env_is_set():
-    return os.getenv('KACHERY_P2P_OFFLINE_STORAGE_DIR', None) is not None
+def _kachery_offline_storage_dir_env_is_set():
+    return os.getenv('KACHERY_OFFLINE_STORAGE_DIR', None) is not None
 
 def _kachery_storage_dir():
-    if _kachery_p2p_offline_storage_dir_env_is_set():
-        return os.getenv('KACHERY_P2P_OFFLINE_STORAGE_DIR', None)
+    if _kachery_offline_storage_dir_env_is_set():
+        return os.getenv('KACHERY_OFFLINE_STORAGE_DIR', None)
     else:
         p = _buffered_probe_daemon()
         if p is not None:
@@ -64,7 +68,7 @@ def _kachery_storage_dir():
             raise Exception('Not connected to daemon.')
 
 def _is_offline_mode():
-    return _kachery_p2p_offline_storage_dir_env_is_set()
+    return _kachery_offline_storage_dir_env_is_set()
         
 def _is_online_mode():
     if _is_offline_mode():

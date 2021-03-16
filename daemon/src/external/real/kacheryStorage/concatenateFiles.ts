@@ -3,9 +3,9 @@ import fs from 'fs'
 import { randomAlphaString } from '../../../common/util'
 import { localFilePath, LocalFilePath, Sha1Hash } from '../../../interfaces/core'
 
-export const concatenateFilesIntoTemporaryFile = async (paths: LocalFilePath[]): Promise<{sha1: Sha1Hash, path: LocalFilePath}> => {
+export const concatenateFilesIntoTemporaryFile = async (paths: LocalFilePath[], storageDir: LocalFilePath): Promise<{sha1: Sha1Hash, path: LocalFilePath}> => {
     return new Promise<{sha1: Sha1Hash, path: LocalFilePath}>((resolve, reject) => {
-        const tmpPath = createTemporaryFilePath({prefix: 'kachery-p2p-concat-'})
+        const tmpPath = createTemporaryFilePath({storageDir, prefix: 'kachery-p2p-concat-'})
         const writeStream = fs.createWriteStream(tmpPath)
         const sha = crypto.createHash('sha1')
         let done = false
@@ -54,8 +54,8 @@ export const moveFileIntoKacheryStorage = (storageDir: LocalFilePath, args: {pat
     return destPath
 }
 
-const _getTemporaryDirectory = () => {
-    const ret = process.env['KACHERY_STORAGE_DIR'] + '/tmp'
+const _getTemporaryDirectory = (storageDir: LocalFilePath) => {
+    const ret = storageDir + '/tmp'
     mkdirIfNeeded(localFilePath(ret))
     return ret
 }
@@ -73,7 +73,7 @@ const mkdirIfNeeded = (path: LocalFilePath) => {
     }
 }
 
-export const createTemporaryFilePath = (args: {prefix: string}) => {
-    const dirPath = _getTemporaryDirectory()
+export const createTemporaryFilePath = (args: {storageDir: LocalFilePath, prefix: string}) => {
+    const dirPath = _getTemporaryDirectory(args.storageDir)
     return `${dirPath}/${args.prefix}-${randomAlphaString(10)}`
 }

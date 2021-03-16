@@ -1,4 +1,4 @@
-## kachery-p2p reference documentation
+## kachery-p2p online and offline modes
 
 Kachery-p2p comprises a Python client, a command-line interface, and a daemon server.
 
@@ -10,7 +10,7 @@ Although some kachery-p2p client operations can run in offline mode (see below),
 
 The kachery-p2p client can either operate in online mode (by connecting to a running daemon) or in a limited offline mode by interacting directly with the local file system.
 
-If the `KACHERY_P2P_OFFLINE_STORAGE_DIR` environment variable is set, the client will operate in the limited offline mode where it can only load and store static files in the `$KACHERY_P2P_OFFLINE_STORAGE_DIR` directory. It cannot read or write feeds and cannot interact with other nodes in the kachery-p2p network.
+If the `KACHERY_OFFLINE_STORAGE_DIR` environment variable is set, the client will operate in the limited offline mode where it can only load and store static files in the `$KACHERY_OFFLINE_STORAGE_DIR` directory. It cannot read or write feeds and cannot interact with other nodes in the kachery-p2p network.
 
 By default (if the offline environment variable is not set), kachery-p2p will attempt to connect to a running daemon on the default port 20421, and will raise an exception if this connection fails. This port can be configured using the `KACHERY_P2P_API_PORT` environment variable.
 
@@ -43,8 +43,8 @@ kp.store_npy(x: np.ndarray) -> uri
 
 Kachery will first compute the URI of the data to be stored and check whether it already exists in the local kachery storage. If it already exists, these functions simply return the URI string.
 
-When in offline mode, kachery will store the data directly to the `$KACHERY_P2P_OFFLINE_STORAGE_DIR` directory. Otherwise, it will send data to the daemon, and the daemon will store the file locally.
+When in offline mode, kachery will store the data directly to the `$KACHERY_OFFLINE_STORAGE_DIR` directory. Otherwise, it will send data to the daemon, and the daemon will store the file locally.
 
 ## Recommendation for multiple users sharing the same computer
 
-If multiple users are sharing the same machine, then it is recommended that one of the users (or perhaps a service user) maintains the running daemon, and that the KACHERY_STORAGE_DIR is set to a directory that is readable (but not writeable) by all users. No environment variables need to be set for the users as the location of the kachery storage directory is obtained from the running daemon.
+If multiple users are sharing the same machine, then it is recommended that one of the users (or perhaps a service user) maintains the running daemon, and that the `KACHERY_STORAGE_DIR` environment variable is set to a directory that is readable (but not writeable) by all users. The `KACHERY_STORAGE_DIR` environment variable should be set for the running daemon, but no environment variables need to be set for the users because the location of the kachery storage directory is obtained from the running daemon.

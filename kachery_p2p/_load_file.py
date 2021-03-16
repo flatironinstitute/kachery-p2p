@@ -30,7 +30,7 @@ def _load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node:
     if _is_offline_mode():
         return None
     if not _is_online_mode():
-        raise Exception('Not connected to daemon, and KACHERY_P2P_OFFLINE_STORAGE_DIR environment variable is not set.')
+        raise Exception('Not connected to daemon, and KACHERY_OFFLINE_STORAGE_DIR environment variable is not set.')
     
     try_p2p = p2p and (not _global_config['nop2p'])
     if not try_p2p:
@@ -120,7 +120,7 @@ def _load_bytes(uri: str, start: Union[int, None], end: Union[int, None], write_
     if _is_offline_mode():
         return None
     if not _is_online_mode():
-        raise Exception('Not connected to daemon, and KACHERY_P2P_OFFLINE_STORAGE_DIR environment variable is not set.')
+        raise Exception('Not connected to daemon, and KACHERY_OFFLINE_STORAGE_DIR environment variable is not set.')
 
     try_p2p = p2p and (not _global_config['nop2p'])
     if not try_p2p:

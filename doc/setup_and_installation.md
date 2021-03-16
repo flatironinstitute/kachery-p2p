@@ -8,22 +8,20 @@ We recommend that you use a Conda environment with
 
 * Python 3.8
 * NumPy
-* Nodejs >=12 (available on conda-forge)
+* Nodejs >=12 (available on conda-forge; see below)
 
 ## Installation using Conda
 
 ```bash
-export KACHERY_STORAGE_DIR=/desired/file/storage/location
-# also add that to .bashrc or wherever you keep your env vars
-
 conda create --name kachery-p2p-env python=3.8 numpy>=1.19.0
 conda activate kachery-p2p-env
+
 conda install -c conda-forge nodejs
 pip install --upgrade kachery_p2p
-```
 
-Or you could use the `environment.yaml` file included in this repo to create a new conda environment, and then use `pip` to install kachery_p2p as above in the new environment.
-(To create an environment from file, execute `conda env create -f environment.yaml`. The included yaml file will create an environment called `kachery_p2p_env`.)
+# On macOS you may need to use the following to get a recent version of nodejs (>=12):
+# conda install nodejs -c conda-forge --repodata-fn=repodata.json
+```
 
 ## Installation without conda
 
@@ -60,9 +58,9 @@ The channel config file contains the channel label (for display purposes), a set
 
 ## Advanced configuration
 
-Environment variables
+Environment variables for the daemon
 
-* `KACHERY_STORAGE_DIR` - should refer to an existing directory on your local computer. This is where kachery stores all of your cached files.
+* `KACHERY_STORAGE_DIR` **(optional)** - Refers to an existing directory on your local computer. This is where kachery stores all of your cached files. If not set, files will be stored in the default location: `$HOME/kachery-storage`.
 * `KACHERY_P2P_API_PORT` **(optional)** - Port that the Python client uses to communicate with the daemon. If not provided, a default port will be used.
 * `KACHERY_P2P_CONFIG_DIR` **(optional)** - Directory where configuration files will be stored, including the public/private keys for your node on the distributed system. The default location is ~/.kachery-p2p
 

@@ -59,7 +59,7 @@ In a new terminal (activate the conda environment), run:
 kachery-p2p-load sha1://c37d2a4b156ff9bcfdbbd2eec12b9c6b74135685/test1.txt
 ```
 
-This will download a small text file from the kachery-p2p network and will display the path where the file is stored inside the $KACHERY_STORAGE_DIR. Verify that the content of the file starts with `"This is an example text file..."`
+This will download a small text file from the kachery-p2p network and will display the path where the file is stored inside the kachery storage directory (`$HOME/kachery-storage` by default). Verify that the content of the file starts with `"This is an example text file..."`
 
 ```
 cat `kachery-p2p-load sha1://c37d2a4b156ff9bcfdbbd2eec12b9c6b74135685/test1.txt`
@@ -111,7 +111,7 @@ This should take around 1-2 minutes (depending on the speed of your internet con
 
 ## Sharing files
 
-Sharing a snapshot of a file on the kachery-p2p network is as simple as storing the file in your local kachery database (located at `$KACHERY_STORAGE_DIR`).
+Sharing a snapshot of a file on the kachery-p2p network is as simple as storing the file in your local kachery database (by default located at $HOME/kachery-storage).
 
 Create a test text file with some unique content
 

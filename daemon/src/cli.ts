@@ -189,10 +189,17 @@ function main() {
           }
         }
 
-        const storageDir = process.env['KACHERY_STORAGE_DIR']
+        let storageDir = process.env['KACHERY_STORAGE_DIR'] || ''
         if (!storageDir) {
-            throw Error('You must set the KACHERY_STORAGE_DIR environment variable.');
+          storageDir = `${os.homedir()}/kachery-storage`
+            console.warn(`Using ${storageDir} for storage. Set KACHERY_STORAGE_DIR to override.`);
+            if (!fs.existsSync(storageDir)) {
+              fs.mkdirSync(storageDir)
+            }
         }
+        if (!fs.lstatSync(storageDir).isDirectory()) {
+          throw new CLIError(`Storage path is not a directory: ${storageDir}`)
+        }        
 
         const externalInterface = realExternalInterface(localFilePath(storageDir), configDir)
 

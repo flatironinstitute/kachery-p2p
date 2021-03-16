@@ -119,7 +119,7 @@ export class KacheryStorageManager {
             }
         }
 
-        const tmpPath = createTemporaryFilePath({prefix: 'kachery-p2p-concat-'})
+        const tmpPath = createTemporaryFilePath({storageDir: this.#storageDir, prefix: 'kachery-p2p-concat-'})
         const writeStream = fs.createWriteStream(tmpPath)
         const shasum = crypto.createHash('sha1')
         for (let chunkSha1 of chunkSha1s) {
@@ -224,13 +224,8 @@ const createDataStreamForFile = (path: LocalFilePath, offset: ByteCount, size: B
     return ret
 }
 
-const _getKacheryStorageDir = () => {
-    const ret = process.env['KACHERY_STORAGE_DIR']
-    return ret
-}
-
-export const createTemporaryFilePath = (args: {prefix: string}) => {
-    const dirPath = _getKacheryStorageDir() + '/tmp'
+export const createTemporaryFilePath = (args: {storageDir: LocalFilePath, prefix: string}) => {
+    const dirPath = args.storageDir + '/tmp'
     fs.mkdirSync(dirPath, {recursive: true})
     return `${dirPath}/${args.prefix}-${randomAlphaString(10)}`
 }
