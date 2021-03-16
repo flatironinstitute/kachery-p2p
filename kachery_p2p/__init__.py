@@ -1,5 +1,5 @@
 __version__ = "0.8.0"
-__protocol_version__ = "0.8.0p"
+__protocol_version__ = "0.7.0p"
 
 
 from typing import Union
