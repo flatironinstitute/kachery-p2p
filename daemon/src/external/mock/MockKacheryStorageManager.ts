@@ -50,7 +50,7 @@ export default class MockKacheryStorageManager {
             throw Error(`Unexpected hash for storing file: ${fileKey.sha1} <> ${sha1}`)
         }
     }
-    async storeLocalFile(localFilePath: LocalFilePath): Promise<Sha1Hash> {
+    async storeLocalFile(localFilePath: LocalFilePath): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
         throw Error('Not implemented in MockKacheryStorageManager')
     }
     async concatenateChunksAndStoreResult(sha1Concat: Sha1Hash, chunkSha1s: Sha1Hash[]): Promise<void> {

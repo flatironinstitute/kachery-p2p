@@ -1,8 +1,9 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import { JSONStringifyDeterministic } from '../../../common/crypto_util';
 import DataStreamy from '../../../common/DataStreamy';
 import { randomAlphaString } from '../../../common/util';
-import { byteCount, ByteCount, byteCountToNumber, FileKey, isBuffer, localFilePath, LocalFilePath, Sha1Hash } from '../../../interfaces/core';
+import { byteCount, ByteCount, byteCountToNumber, FileKey, FileManifest, FileManifestChunk, isBuffer, localFilePath, LocalFilePath, Sha1Hash } from '../../../interfaces/core';
 
 export class KacheryStorageManager {
     #storageDir: LocalFilePath
@@ -48,7 +49,7 @@ export class KacheryStorageManager {
         }
         fs.renameSync(destPathTmp, destPath)
     }
-    async storeLocalFile(localFilePath: LocalFilePath): Promise<Sha1Hash> {
+    async storeLocalFile(localFilePath: LocalFilePath): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
         let stat0: fs.Stats
         try {
             stat0 = await fs.promises.stat(localFilePath.toString())
@@ -61,7 +62,34 @@ export class KacheryStorageManager {
         const tmpDestPath = `${this.#storageDir}/store.file.${randomAlphaString(10)}.tmp`
         const writeStream = fs.createWriteStream(tmpDestPath)
         const shasum = crypto.createHash('sha1')
+        const manifestChunks: FileManifestChunk[] = []
+        const manifestData: {
+            buffers: Buffer[],
+            byte1: number,
+            byte2: number
+        } = {buffers: [], byte1: 0, byte2: 0}
         let complete = false
+        const chunkSize = 20 * 1000 * 1000
+        const _updateManifestChunks = ({final}: {final: boolean}) => {
+            if ((manifestData.byte2 - manifestData.byte1 >= chunkSize) || ((final) && (manifestData.byte2 > manifestData.byte1))) {
+                const d = Buffer.concat(manifestData.buffers)
+                manifestData.buffers = []
+                for (let i = 0; i < d.length; i+=chunkSize) {
+                    const x = d.slice(i, i + Math.min(chunkSize, d.length - i))
+                    if ((x.length === chunkSize) || (final)) {
+                        manifestChunks.push({
+                            start: byteCount(manifestData.byte1),
+                            end: byteCount(manifestData.byte1 + x.length),
+                            sha1: computeSha1OfBufferSync(x) // note that this is synchronous (not ideal)
+                        })
+                        manifestData.byte1 += x.length
+                    }
+                    else {
+                        manifestData.buffers.push(x)
+                    }
+                }
+            }
+        }
         return new Promise((resolve, reject) => {
             const _cleanup = () => {
                 try {
@@ -74,6 +102,9 @@ export class KacheryStorageManager {
                 if (complete) return
                 shasum.update(buf)
                 writeStream.write(buf)
+                manifestData.buffers.push(buf)
+                manifestData.byte2 += buf.length
+                _updateManifestChunks({final: false})
             })
             ds.onError(err => {
                 if (complete) return
@@ -91,7 +122,19 @@ export class KacheryStorageManager {
                     const destPath = `${destParentPath}/${s}`
                     fs.mkdirSync(destParentPath, {recursive: true});
                     fs.renameSync(tmpDestPath, destPath)
-                    resolve(sha1Computed)
+                    _updateManifestChunks({final: true})
+                    const manifest: FileManifest = {
+                        size: byteCount(manifestData.byte2),
+                        sha1: sha1Computed,
+                        chunks: manifestChunks
+                    }
+                    let manifestSha1: Sha1Hash | null = null
+                    if (manifestChunks.length > 0) {
+                        const manifestJson = Buffer.from(JSON.stringify(manifest), 'utf-8')
+                        manifestSha1 = computeSha1OfBufferSync(manifestJson)
+                        this.storeFile(manifestSha1, manifestJson)
+                    }
+                    resolve({sha1: sha1Computed, manifestSha1})
                 }
                 catch(err2) {
                     _cleanup()
@@ -199,6 +242,12 @@ export class KacheryStorageManager {
     storageDir() {
         return this.#storageDir
     }
+}
+
+const computeSha1OfBufferSync = (buf: Buffer) => {
+    const shasum = crypto.createHash('sha1')
+    shasum.update(buf)
+    return shasum.digest('hex') as any as Sha1Hash
 }
 
 const createDataStreamForFile = (path: LocalFilePath, offset: ByteCount, size: ByteCount) => {

@@ -11,8 +11,11 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
     if basename is None:
         basename = os.path.basename(path)
     if _is_offline_mode():
-        stored_path, hash0 = _local_kachery_storage_store_file(path=path, use_hard_links=False, _known_hash=None)
-        return f'sha1://{hash0}/{basename}'
+        stored_path, hash0, manifest_hash = _local_kachery_storage_store_file(path=path, use_hard_links=False)
+        if manifest_hash is None:
+            return f'sha1://{hash0}/{basename}'
+        else:
+            return f'sha1://{hash0}/{basename}?manifest={manifest_hash}'
     if not _is_online_mode():
         raise Exception('Not connected to daemon and not in offline mode.')
     url = f'{_api_url()}/storeFile'
@@ -20,7 +23,11 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
     if not resp['success']:
         raise Exception(f'Problem storing file: {resp["error"]}')
     sha1 = resp['sha1']
-    return f'sha1://{sha1}/{basename}'
+    manifest_sha1 = resp['manifestSha1']
+    if manifest_sha1:
+        return f'sha1://{sha1}/{basename}?manifest={manifest_sha1}'
+    else:
+        return f'sha1://{sha1}/{basename}'
 
 def _store_text(text: str, basename: Union[str, None]=None) -> str:
     if basename is None:
@@ -31,10 +38,10 @@ def _store_text(text: str, basename: Union[str, None]=None) -> str:
             f.write(text)
         return _store_file(fname, basename=basename)
 
-def _store_object(object: dict, basename: Union[str, None]=None) -> str:
+def _store_object(object: dict, basename: Union[str, None]=None, separators=(',', ':'), indent=None) -> str:
     if basename is None:
         basename = 'file.json'
-    txt = simplejson.dumps(object, indent=None)
+    txt = simplejson.dumps(object, separators=separators, indent=indent)
     return _store_text(text=txt, basename=basename)
 
 def _store_npy(array: np.ndarray, basename: Union[str, None]=None) -> str:

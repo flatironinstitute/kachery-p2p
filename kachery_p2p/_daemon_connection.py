@@ -65,7 +65,7 @@ def _kachery_storage_dir():
         if p is not None:
             return p.kachery_storage_dir
         else:
-            raise Exception('Not connected to daemon.')
+            return None
 
 def _is_offline_mode():
     return _kachery_offline_storage_dir_env_is_set()

@@ -4,6 +4,7 @@ import hashlib
 import shutil
 import random
 from typing import Optional, Tuple, Union
+from ._misc import _parse_kachery_uri
 from ._daemon_connection import _kachery_storage_dir
 
 
@@ -23,11 +24,17 @@ def _local_kachery_storage_load_bytes(*, sha1_hash: str, start: Union[int, None]
     else:
         return None
 
-def _local_kachery_storage_store_file(*, path: str, use_hard_links: bool=False, _known_hash: Union[str, None]=None) -> Tuple[str, str]:
-    if _known_hash is not None:
-        hash0 = _known_hash
+def _local_kachery_storage_store_file(*, path: str, use_hard_links: bool=False, _no_manifest=False) -> Tuple[str, str, Union[str, None]]:
+    from ._store_file import _store_object # don't want circular dependencies
+    if (not _no_manifest) and (os.path.getsize(path) > 20000000):
+        hash0, manifest0 = _compute_local_file_sha1_and_manifest(path)
+        if manifest0 is None:
+            raise Exception(f'Unable to compute hash of file: {path}')
+        manifest_uri = _store_object(manifest0)
+        protocol, algorithm, manifest_hash, additional_path, query = _parse_kachery_uri(manifest_uri)
     else:
         hash0 = _get_file_hash(path)
+        manifest_hash = None
     assert hash0 is not None
     sha1_directory = f'{_kachery_storage_dir()}/sha1'
     path0 = _get_path_ext(hash=hash0, create=True, directory=sha1_directory)
@@ -38,7 +45,7 @@ def _local_kachery_storage_store_file(*, path: str, use_hard_links: bool=False, 
         else:
             shutil.copyfile(path, tmp_path)
         _rename_file(tmp_path, path0, remove_if_exists=False)
-    return path0, hash0
+    return path0, hash0, manifest_hash
 
 def _get_file_hash(path: str, *, _cache_only=False):
     algorithm = 'sha1'
@@ -144,6 +151,48 @@ def _rename_file(path1: str, path2: str, remove_if_exists: bool) -> None:
             raise Exception('Problem renaming file: {} -> {}'.format(path1, path2))
         else:
             raise Exception('Problem renaming file:: {} -> {}'.format(path1, path2))
+
+def _compute_local_file_sha1_and_manifest(path):
+    algorithm = 'sha1'
+    manifest = {
+        'size': 0,
+        'sha1': '',
+        'chunks': []
+    }
+    if not os.path.exists(path):
+        return None, None
+    size0 = os.path.getsize(path)
+    if (size0 > 1024 * 1024 * 100):
+        print('Computing {} and manifest of {}'.format(algorithm, path))
+
+    chunk_size = 20000000
+
+    hashsum = getattr(hashlib, algorithm)()
+    with open(path, 'rb') as file:
+        pos = 0
+        while pos < size0:
+            
+            this_chunk_size = min(chunk_size, size0 - pos)
+
+            this_chunk_hashsum = getattr(hashlib, algorithm)()
+            buf = file.read(this_chunk_size)
+            this_chunk_hashsum.update(buf)
+            
+            hashsum.update(buf)
+            
+            chunk = {
+                'start': pos,
+                'end': pos + this_chunk_size,
+                'sha1': this_chunk_hashsum.hexdigest()
+            }
+            manifest['chunks'].append(chunk)
+            
+            pos = pos + this_chunk_size
+            
+    sha1 = hashsum.hexdigest()
+    manifest['sha1'] = sha1
+    manifest['size'] = size0
+    return sha1, manifest
 
 def _random_string(num_chars: int) -> str:
     chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'

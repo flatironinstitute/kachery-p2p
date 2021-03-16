@@ -57,6 +57,7 @@ type StoreFileResponseData = {
     success: boolean
     error: ErrorMessage | null
     sha1: Sha1Hash | null
+    manifestSha1: Sha1Hash | null
 }
 
 interface Req {
@@ -606,11 +607,12 @@ export default class DaemonApiServer {
     async _handleStoreFile(reqData: JSONObject): Promise<JSONObject> {
         if (!isStoreFileRequestData(reqData)) throw Error('Unexpected request data for storeFile.')
         
-        const sha1 = await this.#node.kacheryStorageManager().storeLocalFile(reqData.localFilePath)
+        const {sha1, manifestSha1} = await this.#node.kacheryStorageManager().storeLocalFile(reqData.localFilePath)
         const response: StoreFileResponseData = {
             success: true,
             error: null,
-            sha1: sha1
+            sha1,
+            manifestSha1
         }
         /* istanbul ignore next */
         if (!isJSONObject(response)) throw Error('Unexpected json object in _handleStoreFile')
