@@ -54,7 +54,7 @@ export class KacheryStorageManager {
             stat0 = await fs.promises.stat(localFilePath.toString())
         }
         catch (err) {
-            throw Error(`Unable to stat file: ${localFilePath}`)
+            throw Error(`Unable to stat file. Perhaps the kachery-p2p daemon does not have permission to read this file: ${localFilePath}`)
         }
         const fileSize = byteCount(stat0.size)
         const ds = createDataStreamForFile(localFilePath, byteCount(0), fileSize)

@@ -16,6 +16,8 @@ By default (if the offline environment variable is not set), kachery-p2p will at
 
 When a daemon is running and the client is connected to the daemon (i.e., in online mode), it is not necessary for the `KACHERY_STORAGE_DIR` environment variable to be set because the location of this directory is communicated from the daemon to the client. If this variable *is* set, but is inconsistent with the storage directory of the daemon, then the kachery client will raise a Python exception.
 
+Note that if `KACHERY_OFFLINE_STORAGE_DIR` is set, then the client will be in offline mode even if a daemon is running (i.e., the variable takes precedence).
+
 ## Loading files
 
 The following Python client operations can be used to load files and data:

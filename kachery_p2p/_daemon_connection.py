@@ -63,7 +63,7 @@ def _kachery_storage_dir():
     else:
         p = _buffered_probe_daemon()
         if p is not None:
-            p.kachery_storage_dir
+            return p.kachery_storage_dir
         else:
             raise Exception('Not connected to daemon.')
 

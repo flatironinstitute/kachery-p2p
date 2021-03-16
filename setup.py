@@ -35,6 +35,7 @@ setuptools.setup(
         "bin/kachery-p2p-join-channel",
         "bin/kachery-p2p-leave-channel",
         "bin/kachery-p2p-load",
+        "bin/kachery-p2p-store",
         "bin/kachery-p2p-print-messages",
         "bin/kachery-p2p-start-daemon",
         "bin/kachery-p2p-stop-daemon",

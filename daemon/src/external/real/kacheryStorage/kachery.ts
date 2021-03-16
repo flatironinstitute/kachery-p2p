@@ -2,7 +2,7 @@ import { exec } from 'child_process';
 
 export const kacheryStoreWithHardLink = async (path: string) => {
     try {
-        await executeAndGetStdout(`kachery-store ${path} --use-hard-links`);
+        await executeAndGetStdout(`kachery-p2p-store ${path} --use-hard-links`);
     }
     catch(err) {
         return false;

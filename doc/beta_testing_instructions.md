@@ -9,13 +9,12 @@ Please install kachery-p2p by following the Conda installation instructions foun
 Open a terminal and verify that you have the following commands available:
 
 ```
-kachery-store
+kachery-p2p-store
 kachery-p2p-load
 kachery-p2p-start-daemon
 kachery-p2p-join-channel
 kachery-p2p-leave-channel
 kachery-p2p-find
-kachery-p2p-load
 kachery-p2p-cat
 ```
 
@@ -123,7 +122,7 @@ echo -e "My unique content\nwith multiple lines\n" > tmp.txt
 Then store a copy locally:
 
 ```bash
-kachery-store tmp.txt
+kachery-p2p-store tmp.txt
 ```
 
 Copy the URI that is printed it will have the form `sha1://.../tmp.txt`
@@ -142,13 +141,12 @@ You can also store snapshots of items directly from Python.
 
 ```python
 import kachery_p2p as kp
-import kachery as ka
 import numpy as np
 
-uri_txt = ka.store_text('Some test text')
+uri_txt = kp.store_text('Some test text')
 print(uri_txt)
 
-uri_dict = ka.store_object(dict(name='test-dict'))
+uri_dict = kp.store_object(dict(name='test-dict'))
 print(uri_dict)
 
 A = np.random.normal(0, 1, (500, 500, 5));

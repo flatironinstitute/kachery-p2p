@@ -35,9 +35,9 @@ def run_test(test_nodes, tmpdir):
             d = tn['daemon']
             tn['uris'] = []
             with d.testEnv():
-                import kachery as ka
+                import kachery_p2p as kp
                 for obj in tn['objects_to_store']:
-                    uri = ka.store_object(obj)
+                    uri = kp.store_object(obj)
                     tn['uris'].append(uri)
 
         
@@ -48,7 +48,6 @@ def run_test(test_nodes, tmpdir):
         for tn in test_nodes:
             d = tn['daemon']
             with d.testEnv():
-                import kachery as ka
                 import kachery_p2p as kp
                 for tn2 in test_nodes:
                     if tn['name'] != tn2['name']:
@@ -67,7 +66,7 @@ def run_test(test_nodes, tmpdir):
                     print('WARNING: Failed to stop daemon.')
 
 def test_1(tmpdir):    
-    import kachery as ka
+    import kachery_p2p as kp
     N = 2
     objects = [
         dict(a=a, x=[j for j in range(1000000)])
@@ -88,7 +87,6 @@ def test_1(tmpdir):
     run_test(test_nodes=test_nodes, tmpdir=str(tmpdir))
 
 # def test_2(tmpdir):    
-#     import kachery as ka
 #     import kachery_p2p as kp
 #     N = 3
 #     objects = [

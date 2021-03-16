@@ -22,7 +22,7 @@ Kachery-p2p is a **peer-to-peer, content-addressable file storage and distributi
 Kachery-p2p has advantages for scientific communities that share large datasets. It is often inconvenient (and expensive) for individual labs to host such datasets. The idea of kachery-p2p is to relieve this burden by making it easy to share a data file with a community or individuals by submitting it to the distributed system. The simplest way to share a snapshot (or copy) of a file is:
 
 ```
-kachery-store /my/large-or-small/file.dat
+kachery-p2p-store /my/large-or-small/file.dat
 ```
 
 Then distribute the unique kachery URI (identifier) to colleagues. For example, you could just paste the URI into a python script or a github README file.
@@ -78,7 +78,7 @@ Kachery-p2p can transfer arbitrary files, and also serializes NumPy data from me
 From command line (in a separate terminal):
 
 ```bash
-kachery-store /path/to/your/file.dat
+kachery-p2p-store /path/to/your/file.dat
 ```
 
 This will copy the file to the kachery storage directory and will display a SHA1 URI, which you can then share with your collaborators. The file can then be retrieved from any computer running a kachery-p2p daemon on the same channel:

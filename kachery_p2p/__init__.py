@@ -9,6 +9,8 @@ from ._feeds import Feed, Subfeed
 from ._testdaemon import TestDaemon
 from .cli import cli
 
+from ._experimental_config import _experimental_config
+
 from .main import get_channels, get_node_id
 from .main import load_file, load_npy, load_object, load_text, load_bytes
 from .main import store_file, store_object, store_npy, store_text

@@ -1,6 +1,5 @@
 import os
 
-import kachery as ka
 import kachery_p2p as kp
 import numpy as np
 from kachery_p2p._exceptions import LoadFileError

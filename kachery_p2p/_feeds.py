@@ -6,8 +6,8 @@ from os.path import basename
 from typing import Union
 from urllib.parse import quote, unquote
 
-import kachery as ka
 from ._load_file import _load_object
+from ._store_file import _store_object
 from ._daemon_connection import _api_url
 from ._misc import _http_post_json, _http_get_json
 
@@ -71,7 +71,7 @@ class Feed:
                 subfeedHash=subfeed.get_subfeed_hash(),
                 messages=messages
             )
-        snapshot_uri = ka.store_object(dict(
+        snapshot_uri = _store_object(dict(
             subfeeds=subfeeds
         ), basename='feed.json')
         return Feed(snapshot_uri)
