@@ -7,7 +7,7 @@ Current protocol version: `kachery-p2p 0.8.0p`
 
 Kachery-p2p is a **peer-to-peer, content-addressable file storage and distribution framework** which can operate with minimal infrastructural requirements and offers both command-line and programmatic interfaces to file distribution. In short, it’s a way for you to distribute your data to collaborators with minimal fuss.
 
-**Recent update:** it is no longer necessary to use the KACHERY_STORAGE_DIR environment variable. By default, data are stored in `$HOME/kachery-storage`. To override this, you can set KACHERY_STORAGE_DIR when running the daemon (it is not necessary to set it when using the Python client or command-line interface). For more information, see [online and offline modes](./doc/online_and_offline_modes.md).
+**Update (16 March 2021):** It is no longer necessary to use the KACHERY_STORAGE_DIR environment variable. By default, data are stored in `$HOME/kachery-storage`. To override this, you can set KACHERY_STORAGE_DIR when running the daemon (it is not necessary to set it when using the Python client or command-line interface). It is also possible for multiple users to connect to the same running daemon. For more information, see [online and offline modes](./doc/online_and_offline_modes.md).
 
 ## Getting started
 
