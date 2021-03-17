@@ -2,7 +2,7 @@ import { action } from "../common/action";
 import { TIMEOUTS } from "../common/constants";
 import { JSONStringifyDeterministic } from "../common/crypto_util";
 import { sleepMsec, sleepMsecNum } from "../common/util";
-import { Address, DurationMsec, JSONObject, urlPath, UrlPath } from "../interfaces/core";
+import { Address, DurationMsec, durationMsecToNumber, elapsedSince, JSONObject, nowTimestamp, scaledDurationMsec, urlPath, UrlPath } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 import { protocolVersion } from "../protocolVersion";
 import RemoteNodeManager from "../RemoteNodeManager";
@@ -47,10 +47,13 @@ export default class BootstrapService {
         this.#remoteNodeManager.setBootstrapNode(remoteNodeId, address, webSocketAddress, publicUdpSocketAddress)
     }
     async _start() {
+        const timestampStarted = nowTimestamp()
         await sleepMsecNum(2) // important for tests
         // probe the bootstrap nodes periodically
         while (true) {
             if (this.#halted) return
+            const startingUp = elapsedSince(timestampStarted) < durationMsecToNumber(scaledDurationMsec(10000))
+            const probeIntervalMsec = startingUp ? scaledDurationMsec(1000) : this.opts.probeIntervalMsec
             const allBootstrapAddresses: Address[] = []
             const channelConfigUrls = this.#node.joinedChannelConfigUrls()
             for (let channelConfigUrl of channelConfigUrls) {
@@ -73,7 +76,7 @@ export default class BootstrapService {
                 /////////////////////////////////////////////////////////////////////////
             }
             
-            await sleepMsec(this.opts.probeIntervalMsec, () => {return !this.#halted})
+            await sleepMsec(probeIntervalMsec, () => {return !this.#halted})
         }
     }
 }

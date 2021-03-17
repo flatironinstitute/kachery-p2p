@@ -11,7 +11,8 @@ export default class DisplayStateService {
     #halted = false
     #lastText = ''
     #lastDisplayTimestamp = nowTimestamp()
-    constructor(node: KacheryP2PNode, private opts: {daemonApiPort: Port | null, intervalMsec: DurationMsec}) {
+    #intervalMsec = unscaledDurationMsec(10000)
+    constructor(node: KacheryP2PNode, private opts: {daemonApiPort: Port | null}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
 
@@ -64,7 +65,7 @@ export default class DisplayStateService {
         while (true) {
             if (this.#halted) return
             this._updateDisplay()
-            await sleepMsec(this.opts.intervalMsec, () => {return !this.#halted})
+            await sleepMsec(this.#intervalMsec, () => {return !this.#halted})
         }
     }
 }

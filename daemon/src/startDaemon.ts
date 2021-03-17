@@ -150,7 +150,7 @@ const startDaemon = async (args: {
         multicastAddress: opts.multicastUdpAddress
     }) : null
     let displayService = opts.services.display ? new DisplayStateService(kNode, {
-        daemonApiPort, intervalMsec: unscaledDurationMsec(5000)
+        daemonApiPort
     }) : null
 
     // Start the public http server

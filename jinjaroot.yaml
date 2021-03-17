@@ -1,0 +1,8 @@
+projectName: kachery_p2p
+projectVersion: 0.8.1.dev1
+protocolVersion: 0.7.0p
+projectAuthor: Jeremy Magland and Jeff Soules
+projectAuthorEmail: jmagland@flatironinstitute.org
+projectDescription: Peer-to-peer file sharing for data science
+projectUrl: https://github.com/flatironinstitute/kachery_p2p
+projectBugTrackerUrl: https://github.com/flatironinstitute/kachery_p2p/issues

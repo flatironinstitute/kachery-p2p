@@ -5,6 +5,7 @@ from ._daemon_connection import _api_url, _probe_daemon, _api_host, _api_port
 from typing import List
 from ._misc import _http_get_json
 from ._shellscript import ShellScript
+from .version import __version__
 
 def start_daemon(*,
     port: int=0,
@@ -23,7 +24,6 @@ def start_daemon(*,
 ):
     """Used internally. Use the kachery-p2p-start-daemon command in the terminal.
     """
-    from kachery_p2p import __version__
 
     if _probe_daemon() is not None:
         raise Exception('Cannot start daemon. Already running.')
@@ -66,7 +66,7 @@ def start_daemon(*,
         for na in node_arg:
             start_args.append(f'--node-arg={na}')
 
-        npm_package = f'{thisdir}/kachery-p2p-daemon-0.8.0.tgz'
+        npm_package = f'{thisdir}/kachery-p2p-daemon-{__version__}.tgz'
         if not os.path.exists(npm_package):
             raise Exception(f'No such file: {npm_package}')
     

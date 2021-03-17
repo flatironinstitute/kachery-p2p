@@ -13,7 +13,7 @@ export default class AnnounceService {
     #node: KacheryP2PNode
     #remoteNodeManager: RemoteNodeManager
     #halted = false
-    #announceHistoryTimestamps = new GarbageMap<NodeId, Timestamp>(scaledDurationMsec(30 * 60 * 1000))
+    #announceHistoryTimestamps = new GarbageMap<string, Timestamp>(scaledDurationMsec(30 * 60 * 1000))
     constructor(node: KacheryP2PNode, private opts: {announceBootstrapIntervalMsec: DurationMsec, announceToIndividualNodeIntervalMsec: DurationMsec}) {
         this.#node = node
         this.#remoteNodeManager = node.remoteNodeManager()
@@ -113,28 +113,32 @@ export default class AnnounceService {
         }
     }
     async _start() {
+        const timestampStarted = nowTimestamp()
         await sleepMsecNum(2) // important for tests
         // Announce self other nodes in our channels and to bootstrap nodes
         let lastBootstrapAnnounceTimestamp: Timestamp = zeroTimestamp()
         let lastIndividualNodeAnnounceTimestamp: Timestamp = zeroTimestamp()
         while (true) {
             if (this.#halted) return
+            const startingUp = elapsedSince(timestampStarted) < durationMsecToNumber(scaledDurationMsec(15000))
+            const announceBootstrapIntervalMsec = startingUp ? scaledDurationMsec(2000) : this.opts.announceBootstrapIntervalMsec
+            const announceToIndividualNodeIntervalMsec = startingUp ? scaledDurationMsec(500) : this.opts.announceToIndividualNodeIntervalMsec
             // periodically announce to bootstrap nodes
             const elapsedSinceLastBootstrapAnnounce = elapsedSince(lastBootstrapAnnounceTimestamp)
-            if (elapsedSinceLastBootstrapAnnounce > durationMsecToNumber(this.opts.announceBootstrapIntervalMsec)) {
+            if (elapsedSinceLastBootstrapAnnounce > durationMsecToNumber(announceBootstrapIntervalMsec)) {
                 await this._announceToAllBootstrapNodes()
                 lastBootstrapAnnounceTimestamp = nowTimestamp()
             }
             
             const elapsedSinceLastIndividualNodeAnnounce = elapsedSince(lastIndividualNodeAnnounceTimestamp)
-            if (elapsedSinceLastIndividualNodeAnnounce > durationMsecToNumber(this.opts.announceToIndividualNodeIntervalMsec)) {
+            if (elapsedSinceLastIndividualNodeAnnounce > durationMsecToNumber(announceToIndividualNodeIntervalMsec)) {
                 // for each channel, choose a node and announce to that node
                 const channelConfigUrls = this.#node.joinedChannelConfigUrls()
                 for (let channelConfigUrl of channelConfigUrls) {
                     let nodes = this.#remoteNodeManager.getRemoteNodesInChannel(channelConfigUrl, {includeOffline: false})
                     if (nodes.length > 0) {
-                        var individualNode = selectNode(nodes, this.#announceHistoryTimestamps)
-                        this.#announceHistoryTimestamps.set(individualNode.remoteNodeId(), nowTimestamp())
+                        var individualNode = selectNode(nodes, channelConfigUrl, this.#announceHistoryTimestamps)
+                        this.#announceHistoryTimestamps.set(getCode(individualNode.remoteNodeId(), channelConfigUrl), nowTimestamp())
 
                         /////////////////////////////////////////////////////////////////////////
                         await action('announceToIndividualNode', {context: 'AnnounceService', remoteNodeId: individualNode.remoteNodeId(), channelConfigUrl}, async () => {
@@ -159,11 +163,15 @@ function argMax(array: number[]) {
     return array.map((x, i) => [x, i]).reduce((r, a) => (a[0] > r[0] ? a : r))[1];
 }
 
-const selectNode = (nodes: RemoteNode[], historyTimestamps: GarbageMap<NodeId, Timestamp>): RemoteNode => {
+const selectNode = (nodes: RemoteNode[], channelConfigUrl: ChannelConfigUrl, historyTimestamps: GarbageMap<string, Timestamp>): RemoteNode => {
     const n = nodes[0]
     if (!n) throw Error('Unexpected in selectNode')
-    const timestamps: Timestamp[] = nodes.map(n => (historyTimestamps.getWithDefault(n.remoteNodeId(), zeroTimestamp())))
+    const timestamps: Timestamp[] = nodes.map(n => (historyTimestamps.getWithDefault(getCode(n.remoteNodeId(), channelConfigUrl), zeroTimestamp())))
     const elapsedTimes = timestamps.map(ts => (elapsedSince(ts)))
     const ind = argMax(elapsedTimes)
     return nodes[ind]
+}
+
+const getCode = (nodeId: NodeId, channelConfigUrl: ChannelConfigUrl) => {
+    return nodeId.toString() + ':' + channelConfigUrl.toString()
 }

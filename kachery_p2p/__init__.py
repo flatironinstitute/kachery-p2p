@@ -1,6 +1,4 @@
-__version__ = "0.8.0"
-__protocol_version__ = "0.7.0p"
-
+from .version import __version__, __protocol_version__
 
 from typing import Union
 from ._start_daemon import start_daemon, stop_daemon
