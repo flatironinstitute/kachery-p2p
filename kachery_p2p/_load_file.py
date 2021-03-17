@@ -17,6 +17,17 @@ def _load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node:
             return None
         uri = uri0
     
+    if not uri.startswith('sha1://'):
+        if os.path.isfile(uri):
+            local_path = uri
+            if dest is not None:
+                shutil.copyfile(local_path, dest)
+                return dest
+            else:
+                return local_path
+        else:
+            raise Exception(f'Local file not found: {uri}')
+
     # first check the local kachery storage (if kachery storage dir is known)
     if _kachery_storage_dir():
         protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
@@ -26,7 +37,9 @@ def _load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node:
         if local_path is not None:
             if dest is not None:
                 shutil.copyfile(local_path, dest)
-            return local_path
+                return dest
+            else:
+                return local_path
     if _is_offline_mode():
         return None
     if not _is_online_mode():
@@ -108,6 +121,13 @@ def _load_bytes(uri: str, start: Union[int, None], end: Union[int, None], write_
             return None
         uri = uri0
     
+    if not uri.startswith('sha1://'):
+        if os.path.isfile(uri):
+            local_path = uri
+            return _load_bytes_from_local_file(local_path, start=start, end=end, write_to_stdout=write_to_stdout)
+        else:
+            raise Exception(f'Local file not found: {uri}')
+    
     # first check the local kachery storage (if kachery storage dir is known)
     if _kachery_storage_dir():
         protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
@@ -157,6 +177,29 @@ def _load_bytes(uri: str, start: Union[int, None], end: Union[int, None], write_
         print('Unable to load file.')
         return None
     bytes0 = _local_kachery_storage_load_bytes(sha1_hash=hash0, start=start, end=end, write_to_stdout=write_to_stdout)
+
+def _load_bytes_from_local_file(local_fname: str, *, start: Union[int, None]=None, end: Union[int, None]=None, write_to_stdout: bool=False) -> Union[bytes, None]:
+    size0 = os.path.getsize(local_fname)
+    if start is None:
+        start = 0
+    if end is None:
+        end = size0
+    if start < 0 or start > size0 or end < start or end > size0:
+        raise Exception('Invalid start/end range for file of size {}: {} - {}'.format(size0, start, end))
+    if start == end:
+        return bytes()
+    with open(local_fname, 'rb') as f:
+        f.seek(start)
+        if write_to_stdout:
+            ii = start
+            while ii < end:
+                nn = min(end - ii, 4096)
+                data0 = f.read(nn)
+                ii = ii + nn
+                sys.stdout.buffer.write(data0)
+            return None
+        else:
+            return f.read(end-start)
 
 def _resolve_file_uri_from_dir_uri(dir_uri, p2p: bool=True):
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(dir_uri)

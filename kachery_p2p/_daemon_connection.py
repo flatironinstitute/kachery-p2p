@@ -49,7 +49,7 @@ def _probe_daemon(api_port=None):
     url = f'{api_url}/probe'
     try:
         x = _http_get_json(url)
-    except:
+    except Exception as e:
         return None
     res = _probe_result(x) if x is not None else None
     return res

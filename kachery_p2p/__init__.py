@@ -14,3 +14,5 @@ from .main import load_file, load_npy, load_object, load_text, load_bytes
 from .main import store_file, store_object, store_npy, store_text
 from .main import load_feed, load_subfeed
 from .main import create_feed, delete_feed, get_feed_id, watch_for_new_messages
+
+from ._daemon_connection import _kachery_storage_dir
