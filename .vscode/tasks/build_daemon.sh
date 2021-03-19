@@ -2,6 +2,8 @@
 
 set -ex
 
+rm -rf kachery_p2p/*.tgz
+rm -rf daemon/*.tgz
 cd daemon
 yarn install
 yarn build
