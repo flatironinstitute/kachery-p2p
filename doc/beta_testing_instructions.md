@@ -146,7 +146,7 @@ import numpy as np
 uri_txt = kp.store_text('Some test text')
 print(uri_txt)
 
-uri_dict = kp.store_object(dict(name='test-dict'))
+uri_dict = kp.store_json(dict(name='test-dict'))
 print(uri_dict)
 
 A = np.random.normal(0, 1, (500, 500, 5));

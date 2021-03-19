@@ -27,6 +27,7 @@ kp.load_file(uri: str) -> file path on local system OR None
 kp.load_text(uri: str) -> str OR None
 kp.load_object(uri: str) -> dict OR None
 kp.load_npy(uri: str) -> np.ndarray OR None
+kp.load_pkl(uri: str) -> Any OR None
 kp.load_bytes(uri: str, start: int, end: int)-> bytearray OR None
 ```
 
@@ -39,8 +40,9 @@ The following Python client operations can be used to store files and data in th
 ```
 kp.store_file(path: str) -> uri
 kp.store_text(txt: str) -> uri
-kp.store_object(x: dict) -> uri
+kp.store_json(x: dict) -> uri
 kp.store_npy(x: np.ndarray) -> uri
+kp.store_pkl(x: Any) -> uri
 ```
 
 Kachery will first compute the URI of the data to be stored and check whether it already exists in the kachery storage for the local node. If it already exists, these functions simply return the URI string.

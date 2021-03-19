@@ -38,6 +38,15 @@ uri = kp.store_npy(X)
 X = kp.load_npy(uri)
 ```
 
+Storing and loading Python objects using a restricted pickle format is also supported:
+
+```python
+uri = kp.store_pkl(X)
+
+# Then on a different computer
+X = kp.load_pkl(uri)
+```
+
 This is just the beginning of the capabilities. Because it is meant to power the SpikeForest analysis pipeline and other web-based visualization tools, kachery-p2p supports sharing of live feeds (in addition to static content). This enables powerful functionality like running analysis jobs on a remote compute resource and creating universal (reproducible) scripts that can run from anywhere. The work of transferring input/output files to/from the remote resource is automatically handled by the p2p system and the communication (job submission) is handled via the kachery live feeds.
 
 ### Why not sftp, rsync, google drive, or just a web server?
@@ -104,8 +113,8 @@ print(sha1) # this can now be shared with a collaborator
 kp.store_text("Here is my message")
 
 # You can also store python dicts or numpy arrays
-kp.store_object(dict(text="some text"))
-kp.store_npy([1, 2, 3])
+kp.store_json(dict(text="some text"))
+kp.store_npy(np.array([1, 2, 3]))
 ```
 
 

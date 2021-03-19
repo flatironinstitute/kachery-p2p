@@ -1,4 +1,4 @@
-from typing import Iterable, List, Union
+from typing import Any, Iterable, List, Union
 
 import numpy as np
 
@@ -6,8 +6,8 @@ from ._core2 import (_find_file, _get_channels, _get_node_id)
 from ._feeds import (_create_feed, _delete_feed, _get_feed_id, _load_feed,
                      _load_subfeed, _watch_for_new_messages)
 
-from ._load_file import _load_file, _load_bytes, _load_text, _load_object, _load_npy
-from ._store_file import _store_file, _store_text, _store_object, _store_npy
+from ._load_file import _load_file, _load_bytes, _load_text, _load_json, _load_npy, _load_pkl
+from ._store_file import _store_file, _store_text, _store_json, _store_npy, _store_pkl
 
 def load_file(
     uri: str,
@@ -69,6 +69,20 @@ def get_channels() -> List[dict]:
     """
     return _get_channels()
 
+def load_json(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[dict, None]:
+    """Load an object (Python dict) either from local kachery storage or from a remote kachery node
+
+    Args:
+        uri (str): The kachery URI for the file to load: sha1://...
+        p2p (bool, optional): Whether to search remote nodes. Defaults to True.
+        from_node (Union[str, None], optional): Optionally specify which remote node to load from. Defaults to None.
+        from_channel (Union[str, None], optional): Optionally specify which kachery channel to search. Defaults to None.
+
+    Returns:
+        Union[dict, None]: If found, the Python dict, else None
+    """
+    return _load_json(uri=uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
+
 def load_object(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[dict, None]:
     """Load an object (Python dict) either from local kachery storage or from a remote kachery node
 
@@ -81,7 +95,8 @@ def load_object(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from
     Returns:
         Union[dict, None]: If found, the Python dict, else None
     """
-    return _load_object(uri=uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
+    print('WARNING: load_object() is deprecated. Use load_json() instead.')
+    return _load_json(uri=uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
 
 def load_text(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[str, None]:
     """Load a text string either from local kachery storage or from a remote kachery node
@@ -111,6 +126,20 @@ def load_npy(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_ch
     """
     return _load_npy(uri=uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
 
+def load_pkl(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[Any, None]:
+    """Load a Python item from a restricted pickle format either from local kachery storage or from a remote kachery node
+
+    Args:
+        uri (str): The kachery URI for the .pkl file to load: sha1://...
+        p2p (bool, optional): Whether to search remote nodes. Defaults to True.
+        from_node (Union[str, None], optional): Optionally specify which remote node to load from. Defaults to None.
+        from_channel (Union[str, None], optional): Optionally specify which kachery channel to search. Defaults to None.
+
+    Returns:
+        Union[str, None]: If found, the Numpy array, else None
+    """
+    return _load_pkl(uri=uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
+
 def store_file(path: str, basename: Union[str, None]=None) -> str:
     """Store file in the local kachery storage (will therefore be available on the kachery network) and return a kachery URI
 
@@ -133,7 +162,20 @@ def store_object(object: dict, basename: Union[str, None]=None) -> str:
     Returns:
         str: The kachery URI: sha1://...
     """
-    return _store_object(object=object, basename=basename)
+    print('WARNING: store_object() is deprecated. Use store_json() instead.')
+    return _store_json(object=object, basename=basename)
+
+def store_json(object: Union[dict, list, int, float, str], basename: Union[str, None]=None) -> str:
+    """Store object (Python dict, list or other jsonable) in the local kachery storage (will therefore be available on the kachery network) and return a kachery URI
+
+    Args:
+        object (dict): The Python dict to store
+        basename (Union[str, None], optional): Optional base file name to append to the sha1:// URI. Defaults to None.
+
+    Returns:
+        str: The kachery URI: sha1://...
+    """
+    return _store_json(object=object, basename=basename)
 
 def store_text(text: str, basename: Union[str, None]=None) -> str:
     """Store text in the local kachery storage (will therefore be available on the kachery network) and return a kachery URI
@@ -158,6 +200,18 @@ def store_npy(array: np.ndarray, basename: Union[str, None]=None) -> str:
         str: The kachery URI: sha1://...
     """
     return _store_npy(array=array, basename=basename)
+
+def store_pkl(x: Any, basename: Union[str, None]=None) -> str:
+    """Store Python item in the local kachery storage using a restricted pickle format and return a kachery URI
+
+    Args:
+        array (Any): The item to store
+        basename (Union[str, None], optional): Optional base file name to append to the sha1:// URI. Defaults to None.
+
+    Returns:
+        str: The kachery URI: sha1://...
+    """
+    return _store_pkl(x=x, basename=basename)
 
 def get_node_id(api_port=None) -> str:
     """Return the Node ID for this kachery node

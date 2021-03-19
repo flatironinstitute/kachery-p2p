@@ -5,7 +5,7 @@ from ._daemon_connection import _api_url, _probe_daemon, _api_host, _api_port
 from typing import List
 from ._misc import _http_get_json
 from ._shellscript import ShellScript
-from .version import __version__
+from .protocol_version import __version__
 
 def start_daemon(*,
     port: int=0,

@@ -1,3 +1,4 @@
+import sys
 import os
 import shutil
 from typing import Union
@@ -8,6 +9,7 @@ from ._experimental_config import _global_config
 from ._misc import _create_file_key, _http_post_json_receive_json_socket, _parse_kachery_uri
 from ._exceptions import LoadFileError
 from ._local_kachery_storage import _local_kachery_storage_load_file, _local_kachery_storage_load_bytes
+from ._safe_pickle import _safe_unpickle
 
 def _load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[str, None]:
     # handle old sha1dir system
@@ -93,7 +95,7 @@ def _load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node:
     #         return path
     raise Exception(f'Unable to download file: {uri}')
 
-def _load_object(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[dict, None]:
+def _load_json(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[dict, None]:
     local_path = _load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
     if local_path is None:
         return None
@@ -111,7 +113,13 @@ def _load_npy(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_c
     local_path = _load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
     if local_path is None:
         return None
-    return np.load(local_path)
+    return np.load(local_path, allow_pickle=False)
+
+def _load_pkl(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[np.ndarray, None]:
+    local_path = _load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
+    if local_path is None:
+        return None
+    return _safe_unpickle(local_path)
 
 def _load_bytes(uri: str, start: Union[int, None], end: Union[int, None], write_to_stdout=False, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[bytes, None]:
     # handle old sha1dir system
@@ -148,7 +156,7 @@ def _load_bytes(uri: str, start: Union[int, None], end: Union[int, None], write_
     
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     if query.get('manifest'):
-        manifest = _load_object(f'sha1://{query["manifest"][0]}')
+        manifest = _load_json(f'sha1://{query["manifest"][0]}')
         if manifest is None:
             print('Unable to load manifest')
             return None
@@ -204,7 +212,7 @@ def _load_bytes_from_local_file(local_fname: str, *, start: Union[int, None]=Non
 def _resolve_file_uri_from_dir_uri(dir_uri, p2p: bool=True):
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(dir_uri)
     assert protocol == algorithm + 'dir'
-    dd = _load_object(algorithm + '://' + hash0, p2p=p2p)
+    dd = _load_json(algorithm + '://' + hash0, p2p=p2p)
     if dd is None:
         return None
     if additional_path:

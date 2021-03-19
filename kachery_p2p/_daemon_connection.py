@@ -1,5 +1,6 @@
 import os
 import time
+import tempfile
 from typing import List, Union, cast
 from ._misc import _http_get_json
 
@@ -66,6 +67,20 @@ def _kachery_storage_dir():
             return p.kachery_storage_dir
         else:
             return None
+
+def _create_if_needed(dirpath: str) -> str:
+    if not os.path.isdir(dirpath):
+        os.mkdir(dirpath)
+    return dirpath
+
+def _kachery_temp_dir() -> str:
+    d = os.getenv('KACHERY_TEMP_DIR', None)
+    if d is not None:
+        return _create_if_needed(d)
+    if _kachery_offline_storage_dir_env_is_set():
+        return _create_if_needed(os.getenv('KACHERY_OFFLINE_STORAGE_DIR') + '/kachery-tmp')
+    else:
+        return _create_if_needed(tempfile.gettempdir() + '/kachery-tmp')
 
 def _is_offline_mode():
     return _kachery_offline_storage_dir_env_is_set()

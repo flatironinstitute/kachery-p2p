@@ -34,7 +34,7 @@ Store a Python dict in your local kachery storage:
 ```python
 import kachery_p2p as kp
 
-uri = kp.store_object({'name': 'example-object'})
+uri = kp.store_json({'name': 'example-object'})
 print(uri)
 # sha1://af0fa33ccfec88a593504bbc34b40099325a7c1d/file.json
 ```

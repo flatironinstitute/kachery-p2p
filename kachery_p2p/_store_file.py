@@ -1,5 +1,5 @@
 import os
-from typing import Union
+from typing import Any, Union
 import simplejson
 import numpy as np
 import stat
@@ -7,6 +7,7 @@ from ._daemon_connection import _is_offline_mode, _is_online_mode, _kachery_stor
 from ._local_kachery_storage import _local_kachery_storage_store_file
 from ._misc import _http_post_json
 from ._temporarydirectory import TemporaryDirectory
+from ._safe_pickle import _safe_pickle, _safe_unpickle
 
 def _store_file(path: str, basename: Union[str, None]=None) -> str:
     if basename is None:
@@ -50,7 +51,7 @@ def _store_text(text: str, basename: Union[str, None]=None) -> str:
         _add_read_permissions(fname)
         return _store_file(fname, basename=basename)
 
-def _store_object(object: dict, basename: Union[str, None]=None, separators=(',', ':'), indent=None) -> str:
+def _store_json(object: dict, basename: Union[str, None]=None, separators=(',', ':'), indent=None) -> str:
     if basename is None:
         basename = 'file.json'
     txt = simplejson.dumps(object, separators=separators, indent=indent)
@@ -61,7 +62,18 @@ def _store_npy(array: np.ndarray, basename: Union[str, None]=None) -> str:
         basename = 'file.npy'
     with TemporaryDirectory() as tmpdir:
         fname = tmpdir + '/array.npy'
-        np.save(fname, array)
+        np.save(fname, array, allow_pickle=False)
+        _add_read_permissions(tmpdir)
+        _add_exec_permissions(tmpdir)
+        _add_read_permissions(fname)
+        return _store_file(fname, basename=basename)
+
+def _store_pkl(x: Any, basename: Union[str, None]=None) -> str:
+    if basename is None:
+        basename = 'file.pkl'
+    with TemporaryDirectory() as tmpdir:
+        fname = tmpdir + '/array.pkl'
+        _safe_pickle(fname, x)
         _add_read_permissions(tmpdir)
         _add_exec_permissions(tmpdir)
         _add_read_permissions(fname)

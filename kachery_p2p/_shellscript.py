@@ -8,6 +8,7 @@ import time
 import io
 from typing import Optional, List, Any
 from ._preventkeyboardinterrupt import PreventKeyboardInterrupt
+from ._daemon_connection import _kachery_temp_dir
 
 class ShellScript():
     def __init__(self, script: str, script_path: Optional[str]=None, keep_temp_files: bool=False, verbose: bool=False, label='', docker_container_name=None, redirect_output_to_stdout=False):
@@ -51,11 +52,8 @@ class ShellScript():
         if self._script_path is not None:
             script_path = self._script_path
         else:
-            tempdir = tempfile.mkdtemp(prefix='tmp_shellscript_')
-            if (sys.platform == "win32"):
-                script_path = os.path.join(tempdir, 'script.bat') # pragma: no cover
-            else:
-                script_path = os.path.join(tempdir, 'script.sh')
+            tempdir = tempfile.mkdtemp(prefix='tmp_shellscript_', dir=_kachery_temp_dir())
+            script_path = os.path.join(tempdir, 'script.sh')
             self._dirs_to_remove.append(tempdir)        
         self.write(script_path)
         cmd = script_path

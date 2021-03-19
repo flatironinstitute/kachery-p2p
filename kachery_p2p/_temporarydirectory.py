@@ -1,8 +1,8 @@
 import os
-import pathlib
-import shutil
 import tempfile
+import shutil
 import time
+from ._daemon_connection import _kachery_temp_dir
 
 
 class TemporaryDirectory():
@@ -11,27 +11,7 @@ class TemporaryDirectory():
         self._prefix = prefix
 
     def __enter__(self) -> str:
-        if 'KACHERY_OFFLINE_STORAGE_DIR' in os.environ:
-            storage_dir = os.getenv('KACHERY_OFFLINE_STORAGE_DIR')
-        else:
-            storage_dir = None
-        if storage_dir is not None:
-            assert os.path.isdir(storage_dir), f'Unexpected problem. Storage directory does not exist or is not a directory: {storage_dir}'
-            dirpath = os.path.join(storage_dir, 'tmp')
-            if not os.path.exists(dirpath):
-                for _ in range(1, 3):
-                    try:
-                        os.mkdir(dirpath)
-                        break
-                    except:
-                        # maybe somebody else created this directory
-                        if os.path.exists(dirpath):
-                            break
-                        else:
-                            raise Exception(f'Unexpected problem creating temporary directory: {dirpath}')
-        else:
-            dirpath = None
-        self._path = str(tempfile.mkdtemp(prefix=self._prefix, dir=dirpath))
+        self._path = str(tempfile.mkdtemp(prefix=self._prefix, dir=_kachery_temp_dir()))
         return self._path
 
     def __exit__(self, exc_type, exc_val, exc_tb):

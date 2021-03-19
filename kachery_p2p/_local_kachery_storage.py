@@ -25,12 +25,12 @@ def _local_kachery_storage_load_bytes(*, sha1_hash: str, start: Union[int, None]
         return None
 
 def _local_kachery_storage_store_file(*, path: str, use_hard_links: bool=False, _no_manifest=False) -> Tuple[str, str, Union[str, None]]:
-    from ._store_file import _store_object # don't want circular dependencies
+    from ._store_file import _store_json # don't want circular dependencies
     if (not _no_manifest) and (os.path.getsize(path) > 20000000):
         hash0, manifest0 = _compute_local_file_sha1_and_manifest(path)
         if manifest0 is None:
             raise Exception(f'Unable to compute hash of file: {path}')
-        manifest_uri = _store_object(manifest0)
+        manifest_uri = _store_json(manifest0)
         protocol, algorithm, manifest_hash, additional_path, query = _parse_kachery_uri(manifest_uri)
     else:
         hash0 = _get_file_hash(path)

@@ -6,8 +6,8 @@ from os.path import basename
 from typing import Union
 from urllib.parse import quote, unquote
 
-from ._load_file import _load_object
-from ._store_file import _store_object
+from ._load_file import _load_json
+from ._store_file import _store_json
 from ._daemon_connection import _api_url
 from ._misc import _http_post_json, _http_get_json
 
@@ -33,7 +33,7 @@ class Feed:
             self._feed_node_id = None
             self._is_writeable = False
             self._is_snapshot = True
-            self._snapshot_object = _load_object(uri)
+            self._snapshot_object = _load_json(uri)
             assert self._snapshot_object is not None, f'Unable to load snapshot: {uri}'
         else:
             raise Exception(f'Unexpected feed uri: {uri}')
@@ -71,7 +71,7 @@ class Feed:
                 subfeedHash=subfeed.get_subfeed_hash(),
                 messages=messages
             )
-        snapshot_uri = _store_object(dict(
+        snapshot_uri = _store_json(dict(
             subfeeds=subfeeds
         ), basename='feed.json')
         return Feed(snapshot_uri)

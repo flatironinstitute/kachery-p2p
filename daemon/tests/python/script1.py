@@ -17,7 +17,7 @@ def main():
 
     # test invalid manifest
     b = kp.store_npy(np.meshgrid(np.arange(N1 + 1), np.arange(N2))[0])
-    invalid_manifest = kp.store_object({'invalid': True})
+    invalid_manifest = kp.store_json({'invalid': True})
     b_invalid_manifest = b.split('?')[0] + '?manifest=' + ka.get_file_hash(invalid_manifest)
     sf.append_message({'b_invalid_manifest': b_invalid_manifest})
 
