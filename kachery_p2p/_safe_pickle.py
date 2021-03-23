@@ -39,7 +39,7 @@ def _safe_unpickle(fname: str):
 def _check_safe_for_pickling(x: Any):
     if isinstance(x, int) or isinstance(x, float) or isinstance(x, str) or isinstance(x, bool) or (x is None):
         pass
-    if isinstance(x, range) or isinstance(x, complex) or isinstance(x, slice):
+    elif isinstance(x, range) or isinstance(x, complex) or isinstance(x, slice):
         # do not include "set" for now
         pass
     elif isinstance(x, dict):

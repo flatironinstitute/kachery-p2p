@@ -1,4 +1,4 @@
-from typing import Any, Iterable, List, Union
+from typing import Any, Dict, Iterable, List, Union
 
 import numpy as np
 
@@ -136,7 +136,7 @@ def load_pkl(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_ch
         from_channel (Union[str, None], optional): Optionally specify which kachery channel to search. Defaults to None.
 
     Returns:
-        Union[str, None]: If found, the Numpy array, else None
+        Union[str, None]: If found, result, else None
     """
     return _load_pkl(uri=uri, p2p=p2p, from_node=from_node, from_channel=from_channel)
 
@@ -281,7 +281,7 @@ def load_feed(feed_name_or_uri: str, *, timeout_sec: Union[None, float]=None, cr
     """
     return _load_feed(feed_name_or_uri=feed_name_or_uri, timeout_sec=timeout_sec, create=create)
 
-def watch_for_new_messages(subfeed_watches: List[dict], *, wait_msec) -> List[dict]:
+def watch_for_new_messages(subfeed_watches: Dict[str, dict], *, wait_msec) -> Dict[str, Any]:
     """Watch for new messages on one or more subfeeds
 
     Args:
