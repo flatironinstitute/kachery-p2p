@@ -1,7 +1,7 @@
 import GarbageMap from '../common/GarbageMap';
 import { sleepMsec } from '../common/util';
 import { LocalFeedManagerInterface } from '../external/ExternalInterface';
-import { DurationMsec, durationMsecToNumber, FeedId, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, messageCount, MessageCount, NodeId, nowTimestamp, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
+import { DurationMsec, durationMsecToNumber, FeedId, FeedName, feedSubfeedId, FeedSubfeedId, FindLiveFeedResult, messageCount, MessageCount, messageCountToNumber, NodeId, nowTimestamp, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, subfeedPosition, subfeedPositionToNumber, SubfeedWatch, SubfeedWatchesRAM, SubfeedWatchName, SubmittedSubfeedMessage, submittedSubfeedMessageToSubfeedMessage } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import NewIncomingSubfeedSubscriptionManager from './NewIncomingSubfeedSubscriptionManager';
 import NewOutgoingSubfeedSubscriptionManager from './NewOutgoingSubfeedSubscriptionManager';
@@ -173,13 +173,47 @@ class FeedManager {
         signed: boolean
     }): Promise<Map<SubfeedWatchName, (SubfeedMessage[] | SignedSubfeedMessage[])>> {
         // assert(typeof(waitMsec) === 'number');
-        // assert(typeof(waxNumMessages) === 'number');
+        // assert(typeof(maxNumMessages) === 'number');
+
+        const messages = new Map<SubfeedWatchName, SubfeedMessage[] | SignedSubfeedMessage[]>();
+
+        // first check for messages we have locally and return those if nonempty...
+        // if we have none of those, then we will wait for new messages (if waitMsec > 0)
+        let foundSomething = false
+        for (let wn of subfeedWatches.keys()) {
+            const watchName = wn as any as SubfeedWatchName
+            const w = subfeedWatches.get(watchName)
+            if (!w) throw Error('Unexpected.')
+            const subfeed = await this._loadSubfeed(w.feedId, w.subfeedHash)
+            const numLocalMessages = subfeed.getNumLocalMessages()
+            let numMessages = messageCountToNumber(numLocalMessages) - subfeedPositionToNumber(w.position)
+            if ( numMessages > 0 ) {
+                foundSomething = true
+                if (messageCountToNumber(maxNumMessages) > 0) {
+                    numMessages = Math.min(messageCountToNumber(maxNumMessages), numMessages)
+                }
+                let messages0 = subfeed.getLocalSignedMessages({position: w.position, numMessages: messageCount(numMessages) })
+                if (signed) {
+                    messages.set(watchName, messages0)
+                }
+                else {
+                    messages.set(watchName, messages0.map(m => (m.body.message)))
+                }
+            }
+        }
+        if (foundSomething) {
+            return messages
+        }
+        if (durationMsecToNumber(waitMsec) === 0) {
+            // we are not going to wait
+            return messages
+        }
+
+        // now we are going to wait
         return new Promise<Map<SubfeedWatchName, (SubfeedMessage[] | SignedSubfeedMessage[])>>((resolve, reject) => {
             // Wait until new messages are received on one or more subfeeds, and return information on which watches were triggered
 
             let finished = false;
-
-            const messages = new Map<SubfeedWatchName, SubfeedMessage[] | SignedSubfeedMessage[]>();
 
             let numMessages = 0;
             const doFinish = async () => {

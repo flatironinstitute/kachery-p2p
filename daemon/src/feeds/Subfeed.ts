@@ -168,7 +168,7 @@ class Subfeed {
             throw Error('signed messages not initialized. Perhaps getLocalSignedMessages was called before subfeed was initialized.');
         }
         if (subfeedPositionToNumber(position) + messageCountToNumber(numMessages) <= Number(this.#localSubfeedSignedMessagesManager.getNumMessages())) {
-            // If we have some messages loaded into memory, let's return those! (no need to look remotely)
+            // If we have some messages loaded into memory, let's return those!
             let signedMessages: SignedSubfeedMessage[] = [];
             for (let i = subfeedPositionToNumber(position); i < subfeedPositionToNumber(position) + messageCountToNumber(numMessages); i++) {
                 signedMessages.push(this.#localSubfeedSignedMessagesManager.getSignedMessage(i));
