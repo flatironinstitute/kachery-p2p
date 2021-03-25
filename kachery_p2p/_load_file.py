@@ -167,15 +167,22 @@ def _load_bytes(uri: str, start: Union[int, None], end: Union[int, None], write_
             if start < ch['end'] and end > ch['start']:
                 chunks_to_load.append(ch)
         for ii, ch in enumerate(chunks_to_load):
-            if len(chunks_to_load) > 1:
+            if len(chunks_to_load) > 4:
                 print(f'load_bytes: Loading chunk {ii + 1} of {len(chunks_to_load)}')
+            chunk_uri = f'sha1://{ch["sha1"]}?chunkOf={hash0}~{ch["start"]}~{ch["end"]}'
+            chunk_path = _load_file(chunk_uri)
+            if chunk_path is None:
+                print(f'Problem loading chunk: {chunk_uri}')
+                return None
+            start_byte = max(0, start - ch['start'])
+            end_byte = min(ch['end']-ch['start'], end-ch['start'])
             a = _load_bytes(
-                uri=f'sha1://{ch["sha1"]}?chunkOf={hash0}~{ch["start"]}~{ch["end"]}',
-                start=max(0, start - ch['start']),
-                end=min(ch['end']-ch['start'], end-ch['start']
-            ))
+                uri=chunk_path,
+                start=start_byte,
+                end=end_byte
+            )
             if a is None:
-                print('Unable to load bytes from chunk')
+                print(f'Unable to load bytes from chunk: {chunk_path} (start={start_byte}; end={end_byte})')
                 return None
             data_chunks.append(a)
         return b''.join(data_chunks)
