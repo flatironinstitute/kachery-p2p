@@ -1,4 +1,5 @@
 import { DataStreamyProgress } from "../common/DataStreamy";
+import GarbageMap from "../common/GarbageMap";
 import { sleepMsec } from "../common/util";
 import { byteCount, DurationMsec, FileKey, scaledDurationMsec, Sha1Hash, _validateObject } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
@@ -68,6 +69,7 @@ class MirrorManager {
     #urisToMirror: string[] = []
     #halted = false
     #currentFileIndex = 0
+    #mirroredFileUris = new GarbageMap<string, boolean>(scaledDurationMsec(1000 * 60 * 60))
     constructor(private node: KacheryP2PNode) {
         this._start()
     }
@@ -87,6 +89,7 @@ class MirrorManager {
         return new Promise<void>((resolve, reject) => {
             loadFile(this.node, fileKey, {fromNode: null, label: `Mirror ${uri}`}).then((x) => {
                 x.onFinished(() => {
+                    this.#mirroredFileUris.set(uri, true)
                     resolve()
                 })
                 x.onError((err: Error) => {
@@ -109,17 +112,19 @@ class MirrorManager {
             
             if (this.#currentFileIndex < this.#urisToMirror.length) {
                 const uri = this.#urisToMirror[this.#currentFileIndex]
-                try {
-                    await this._mirrorFile(uri)
-                }
-                catch(err) {
-                    console.warn(`Problem mirroring file (${err.message}): ${uri}`)
+                if (!this.#mirroredFileUris.get(uri)) {
+                    try {
+                        await this._mirrorFile(uri)
+                    }
+                    catch(err) {
+                        console.warn(`Problem mirroring file (${err.message}): ${uri}`)
+                    }
                 }
                 this.#currentFileIndex ++
             }
             else {
                 // wait a bit before starting again
-                await sleepMsec(scaledDurationMsec(10000), () => {return !this.#halted})
+                await sleepMsec(scaledDurationMsec(1000 * 120), () => {return !this.#halted})
                 this.#currentFileIndex = 0
             }
 
@@ -199,7 +204,7 @@ export default class MirrorService {
     #node: KacheryP2PNode
     #halted = false
     #mirrorSourceManager: MirrorSourceManager
-    constructor(node: KacheryP2PNode, private opts: {intervalMsec: DurationMsec}) {
+    constructor(node: KacheryP2PNode, private opts: {}) {
         this.#node = node
         this.#mirrorSourceManager = new MirrorSourceManager(node)
 
@@ -210,13 +215,14 @@ export default class MirrorService {
         this.#halted = true
     }
     async _start() {
+        const intervalMsec = scaledDurationMsec(1000 * 60 * 3)
         // wait a bit before starting
-        await sleepMsec(scaledDurationMsec(5000), () => {return !this.#halted})
+        await sleepMsec(scaledDurationMsec(1000 * 5), () => {return !this.#halted})
         while (true) {
             if (this.#halted) return
             await this.#mirrorSourceManager.update()
 
-            await sleepMsec(this.opts.intervalMsec, () => {return !this.#halted})
+            await sleepMsec(intervalMsec, () => {return !this.#halted})
         }
     }
 }

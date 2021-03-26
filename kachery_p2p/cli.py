@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-from typing import List, Union
+from typing import List, Union, cast
 
 import click
 import kachery_p2p as kp
@@ -31,7 +31,7 @@ def _get_joined_channels_config() -> dict:
     num_messages = sf.get_num_local_messages()
     if (num_messages > 0):
         sf.set_position(num_messages - 1)
-        joined_channels_config = sf.get_next_message(wait_msec=100)
+        joined_channels_config = cast(dict, sf.get_next_message(wait_msec=100))
     else:
         joined_channels_config = {
             'joinedChannels': []
