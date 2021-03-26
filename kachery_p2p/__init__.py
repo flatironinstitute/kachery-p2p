@@ -9,6 +9,7 @@ from .cli import cli
 
 from ._experimental_config import _experimental_config
 
+from .main import find_file
 from .main import get_channels, get_node_id
 from .main import load_file, load_npy, load_pkl, load_object, load_json, load_text, load_bytes
 from .main import store_file, store_object, store_json, store_npy, store_pkl, store_text

@@ -1,6 +1,6 @@
 import { IsDataProxy, IsMessageProxy, IsPublic } from "../cli";
 import { loadYamlFromPathOrUrl, sleepMsec } from "../common/util";
-import { ChannelConfigUrl, DurationMsec, feedName, isArrayOf, isBoolean, isChannelConfigUrl, optional, sha1OfString, subfeedHash, _validateObject } from "../interfaces/core";
+import { ChannelConfigUrl, DurationMsec, feedName, isArrayOf, isBoolean, isChannelConfigUrl, isString, optional, Sha1Hash, sha1OfString, subfeedHash, _validateObject } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 
 export interface JoinedChannelConfig {
@@ -16,7 +16,19 @@ export const isJoinedChannelConfig = (x: any): x is JoinedChannelConfig => {
         isMessageProxy: optional(isBoolean),
         isDataProxy: optional(isBoolean),
         isPublic: optional(isBoolean)
-    })
+    }, {allowAdditionalFields: true})
+}
+
+export interface MirrorSourceConfig {
+    uri: string
+    label?: string
+}
+
+export const isMirrorSourceConfig = (x: any): x is MirrorSourceConfig => {
+    return _validateObject(x, {
+        uri: isString,
+        label: optional(isString)
+    }, {allowAdditionalFields: true})
 }
 
 interface JoinedChannelsConfig {
@@ -56,6 +68,19 @@ export default class ConfigUpdateService {
                     }
                 }
                 this.#node.setJoinedChannels(joinedChannels)
+            }
+            if (config.mirrorSources) {
+                const mirrorSources: MirrorSourceConfig[] = []
+                for (let mirrorSource of config.mirrorSources) {
+                    if (isMirrorSourceConfig(mirrorSource)) {
+                        mirrorSources.push(mirrorSource)
+                    }
+                    else {
+                        console.warn(mirrorSource)
+                        console.warn('Invalid mirror source config')
+                    }
+                }
+                this.#node.setMirrorSources(mirrorSources)
             }
         }
         while (true) {

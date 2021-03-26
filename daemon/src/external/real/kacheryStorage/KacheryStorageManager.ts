@@ -207,9 +207,24 @@ export class KacheryStorageManager {
         fs.mkdirSync(destParentPath, {recursive: true});
         fs.renameSync(tmpPath, destPath)
     }
+    async hasLocalFile(fileKey: FileKey): Promise<boolean> {
+        if (fileKey.sha1) {
+            const { path: filePath, size: fileSize } = await this._getLocalFileInfo(fileKey.sha1)
+            if ((filePath) && (fileSize !== null)) {
+                return true
+            }
+        }
+        if (fileKey.chunkOf) {
+            const { path: filePath, size: fileSize } = await this._getLocalFileInfo(fileKey.chunkOf.fileKey.sha1)
+            if (filePath) {
+                return true
+            }
+        }
+        return false
+    }
     async getFileReadStream(fileKey: FileKey): Promise<DataStreamy> {
         if (fileKey.sha1) {
-            const { path: filePath, size: fileSize } = await this._getLocalFileInfo(fileKey.sha1);
+            const { path: filePath, size: fileSize } = await this._getLocalFileInfo(fileKey.sha1)
             if ((filePath) && (fileSize !== null)) {
                 return createDataStreamForFile(filePath, byteCount(0), fileSize)
             }

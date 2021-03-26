@@ -25,6 +25,9 @@ export default class MockKacheryStorageManager {
             }
         }
     }
+    async hasLocalFile(fileKey: FileKey): Promise<boolean> {
+        return this.#mockFiles.has(fileKey.sha1)
+    }
     async getFileReadStream(fileKey: FileKey): Promise<DataStreamy> {
         const content = this.#mockFiles.get(fileKey.sha1)
         if (content) {

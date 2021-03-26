@@ -231,7 +231,8 @@ function main() {
                 udpSocket: !noUdp,
                 webSocketServer: webSocketListenPort ? true : false,
                 httpServer: true,
-                daemonServer: true
+                daemonServer: true,
+                mirror: true
             }
           }
         })

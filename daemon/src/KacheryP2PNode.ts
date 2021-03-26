@@ -29,7 +29,7 @@ import { protocolVersion } from './protocolVersion'
 import { ProxyWebsocketConnection } from './proxyConnections/ProxyWebsocketConnection'
 import RemoteNode from './RemoteNode'
 import RemoteNodeManager from './RemoteNodeManager'
-import { JoinedChannelConfig } from './services/ConfigUpdateService'
+import { JoinedChannelConfig, MirrorSourceConfig } from './services/ConfigUpdateService'
 import PublicUdpSocketServer from './services/PublicUdpSocketServer'
 import { PacketId } from './udp/UdpPacketSender'
 
@@ -55,6 +55,7 @@ class KacheryP2PNode {
     #downloadOptimizer: DownloadOptimizer
     #onProxyConnectionToServerCallbacks: (() => void)[] = []
     #stats = new NodeStats()
+    #mirrorSources: MirrorSourceConfig[] = []
     constructor(private p: {
         configDir: LocalFilePath | null,
         verbose: number,
@@ -95,7 +96,13 @@ class KacheryP2PNode {
         return (this.#joinedChannels.filter(x => (x.channelConfigUrl === channelConfigUrl)).length > 0)
     }
     setJoinedChannels(x: JoinedChannelConfig[]) {
-        return this.#joinedChannels = x
+        this.#joinedChannels = x
+    }
+    setMirrorSources(x: MirrorSourceConfig[]) {
+        this.#mirrorSources = x
+    }
+    mirrorSources() {
+        return [...this.#mirrorSources]
     }
     remoteNodeManager() {
         return this.#remoteNodeManager

@@ -13,6 +13,7 @@ import ProxyClientService from './services/ProxyClientService';
 import PublicApiServer from './services/PublicApiServer';
 import PublicUdpSocketServer from './services/PublicUdpSocketServer';
 import PublicWebSocketServer from './services/PublicWebSocketServer';
+import MirrorService from './services/MirrorService'
 
 export interface StartDaemonOpts {
     isBootstrap: boolean,
@@ -33,6 +34,7 @@ export interface StartDaemonOpts {
         webSocketServer?: boolean,
         httpServer?: boolean,
         daemonServer?: boolean
+        mirror?: boolean
     }
 }
 
@@ -48,6 +50,7 @@ export interface DaemonInterface {
     configUpdateService: ConfigUpdateService | null,
     multicastService: MulticastService | null,
     displayService: DisplayStateService | null,
+    mirrorService: MirrorService | null,
     node: KacheryP2PNode,
     stop: () => void
 }
@@ -152,6 +155,9 @@ const startDaemon = async (args: {
     let displayService = opts.services.display ? new DisplayStateService(kNode, {
         daemonApiPort
     }) : null
+    const mirrorService = opts.services.mirror ? new MirrorService(kNode, {
+        intervalMsec: scaledDurationMsec(120000)
+    }): null
 
     // Start the public http server
     const publicApiServer = new PublicApiServer(kNode, { verbose })
@@ -168,6 +174,7 @@ const startDaemon = async (args: {
         configUpdateService && configUpdateService.stop()
         multicastService && multicastService.stop()
         displayService && displayService.stop()
+        mirrorService && mirrorService.stop()
         // wait a bit after stopping services before cleaning up the rest (for clean exit of services)
         setTimeout(() => {
             daemonApiServer && daemonApiServer.stop()
@@ -192,6 +199,7 @@ const startDaemon = async (args: {
         configUpdateService,
         multicastService,
         displayService,
+        mirrorService,
         node: kNode,
         stop: _stop
     }

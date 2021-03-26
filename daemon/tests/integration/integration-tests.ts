@@ -220,7 +220,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         discover: true,
                         bootstrap: true,
                         proxyClient: true,
-                        display: false
+                        display: false,
+                        mirror: true
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -285,7 +286,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         bootstrap: true,
                         udpSocket: true,
                         proxyClient: true,
-                        display: false
+                        display: false,
+                        mirror: true
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})
@@ -354,7 +356,8 @@ const testContext = (testFunction: (g: MockNodeDaemonGroup, resolve: () => void,
                         bootstrap: true,
                         udpSocket: true,
                         proxyClient: true,
-                        display: false
+                        display: false,
+                        mirror: true
                     }
                 }
                 const bootstrapDaemon = await g.createDaemon({...bootstrapOpts})

@@ -41,6 +41,7 @@ export type StartWebSocketServerFunction = (port: Port, nodeId: NodeId) => Promi
 export type CreateWebSocketFunction = (url: string, opts: {timeoutMsec: DurationMsec}) => WebSocketInterface
 
 export interface KacheryStorageManagerInterface {
+    hasLocalFile: (fileKey: FileKey) => Promise<boolean>
     findFile: (fileKey: FileKey) => Promise<{found: boolean, size: ByteCount, localFilePath: LocalFilePath | null}>
     getFileReadStream: (fileKey: FileKey) => Promise<DataStreamy>
     storeFile: (sha1: Sha1Hash, data: Buffer) => Promise<void>

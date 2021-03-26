@@ -1,17 +1,17 @@
 import DataStreamy, { DataStreamyProgress } from './common/DataStreamy'
 import { sha1MatchesFileKey } from './common/util'
 import { formatByteCount } from './downloadOptimizer/createDownloader'
-import { byteCount, ByteCount, byteCountToNumber, elapsedSince, FileKey, FileManifestChunk, isFileManifest, NodeId, nowTimestamp, Sha1Hash } from './interfaces/core'
+import { byteCount, ByteCount, byteCountToNumber, elapsedSince, FileKey, FileManifestChunk, isFileManifest, LocalFilePath, NodeId, nowTimestamp, Sha1Hash } from './interfaces/core'
 import KacheryP2PNode from './KacheryP2PNode'
 
 
-const loadFileAsync = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, label: string}): Promise<{found: boolean, size: ByteCount}> => {
+export const loadFileAsync = async (node: KacheryP2PNode, fileKey: FileKey, opts: {fromNode: NodeId | null, label: string}): Promise<{found: boolean, size: ByteCount, localFilePath: LocalFilePath | null}> => {
     const r = await node.kacheryStorageManager().findFile(fileKey)
     if (r.found) {
         return r
     }
     const ds = await loadFile(node, fileKey, opts)
-    return await new Promise<{found: boolean, size: ByteCount}>((resolve, reject) => {
+    return await new Promise<{found: boolean, size: ByteCount, localFilePath: LocalFilePath | null}>((resolve, reject) => {
         ds.onError(err => {
             reject(err)
         })
