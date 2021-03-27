@@ -20,6 +20,11 @@
             "label": "Publish PyPI",
             "type": "shell",
             "command": "bash -ic .vscode/tasks/publish-pypi.sh"
+        },
+        {
+            "label": "Install git hooks",
+            "type": "shell",
+            "command": "bash -ic .vscode/tasks/install-git-hooks.sh"
         }
     ]
 }
