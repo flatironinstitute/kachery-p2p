@@ -59,7 +59,7 @@ def start_daemon(*,
     thisdir = os.path.dirname(os.path.realpath(__file__))
     if method == 'npx':
         try:
-            subprocess.check_call(['npx', 'check-node-version', '--print', '--node', '>=12'])
+            subprocess.check_call(['npx', 'check-node-version', '-y', '--print', '--node', '>=12'])
         except:
             raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
         
