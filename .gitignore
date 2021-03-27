@@ -1,3 +1,4 @@
+devel/dockerized_tests/*.tar.gz
 old
 node_modules
 .vscode/settings.json

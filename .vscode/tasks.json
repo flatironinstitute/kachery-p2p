@@ -36,6 +36,11 @@
             "label": "Install git hooks",
             "type": "shell",
             "command": "bash -ic .vscode/tasks/install-git-hooks.sh"
+        },
+        {
+            "label": "Dockerize tests",
+            "type": "shell",
+            "command": "bash -c .vscode/tasks/dockerized-tests.sh"
         }
     ]
 }

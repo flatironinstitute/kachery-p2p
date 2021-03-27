@@ -20,8 +20,11 @@ jinjaroot verify
 
 cd ./daemon
 
+# install and build
 yarn install
 yarn build
+
+# dry run
 npm run publish-dry
 
 # Confirm publish
@@ -34,4 +37,5 @@ while true; do
     esac
 done
 
+# publish
 npm run publish-go
