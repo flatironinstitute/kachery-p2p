@@ -1,4 +1,4 @@
-FROM node:14
+FROM node:15
 
 COPY ./run_inside_container.sh /run_inside_container.sh
 

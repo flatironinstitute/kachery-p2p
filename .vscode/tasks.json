@@ -2,6 +2,15 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Code generation",
+            "type": "shell",
+            "command": "jinjaroot generate",
+            "presentation": {
+                "clear": true
+            },
+            "detail": "Run jinjaroot code generation"
+        },
+        {
             "label": "Build daemon",
             "type": "shell",
             
@@ -10,7 +19,7 @@
         {
             "label": "Publish PyPI",
             "type": "shell",
-            "command": "bash -ic .vscode/tasks/publish_pypi.sh"
+            "command": "bash -ic .vscode/tasks/publish-pypi.sh"
         }
     ]
 }

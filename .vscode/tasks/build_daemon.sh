@@ -2,6 +2,8 @@
 
 set -ex
 
+echo "Building daemon"
+
 rm -rf kachery_p2p/*.tgz
 rm -rf daemon/*.tgz
 cd daemon
