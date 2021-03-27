@@ -173,7 +173,8 @@ def print_messages(uri):
 @click.option('--websocket-port', default=0, help='Port for websocket server')
 @click.option('--static-config', default='', help='A URL or path to a configuration file for static configuration')
 @click.option('--node-arg', multiple=True, help='Additional arguments to send to node')
-def start_daemon(label: str, method: str, verbose: int, host: str, public_url: str, port: int, udp_port: Union[int, None], websocket_port: int, isbootstrap: bool, noudp: bool, nomulticast: bool, static_config: str, node_arg: List[str]):
+@click.option('--install-only', is_flag=True, help='Only install the npm package (do not install)')
+def start_daemon(label: str, method: str, verbose: int, host: str, public_url: str, port: int, udp_port: Union[int, None], websocket_port: int, isbootstrap: bool, noudp: bool, nomulticast: bool, static_config: str, node_arg: List[str], install_only: bool):
     kp.start_daemon(
         label=label,
         method=method,
@@ -187,7 +188,8 @@ def start_daemon(label: str, method: str, verbose: int, host: str, public_url: s
         noudp=noudp,
         nomulticast=nomulticast,
         static_config=static_config,
-        node_arg=node_arg
+        node_arg=node_arg,
+        install_only=install_only
     )
 
 @click.command(help="Stop the daemon.")

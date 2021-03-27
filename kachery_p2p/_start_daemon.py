@@ -20,7 +20,8 @@ def start_daemon(*,
     isbootstrap: bool=False,
     nomulticast: bool=False,
     static_config: str='',
-    node_arg: List[str]=[]
+    node_arg: List[str]=[],
+    install_only: bool=False
 ):
     """Used internally. Use the kachery-p2p-start-daemon command in the terminal.
     """
@@ -69,8 +70,8 @@ def start_daemon(*,
         npm_package = f'{thisdir}/kachery-p2p-daemon-{__version__}.tgz'
         if not os.path.exists(npm_package):
             raise Exception(f'No such file: {npm_package}')
-    
-        ss = ShellScript(f'''
+
+        script = f'''
         #!/bin/bash
         set -ex
 
@@ -78,8 +79,14 @@ def start_daemon(*,
         export KACHERY_P2P_API_HOST="{api_host}"
         export KACHERY_P2P_CONFIG_DIR="{config_dir}"
         npm install -g -y {npm_package}
-        exec kachery-p2p-daemon start {' '.join(start_args)}
-        ''')
+        '''
+
+        if not install_only:
+            script = script + f'''
+            exec kachery-p2p-daemon start {' '.join(start_args)}
+            '''
+    
+        ss = ShellScript(script)
         ss.start()
         try:
             retcode = ss.wait()
