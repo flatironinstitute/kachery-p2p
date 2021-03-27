@@ -1,6 +1,6 @@
 old
 node_modules
-.vscode
+.vscode/settings.json
 data
 data2
 kachery-storage*

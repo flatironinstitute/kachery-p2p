@@ -7,3 +7,4 @@ projectDescription: Peer-to-peer file sharing for data science
 projectUrl: https://github.com/flatironinstitute/kachery_p2p
 projectBugTrackerUrl: https://github.com/flatironinstitute/kachery_p2p/issues
 pythonPackageDir: .
+npmPackageDir: ./daemon
