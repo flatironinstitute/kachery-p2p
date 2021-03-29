@@ -5,7 +5,7 @@ import kachery_p2p as kp
 
 def main():
     timeout_sec = 30
-    
+
     print('Waiting for daemon to start...')
     timer = time.time()
     while True:

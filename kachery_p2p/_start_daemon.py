@@ -4,8 +4,16 @@ import subprocess
 from ._daemon_connection import _api_url, _probe_daemon, _api_host, _api_port
 from typing import List, Union
 from ._misc import _http_get_json
-from ._shellscript import ShellScript
+from ._shellscript import ShellScript, stop_all_scripts
 from .protocol_version import __version__
+import signal
+import sys
+
+def handle_exit(sig, frame):
+    stop_all_scripts()
+    sys.exit(1)
+signal.signal(signal.SIGINT, handle_exit)
+signal.signal(signal.SIGTERM, handle_exit)
 
 def start_daemon(*,
     port: int=0,
@@ -59,7 +67,7 @@ def start_daemon(*,
     thisdir = os.path.dirname(os.path.realpath(__file__))
     if method == 'npx':
         try:
-            subprocess.check_call(['npx', 'check-node-version', '-y', '--print', '--node', '>=12'])
+            subprocess.check_call(['npx', 'check-node-version', '--print', '--node', '>=12'])
         except:
             raise Exception('Please install nodejs version >=12. This is required in order to run kachery-p2p-daemon.')
         
@@ -107,7 +115,7 @@ def start_daemon(*,
         ''')
         ss.start()
         try:
-            ss.wait()
+            retcode = ss.wait()
         finally:
             ss.stop()
             ss.kill()

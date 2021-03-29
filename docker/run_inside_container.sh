@@ -15,4 +15,4 @@ then
     exit 1
 fi
 
-kachery-p2p-daemon start "$@"
+exec kachery-p2p-daemon start "$@"
