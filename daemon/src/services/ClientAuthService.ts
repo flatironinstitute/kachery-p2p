@@ -22,7 +22,7 @@ export default class ClientAuthService {
         this.#halted = true
     }
     async _start() {
-        const intervalMsec = scaledDurationMsec(1000 * 30)
+        const intervalMsec = scaledDurationMsec(1000 * 60 * 3)
         // this service should not wait before starting
         while (true) {
             if (this.#halted) return
