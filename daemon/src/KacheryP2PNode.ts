@@ -5,6 +5,7 @@ import { ChannelConfig } from './cli'
 import { createKeyPair, getSignature, hexToPrivateKey, hexToPublicKey, JSONStringifyDeterministic, privateKeyToHex, publicKeyToHex, verifySignature } from './common/crypto_util'
 import DataStreamy from './common/DataStreamy'
 import GarbageMap from './common/GarbageMap'
+import { isReadableByOthers } from './common/util'
 import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import ExternalInterface, { KacheryStorageManagerInterface } from './external/ExternalInterface'
 import { MockNodeDefects } from './external/mock/MockNodeDaemon'
@@ -663,8 +664,11 @@ const _loadKeypair = (configDir: LocalFilePath): KeyPair => {
     else {
         const { publicKey, privateKey } = createKeyPair()
         fs.writeFileSync(publicKeyPath, publicKey.toString(), { encoding: 'utf-8' })
-        fs.writeFileSync(privateKeyPath, privateKey.toString(), { encoding: 'utf-8' })
-        fs.chmodSync(privateKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
+        fs.writeFileSync(privateKeyPath, privateKey.toString(), { encoding: 'utf-8', mode: fs.constants.S_IRUSR | fs.constants.S_IWUSR})
+    }
+
+    if (isReadableByOthers(privateKeyPath)) {
+        throw Error(`Invalid permissions for private key file: ${privateKeyPath}`)
     }
 
     const keyPair = {

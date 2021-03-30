@@ -169,3 +169,11 @@ export const loadYamlFromPathOrUrl = async (pathOrUrl: string): Promise<object> 
         return await loadYamlFromPath(pathOrUrl)
     }   
 }
+
+export const isReadableByOthers = (path: string) => {
+    const stat = fs.statSync(path)
+    if ((stat.mode & fs.constants.S_IROTH) || (stat.mode & fs.constants.S_IRGRP)) {
+        return true
+    }
+    return false
+}

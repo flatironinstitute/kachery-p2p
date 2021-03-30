@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { createKeyPair, hexToPrivateKey, JSONStringifyDeterministic, privateKeyToHex, publicKeyHexToFeedId, publicKeyToHex } from '../../common/crypto_util';
 import GarbageMap from '../../common/GarbageMap';
+import { isReadableByOthers } from '../../common/util';
 import { FeedId, FeedName, isFeedId, isJSONObject, isPrivateKeyHex, localFilePath, LocalFilePath, PrivateKey, PrivateKeyHex, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, _validateObject } from '../../interfaces/core';
 import LocalFeedsDatabase from './LocalFeedsDatabase';
 
@@ -33,7 +34,8 @@ class FeedsConfigManager {
             feedId,
             privateKey
         }
-        await writeJsonFile(`${dirPath}/config.json`, config)
+        await writeJsonFile(`${dirPath}/config.json`, config, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
+
         this.#feedsConfigMemCache.set(feedId, {feedId, privateKey})
     }
     async getFeedConfig(feedId: FeedId): Promise<FeedConfig | null> {
@@ -43,7 +45,14 @@ class FeedsConfigManager {
         }
         const dirPath = await this._feedConfigDirectory(feedId, {create: false})
         if (fs.existsSync(dirPath.toString())) {
-            const config = await readJsonFile(`${dirPath}/config.json`, {})
+            const configPath = `${dirPath}/config.json`
+            if (isReadableByOthers(configPath)) {
+                fs.chmodSync(configPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
+                if (isReadableByOthers(configPath)) {
+                    throw Error(`Feed config file is readable by others even after setting permissions: ${configPath}`)
+                }
+            }            
+            const config = await readJsonFile(configPath, {})
             if (isFeedConfig(config)) {
                 this.#feedsConfigMemCache.set(feedId, config)
                 return config
@@ -192,7 +201,7 @@ const readJsonFile = async (path: string, defaultVal: Object): Promise<Object> =
     }
 }
 
-const writeJsonFile = async (path: string, obj: Object) => {
+const writeJsonFile = async (path: string, obj: Object, mode?: fs.Mode) => {
     const txt = JSONStringifyDeterministic(obj, 4);
-    await fs.promises.writeFile(path, txt);
+    await fs.promises.writeFile(path, txt, {mode});
 }
