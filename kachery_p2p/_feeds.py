@@ -38,12 +38,12 @@ class Feed:
         else:
             raise Exception(f'Unexpected feed uri: {uri}')
     def _initialize(self):
-        api_url = _api_url()
+        api_url, headers = _api_url()
         url = f'{api_url}/feed/getFeedInfo'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
             timeoutMsec=(self._timeout_sec if self._timeout_sec is not None else 6) * 1000
-        ))
+        ), headers=headers)
 
         assert x['success'], f'Unable to initialize feed: {self._feed_id} ({x["error"]})'
         self._feed_node_id = x['nodeId']
@@ -141,12 +141,12 @@ class Subfeed:
     
     def get_num_local_messages(self):
         if not self.is_snapshot():
-            api_url = _api_url()
+            api_url, headers = _api_url()
             url = f'{api_url}/feed/getNumLocalMessages'
             x = _http_post_json(url, dict(
                 feedId=self._feed_id,
                 subfeedHash=self._subfeed_hash
-            ))
+            ), headers=headers)
             assert x['success'], f'Unable to get num. messages for subfeed: {self._feed_id} {self._subfeed_name_str}'
             return x['numMessages']
         else:
@@ -245,13 +245,13 @@ class Subfeed:
         if not self.is_writeable():
             raise Exception('Cannot append messages to a readonly feed')
         # CHAIN:append_messages:step(1)
-        api_url = _api_url()
+        api_url, headers = _api_url()
         url = f'{api_url}/feed/appendMessages'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
             subfeedHash=self._subfeed_hash,
             messages=messages
-        ))
+        ), headers=headers)
         if not x['success']:
             raise Exception(f'Unable to append messages: {x.get("error")}')
     
@@ -261,7 +261,7 @@ class Subfeed:
     def submit_messages(self, messages):
         if self.is_snapshot():
             raise Exception('Cannot submit messages to a snapshot')
-        api_url = _api_url()
+        api_url, headers = _api_url()
         for message in messages:
             url = f'{api_url}/feed/submitMessage'
             x = _http_post_json(url, dict(
@@ -269,32 +269,32 @@ class Subfeed:
                 subfeedHash=self._subfeed_hash,
                 message=message,
                 timeoutMsec=4000
-            ))
+            ), headers=headers)
             if not x['success']:
                 raise Exception(f'Unable to submit message: {x.get("error")}')
 
     def set_access_rules(self, access_rules):
         if not self._is_writeable:
             raise Exception('Cannot set access rules for non-writeable feed')
-        api_url = _api_url()
+        api_url, headers = _api_url()
         url = f'{api_url}/feed/setAccessRules'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
             subfeedHash=self._subfeed_hash,
             accessRules=access_rules
-        ))
+        ), headers=headers)
         if not x['success']:
             raise Exception('Unable to set access rules.')
     
     def get_access_rules(self):
         if not self._is_writeable:
             raise Exception('Cannot get access rules for non-writeable feed')
-        api_url = _api_url()
+        api_url, headers = _api_url()
         url = f'{api_url}/feed/getAccessRules'
         x = _http_post_json(url, dict(
             feedId=self._feed_id,
             subfeedHash=self._subfeed_hash
-        ))
+        ), headers=headers)
         if not x['success']:
             raise Exception('Unable to get access rules.')
         print(x)
@@ -331,12 +331,12 @@ class Subfeed:
             self.set_access_rules(access_rules)
 
 def _create_feed(feed_name=None):
-    api_url = _api_url()
+    api_url, headers = _api_url()
     url = f'{api_url}/feed/createFeed'
     req_data = dict()
     if feed_name is not None:
         req_data['feedName'] = feed_name
-    x = _http_post_json(url, req_data)
+    x = _http_post_json(url, req_data, headers=headers)
     if not x['success']:
         raise Exception(f'Unable to create feed: {feed_name}')
     return _load_feed('feed://' + x['feedId'])
@@ -346,11 +346,11 @@ def _delete_feed(feed_name_or_uri):
         feed_uri = feed_name_or_uri
         feed_id, subfeed_name, position = _parse_feed_uri(feed_uri)
         assert subfeed_name is None, 'Cannot specify subfeed name when deleting feed'
-        api_url = _api_url()
+        api_url, headers = _api_url()
         url = f'{api_url}/feed/deleteFeed'
         x = _http_post_json(url, dict(
             feedId=feed_id
-        ))
+        ), headers=headers)
         if not x['success']:
             raise Exception(f'Unable to delete feed {feed_id}: {x.get("error", None)}')
     else:
@@ -360,11 +360,11 @@ def _delete_feed(feed_name_or_uri):
         _delete_feed(f'feed://{feed_id}')
 
 def _get_feed_id(feed_name, *, create=False):
-    api_url = _api_url()
+    api_url, headers = _api_url()
     url = f'{api_url}/feed/getFeedId'
     x = _http_post_json(url, dict(
         feedName=feed_name
-    ))
+    ), headers=headers)
     if not x['success']:
         if create:
             return _create_feed(feed_name)._feed_id
@@ -397,7 +397,7 @@ def _load_feed(feed_name_or_uri, *, timeout_sec: Union[None, float]=None, create
         return _load_feed(f'feed://{feed_id}')
 
 def _watch_for_new_messages(subfeed_watches, *, wait_msec, signed=False, max_num_messages=0):
-    api_url = _api_url()
+    api_url, headers = _api_url()
     url = f'{api_url}/feed/watchForNewMessages'
     subfeed_watches2 = {}
     for key, watch in subfeed_watches.items():
@@ -411,7 +411,7 @@ def _watch_for_new_messages(subfeed_watches, *, wait_msec, signed=False, max_num
         waitMsec=wait_msec,
         signed=signed,
         maxNumMessages=max_num_messages
-    ))
+    ), headers=headers)
     if not x['success']:
         raise Exception(f'Unable to watch for new messages.')
     return x['messages']

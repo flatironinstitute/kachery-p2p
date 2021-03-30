@@ -1,4 +1,4 @@
-import express, { Express } from 'express';
+import express, { Express, NextFunction, Request, RequestHandler, Response } from 'express';
 import JsonSocket from 'json-socket';
 import { Socket } from 'net';
 import { ChannelConfig, isChannelConfig } from '../cli';
@@ -476,13 +476,25 @@ export default class DaemonApiServer {
         // this.#app.use(cors()); // in the future, if we want to do this
         this.#app.use(express.json());
 
-        this.#app.all('/*', (req: any, res: any, next: any) => {
-            /* istanbul ignore next */
-            if (!isLocalRequest(req)) {
-                console.warn(`Rejecting access to remote request from ${req.connection.remoteAddress}`);
-                res.send("API only accessible from the local device").status(403).end();
-                return;
+        this.#app.all('/*', (req: Request, res: Response, next: NextFunction) => {
+            // if (!isLocalRequest(req)) {
+            //     console.warn(`Rejecting access to remote request from ${req.socket.remoteAddress}`);
+            //     res.status(403).send("API only accessible from the local device").end();
+            //     return;
+            // }
+
+            if (req.path !== '/probe') {
+                const authCode = req.header('KACHERY-CLIENT-AUTH-CODE')
+                if (!authCode) {
+                    res.status(403).send("Missing client auth code in daemon request. You probably need to upgrade kachery-p2p.").end();
+                    return;
+                }
+                if (!this.#node.verifyClientAuthCode(authCode)) {
+                    res.status(403).send("Incorrect client authorization code.").end();
+                    return;
+                }
             }
+            
             /* istanbul ignore next */
             next();
         });
@@ -933,6 +945,6 @@ export default class DaemonApiServer {
     }
 }
 
-const isLocalRequest = (req: any) => {
-    return (req.connection.localAddress === req.connection.remoteAddress);
+const isLocalRequest = (req: Request) => {
+    return (req.socket.localAddress === req.socket.remoteAddress);
 }

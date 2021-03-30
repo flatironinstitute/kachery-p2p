@@ -24,7 +24,7 @@ def _parse_kachery_uri(uri: str) -> Tuple[str, str, str, str, dict]:
         raise Exception('Unexpected protocol: {}'.format(protocol))
     return protocol, algorithm, hash0, additional_path, query
 
-def _http_post_json(url: str, data: dict, verbose: Optional[bool] = None) -> dict:
+def _http_post_json(url: str, data: dict, verbose: Optional[bool] = None, headers: dict = {}) -> dict:
     timer = time.time()
     if verbose is None:
         verbose = (os.environ.get('HTTP_VERBOSE', '') == 'TRUE')
@@ -34,7 +34,7 @@ def _http_post_json(url: str, data: dict, verbose: Optional[bool] = None) -> dic
         import requests
     except:
         raise Exception('Error importing requests *')
-    req = requests.post(url, json=data)
+    req = requests.post(url, json=data, headers=headers)
     if req.status_code != 200:
         return dict(
             success=False,
@@ -45,7 +45,7 @@ def _http_post_json(url: str, data: dict, verbose: Optional[bool] = None) -> dic
         print('Elapsed time for _http_post_json: {}'.format(time.time() - timer))
     return json.loads(req.content)
 
-def _http_post_json_receive_json_socket(url: str, data: dict, verbose: Optional[bool] = None) -> Iterable[dict]:
+def _http_post_json_receive_json_socket(url: str, data: dict, verbose: Optional[bool] = None, headers: dict = {}) -> Iterable[dict]:
     timer = time.time()
     if verbose is None:
         verbose = (os.environ.get('HTTP_VERBOSE', '') == 'TRUE')
@@ -55,7 +55,7 @@ def _http_post_json_receive_json_socket(url: str, data: dict, verbose: Optional[
         import requests
     except:
         raise Exception('Error importing requests *')
-    req = requests.post(url, json=data, stream=True)
+    req = requests.post(url, json=data, stream=True, headers=headers)
     if req.status_code != 200:
         raise Exception('Error posting json: {} {}'.format(req.status_code, req.content.decode('utf-8')))
     class custom_iterator:
@@ -80,7 +80,7 @@ def _http_post_json_receive_json_socket(url: str, data: dict, verbose: Optional[
                     buf.append(c[0])
     return custom_iterator()
 
-def _http_get_json(url: str, verbose: Optional[bool] = None) -> dict:
+def _http_get_json(url: str, verbose: Optional[bool] = None, headers: dict = {}) -> dict:
     timer = time.time()
     if verbose is None:
         verbose = (os.environ.get('HTTP_VERBOSE', '') == 'TRUE')
@@ -90,7 +90,7 @@ def _http_get_json(url: str, verbose: Optional[bool] = None) -> dict:
         import requests
     except:
         raise Exception('Error importing requests *')
-    req = requests.get(url)
+    req = requests.get(url, headers=headers)
     if req.status_code != 200:
         return dict(
             success=False,

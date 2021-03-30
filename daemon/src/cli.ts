@@ -135,6 +135,10 @@ function main() {
           describe: 'Path or URL to a config file for static configuration',
           type: 'string'
         })
+        y.option('auth-group', {
+          describe: 'The os group that has access to this daemon',
+          type: 'string'
+        })
         return y
       },
       handler: async (argv) => {
@@ -154,6 +158,7 @@ function main() {
         const noMulticast = argv['nomulticast'] ? true : false
         const verbose = Number(argv.verbose || 0)
         const staticConfigPathOrUrl: string | null = argv['static-config'] ? argv['static-config'] + '' : null 
+        const authGroup: string | null = argv['auth-group'] ? argv['auth-group'] + '' : null 
 
         const configDir = (process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`) as any as LocalFilePath
         if (!fs.existsSync(configDir.toString())) {
@@ -220,6 +225,7 @@ function main() {
             webSocketListenPort,
             firewalled: false,
             staticConfigPathOrUrl,
+            authGroup,
             services: {
                 announce: true,
                 discover: true,
@@ -232,7 +238,8 @@ function main() {
                 webSocketServer: webSocketListenPort ? true : false,
                 httpServer: true,
                 daemonServer: true,
-                mirror: true
+                mirror: true,
+                clientAuth: true
             }
           }
         })

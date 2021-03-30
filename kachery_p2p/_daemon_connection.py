@@ -10,7 +10,32 @@ def _api_port():
 def _api_host():
     return os.getenv('KACHERY_P2P_API_HOST', 'localhost')
 
-def _api_url(api_port=None, api_host=None):
+_client_auth_code_info = {
+    'timestamp': 0,
+    'code': ''
+}
+
+def _get_client_auth_code():
+    elapsed = time.time() - _client_auth_code_info['timestamp']
+    if elapsed > 10:
+        _client_auth_code_info['code'] = _read_client_auth_code()
+        _client_auth_code_info['timestamp'] = time.time()
+    return _client_auth_code_info['code']
+
+def _read_client_auth_code():
+    ksd = _kachery_storage_dir()
+    p = f'{ksd}/client-auth'
+    if not os.path.isfile(p):
+        raise Exception(f'Unable to find client auth file (perhaps daemon is not running): {p}')
+    try:
+        with open(p, 'r') as f:
+            client_auth_code = f.read()
+    except:
+        raise Exception(f'Unable to read client auth file. Perhaps you do not have permission to access this daemon.')
+    return client_auth_code
+
+
+def _api_url(api_port=None, api_host=None, no_client_auth=False):
     if api_port is not None:
         port = api_port
     else:
@@ -19,7 +44,13 @@ def _api_url(api_port=None, api_host=None):
         host = api_host
     else:
         host = _api_host()
-    return f'http://{host}:{port}'
+    if not no_client_auth:
+        headers = {
+            'KACHERY-CLIENT-AUTH-CODE': _get_client_auth_code()
+        }
+    else:
+        headers = {}
+    return f'http://{host}:{port}', headers
 
 class _probe_result:
     def __init__(self, x: dict):
@@ -46,7 +77,7 @@ def _buffered_probe_daemon(api_port=None):
     return _buffered_probe_data.result
 
 def _probe_daemon(api_port=None):
-    api_url = _api_url(api_port=api_port)
+    api_url, headers = _api_url(api_port=api_port, no_client_auth=True)
     url = f'{api_url}/probe'
     try:
         x = _http_get_json(url)

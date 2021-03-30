@@ -57,6 +57,7 @@ class KacheryP2PNode {
     #onProxyConnectionToServerCallbacks: (() => void)[] = []
     #stats = new NodeStats()
     #mirrorSources: MirrorSourceConfig[] = []
+    #clientAuthCode = {current: '', previous: ''}
     constructor(private p: {
         configDir: LocalFilePath | null,
         verbose: number,
@@ -635,6 +636,17 @@ class KacheryP2PNode {
     }
     nodeLabel() {
         return this.p.label
+    }
+    setClientAuthCode(code: string, previousCode: string) {
+        this.#clientAuthCode = {
+            current: code,
+            previous: previousCode
+        }
+    }
+    verifyClientAuthCode(code: string) {
+        if (code === this.#clientAuthCode.current) return true
+        if ((this.#clientAuthCode.previous) && (code === this.#clientAuthCode.previous)) return true
+        return false
     }
 }
 

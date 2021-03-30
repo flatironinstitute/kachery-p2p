@@ -29,7 +29,8 @@ def start_daemon(*,
     nomulticast: bool=False,
     static_config: str='',
     node_arg: List[str]=[],
-    install_only: bool=False
+    install_only: bool=False,
+    auth_group: str=''
 ):
     """Used internally. Use the kachery-p2p-start-daemon command in the terminal.
     """
@@ -59,6 +60,8 @@ def start_daemon(*,
         start_args.append(f'--udp-port {udp_port}')
     if static_config:
         start_args.append(f'--static-config {static_config}')
+    if auth_group:
+        start_args.append(f'--auth-group {auth_group}')
     start_args.append(f'--label {label}')
     start_args.append(f'--http-port {port}')
 
@@ -128,10 +131,10 @@ def stop_daemon(api_port=None, api_host=None):
     Args:
         api_port ([type], optional): Optional override of the api port for the daemon. Defaults to None.
     """
-    api_url = _api_url(api_port=api_port, api_host=api_host)
+    api_url, headers = _api_url(api_port=api_port, api_host=api_host)
     url = f'{api_url}/halt'
     try:
-        x = _http_get_json(url)
+        x = _http_get_json(url, headers=headers)
     except:
         return False
     return x.get('success')

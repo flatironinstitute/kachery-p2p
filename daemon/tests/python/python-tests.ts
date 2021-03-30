@@ -70,7 +70,8 @@ const daemonContext = async (o: DaemonContextOpts[], testFunction: (daemons: Dae
                     webSocketServer: true,
                     httpServer: true,
                     daemonServer: true,
-                    mirror: true
+                    mirror: true,
+                    clientAuth: true
                 }
             }
             

@@ -1,3 +1,4 @@
+import { userInfo } from 'os'
 import ExternalInterface from './external/ExternalInterface';
 import { MockNodeDefects } from './external/mock/MockNodeDaemon';
 import { Address, HostName, LocalFilePath, NodeLabel, Port, scaledDurationMsec, unscaledDurationMsec, UrlString } from './interfaces/core';
@@ -14,6 +15,7 @@ import PublicApiServer from './services/PublicApiServer';
 import PublicUdpSocketServer from './services/PublicUdpSocketServer';
 import PublicWebSocketServer from './services/PublicWebSocketServer';
 import MirrorService from './services/MirrorService'
+import ClientAuthService from './services/ClientAuthService'
 
 export interface StartDaemonOpts {
     isBootstrap: boolean,
@@ -22,6 +24,7 @@ export interface StartDaemonOpts {
     webSocketListenPort: Port | null,
     firewalled: boolean,
     staticConfigPathOrUrl: string | null,
+    authGroup: string | null,
     services: {
         announce?: boolean,
         discover?: boolean,
@@ -34,7 +37,8 @@ export interface StartDaemonOpts {
         webSocketServer?: boolean,
         httpServer?: boolean,
         daemonServer?: boolean
-        mirror?: boolean
+        mirror?: boolean,
+        clientAuth?: boolean
     }
 }
 
@@ -51,6 +55,7 @@ export interface DaemonInterface {
     multicastService: MulticastService | null,
     displayService: DisplayStateService | null,
     mirrorService: MirrorService | null,
+    clientAuthService: ClientAuthService | null,
     node: KacheryP2PNode,
     stop: () => void
 }
@@ -158,6 +163,9 @@ const startDaemon = async (args: {
     const mirrorService = opts.services.mirror ? new MirrorService(kNode, {
         intervalMsec: scaledDurationMsec(120000)
     }): null
+    const clientAuthService = opts.services.clientAuth ? new ClientAuthService(kNode, {
+        clientAuthGroup: opts.authGroup ? opts.authGroup : userInfo().username
+    }) : null
 
     // Start the public http server
     const publicApiServer = new PublicApiServer(kNode, { verbose })
@@ -175,6 +183,7 @@ const startDaemon = async (args: {
         multicastService && multicastService.stop()
         displayService && displayService.stop()
         mirrorService && mirrorService.stop()
+        clientAuthService && clientAuthService.stop()
         // wait a bit after stopping services before cleaning up the rest (for clean exit of services)
         setTimeout(() => {
             daemonApiServer && daemonApiServer.stop()
@@ -200,6 +209,7 @@ const startDaemon = async (args: {
         multicastService,
         displayService,
         mirrorService,
+        clientAuthService,
         node: kNode,
         stop: _stop
     }
