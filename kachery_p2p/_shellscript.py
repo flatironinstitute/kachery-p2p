@@ -209,7 +209,7 @@ class ShellScript():
         _test_shellscript()
 
 def stop_all_scripts():
-    x = _running_scripts.values()
+    x = list(_running_scripts.values())
     for s in x:
         s.stop()
 

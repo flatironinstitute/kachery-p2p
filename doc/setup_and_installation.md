@@ -64,6 +64,12 @@ Environment variables for the daemon
 * `KACHERY_P2P_API_PORT` **(optional)** - Port that the Python client uses to communicate with the daemon. If not provided, a default port will be used.
 * `KACHERY_P2P_CONFIG_DIR` **(optional)** - Directory where configuration files will be stored, including the public/private keys for your node on the distributed system. The default location is ~/.kachery-p2p
 
+Environment variables for the client
+
+* `KACHERY_P2P_API_PORT` **(optional)** - same as above
+* `KACHERY_TEMP_DIR` **(optional)** - Existing directory where temporary files are stored - not the same as `KACHERY_STORAGE_DIR`.
+
+
 ## Hosting a bootstrap node
 
 In order for peers to find one another, they need to connect to a common bootstrap server. In the example above, we provide a couple of bootstrap nodes. You are welcome to use these in your own channels. But you can also host your own bootstrap node(s).
