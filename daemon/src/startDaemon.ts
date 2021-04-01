@@ -1,4 +1,3 @@
-import { userInfo } from 'os'
 import ExternalInterface from './external/ExternalInterface';
 import { MockNodeDefects } from './external/mock/MockNodeDaemon';
 import { Address, HostName, LocalFilePath, NodeLabel, Port, scaledDurationMsec, unscaledDurationMsec, UrlString } from './interfaces/core';
@@ -164,7 +163,7 @@ const startDaemon = async (args: {
         intervalMsec: scaledDurationMsec(120000)
     }): null
     const clientAuthService = opts.services.clientAuth ? new ClientAuthService(kNode, {
-        clientAuthGroup: opts.authGroup ? opts.authGroup : userInfo().username
+        clientAuthGroup: opts.authGroup ? opts.authGroup : null
     }) : null
 
     // Start the public http server
