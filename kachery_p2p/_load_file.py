@@ -54,7 +54,7 @@ def _load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node:
     protocol, algorithm, hash0, additional_path, query = _parse_kachery_uri(uri)
     assert algorithm == 'sha1'
     file_key = _create_file_key(sha1=hash0, query=query)
-    api_url, headers = _api_url
+    api_url, headers = _api_url()
     url = f'{api_url}/loadFile'
     sock = _http_post_json_receive_json_socket(url, dict(
         fileKey=file_key,
