@@ -76,6 +76,7 @@ class ShellScript():
             while True:
                 retcode = self.wait(timeout=timeout_increment)
                 if retcode is not None:
+                    self._cleanup()
                     return retcode
                 if timeout is not None:
                     elapsed = time.time() - timer
@@ -84,6 +85,7 @@ class ShellScript():
 
         if not self.isRunning():
             self._print_stdout()
+            self._cleanup()
             return self.returnCode()
         assert self._process is not None, "Unexpected self._process is None even though it is running."
         try:
@@ -126,19 +128,20 @@ class ShellScript():
                 return
             assert self._process is not None, "Unexpected self._process is None even though it is running."
 
-            self._cleanup()
+            try:
+                signals = [signal.SIGINT, signal.SIGINT, signal.SIGINT] + [signal.SIGTERM, signal.SIGTERM, signal.SIGTERM] + [signal.SIGKILL]
+                signal_strings = ['SIGINT', 'SIGINT', 'SIGINT'] + ['SIGTERM', 'SIGTERM', 'SIGTERM'] + ['SIGKILL']
+                delays = [5, 5, 5] + [5, 5, 5] + [1]
 
-            signals = [signal.SIGINT, signal.SIGINT, signal.SIGINT] + [signal.SIGTERM, signal.SIGTERM, signal.SIGTERM] + [signal.SIGKILL]
-            signal_strings = ['SIGINT', 'SIGINT', 'SIGINT'] + ['SIGTERM', 'SIGTERM', 'SIGTERM'] + ['SIGKILL']
-            delays = [5, 5, 5] + [5, 5, 5] + [1]
-
-            for iis in range(len(signals)):
-                self._process.send_signal(signals[iis])
-                try:
-                    self._process.wait(timeout=delays[iis])
-                    return
-                except:
-                    pass
+                for iis in range(len(signals)):
+                    self._process.send_signal(signals[iis])
+                    try:
+                        self._process.wait(timeout=delays[iis])
+                        return
+                    except:
+                        pass
+            finally:
+                self._cleanup()
 
     def kill(self) -> None:
         if not self.isRunning():

@@ -101,7 +101,12 @@ def _kachery_storage_dir():
 
 def _create_if_needed(dirpath: str) -> str:
     if not os.path.isdir(dirpath):
-        os.mkdir(dirpath)
+        try:
+            os.mkdir(dirpath)
+        except:
+            # in case it was created elsewhere
+            if not os.path.isdir(dirpath):
+                raise Exception(f'Failed to create dir: {dirpath}')
     return dirpath
 
 def _kachery_temp_dir() -> str:

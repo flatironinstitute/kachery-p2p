@@ -136,7 +136,10 @@ class Subfeed {
         const messages = check()
         if (messages.length > 0) return messages
         if (durationMsecToNumber(waitMsec) > 0) {
-            this.remoteFeedManager.subscribeToRemoteSubfeed(this.feedId, this.subfeedHash)
+            const success = this.remoteFeedManager.subscribeToRemoteSubfeed(this.feedId, this.subfeedHash)
+            if (!success) {
+                return []
+            }
             return new Promise((resolve, reject) => {
                 const listenerId = createListenerId()
                 let completed = false

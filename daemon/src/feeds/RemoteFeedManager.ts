@@ -1,29 +1,41 @@
 import { TIMEOUTS } from '../common/constants';
 import GarbageMap from '../common/GarbageMap';
 import { sleepMsec } from '../common/util';
-import { DurationMsec, FeedId, FindLiveFeedResult, scaledDurationMsec, SubfeedHash, SubmittedSubfeedMessage } from '../interfaces/core';
+import { DurationMsec, elapsedSince, FeedId, FindLiveFeedResult, nowTimestamp, scaledDurationMsec, SubfeedHash, SubmittedSubfeedMessage, Timestamp } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import NewOutgoingSubfeedSubscriptionManager from './NewOutgoingSubfeedSubscriptionManager';
 
 class RemoteFeedManager {
-    #liveFeedInfos = new GarbageMap<FeedId, FindLiveFeedResult>(scaledDurationMsec(5 * 60 * 1000)) // Information about the live feeds (cached in memory)
+    #liveFeedInfos = new GarbageMap<FeedId, {result: FindLiveFeedResult | null, timestamp: Timestamp}>(scaledDurationMsec(60 * 60 * 1000)) // Information about the live feeds (cached in memory) - null result means not found
     // #remoteSubfeedSubscriptions = new GarbageMap<string, RemoteSubfeedSubscription>(null)
     // Manages interactions with feeds on remote nodes within the p2p network
     constructor(private node: KacheryP2PNode, private outgoingSubfeedSubscriptionManager: NewOutgoingSubfeedSubscriptionManager) {
     }
 
-    async subscribeToRemoteSubfeed(feedId: FeedId, subfeedHash: SubfeedHash): Promise<void> {
+    async subscribeToRemoteSubfeed(feedId: FeedId, subfeedHash: SubfeedHash): Promise<boolean> {
         // todo: find the node ID and channel of the remote subfeed
-        let info = this.#liveFeedInfos.get(feedId)
-        if (!info) {
-            const findLiveFeedResult = await this.node.findLiveFeed({feedId, timeoutMsec: TIMEOUTS.defaultRequest})
-            if (!findLiveFeedResult) throw Error('Unable to find live feed (subscribeToRemoteSubfeed).')
-            info = findLiveFeedResult
-            this.#liveFeedInfos.set(feedId, info)
+        let cachedInfo = this.#liveFeedInfos.get(feedId)
+        if (cachedInfo) {
+            // invalidate the cached result
+            const elapsed = elapsedSince(cachedInfo.timestamp)
+            if ((cachedInfo.result) && (elapsed > 1000 * 60 * 10)) {
+                cachedInfo = undefined
+            }
+            else if ((!cachedInfo.result) && (elapsed > 1000 * 30)) {
+                cachedInfo = undefined
+            }
         }
-        const remoteNodeId = info.nodeId
+        if (!cachedInfo) {
+            const findLiveFeedResult = await this.node.findLiveFeed({feedId, timeoutMsec: TIMEOUTS.defaultRequest})
+            cachedInfo = {result: findLiveFeedResult, timestamp: nowTimestamp()}
+            this.#liveFeedInfos.set(feedId, cachedInfo)
+        }
+        const findLiveFeedResult = cachedInfo.result
+        if (!findLiveFeedResult) return false
+        const remoteNodeId = findLiveFeedResult.nodeId
         // CHAIN:get_remote_messages:step(5)
         await this.outgoingSubfeedSubscriptionManager.createOrRenewOutgoingSubscription(remoteNodeId, feedId, subfeedHash)
+        return true
     }
     async submitMessage(args: {feedId: FeedId, subfeedHash: SubfeedHash, message: SubmittedSubfeedMessage, timeoutMsec: DurationMsec}) {
         const {feedId, subfeedHash, message, timeoutMsec} = args;
@@ -71,11 +83,11 @@ class RemoteFeedManager {
 
         // First check if we have the information in the memory cache
         const cachedInfo = this.#liveFeedInfos.get(feedId)
-        if (cachedInfo) {
+        if ((cachedInfo) && (cachedInfo.result)) {
             // check whether the node is still online
-            if (this.node.remoteNodeManager().remoteNodeIsOnline(cachedInfo.nodeId)) {
+            if (this.node.remoteNodeManager().remoteNodeIsOnline(cachedInfo.result.nodeId)) {
                 // if so, return it
-                return cachedInfo
+                return cachedInfo.result
             }
             else {
                 // if not, then set the cached info to null
@@ -89,7 +101,7 @@ class RemoteFeedManager {
         }
 
         // Store in memory cache
-        this.#liveFeedInfos.set(feedId, x)
+        this.#liveFeedInfos.set(feedId, {result: x, timestamp: nowTimestamp()})
         return x
     }
 }
