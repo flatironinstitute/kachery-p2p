@@ -121,7 +121,19 @@ export class KacheryStorageManager {
                     const destParentPath = `${this.#storageDir}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`
                     const destPath = `${destParentPath}/${s}`
                     fs.mkdirSync(destParentPath, {recursive: true});
-                    fs.renameSync(tmpDestPath, destPath)
+                    try {
+                        // this line occassionaly fails on our ceph system and it is unclear the reason. So I am catching the error to troubleshoot
+                        fs.renameSync(tmpDestPath, destPath)
+                    }
+                    catch(err) {
+                        if (!fs.existsSync(tmpDestPath)) {
+                            throw Error(`Unexpected problem renaming file. File does not exist: ${tmpDestPath}: ${err.message}`)
+                        }
+                        if (!fs.existsSync(destParentPath)) {
+                            throw Error(`Unexpected problem renaming file. Destination parent path does not exist: ${destParentPath}: ${err.message}`)
+                        }
+                        throw Error(`Unexpected problem renaming file. Even though file exists and dest parent directory exists: ${tmpDestPath} ${destParentPath}: ${err.message}`)
+                    }
                     _updateManifestChunks({final: true})
                     const manifest: FileManifest = {
                         size: byteCount(manifestData.byte2),
