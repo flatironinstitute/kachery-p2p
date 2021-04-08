@@ -6,7 +6,7 @@ import { ChannelConfigUrl, elapsedSince, nowTimestamp, scaledDurationMsec, Times
 type ChannelConfigRecord = {
     channelConfigUrl: ChannelConfigUrl
     timestamp: Timestamp
-    channelConfig: ChannelConfig
+    channelConfig: ChannelConfig | null
 }
 
 class ChannelConfigManager {
@@ -45,6 +45,7 @@ class ChannelConfigManager {
             const config = await loadConfig(channelConfigUrl.toString())
             if (config) {
                 if (isChannelConfig(config)) {
+                    config.authorizedNodes
                     const r: ChannelConfigRecord = {
                         channelConfig: config,
                         timestamp: nowTimestamp(),
@@ -55,7 +56,13 @@ class ChannelConfigManager {
                 }
                 else {
                     console.warn(`Invalid channel config for: ${channelConfigUrl}`)
-                    return null
+                    const r: ChannelConfigRecord = {
+                        channelConfig: null,
+                        timestamp: nowTimestamp(),
+                        channelConfigUrl
+                    }
+                    this.#records.set(channelConfigUrl, r)
+                    return r
                 }
             }
             else return null

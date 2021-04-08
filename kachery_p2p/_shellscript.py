@@ -1,12 +1,11 @@
 import subprocess
-import sys
 import tempfile
 import shutil
 import signal
 import os
 import time
-import io
 import random
+import atexit
 from typing import Optional, List, Any
 from ._preventkeyboardinterrupt import PreventKeyboardInterrupt
 from ._daemon_connection import _kachery_temp_dir
@@ -301,3 +300,5 @@ def _test_shellscript():
     
     # _test_error_handling_1()
     _test_coverage()
+
+atexit.register(stop_all_scripts)

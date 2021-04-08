@@ -5,6 +5,7 @@ import numpy as np
 from ._core2 import (_find_file, _get_channels, _get_node_id)
 from ._feeds import (_create_feed, _delete_feed, _get_feed_id, _load_feed,
                      _load_subfeed, _watch_for_new_messages)
+from ._mutables import (_get, _set, _delete)
 
 from ._load_file import _load_file, _load_bytes, _load_text, _load_json, _load_npy, _load_pkl
 from ._store_file import _store_file, _store_text, _store_json, _store_npy, _store_pkl
@@ -292,3 +293,51 @@ def watch_for_new_messages(subfeed_watches: Dict[str, dict], *, wait_msec) -> Di
         List[dict]: The list of retrieved messages (TODO: more details needed)
     """
     return _watch_for_new_messages(subfeed_watches=subfeed_watches, wait_msec=wait_msec)
+
+################################################
+
+def set(key: Union[str, dict, list], value: Union[str, dict, list]):
+    """Set a mutable value (only available locally)
+
+    Args:
+        key (Union[str, dict, list]): The key
+        value (Union[str, dict, list]): The value
+
+    Returns:
+        None
+    """
+    return _set(key=key, value=value)
+
+def get(key: Union[str, dict, list]):
+    """Get a mutable value (only available locally)
+
+    Args:
+        key (Union[str, dict, list]): The key
+
+    Returns:
+        value (Union[str, dict, list, None]): The value if found, else None
+    """
+    return _get(key=key)
+
+def get_string(key: Union[str, dict, list]):
+    """Get a mutable value as a string (only available locally)
+
+    Args:
+        key (Union[str, dict, list]): The key
+
+    Returns:
+        value (Union[str, None]): The value as a string if found, else None
+    """
+    v = get(key)
+    return str(v) if v is not None else None
+
+def delete(key: Union[str, dict, list], value: Union[str, dict, list]):
+    """Delete a mutable value (only available locally)
+
+    Args:
+        key (Union[str, dict, list]): The key
+
+    Returns:
+        None
+    """
+    return _delete(key=key)

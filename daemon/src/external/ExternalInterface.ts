@@ -47,7 +47,7 @@ export interface KacheryStorageManagerInterface {
     storeFile: (sha1: Sha1Hash, data: Buffer) => Promise<void>
     storeLocalFile: (localFilePath: LocalFilePath) => Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}>
     concatenateChunksAndStoreResult: (sha1: Sha1Hash, chunkSha1s: Sha1Hash[]) => Promise<void>
-    storageDir: () => LocalFilePath | null
+    storageDir: () => LocalFilePath
 }
 
 export type CreateKacheryStorageManagerFunction = () => KacheryStorageManagerInterface

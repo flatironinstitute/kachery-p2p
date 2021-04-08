@@ -15,6 +15,7 @@ from .main import load_file, load_npy, load_pkl, load_object, load_json, load_te
 from .main import store_file, store_object, store_json, store_npy, store_pkl, store_text
 from .main import load_feed, load_subfeed
 from .main import create_feed, delete_feed, get_feed_id, watch_for_new_messages
+from .main import get, set, delete, get_string
 
 from ._temporarydirectory import TemporaryDirectory
 from ._shellscript import ShellScript

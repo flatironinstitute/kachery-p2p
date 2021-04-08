@@ -7,7 +7,7 @@ import DataStreamy from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
 import { isGetStatsOpts, NodeStatsInterface } from '../getStats';
-import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToNumber, ErrorMessage, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelConfigUrl, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, LocalFilePath, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject } from '../interfaces/core';
+import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToNumber, ErrorMessage, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelConfigUrl, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, LocalFilePath, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject, JSONValue, isJSONValue } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -119,6 +119,63 @@ export const isFeedApiWatchForNewMessagesResponse = (x: any): x is FeedApiWatchF
     return _validateObject(x, {
         success: isBoolean,
         messages: isOneOf([isObjectOf(isString, isArrayOf(isSubfeedMessage)), isObjectOf(isString, isArrayOf(isSignedSubfeedMessage))])
+    })
+}
+
+export interface MutableApiSetRequest {
+    key: JSONValue
+    value: JSONValue
+}
+export const isMutableApiSetRequest = (x: any): x is MutableApiSetRequest => {
+    return _validateObject(x, {
+        key: isJSONValue,
+        value: isJSONValue
+    })
+}
+export interface MutableApiSetResponse {
+    success: boolean
+}
+export const isMutableApiSetResponse = (x: any): x is MutableApiSetResponse => {
+    return _validateObject(x, {
+        success: isBoolean
+    })
+}
+
+export interface MutableApiGetRequest {
+    key: JSONValue
+}
+export const isMutableApiGetRequest = (x: any): x is MutableApiGetRequest => {
+    return _validateObject(x, {
+        key: isJSONValue
+    })
+}
+export interface MutableApiGetResponse {
+    success: boolean,
+    found: boolean,
+    value: JSONValue
+}
+export const isMutableApiGetResponse = (x: any): x is MutableApiGetResponse => {
+    return _validateObject(x, {
+        success: isBoolean,
+        found: isBoolean,
+        value: isJSONValue
+    })
+}
+
+export interface MutableApiDeleteRequest {
+    key: JSONValue
+}
+export const isMutableApiDeleteRequest = (x: any): x is MutableApiDeleteRequest => {
+    return _validateObject(x, {
+        key: isJSONValue
+    })
+}
+export interface MutableApiDeleteResponse {
+    success: boolean
+}
+export const isMutableApiDeleteResponse = (x: any): x is MutableApiDeleteResponse => {
+    return _validateObject(x, {
+        success: isBoolean
     })
 }
 
@@ -462,6 +519,16 @@ export default class DaemonApiServer {
             // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
             path: '/feed/watchForNewMessages',
             handler: async (reqData: JSONObject) => {return await this._handleFeedApiWatchForNewMessages(reqData)}
+        },
+        {
+            // /mutable/get - get a mutable value
+            path: '/mutable/get',
+            handler: async (reqData: JSONObject) => {return await this._handleMutableApiGet(reqData)}
+        },
+        {
+            // /mutable/set - set a mutable value
+            path: '/mutable/set',
+            handler: async (reqData: JSONObject) => {return await this._handleMutableApiSet(reqData)}
         }
     ]
 
@@ -918,6 +985,43 @@ export default class DaemonApiServer {
         })
 
         const response: FeedApiWatchForNewMessagesResponse = {success: true, messages: mapToObject(messages)}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object')
+        return response
+    }
+    // /mutable/set - set a mutable value
+    async _handleMutableApiSet(reqData: JSONObject) {
+        /* istanbul ignore next */
+        console.warn(reqData)
+        if (!isMutableApiSetRequest(reqData)) throw Error('Invalid request in _mutableApiSet')
+        const { key, value } = reqData
+
+        await this.#node.mutableManager().set(key, value)
+
+        const response: MutableApiSetResponse = {success: true}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object')
+        return response
+    }
+    // /mutable/get - get a mutable value
+    async _handleMutableApiGet(reqData: JSONObject) {
+        /* istanbul ignore next */
+        if (!isMutableApiGetRequest(reqData)) throw Error('Invalid request in _mutableApiGet')
+        const { key } = reqData
+
+        const rec = await this.#node.mutableManager().get(key)
+
+        const response: MutableApiGetResponse = {success: true, found: rec !== undefined,  value: rec !== undefined ? rec.value : ''}
+        if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object')
+        return response
+    }
+    // /mutable/delete - delete a mutable value
+    async _handleMutableApiDelete(reqData: JSONObject) {
+        /* istanbul ignore next */
+        if (!isMutableApiDeleteRequest(reqData)) throw Error('Invalid request in _mutableApiDelete')
+        const { key } = reqData
+
+        await this.#node.mutableManager().delete(key)
+
+        const response: MutableApiDeleteResponse = {success: true}
         if (!isJSONObject(response)) throw Error('Unexpected, not a JSON-serializable object')
         return response
     }

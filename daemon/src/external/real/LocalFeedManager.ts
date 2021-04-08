@@ -115,16 +115,14 @@ class FeedsConfigManager {
 }
 
 export default class LocalFeedManager {
-    #configDir: LocalFilePath
     #feedsConfigManager: FeedsConfigManager
     #localFeedsDatabase: LocalFeedsDatabase
     // #localFeedsDatabaseOld: LocalFeedsDatabaseOld
-    constructor(private storageDir: LocalFilePath, private configDir: LocalFilePath) {
+    constructor(storageDir: LocalFilePath, configDir: LocalFilePath) {
         if (!fs.existsSync(storageDir.toString())) {
             throw Error(`Storage directory does not exist: ${storageDir}`)
         }
-        this.#configDir = configDir
-        this.#feedsConfigManager = new FeedsConfigManager(this.#configDir, {useMemoryCache: true}) // todo: need to test this for both false and true
+        this.#feedsConfigManager = new FeedsConfigManager(configDir, {useMemoryCache: true}) // todo: need to test this for both false and true
         this.#localFeedsDatabase = new LocalFeedsDatabase(localFilePath(storageDir + '/feeds.db'))
         // this.#localFeedsDatabaseOld = new LocalFeedsDatabaseOld(storageDir)
     }

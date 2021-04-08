@@ -91,7 +91,7 @@ export default class MockKacheryStorageManager {
         }
     }
     storageDir() {
-        return null
+        return localFilePath('<mock>')
     }
     _createFileManifest(content: Buffer, chunkSize: ByteCount) {
         var shasum = crypto.createHash('sha1')

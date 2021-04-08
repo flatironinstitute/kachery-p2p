@@ -10,6 +10,7 @@ import DownloadOptimizer from './downloadOptimizer/DownloadOptimizer'
 import ExternalInterface, { KacheryStorageManagerInterface } from './external/ExternalInterface'
 import { MockNodeDefects } from './external/mock/MockNodeDaemon'
 import FeedManager from './feeds/FeedManager'
+import MutableManager from './mutables/MutableManager'
 import Subfeed from './feeds/Subfeed'
 import { getStats, GetStatsOpts } from './getStats'
 import { addDurations, Address, byteCount, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, ChannelNodeInfoBody, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, messageCountToNumber, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, subfeedPositionToNumber, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
@@ -45,6 +46,7 @@ class KacheryP2PNode {
     #nodeId: NodeId
     #joinedChannels: JoinedChannelConfig[] = []
     #feedManager: FeedManager
+    #mutableManager: MutableManager
     #remoteNodeManager: RemoteNodeManager
     #kacheryStorageManager: KacheryStorageManagerInterface
     #channelConfigManager = new ChannelConfigManager()
@@ -77,6 +79,9 @@ class KacheryP2PNode {
         // The feed manager -- each feed is a collection of append-only logs
         const localFeedManager = this.p.externalInterface.createLocalFeedManager()
         this.#feedManager = new FeedManager(this, localFeedManager)
+
+        const storageDir = this.#kacheryStorageManager.storageDir()
+        this.#mutableManager = new MutableManager(storageDir)
 
         this.#remoteNodeManager = new RemoteNodeManager(this)
 
@@ -258,6 +263,9 @@ class KacheryP2PNode {
     }
     feedManager() {
         return this.#feedManager
+    }
+    mutableManager() {
+        return this.#mutableManager
     }
     setProxyConnectionToClient(nodeId: NodeId, c: ProxyWebsocketConnection) {
         if (this.#proxyConnectionsToClients.has(nodeId)) {

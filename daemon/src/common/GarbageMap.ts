@@ -35,7 +35,7 @@ export default class GarbageMap<Key extends String, Value> {
         this._checkGarbageCollection()
     }
     delete(key: Key) {
-        this.#map.delete(key)
+        if (this.#map.has(key)) this.#map.delete(key)
         this._checkGarbageCollection()
     }
     has(key: Key) {

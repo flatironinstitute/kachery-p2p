@@ -11,8 +11,11 @@ export type JSONValue = JSONPrimitive | JSONObject | JSONArray;
 export type JSONObject = { [member: string]: JSONValue };
 export interface JSONArray extends Array<JSONValue> {}
 export const isJSONObject = (x: any): x is JSONObject => {
-    if (!isObject(x)) return false;
-    return isJSONSerializable(x);
+    if (!isObject(x)) return false
+    return isJSONSerializable(x)
+}
+export const isJSONValue = (x: any): x is JSONValue => {
+    return isJSONSerializable(x)
 }
 export const tryParseJsonObject = (x: string): JSONObject | null => {
     let a: any
@@ -26,6 +29,8 @@ export const tryParseJsonObject = (x: string): JSONObject | null => {
     return a;
 }
 export const isJSONSerializable = (obj: any): boolean => {
+    if (typeof(obj) === 'string') return true
+    if (typeof(obj) === 'number') return true
     if (!isObject(obj)) return false
     const isPlainObject = (a: Object) => {
         return Object.prototype.toString.call(a) === '[object Object]';
