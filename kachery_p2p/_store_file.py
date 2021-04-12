@@ -8,6 +8,7 @@ from ._local_kachery_storage import _local_kachery_storage_store_file
 from ._misc import _http_post_json
 from ._temporarydirectory import TemporaryDirectory
 from ._safe_pickle import _safe_pickle, _safe_unpickle
+from ._local_kachery_storage import _get_path_ext
 
 def _store_file(path: str, basename: Union[str, None]=None) -> str:
     if basename is None:
@@ -20,6 +21,7 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
             return f'sha1://{hash0}/{basename}?manifest={manifest_hash}'
     if not _is_online_mode():
         raise Exception('Not connected to daemon and not in offline mode.')
+    file_size = os.path.getsize(path)
     api_url, headers = _api_url()
     url = f'{api_url}/storeFile'
     resp = _http_post_json(url, {'localFilePath': os.path.abspath(path)}, headers=headers)
@@ -27,6 +29,18 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
         raise Exception(f'Problem storing file: {resp["error"]}')
     sha1 = resp['sha1']
     manifest_sha1 = resp['manifestSha1']
+
+    # important to verify that we can access the file
+    # this is crucial for systems where the daemon is running on a different computer
+    # in frank lab there was an issue where we needed to stat the file before proceeding
+    sha1_directory = f'{_kachery_storage_dir()}/sha1'
+    path0 = _get_path_ext(hash=sha1, create=False, directory=sha1_directory)
+    if not os.path.exists(path0):
+        raise Exception(f'Unexpected, could not find stored file after storing with daemon: {path0}')
+    size0 = os.path.getsize(path0)
+    if size0 != file_size:
+        raise Exception(f'Inconsistent size between stored file and orginal file for: {path} {path0} {size0} {file_size}')
+
     if manifest_sha1:
         return f'sha1://{sha1}/{basename}?manifest={manifest_sha1}'
     else:

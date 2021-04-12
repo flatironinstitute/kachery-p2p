@@ -120,19 +120,25 @@ export class KacheryStorageManager {
                     const s = sha1Computed
                     const destParentPath = `${this.#storageDir}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`
                     const destPath = `${destParentPath}/${s}`
-                    fs.mkdirSync(destParentPath, {recursive: true});
-                    try {
-                        // this line occassionaly fails on our ceph system and it is unclear the reason. So I am catching the error to troubleshoot
-                        fs.renameSync(tmpDestPath, destPath)
+                    if (fs.existsSync(destPath)) {
+                        // if the dest path already exists, we already have the file and we are good
                     }
-                    catch(err) {
-                        if (!fs.existsSync(tmpDestPath)) {
-                            throw Error(`Unexpected problem renaming file. File does not exist: ${tmpDestPath}: ${err.message}`)
+                    else {
+                        // dest path does not already exist
+                        fs.mkdirSync(destParentPath, {recursive: true});
+                        try {
+                            // this line occassionaly fails on our ceph system and it is unclear the reason. So I am catching the error to troubleshoot
+                            fs.renameSync(tmpDestPath, destPath)
                         }
-                        if (!fs.existsSync(destParentPath)) {
-                            throw Error(`Unexpected problem renaming file. Destination parent path does not exist: ${destParentPath}: ${err.message}`)
+                        catch(err) {
+                            if (!fs.existsSync(tmpDestPath)) {
+                                throw Error(`Unexpected problem renaming file. File does not exist: ${tmpDestPath}: ${err.message}`)
+                            }
+                            if (!fs.existsSync(destParentPath)) {
+                                throw Error(`Unexpected problem renaming file. Destination parent path does not exist: ${destParentPath}: ${err.message}`)
+                            }
+                            throw Error(`Unexpected problem renaming file. Even though file exists and dest parent directory exists: ${tmpDestPath} ${destParentPath}: ${err.message}`)
                         }
-                        throw Error(`Unexpected problem renaming file. Even though file exists and dest parent directory exists: ${tmpDestPath} ${destParentPath}: ${err.message}`)
                     }
                     _updateManifestChunks({final: true})
                     const manifest: FileManifest = {
