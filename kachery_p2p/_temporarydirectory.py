@@ -16,7 +16,8 @@ class TemporaryDirectory():
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self._remove:
-            _rmdir_with_retries(self._path, num_retries=5)
+            if not os.getenv('KACHERY_P2P_KEEP_TEMP_FILES') == '1':
+                _rmdir_with_retries(self._path, num_retries=5)
 
     def path(self):
         return self._path
