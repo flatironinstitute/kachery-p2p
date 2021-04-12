@@ -51,6 +51,7 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
             elapsed = time.time() - timer
             if elapsed > 10:
                 raise
+            os.scandir(os.path.dirname(path0))
             time.sleep(0.1)
 
     if manifest_sha1:
