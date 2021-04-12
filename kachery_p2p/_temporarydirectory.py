@@ -2,6 +2,7 @@ import os
 import tempfile
 import shutil
 import time
+import random
 from ._daemon_connection import _kachery_temp_dir
 
 
@@ -11,7 +12,8 @@ class TemporaryDirectory():
         self._prefix = prefix
 
     def __enter__(self) -> str:
-        self._path = str(tempfile.mkdtemp(prefix=self._prefix, dir=_kachery_temp_dir()))
+        self._path = f'{_kachery_temp_dir()}/{self._prefix}_{_random_string(8)}'
+        os.mkdir(self._path)
         return self._path
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -36,3 +38,7 @@ def _rmdir_with_retries(dirname: str, num_retries: int, delay_between_tries: flo
                 time.sleep(delay_between_tries)
             else:
                 raise Exception('Unable to remove directory after {} tries: {}'.format(num_retries, dirname))
+
+def _random_string(num_chars: int) -> str:
+    chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    return ''.join(random.choice(chars) for _ in range(num_chars))
