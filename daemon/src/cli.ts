@@ -202,7 +202,7 @@ function main() {
               fs.mkdirSync(storageDir)
             }
         }
-        if (!fs.lstatSync(storageDir).isDirectory()) {
+        if ((!fs.lstatSync(storageDir).isDirectory()) && (!fs.lstatSync(storageDir).isSymbolicLink)) {
           throw new CLIError(`Storage path is not a directory: ${storageDir}`)
         }        
 
