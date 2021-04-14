@@ -67,6 +67,7 @@ Environment variables for the daemon
 Environment variables for the client
 
 * `KACHERY_P2P_API_PORT` **(optional)** - same as above
+* `KACHERY_P2P_API_HOST` **(optional)** - same as above
 * `KACHERY_TEMP_DIR` **(optional)** - Existing directory where temporary files are stored - not the same as `KACHERY_STORAGE_DIR`.
 
 
