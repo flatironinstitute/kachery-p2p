@@ -62,11 +62,13 @@ Environment variables for the daemon
 
 * `KACHERY_STORAGE_DIR` **(optional)** - Refers to an existing directory on your local computer. This is where kachery stores all of your cached files. If not set, files will be stored in the default location: `$HOME/kachery-storage`.
 * `KACHERY_P2P_API_PORT` **(optional)** - Port that the Python client uses to communicate with the daemon. If not provided, a default port will be used.
+* `KACHERY_P2P_API_HOST` **(optional)** - Host that the Python client uses to communicate with the daemon. If not provided, a default of localhost will be used.
 * `KACHERY_P2P_CONFIG_DIR` **(optional)** - Directory where configuration files will be stored, including the public/private keys for your node on the distributed system. The default location is ~/.kachery-p2p
 
 Environment variables for the client
 
 * `KACHERY_P2P_API_PORT` **(optional)** - same as above
+* `KACHERY_P2P_API_HOST` **(optional)** - same as above
 * `KACHERY_TEMP_DIR` **(optional)** - Existing directory where temporary files are stored - not the same as `KACHERY_STORAGE_DIR`.
 
 
