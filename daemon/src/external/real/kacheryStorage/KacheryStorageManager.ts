@@ -48,6 +48,11 @@ export class KacheryStorageManager {
             }
         }
         fs.renameSync(destPathTmp, destPath)
+        // we need to stat the file here for purpose of flushing to disk
+        const size0 = fs.statSync(destPath).size
+        if (size0 === 0) {
+            throw Error('Unexpected: file has size zero after renaming')
+        }
     }
     async storeLocalFile(localFilePath: LocalFilePath): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
         let stat0: fs.Stats
@@ -139,6 +144,11 @@ export class KacheryStorageManager {
                             }
                             throw Error(`Unexpected problem renaming file. Even though file exists and dest parent directory exists: ${tmpDestPath} ${destParentPath}: ${err.message}`)
                         }
+                        // we need to stat the file here for purpose of flushing to disk
+                        const size0 = fs.statSync(destPath).size
+                        if (size0 === 0) {
+                            throw Error('Unexpected: file has size zero after renaming (*)')
+                        }
                     }
                     _updateManifestChunks({final: true})
                     const manifest: FileManifest = {
@@ -224,6 +234,11 @@ export class KacheryStorageManager {
         }
         fs.mkdirSync(destParentPath, {recursive: true});
         fs.renameSync(tmpPath, destPath)
+        // we need to stat the file here for purpose of flushing to disk
+        const size0 = fs.statSync(destPath).size
+        if (size0 === 0) {
+            throw Error('Unexpected: file has size zero after renaming (**)')
+        }
     }
     async hasLocalFile(fileKey: FileKey): Promise<boolean> {
         if (fileKey.sha1) {
