@@ -1,9 +1,10 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import { time } from 'node:console';
 import { JSONStringifyDeterministic } from '../../../common/crypto_util';
 import DataStreamy from '../../../common/DataStreamy';
-import { randomAlphaString } from '../../../common/util';
-import { byteCount, ByteCount, byteCountToNumber, FileKey, FileManifest, FileManifestChunk, isBuffer, localFilePath, LocalFilePath, Sha1Hash } from '../../../interfaces/core';
+import { randomAlphaString, sleepMsec } from '../../../common/util';
+import { byteCount, ByteCount, byteCountToNumber, FileKey, FileManifest, FileManifestChunk, isBuffer, localFilePath, LocalFilePath, scaledDurationMsec, Sha1Hash } from '../../../interfaces/core';
 
 export class KacheryStorageManager {
     #storageDir: LocalFilePath
@@ -47,12 +48,7 @@ export class KacheryStorageManager {
                 return
             }
         }
-        fs.renameSync(destPathTmp, destPath)
-        // we need to stat the file here for purpose of flushing to disk
-        const size0 = fs.statSync(destPath).size
-        if (size0 === 0) {
-            throw Error('Unexpected: file has size zero after renaming')
-        }
+        await renameAndCheck(destPathTmp, destPath)
     }
     async storeLocalFile(localFilePath: LocalFilePath): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
         let stat0: fs.Stats
@@ -125,44 +121,30 @@ export class KacheryStorageManager {
                     const s = sha1Computed
                     const destParentPath = `${this.#storageDir}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`
                     const destPath = `${destParentPath}/${s}`
+                    const nextStep = () => {
+                        _updateManifestChunks({final: true})
+                        const manifest: FileManifest = {
+                            size: byteCount(manifestData.byte2),
+                            sha1: sha1Computed,
+                            chunks: manifestChunks
+                        }
+                        let manifestSha1: Sha1Hash | null = null
+                        if (manifestChunks.length > 1) {
+                            const manifestJson = Buffer.from(JSON.stringify(manifest), 'utf-8')
+                            manifestSha1 = computeSha1OfBufferSync(manifestJson)
+                            this.storeFile(manifestSha1, manifestJson)
+                        }
+                        resolve({sha1: sha1Computed, manifestSha1})
+                    }
                     if (fs.existsSync(destPath)) {
                         // if the dest path already exists, we already have the file and we are good
+                        nextStep()
                     }
                     else {
                         // dest path does not already exist
                         fs.mkdirSync(destParentPath, {recursive: true});
-                        try {
-                            // this line occassionaly fails on our ceph system and it is unclear the reason. So I am catching the error to troubleshoot
-                            fs.renameSync(tmpDestPath, destPath)
-                        }
-                        catch(err) {
-                            if (!fs.existsSync(tmpDestPath)) {
-                                throw Error(`Unexpected problem renaming file. File does not exist: ${tmpDestPath}: ${err.message}`)
-                            }
-                            if (!fs.existsSync(destParentPath)) {
-                                throw Error(`Unexpected problem renaming file. Destination parent path does not exist: ${destParentPath}: ${err.message}`)
-                            }
-                            throw Error(`Unexpected problem renaming file. Even though file exists and dest parent directory exists: ${tmpDestPath} ${destParentPath}: ${err.message}`)
-                        }
-                        // we need to stat the file here for purpose of flushing to disk
-                        const size0 = fs.statSync(destPath).size
-                        if (size0 === 0) {
-                            throw Error('Unexpected: file has size zero after renaming (*)')
-                        }
+                        renameAndCheck(tmpDestPath, destPath).then(nextStep)
                     }
-                    _updateManifestChunks({final: true})
-                    const manifest: FileManifest = {
-                        size: byteCount(manifestData.byte2),
-                        sha1: sha1Computed,
-                        chunks: manifestChunks
-                    }
-                    let manifestSha1: Sha1Hash | null = null
-                    if (manifestChunks.length > 1) {
-                        const manifestJson = Buffer.from(JSON.stringify(manifest), 'utf-8')
-                        manifestSha1 = computeSha1OfBufferSync(manifestJson)
-                        this.storeFile(manifestSha1, manifestJson)
-                    }
-                    resolve({sha1: sha1Computed, manifestSha1})
                 }
                 catch(err2) {
                     _cleanup()
@@ -233,12 +215,7 @@ export class KacheryStorageManager {
             }
         }
         fs.mkdirSync(destParentPath, {recursive: true});
-        fs.renameSync(tmpPath, destPath)
-        // we need to stat the file here for purpose of flushing to disk
-        const size0 = fs.statSync(destPath).size
-        if (size0 === 0) {
-            throw Error('Unexpected: file has size zero after renaming (**)')
-        }
+        await renameAndCheck(tmpPath, destPath)
     }
     async hasLocalFile(fileKey: FileKey): Promise<boolean> {
         if (fileKey.sha1) {
@@ -325,4 +302,25 @@ export const createTemporaryFilePath = (args: {storageDir: LocalFilePath, prefix
     const dirPath = args.storageDir + '/tmp'
     fs.mkdirSync(dirPath, {recursive: true})
     return `${dirPath}/${args.prefix}-${randomAlphaString(10)}`
+}
+
+export const renameAndCheck = async (srcPath: string, dstPath: string) => {
+    try {
+        // this line occassionaly fails on our ceph system and it is unclear the reason. So I am catching the error to troubleshoot
+        fs.renameSync(srcPath, dstPath)
+    }
+    catch(err) {
+        if (!fs.existsSync(dstPath)) {
+            throw Error(`Unexpected problem renaming file. File does not exist: ${dstPath}: ${err.message}`)
+        }
+        throw Error(`Unexpected problem renaming file. Even though file exists: ${dstPath}: ${err.message}`)
+    }
+    // we need to stat the file here for purpose of flushing to disk
+    const numTries = 5
+    for (let i = 0; i < numTries; i++) {
+        const size0 = fs.statSync(dstPath).size
+        if (size0 > 0) return // we are good
+        await sleepMsec(scaledDurationMsec(100))
+    }
+    throw Error(`Unexpected: file has size 0 after renaming (*): ${dstPath}`)
 }
