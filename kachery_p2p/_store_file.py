@@ -37,30 +37,16 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
     # in frank lab there was an issue where we needed to stat the file before proceeding
     sha1_directory = f'{_kachery_storage_dir()}/sha1'
     path0 = _get_path_ext(hash=sha1, create=False, directory=sha1_directory)
-    timer = time.time()
-    printed_warning = False
-    while True:
-        try:
-            if not os.path.exists(path0):
-                raise Exception(f'Unexpected, could not find stored file after storing with daemon: {path0}')
+    if not os.path.exists(path0):
+        raise Exception(f'Unexpected, could not find stored file after storing with daemon: {path0}')
 
-            size0 = _get_file_size_using_system_call(path0)
-            if size0 != file_size:
-                if size0 == 0:
-                    # perhaps the file has not synced across devices
-                    raise Exception(f'Inconsistent size between stored file and original file for: {path} {path0} {file_size} {size0}')
-                else:
-                    raise Exception(f'Unexpected size discrepancy between stored file and original file for: {path} {path0} {file_size} {size0}')
-            break
-        except:
-            elapsed = time.time() - timer
-            if elapsed > 1:
-                if not printed_warning:
-                    printed_warning = True
-                    print(f'WARNING: still waiting for file: {path0}')
-            if elapsed > 10:
-                raise
-            time.sleep(0.1)
+    size0 = _get_file_size_using_system_call(path0)
+    if size0 != file_size:
+        if size0 == 0:
+            # perhaps the file has not synced across devices
+            raise Exception(f'Inconsistent size between stored file and original file for: {path} {path0} {file_size} {size0}')
+        else:
+            raise Exception(f'Unexpected size discrepancy between stored file and original file for: {path} {path0} {file_size} {size0}')
 
     if manifest_sha1:
         return f'sha1://{sha1}/{basename}?manifest={manifest_sha1}'

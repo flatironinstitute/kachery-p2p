@@ -4,7 +4,7 @@ import { time } from 'node:console';
 import { JSONStringifyDeterministic } from '../../../common/crypto_util';
 import DataStreamy from '../../../common/DataStreamy';
 import { randomAlphaString, sleepMsec } from '../../../common/util';
-import { byteCount, ByteCount, byteCountToNumber, FileKey, FileManifest, FileManifestChunk, isBuffer, localFilePath, LocalFilePath, scaledDurationMsec, Sha1Hash } from '../../../interfaces/core';
+import { byteCount, ByteCount, byteCountToNumber, elapsedSince, FileKey, FileManifest, FileManifestChunk, isBuffer, localFilePath, LocalFilePath, nowTimestamp, scaledDurationMsec, Sha1Hash } from '../../../interfaces/core';
 
 export class KacheryStorageManager {
     #storageDir: LocalFilePath
@@ -48,7 +48,7 @@ export class KacheryStorageManager {
                 return
             }
         }
-        await renameAndCheck(destPathTmp, destPath)
+        await renameAndCheck(destPathTmp, destPath, data.length)
     }
     async storeLocalFile(localFilePath: LocalFilePath): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
         let stat0: fs.Stats
@@ -143,7 +143,7 @@ export class KacheryStorageManager {
                     else {
                         // dest path does not already exist
                         fs.mkdirSync(destParentPath, {recursive: true});
-                        renameAndCheck(tmpDestPath, destPath).then(nextStep)
+                        renameAndCheck(tmpDestPath, destPath, byteCountToNumber(fileSize)).then(nextStep)
                     }
                 }
                 catch(err2) {
@@ -175,10 +175,12 @@ export class KacheryStorageManager {
         const tmpPath = createTemporaryFilePath({storageDir: this.#storageDir, prefix: 'kachery-p2p-concat-'})
         const writeStream = fs.createWriteStream(tmpPath)
         const shasum = crypto.createHash('sha1')
+        let totalSizeBytes = 0
         for (let chunkSha1 of chunkSha1s) {
             const readStream = await this.getFileReadStream({sha1: chunkSha1})
             await new Promise<void>((resolve, reject) => {
                 readStream.onData(buf => {
+                    totalSizeBytes += buf.length
                     shasum.update(buf)
                     writeStream.write(buf)
                 })
@@ -215,7 +217,7 @@ export class KacheryStorageManager {
             }
         }
         fs.mkdirSync(destParentPath, {recursive: true});
-        await renameAndCheck(tmpPath, destPath)
+        await renameAndCheck(tmpPath, destPath, totalSizeBytes)
     }
     async hasLocalFile(fileKey: FileKey): Promise<boolean> {
         if (fileKey.sha1) {
@@ -304,7 +306,7 @@ export const createTemporaryFilePath = (args: {storageDir: LocalFilePath, prefix
     return `${dirPath}/${args.prefix}-${randomAlphaString(10)}`
 }
 
-export const renameAndCheck = async (srcPath: string, dstPath: string) => {
+export const renameAndCheck = async (srcPath: string, dstPath: string, expectedSizeBytes: number) => {
     try {
         // this line occassionaly fails on our ceph system and it is unclear the reason. So I am catching the error to troubleshoot
         fs.renameSync(srcPath, dstPath)
@@ -315,12 +317,16 @@ export const renameAndCheck = async (srcPath: string, dstPath: string) => {
         }
         throw Error(`Unexpected problem renaming file. Even though file exists: ${dstPath}: ${err.message}`)
     }
-    // we need to stat the file here for purpose of flushing to disk
-    const numTries = 5
-    for (let i = 0; i < numTries; i++) {
+    // we need to stat the file here for purpose of flushing to disk (problem encountered on franklab system)
+    const timeoutMsec = 1000 * 10
+    const timer = nowTimestamp()
+    while (true) {
         const size0 = fs.statSync(dstPath).size
-        if (size0 > 0) return // we are good
+        if (size0 === expectedSizeBytes) return // we are good
         await sleepMsec(scaledDurationMsec(100))
+        const elapsed = elapsedSince(timer)
+        if (elapsed > timeoutMsec) {
+            throw Error(`Unexpected: file does not have expected size after renaming (*): ${dstPath} ${size0} ${expectedSizeBytes}`)
+        }
     }
-    throw Error(`Unexpected: file has size 0 after renaming (*): ${dstPath}`)
 }
