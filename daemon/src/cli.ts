@@ -161,9 +161,10 @@ function main() {
         const authGroup: string | null = argv['auth-group'] ? argv['auth-group'] + '' : null 
 
         const configDir = (process.env.KACHERY_P2P_CONFIG_DIR || `${os.homedir()}/.kachery-p2p`) as any as LocalFilePath
-        if (!fs.existsSync(configDir.toString())) {
-          fs.mkdirSync(configDir.toString());
-        }
+        // do not create the config dir because we no longer us it
+        // if (!fs.existsSync(configDir.toString())) {
+        //   fs.mkdirSync(configDir.toString());
+        // }
 
         if (hostName !== null) {
           if (!isHostName(hostName)) {

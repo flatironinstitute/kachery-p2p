@@ -2,7 +2,8 @@ import fs from 'fs';
 import { createKeyPair, hexToPrivateKey, JSONStringifyDeterministic, privateKeyToHex, publicKeyHexToFeedId, publicKeyToHex } from '../../common/crypto_util';
 import GarbageMap from '../../common/GarbageMap';
 import { isReadableByOthers } from '../../common/util';
-import { FeedId, FeedName, isFeedId, isJSONObject, isPrivateKeyHex, localFilePath, LocalFilePath, PrivateKey, PrivateKeyHex, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, _validateObject } from '../../interfaces/core';
+import { FeedId, FeedName, isFeedId, isJSONObject, isPrivateKeyHex, JSONValue, localFilePath, LocalFilePath, PrivateKey, PrivateKeyHex, scaledDurationMsec, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, _validateObject } from '../../interfaces/core';
+import MutableManager from '../../mutables/MutableManager';
 import LocalFeedsDatabase from './LocalFeedsDatabase';
 
 interface FeedConfig {
@@ -16,12 +17,10 @@ const isFeedConfig = (x: any): x is FeedConfig => {
     })
 }
 
-class FeedsConfigManager {
-    #configDir: LocalFilePath
+class OldFeedsConfigManager {
     #feedsConfigMemCache = new GarbageMap<FeedId, FeedConfig>(scaledDurationMsec(60 * 60 * 1000))
     #feedIdsByNameMemCache = new GarbageMap<FeedName, FeedId>(scaledDurationMsec(60 * 60 * 1000))
-    constructor(configDir: LocalFilePath, private opts: {useMemoryCache: boolean}) {
-        this.#configDir = configDir
+    constructor(private configDir: LocalFilePath, private opts: {useMemoryCache: boolean}) {
     }
 
     async addFeed(feedId: FeedId, privateKey: PrivateKeyHex) {
@@ -94,7 +93,7 @@ class FeedsConfigManager {
     }
     async _feedConfigDirectory(feedId: FeedId, opts: {create: boolean}): Promise<LocalFilePath> {
         const f = feedId
-        const ret = `${this.#configDir}/feeds/${f[0]}${f[1]}/${f[2]}${f[3]}/${f[4]}${f[5]}/${f}`
+        const ret = `${this.configDir}/feeds/${f[0]}${f[1]}/${f[2]}${f[3]}/${f[4]}${f[5]}/${f}`
         if (opts.create) {
             if (!fs.existsSync(ret)) {
                 await fs.promises.mkdir(ret, {recursive: true})
@@ -104,7 +103,7 @@ class FeedsConfigManager {
     }
     async _feedIdByNamePath(feedName: FeedName, opts: {create: boolean}): Promise<LocalFilePath> {
         const f = feedName
-        const p = `${this.#configDir}/feeds/byName`
+        const p = `${this.configDir}/feeds/byName`
         if (opts.create) {
             if (!fs.existsSync(p)) {
                 await fs.promises.mkdir(p, {recursive: true})
@@ -112,17 +111,150 @@ class FeedsConfigManager {
         }
         return localFilePath(`${p}/${feedName}.json`)
     }
+    _migration_getAllFeedIds(): FeedId[] {
+        const checkDirectory = (path: string) => {
+            if (!fs.existsSync(path)) return []
+            const ret: FeedId[] = []
+            for (let fname of fs.readdirSync(path)) {
+                const path2 = `${path}/${fname}`
+                if (fname === 'config.json') {
+                    const config = JSON.parse(fs.readFileSync(path2, {encoding: 'utf-8'}))
+                    ret.push(config.feedId)
+                }
+                if (fs.statSync(path2).isDirectory()) {
+                    const ret2 = checkDirectory(path2)
+                    for (let x of ret2) ret.push(x)
+                }
+            }
+            return ret
+        }
+        return checkDirectory(`${this.configDir}/feeds`)
+    }
+    _migration_getAllFeedNames(): FeedName[] {
+        const p = `${this.configDir}/feeds/byName`
+        if (!fs.existsSync(p)) return []
+        const ret: FeedName[] = []
+        for (let fname of fs.readdirSync(p)) {
+            if (fname.endsWith('.json')) {
+                const path2 = `${p}/${fname}`
+                const a = JSON.parse(fs.readFileSync(path2, {encoding: 'utf-8'}))
+                // const feedId = a.feedId
+                const feedName = a.feedName
+                ret.push(feedName)
+            }
+        }
+        return ret
+    }
+    _migration_deleteFeedIdForName(feedName: FeedName) {
+        const p = `${this.configDir}/feeds/byName`
+        if (!fs.existsSync(p)) throw Error(`Unable to delete feedId for name: byName directory does not exist: ${feedName} ${p}`)
+        const ret: FeedName[] = []
+        for (let fname of fs.readdirSync(p)) {
+            if (fname.endsWith('.json')) {
+                const path2 = `${p}/${fname}`
+                const a = JSON.parse(fs.readFileSync(path2, {encoding: 'utf-8'}))
+                // const feedId = a.feedId
+                if (a.feedName === feedName.toString()) {
+                    fs.unlinkSync(path2)
+                    return
+                }
+            }
+        }
+        throw Error(`Unable to delete feedId for name: ${feedName}`)
+    }
+}
+
+class FeedsConfigManager {
+    constructor(private mutableManager: MutableManager, private configDir: LocalFilePath) {
+        if (fs.existsSync(`${configDir}/feeds`)) {
+            const M = new OldFeedsConfigManager(configDir, {useMemoryCache: false})
+
+            const allFeedIds: FeedId[] = M._migration_getAllFeedIds()
+            for (let feedId of allFeedIds) {
+                console.info(`Migrating feed to new system: ${feedId}`)
+                M.getFeedConfig(feedId).then(feedConfig => {
+                    if (feedConfig) {
+                        this.addFeed(feedId, feedConfig.privateKey).then(() => {
+                            M.deleteFeed(feedId).catch((err: Error) => {
+                                console.warn(`Problem deleting feed config during migration: ${feedId} (${err.message})`)
+                            })
+                        }).catch((err: Error) => {
+                            console.warn(`Problem adding feed config during migration: ${feedId} (${err.message})`)
+                        })
+                    }
+                }).catch((err: Error) => {
+                    console.warn(`Problem getting feed config during migration: ${feedId} (${err.message})`)
+                })
+            }
+
+            const allFeedNames: FeedName[] = M._migration_getAllFeedNames()
+            for (let feedName of allFeedNames) {
+                console.info(`Migrating feed name to new system: ${feedName}`)
+                M.getFeedIdForName(feedName).then(feedId => {
+                    if (feedId) {
+                        this.setFeedIdForName(feedName, feedId).then(() => {
+                            try {
+                                M._migration_deleteFeedIdForName(feedName)
+                            }
+                            catch (err) {
+                                console.warn(`Problem deleting feed id for name during migration: ${feedName} ${feedId} (${err.message})`)
+                            }
+                        }).catch((err: Error) => {
+                            console.warn(`Problem setting feed for name during migration: ${feedName} ${feedId} (${err.message})`)
+                        })
+                    }
+                }).catch((err: Error) => {
+                    console.warn(`Problem getting feed for name during migration: ${feedName} (${err.message})`)
+                })
+            }
+        }
+    }
+
+    async addFeed(feedId: FeedId, privateKey: PrivateKeyHex) {
+        const c = await this.getFeedConfig(feedId)
+        if (c) {
+            throw Error('Cannot add feed. Feed with this ID already exists')
+        }
+        const config: FeedConfig = {
+            feedId, privateKey
+        }
+        await this.mutableManager.set({type: 'feedConfig', feedId: feedId.toString()}, config as any as JSONValue)
+    }
+    async getFeedConfig(feedId: FeedId): Promise<FeedConfig | null> {
+        const r = await this.mutableManager.get({type: 'feedConfig', feedId: feedId.toString()})
+        if (!r) return null
+        const config = r.value
+        if (!isFeedConfig(config)) {
+            throw Error(`Not a valid feed config for feed: ${feedId}`)
+        }
+        return config
+    }
+    async deleteFeed(feedId: FeedId) {
+        await this.mutableManager.delete({type: 'feedConfig', feedId: feedId.toString()})
+    }
+    async setFeedIdForName(feedName: FeedName, feedId: FeedId) {
+        await this.mutableManager.set({type: 'feedIdForName', feedName: feedName.toString()}, feedId.toString())
+    }
+    async getFeedIdForName(feedName: FeedName): Promise<FeedId | null> {
+        const x = await this.mutableManager.get({type: 'feedIdForName', feedName: feedName.toString()})
+        if (!x) return null
+        const feedId = x.value
+        if (!isFeedId(feedId)) {
+            throw Error(`Not a valid feed ID for name: ${feedName} ${feedId}`)
+        }
+        return feedId
+    }
 }
 
 export default class LocalFeedManager {
     #feedsConfigManager: FeedsConfigManager
     #localFeedsDatabase: LocalFeedsDatabase
     // #localFeedsDatabaseOld: LocalFeedsDatabaseOld
-    constructor(storageDir: LocalFilePath, configDir: LocalFilePath) {
+    constructor(storageDir: LocalFilePath, mutableManager: MutableManager, configDir: LocalFilePath) {
         if (!fs.existsSync(storageDir.toString())) {
             throw Error(`Storage directory does not exist: ${storageDir}`)
         }
-        this.#feedsConfigManager = new FeedsConfigManager(configDir, {useMemoryCache: true}) // todo: need to test this for both false and true
+        this.#feedsConfigManager = new FeedsConfigManager(mutableManager, configDir)
         this.#localFeedsDatabase = new LocalFeedsDatabase(localFilePath(storageDir + '/feeds.db'))
         // this.#localFeedsDatabaseOld = new LocalFeedsDatabaseOld(storageDir)
     }

@@ -322,11 +322,12 @@ export const renameAndCheck = async (srcPath: string, dstPath: string, expectedS
     const timer = nowTimestamp()
     while (true) {
         const size0 = fs.statSync(dstPath).size
-        if (size0 === expectedSizeBytes) return // we are good
+        if (size0 === expectedSizeBytes) break // we are good
         await sleepMsec(scaledDurationMsec(100))
         const elapsed = elapsedSince(timer)
         if (elapsed > timeoutMsec) {
             throw Error(`Unexpected: file does not have expected size after renaming (*): ${dstPath} ${size0} ${expectedSizeBytes}`)
         }
     }
+    fs.chmodSync(dstPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR | fs.constants.S_IRGRP | fs.constants.S_IROTH)
 }

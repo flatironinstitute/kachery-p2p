@@ -60,7 +60,7 @@ export interface DaemonInterface {
 }
 
 const startDaemon = async (args: {
-    configDir: LocalFilePath | null,
+    configDir: LocalFilePath | null, // no longer used, but included for migration
     verbose: number,
     hostName: HostName | null,
     publicUrl: UrlString | null,
@@ -72,7 +72,7 @@ const startDaemon = async (args: {
     opts: StartDaemonOpts
 }): Promise<DaemonInterface> => {
     const {
-        configDir,
+        configDir, // no longer used, but include for migration
         verbose,
         hostName,
         publicUrl,
@@ -83,7 +83,7 @@ const startDaemon = async (args: {
         opts
     } = args
     const kNode = new KacheryP2PNode({
-        configDir,
+        configDir, // no longer used, but include for migration
         verbose,
         hostName,
         publicUrl,

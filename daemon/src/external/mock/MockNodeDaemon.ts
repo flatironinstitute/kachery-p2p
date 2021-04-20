@@ -42,7 +42,7 @@ export default class MockNodeDaemon {
     async initialize() {
         const externalInterface = mockExternalInterface(this.#daemonGroup, () => (this.defects()))
         this.#d = await startDaemon({
-            configDir: null,
+            configDir: null, // no longer used, but include for migration
             verbose: 0,
             hostName: null,
             publicUrl: null,

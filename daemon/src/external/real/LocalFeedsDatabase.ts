@@ -3,6 +3,7 @@ import sqlite3 from 'sqlite3';
 import { JSONStringifyDeterministic } from '../../common/crypto_util';
 import { sleepMsec } from '../../common/util';
 import { FeedId, isJSONObject, isSignedSubfeedMessage, isString, isSubfeedAccessRules, LocalFilePath, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, unscaledDurationMsec } from "../../interfaces/core";
+import fs from 'fs'
 
 class LocalFeedsDatabase {
     #db: Database | null = null
@@ -59,6 +60,7 @@ class LocalFeedsDatabase {
         finally {
             await this._closeDatabase()
         }
+        fs.chmodSync(this.databasePath.toString(), fs.constants.S_IRUSR | fs.constants.S_IWUSR)
         this.#initialized = true
         this.#initializing = false
     }

@@ -1,4 +1,5 @@
 import { Address, DurationMsec, JSONObject, NodeId, Port, UrlPath } from '../../interfaces/core'
+import MutableManager from '../../mutables/MutableManager'
 import NodeStats from '../../NodeStats'
 import ExternalInterface, { ExpressInterface, HttpServerInterface, LocalFeedManagerInterface } from '../ExternalInterface'
 import mockDgramCreateSocket from './mockDgramCreateSocket'
@@ -20,7 +21,7 @@ const mockExternalInterface = (daemonGroup: MockNodeDaemonGroup, getDefects: () 
         return daemonGroup.mockHttpGetDownload(address, path, stats, opts)
     }
 
-    const createLocalFeedManager = (): LocalFeedManagerInterface => {
+    const createLocalFeedManager = (mutableManager: MutableManager): LocalFeedManagerInterface => {
         return new MockLocalFeedManager()
     }
 

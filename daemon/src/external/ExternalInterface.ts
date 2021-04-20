@@ -1,5 +1,6 @@
 import DataStreamy from "../common/DataStreamy"
 import { Address, ByteCount, DurationMsec, FeedId, FeedName, FileKey, JSONObject, LocalFilePath, NodeId, Port, PrivateKey, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, UrlPath } from "../interfaces/core"
+import MutableManager from "../mutables/MutableManager"
 import NodeStats from "../NodeStats"
 
 export type HttpPostJsonFunction = ((address: Address, path: UrlPath, data: Object, opts: {timeoutMsec: DurationMsec}) => Promise<JSONObject>)
@@ -65,7 +66,7 @@ export interface LocalFeedManagerInterface {
     setSubfeedAccessRules: (feedId: FeedId, subfeedHash: SubfeedHash, accessRules: SubfeedAccessRules) => Promise<void> // synchronous???!!!
 }
 
-export type CreateLocalFeedManagerFunction = () => LocalFeedManagerInterface
+export type CreateLocalFeedManagerFunction = (mutableManager: MutableManager) => LocalFeedManagerInterface
 
 export interface HttpServerInterface {
     close: () => void

@@ -61,7 +61,7 @@ class KacheryP2PNode {
     #mirrorSources: MirrorSourceConfig[] = []
     #clientAuthCode = {current: '', previous: ''}
     constructor(private p: {
-        configDir: LocalFilePath | null,
+        configDir: LocalFilePath | null, // no longer used, but include for migration
         verbose: number,
         hostName: HostName | null,
         publicUrl: UrlString | null,
@@ -72,16 +72,21 @@ class KacheryP2PNode {
         externalInterface: ExternalInterface,
         opts: KacheryP2PNodeOpts
     }) {
-        this.#keyPair = p.configDir !== null ? _loadKeypair(p.configDir) : createKeyPair()
-        this.#nodeId = publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey)) // get the node id from the public key
         this.#kacheryStorageManager = p.externalInterface.createKacheryStorageManager()
 
-        // The feed manager -- each feed is a collection of append-only logs
-        const localFeedManager = this.p.externalInterface.createLocalFeedManager()
-        this.#feedManager = new FeedManager(this, localFeedManager)
+        if ((p.configDir) && (fs.existsSync(`${p.configDir.toString()}/private.pem`))) {
+            migrateKeypairToStorageDir(p.configDir, this.#kacheryStorageManager.storageDir())
+        }
+
+        this.#keyPair = this.#kacheryStorageManager.storageDir() ? _loadKeypair(this.#kacheryStorageManager.storageDir()) : createKeyPair()
+        this.#nodeId = publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey)) // get the node id from the public key
 
         const storageDir = this.#kacheryStorageManager.storageDir()
         this.#mutableManager = new MutableManager(storageDir)
+
+        // The feed manager -- each feed is a collection of append-only logs
+        const localFeedManager = this.p.externalInterface.createLocalFeedManager(this.#mutableManager)
+        this.#feedManager = new FeedManager(this, localFeedManager)
 
         this.#remoteNodeManager = new RemoteNodeManager(this)
 
@@ -658,6 +663,30 @@ class KacheryP2PNode {
     }
 }
 
+const migrateKeypairToStorageDir = (configDir: LocalFilePath, storageDir: LocalFilePath) => {
+    const oldPublicKeyPath = `${configDir.toString()}/public.pem`
+    const oldPrivateKeyPath = `${configDir.toString()}/private.pem`
+    const newPublicKeyPath = `${storageDir.toString()}/public.pem`
+    const newPrivateKeyPath = `${storageDir.toString()}/private.pem`
+    if (fs.existsSync(newPublicKeyPath)) {
+        throw Error(`Unexpected problem migrating keypair. File exists: ${newPublicKeyPath}`)
+    }
+    if (fs.existsSync(newPrivateKeyPath)) {
+        throw Error(`Unexpected problem migrating keypair. File exists: ${newPrivateKeyPath}`)
+    }
+    if (!fs.existsSync(oldPublicKeyPath)) {
+        throw Error(`Unexpected problem migrating keypair. File does not exists: ${oldPublicKeyPath}`)
+    }
+    if (!fs.existsSync(oldPrivateKeyPath)) {
+        throw Error(`Unexpected problem migrating keypair. File exists: ${oldPrivateKeyPath}`)
+    }
+    console.info('Migrating keypair to kachery storage directory')
+    fs.renameSync(oldPublicKeyPath, newPublicKeyPath)
+    fs.renameSync(oldPrivateKeyPath, newPrivateKeyPath)
+    fs.chmodSync(newPublicKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
+    fs.chmodSync(newPrivateKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
+}
+
 class DownloadStreamManager {
     #downloadStreamInfos = new GarbageMap<StreamId, DownloadFileDataRequestData | DownloadSubfeedMessagesRequestData>(scaledDurationMsec(30 * 60 * 1000))
     set(streamId: StreamId, info: DownloadFileDataRequestData | DownloadSubfeedMessagesRequestData) {
@@ -668,13 +697,13 @@ class DownloadStreamManager {
     }
 }
 
-const _loadKeypair = (configDir: LocalFilePath): KeyPair => {
-    if (!fs.existsSync(configDir.toString())) {
+const _loadKeypair = (storageDir: LocalFilePath): KeyPair => {
+    if (!fs.existsSync(storageDir.toString())) {
         /* istanbul ignore next */
-        throw Error(`Config directory does not exist: ${configDir}`)
+        throw Error(`Storage directory does not exist: ${storageDir}`)
     }
-    const publicKeyPath = `${configDir.toString()}/public.pem`
-    const privateKeyPath = `${configDir.toString()}/private.pem`
+    const publicKeyPath = `${storageDir.toString()}/public.pem`
+    const privateKeyPath = `${storageDir.toString()}/private.pem`
     if (fs.existsSync(publicKeyPath)) {
         /* istanbul ignore next */
         if (!fs.existsSync(privateKeyPath)) {
@@ -685,6 +714,8 @@ const _loadKeypair = (configDir: LocalFilePath): KeyPair => {
         const { publicKey, privateKey } = createKeyPair()
         fs.writeFileSync(publicKeyPath, publicKey.toString(), { encoding: 'utf-8' })
         fs.writeFileSync(privateKeyPath, privateKey.toString(), { encoding: 'utf-8', mode: fs.constants.S_IRUSR | fs.constants.S_IWUSR})
+        fs.chmodSync(publicKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
+        fs.chmodSync(privateKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
     }
 
     if (isReadableByOthers(privateKeyPath)) {
