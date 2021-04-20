@@ -57,11 +57,19 @@ class _probe_result:
         self.probe_response = cast(dict, x)
         self.node_id = cast(str, x['nodeId'])
         self.joined_channels = cast(List[dict], x['joinedChannels'])
-        self.kachery_storage_dir = cast(Union[str, None], x['kacheryStorageDir'] or None)
-        ksd = os.getenv('KACHERY_STORAGE_DIR', None) 
-        if ksd is not None:
-            if ksd != self.kachery_storage_dir:
-                raise Exception(f'KACHERY_STORAGE_DIR is set, but is inconsistent with the daemon: {ksd} <> {self.kachery_storage_dir}')
+        ksd = os.getenv('KACHERY_STORAGE_DIR', cast(Union[str, None], x['kacheryStorageDir'] or None))
+        if ksd is None:
+            raise Exception('No kachery storage directory.')
+        if not os.path.exists(ksd):
+            raise Exception(f'Kachery storage directory does not exist: {ksd}')
+        fname = f'{ksd}/kachery-node-id'
+        if not os.path.exists(fname):
+            raise Exception(f'File does not exist (perhaps daemon is not running or perhaps you are using an inconsistent version of kachery between daemon and client): {fname}')
+        with open(fname, 'r') as f:
+            node_id_from_file = f.read()
+            if node_id_from_file != self.node_id:
+                raise Exception(f'Inconsistent node ID between running daemon and kachery storage directory: {node_id_from_file} <> {self.node_id} ({fname})')
+        self.kachery_storage_dir = ksd
 
 class _buffered_probe_data:
     timestamp: float=0

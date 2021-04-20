@@ -82,6 +82,11 @@ class KacheryP2PNode {
         this.#nodeId = publicKeyHexToNodeId(publicKeyToHex(this.#keyPair.publicKey)) // get the node id from the public key
 
         const storageDir = this.#kacheryStorageManager.storageDir()
+
+        if (storageDir) {
+            fs.writeFileSync(`${storageDir}/kachery-node-id`, `${this.#nodeId}`)
+        }
+
         this.#mutableManager = new MutableManager(storageDir)
 
         // The feed manager -- each feed is a collection of append-only logs
