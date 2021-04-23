@@ -47,6 +47,7 @@ export interface KacheryStorageManagerInterface {
     getFileReadStream: (fileKey: FileKey) => Promise<DataStreamy>
     storeFile: (sha1: Sha1Hash, data: Buffer) => Promise<void>
     storeLocalFile: (localFilePath: LocalFilePath) => Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}>
+    storeFileFromStream: (stream: DataStreamy, fileSize: ByteCount) => Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}>
     concatenateChunksAndStoreResult: (sha1: Sha1Hash, chunkSha1s: Sha1Hash[]) => Promise<void>
     storageDir: () => LocalFilePath
 }

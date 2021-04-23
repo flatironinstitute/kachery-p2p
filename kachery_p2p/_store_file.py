@@ -7,7 +7,7 @@ import stat
 import time
 from ._daemon_connection import _is_offline_mode, _is_online_mode, _kachery_storage_dir, _api_url
 from ._local_kachery_storage import _local_kachery_storage_store_file
-from ._misc import _http_post_json
+from ._misc import _http_post_json, _http_post_file
 from ._temporarydirectory import TemporaryDirectory
 from ._safe_pickle import _safe_pickle, _safe_unpickle
 from ._local_kachery_storage import _get_path_ext
@@ -25,8 +25,12 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
         raise Exception('Not connected to daemon and not in offline mode.')
     file_size = os.path.getsize(path)
     api_url, headers = _api_url()
-    url = f'{api_url}/storeFile'
-    resp = _http_post_json(url, {'localFilePath': os.path.abspath(path)}, headers=headers)
+    # url = f'{api_url}/storeFile'
+    url = f'{api_url}/store'
+    headers['Content-Length'] = f'{file_size}'
+    resp = _http_post_file(url, os.path.abspath(path), headers=headers)
+
+    # resp = _http_post_json(url, {'localFilePath': os.path.abspath(path)}, headers=headers)
     if not resp['success']:
         raise Exception(f'Problem storing file: {resp["error"]}')
     sha1 = resp['sha1']

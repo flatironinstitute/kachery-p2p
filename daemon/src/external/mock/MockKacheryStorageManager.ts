@@ -56,6 +56,9 @@ export default class MockKacheryStorageManager {
     async storeLocalFile(localFilePath: LocalFilePath): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
         throw Error('Not implemented in MockKacheryStorageManager')
     }
+    async storeFileFromStream(stream: DataStreamy, fileSize: ByteCount): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
+        throw Error('Not implemented in MockKacheryStorageManager')
+    }
     async concatenateChunksAndStoreResult(sha1Concat: Sha1Hash, chunkSha1s: Sha1Hash[]): Promise<void> {
         const chunks: Buffer[] = []
         chunkSha1s.forEach(sha1 => {

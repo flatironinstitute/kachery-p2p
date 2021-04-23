@@ -50,16 +50,7 @@ export class KacheryStorageManager {
         }
         await renameAndCheck(destPathTmp, destPath, data.length)
     }
-    async storeLocalFile(localFilePath: LocalFilePath): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
-        let stat0: fs.Stats
-        try {
-            stat0 = await fs.promises.stat(localFilePath.toString())
-        }
-        catch (err) {
-            throw Error(`Unable to stat file. Perhaps the kachery-p2p daemon does not have permission to read this file: ${localFilePath}`)
-        }
-        const fileSize = byteCount(stat0.size)
-        const ds = createDataStreamForFile(localFilePath, byteCount(0), fileSize)
+    async storeFileFromStream(ds: DataStreamy, fileSize: ByteCount): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
         const tmpDestPath = `${this.#storageDir}/store.file.${randomAlphaString(10)}.tmp`
         const writeStream = fs.createWriteStream(tmpDestPath)
         const shasum = crypto.createHash('sha1')
@@ -152,6 +143,18 @@ export class KacheryStorageManager {
                 }
             })
         })
+    }
+    async storeLocalFile(localFilePath: LocalFilePath): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
+        let stat0: fs.Stats
+        try {
+            stat0 = await fs.promises.stat(localFilePath.toString())
+        }
+        catch (err) {
+            throw Error(`Unable to stat file. Perhaps the kachery-p2p daemon does not have permission to read this file: ${localFilePath}`)
+        }
+        const fileSize = byteCount(stat0.size)
+        const ds = createDataStreamForFile(localFilePath, byteCount(0), fileSize)
+        return await this.storeFileFromStream(ds, fileSize)
     }
     async concatenateChunksAndStoreResult(sha1: Sha1Hash, chunkSha1s: Sha1Hash[]): Promise<void> {
         const s = sha1

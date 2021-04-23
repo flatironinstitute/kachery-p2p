@@ -1,4 +1,4 @@
-import express, { Express, NextFunction, Request, RequestHandler, Response } from 'express';
+import express, { Express, NextFunction, Request, Response } from 'express';
 import JsonSocket from 'json-socket';
 import { Socket } from 'net';
 import { ChannelConfig, isChannelConfig } from '../cli';
@@ -7,7 +7,7 @@ import DataStreamy from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
 import { isGetStatsOpts, NodeStatsInterface } from '../getStats';
-import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToNumber, ErrorMessage, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelConfigUrl, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, LocalFilePath, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject, JSONValue, isJSONValue } from '../interfaces/core';
+import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToNumber, ErrorMessage, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelConfigUrl, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, LocalFilePath, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject, JSONValue, isJSONValue, byteCount } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -60,20 +60,20 @@ type StoreFileResponseData = {
     manifestSha1: Sha1Hash | null
 }
 
-interface Req {
-    body: any,
-    on: (eventName: string, callback: () => void) => void,
-    connection: Socket
-}
+// interface Req {
+//     body: any,
+//     on: (eventName: string, callback: () => void) => void,
+//     connection: Socket
+// }
 
-interface Res {
-    json: (obj: {
-        success: boolean
-    } & JSONObject) => void,
-    end: () => void,
-    status: (s: number) => Res,
-    send: (x: any) => Res
-}
+// interface Res {
+//     json: (obj: {
+//         success: boolean
+//     } & JSONObject) => void,
+//     end: () => void,
+//     status: (s: number) => Res,
+//     send: (x: any) => Res
+// }
 
 export interface ApiFindFileRequest {
     fileKey: FileKey,
@@ -624,6 +624,17 @@ export default class DaemonApiServer {
             });
             /////////////////////////////////////////////////////////////////////////
         });
+        // /store - store a file by streaming data to the daemon
+        this.#app.post('/store', async (req, res) => {
+            /////////////////////////////////////////////////////////////////////////
+            /* istanbul ignore next */
+            await action('/store', {context: 'Daemon API'}, async () => {
+                await this._apiStore(req, res)
+            }, async (err: Error) => {
+                res.status(500).send('Error storing file from data stream.');
+            });
+            /////////////////////////////////////////////////////////////////////////
+        });
     }
     stop() {
         /* istanbul ignore next */
@@ -734,7 +745,7 @@ export default class DaemonApiServer {
     }
     // /findFile - find a file (or feed) locally or in the remote nodes. May return more than one.
     /* istanbul ignore next */
-    async _apiFindFile(req: Req, res: Res) {
+    async _apiFindFile(req: Request, res: Response) {
         const reqData = req.body
         /* istanbul ignore next */
         if (!isApiFindFileRequest(reqData)) throw Error('Invalid request in _apiFindFile')
@@ -768,7 +779,7 @@ export default class DaemonApiServer {
     }
     // /loadFile - load a file from remote kachery node(s) and store in kachery storage
     /* istanbul ignore next */
-    async _apiLoadFile(req: Req, res: Res) {
+    async _apiLoadFile(req: Request, res: Response) {
         const jsonSocket = new JsonSocket(res as any as Socket)
         let x: DataStreamy
         const apiLoadFileRequest = req.body
@@ -829,6 +840,47 @@ export default class DaemonApiServer {
             isDone = true
             x.cancel()
         });
+    }
+    // /store - store file by streaming data to daemon
+    /* istanbul ignore next */
+    async _apiStore(req: Request, res: Response) {
+        const contentLength = req.header("Content-Length")
+        if (!contentLength) {
+            res.status(403).send("Missing Content-Length in header").end();
+            return
+        }
+        const fileSize = parseInt(contentLength)
+        const x = new DataStreamy()
+        req.on('data', (chunk: Buffer) => {
+            x.producer().data(chunk)
+        })
+        req.on('end', () => {
+            x.producer().end()
+        })
+        req.on('error', (err: Error) => {
+            x.producer().error(err)
+        })
+        let response: StoreFileResponseData
+        try {
+            const {sha1, manifestSha1} = await this.#node.kacheryStorageManager().storeFileFromStream(x, byteCount(fileSize))
+            response = {
+                success: true,
+                error: null,
+                sha1,
+                manifestSha1
+            }
+        }
+        catch(err) {
+            response = {
+                success: true,
+                error: err.message,
+                sha1: null,
+                manifestSha1: null
+            }
+        }
+        /* istanbul ignore next */
+        if (!isJSONObject(response)) throw Error('Unexpected json object in _handleStoreFile')
+        res.json(response)
     }
     async _loadFile(reqData: ApiLoadFileRequest) {
         /* istanbul ignore next */
@@ -1027,7 +1079,7 @@ export default class DaemonApiServer {
     }
     // Helper function for returning http request with an error response
     /* istanbul ignore next */
-    async _errorResponse(req: Req, res: Res, code: number, errorString: string) {
+    async _errorResponse(req: Request, res: Response, code: number, errorString: string) {
         console.info(`Daemon responding with error: ${code} ${errorString}`);
         try {
             res.status(code).send(errorString);
