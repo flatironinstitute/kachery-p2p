@@ -237,18 +237,21 @@ export class KacheryStorageManager {
         }
         return false
     }
-    async getFileReadStream(fileKey: FileKey): Promise<DataStreamy> {
+    async getFileReadStream(fileKey: FileKey, startByte?: ByteCount, endByte?: ByteCount): Promise<DataStreamy> {
         if (fileKey.sha1) {
             const { path: filePath, size: fileSize } = await this._getLocalFileInfo(fileKey.sha1)
             if ((filePath) && (fileSize !== null)) {
-                return createDataStreamForFile(filePath, byteCount(0), fileSize)
+                const offset = (startByte === undefined) || (endByte === undefined) ? byteCount(0) : startByte
+                const size = (startByte === undefined) || (endByte === undefined) ? fileSize : byteCount(byteCountToNumber(endByte) - byteCountToNumber(startByte))
+                return createDataStreamForFile(filePath, offset, size)
             }
         }
         if (fileKey.chunkOf) {
             const { path: filePath, size: fileSize } = await this._getLocalFileInfo(fileKey.chunkOf.fileKey.sha1)
             if (filePath) {
-                const offset = fileKey.chunkOf.startByte
-                const size = byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte))
+                const additionalOffset = (startByte === undefined) || (endByte === undefined) ? byteCount(0) : startByte
+                const offset = byteCount(byteCountToNumber(fileKey.chunkOf.startByte) + byteCountToNumber(additionalOffset))
+                const size = (startByte === undefined) || (endByte === undefined) ? byteCount(byteCountToNumber(fileKey.chunkOf.endByte) - byteCountToNumber(fileKey.chunkOf.startByte)) : byteCount(byteCountToNumber(endByte) - byteCountToNumber(startByte))
                 return createDataStreamForFile(filePath, offset, size)
             }
         }

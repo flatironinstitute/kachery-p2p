@@ -1,4 +1,5 @@
 import express, { Express, NextFunction, Request, Response } from 'express';
+import cors from 'cors';
 import JsonSocket from 'json-socket';
 import { Socket } from 'net';
 import { ChannelConfig, isChannelConfig } from '../cli';
@@ -7,7 +8,7 @@ import DataStreamy from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
 import { isGetStatsOpts, NodeStatsInterface } from '../getStats';
-import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToNumber, ErrorMessage, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelConfigUrl, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, LocalFilePath, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject, JSONValue, isJSONValue, byteCount } from '../interfaces/core';
+import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToNumber, ErrorMessage, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelConfigUrl, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, LocalFilePath, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject, JSONValue, isJSONValue, byteCount, ByteCount, isByteCount } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -94,6 +95,19 @@ const isApiLoadFileRequest = (x: any): x is ApiLoadFileRequest => {
     return _validateObject(x, {
         fileKey: isFileKey,
         fromNode: isOneOf([isNull, isNodeId])
+    });
+}
+
+export interface ApiDownloadFileDataRequest {
+    fileKey: FileKey,
+    startByte?: ByteCount
+    endByte?: ByteCount
+}
+const isApiDownloadFileDataRequest = (x: any): x is ApiDownloadFileDataRequest => {
+    return _validateObject(x, {
+        fileKey: isFileKey,
+        startByte: optional(isByteCount),
+        endByte: optional(isByteCount),
     });
 }
 
@@ -426,6 +440,7 @@ export default class DaemonApiServer {
     #simpleGetHandlers: {
         path: string,
         handler: (query: JSONObject) => Promise<JSONObject>,
+        browserAccess: boolean
     }[] = [
         {
             // /probe - check whether the daemon is up and running and return info such as the node ID
@@ -433,7 +448,8 @@ export default class DaemonApiServer {
             handler: async (query) => {
                 /* istanbul ignore next */
                 return await this._handleProbe()
-            }
+            },
+            browserAccess: true
         },
         {
             // /halt - halt the kachery-p2p daemon (stops the server process)
@@ -441,18 +457,21 @@ export default class DaemonApiServer {
             handler: async (query) => {
                 /* istanbul ignore next */
                 return await this._handleHalt()
-            }
+            },
+            browserAccess: false
         },
         {
             path: '/stats',
             handler: async (query) => {
                 return await this._handleStats(query)
-            }
+            },
+            browserAccess: true
         }
     ]
     #simplePostHandlers: {
         path: string,
         handler: (reqData: JSONObject) => Promise<JSONObject>,
+        browserAccess: boolean
     }[] = [
         {
             // /probe - check whether the daemon is up and running and return info such as the node ID
@@ -460,7 +479,8 @@ export default class DaemonApiServer {
             handler: async (reqData: JSONObject) => {
                 /* istanbul ignore next */
                 return await this._handleProbe()
-            }
+            },
+            browserAccess: true
         },
         {
             // /storeFile - Store a local file in local kachery storage
@@ -468,67 +488,80 @@ export default class DaemonApiServer {
             handler: async (reqData: JSONObject) => {
                 /* istanbul ignore next */
                 return await this._handleStoreFile(reqData)
-            }
+            },
+            browserAccess: true
         },
         {
             // /feed/createFeed - create a new writeable feed on this node
             path: '/feed/createFeed',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiCreateFeed(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiCreateFeed(reqData)},
+            browserAccess: false
         },
         {
             // /feed/deleteFeed - delete feed on this node
             path: '/feed/deleteFeed',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiDeleteFeed(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiDeleteFeed(reqData)},
+            browserAccess: false
         },
         {
             // /feed/getFeedId - lookup the ID of a local feed based on its name
             path: '/feed/getFeedId',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetFeedId(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetFeedId(reqData)},
+            browserAccess: true
         },
         {
             // /feed/appendMessages - append messages to a local writeable subfeed
             path: '/feed/appendMessages',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiAppendMessages(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiAppendMessages(reqData)},
+            browserAccess: true
         },
         {
             // /feed/submitMessage - submit messages to a remote live subfeed (must have permission)
             path: '/feed/submitMessage',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiSubmitMessage(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiSubmitMessage(reqData)},
+            browserAccess: false
         },
         {
             // /feed/getNumLocalMessages - get number of messages in a subfeed
             path: '/feed/getNumLocalMessages',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetNumLocalMessages(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetNumLocalMessages(reqData)},
+            browserAccess: true
         },
         {
             // /feed/getFeedInfo - get info for a feed - such as whether it is writeable
             path: '/feed/getFeedInfo',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetFeedInfo(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetFeedInfo(reqData)},
+            browserAccess: true
         },
         {
             // /feed/getAccessRules - get access rules for a local writeable subfeed
             path: '/feed/getAccessRules',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetAccessRules(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiGetAccessRules(reqData)},
+            browserAccess: true
         },
         {
             // /feed/setAccessRules - set access rules for a local writeable subfeed
             path: '/feed/setAccessRules',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiSetAccessRules(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiSetAccessRules(reqData)},
+            browserAccess: false
         },
         {
             // /feed/watchForNewMessages - wait until new messages have been appended to a list of watched subfeeds
             path: '/feed/watchForNewMessages',
-            handler: async (reqData: JSONObject) => {return await this._handleFeedApiWatchForNewMessages(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleFeedApiWatchForNewMessages(reqData)},
+            browserAccess: true
         },
         {
             // /mutable/get - get a mutable value
             path: '/mutable/get',
-            handler: async (reqData: JSONObject) => {return await this._handleMutableApiGet(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleMutableApiGet(reqData)},
+            browserAccess: true
         },
         {
             // /mutable/set - set a mutable value
             path: '/mutable/set',
-            handler: async (reqData: JSONObject) => {return await this._handleMutableApiSet(reqData)}
+            handler: async (reqData: JSONObject) => {return await this._handleMutableApiSet(reqData)},
+            browserAccess: true
         }
     ]
 
@@ -540,35 +573,22 @@ export default class DaemonApiServer {
         this.#app = express(); // the express app
 
         this.#app.set('json spaces', 4); // when we respond with json, this is how it will be formatted
-        // this.#app.use(cors()); // in the future, if we want to do this
+
+        var corsOptions = {
+            origin: 'http://localhost:3000'
+        }
+        const cors1 = cors(corsOptions)
+
+        this.#app.use(cors1); // in the future, if we want to do this
         this.#app.use(express.json());
 
-        this.#app.all('/*', (req: Request, res: Response, next: NextFunction) => {
-            // if (!isLocalRequest(req)) {
-            //     console.warn(`Rejecting access to remote request from ${req.socket.remoteAddress}`);
-            //     res.status(403).send("API only accessible from the local device").end();
-            //     return;
-            // }
-
-            if (req.path !== '/probe') {
-                const authCode = req.header('KACHERY-CLIENT-AUTH-CODE')
-                if (!authCode) {
-                    res.status(403).send("Missing client auth code in daemon request. You probably need to upgrade kachery-p2p.").end();
-                    return;
-                }
-                if (!this.#node.verifyClientAuthCode(authCode)) {
-                    res.status(403).send("Incorrect client authorization code.").end();
-                    return;
-                }
-            }
-            
-            /* istanbul ignore next */
-            next();
-        });
-
+        const dummyMiddleware = (req: Request, res: Response, next: () => void) => {next()}
         
         this.#simpleGetHandlers.forEach(h => {
             this.#app.get(h.path, async (req, res) => {
+                if (h.path !== '/probe') {
+                    if (!this._checkAuthCode(req, res, {browserAccess: h.browserAccess})) return
+                }
                 /////////////////////////////////////////////////////////////////////////
                 /* istanbul ignore next */
                 await action(h.path, {context: 'Daemon API'}, async () => {
@@ -588,6 +608,7 @@ export default class DaemonApiServer {
 
         this.#simplePostHandlers.forEach(h => {
             this.#app.post(h.path, async (req, res) => {
+                if (!this._checkAuthCode(req, res, {browserAccess: h.browserAccess})) return
                 /////////////////////////////////////////////////////////////////////////
                 /* istanbul ignore next */
                 await action(h.path, {context: 'Daemon API'}, async () => {
@@ -604,6 +625,7 @@ export default class DaemonApiServer {
 
         // /findFile - find a file (or feed) in the remote nodes. May return more than one.
         this.#app.post('/findFile', async (req, res) => {
+            if (!this._checkAuthCode(req, res, {browserAccess: true})) return
             /////////////////////////////////////////////////////////////////////////
             /* istanbul ignore next */
             await action('/findFile', {context: 'Daemon API'}, async () => {
@@ -615,6 +637,7 @@ export default class DaemonApiServer {
         });
         // /loadFile - download file from remote node(s) and store in kachery storage
         this.#app.post('/loadFile', async (req, res) => {
+            if (!this._checkAuthCode(req, res, {browserAccess: true})) return
             /////////////////////////////////////////////////////////////////////////
             /* istanbul ignore next */
             await action('/loadFile', {context: 'Daemon API'}, async () => {
@@ -624,8 +647,21 @@ export default class DaemonApiServer {
             });
             /////////////////////////////////////////////////////////////////////////
         });
+        // /downloadFileData - download file data - file must exist in local kachery storage
+        this.#app.post('/downloadFileData', async (req, res) => {
+            if (!this._checkAuthCode(req, res, {browserAccess: true})) return
+            /////////////////////////////////////////////////////////////////////////
+            /* istanbul ignore next */
+            await action('/downloadFileData', {context: 'Daemon API'}, async () => {
+                await this._apiDownloadFileData(req, res)
+            }, async (err: Error) => {
+                res.status(500).send(`Error downloading file: ${err.message}`);
+            });
+            /////////////////////////////////////////////////////////////////////////
+        });
         // /store - store a file by streaming data to the daemon
         this.#app.post('/store', async (req, res) => {
+            if (!this._checkAuthCode(req, res, {browserAccess: true})) return
             /////////////////////////////////////////////////////////////////////////
             /* istanbul ignore next */
             await action('/store', {context: 'Daemon API'}, async () => {
@@ -841,6 +877,26 @@ export default class DaemonApiServer {
             x.cancel()
         });
     }
+    // /loadFile - download data for a file - must already be on this node
+    /* istanbul ignore next */
+    async _apiDownloadFileData(req: Request, res: Response): Promise<void> {
+        const apiDownloadFileDataRequest = req.body
+        if (!isApiDownloadFileDataRequest(apiDownloadFileDataRequest)) {
+            throw Error('Invalid request in _apiDownloadFileData');
+        }
+        const x = await this.#node.kacheryStorageManager().getFileReadStream(apiDownloadFileDataRequest.fileKey, apiDownloadFileDataRequest.startByte, apiDownloadFileDataRequest.endByte)
+        return new Promise((resolve, reject) => {
+            x.onData((chunk: Buffer) => {
+                res.write(chunk)
+            })
+            x.onError((err: Error) => {
+                reject(err.message)
+            })
+            x.onFinished(() => {
+                res.end()
+            })
+        })
+    }
     // /store - store file by streaming data to daemon
     /* istanbul ignore next */
     async _apiStore(req: Request, res: Response) {
@@ -1043,7 +1099,6 @@ export default class DaemonApiServer {
     // /mutable/set - set a mutable value
     async _handleMutableApiSet(reqData: JSONObject) {
         /* istanbul ignore next */
-        console.warn(reqData)
         if (!isMutableApiSetRequest(reqData)) throw Error('Invalid request in _mutableApiSet')
         const { key, value } = reqData
 
@@ -1089,7 +1144,7 @@ export default class DaemonApiServer {
         }
         await sleepMsec(scaledDurationMsec(100));
         try {
-            req.connection.destroy();
+            req.socket.destroy();
         }
         catch(err) {
             console.warn('Problem destroying connection', {error: err.message});
@@ -1098,6 +1153,18 @@ export default class DaemonApiServer {
     // Start listening via http/https
     async listen(port: Port) {
         this.#server = await this.#node.externalInterface().startHttpServer(this.#app, port)
+    }
+    _checkAuthCode(req: Request, res: Response, opts: {browserAccess: boolean}) {
+        const authCode = req.header('KACHERY-CLIENT-AUTH-CODE')
+        if (!authCode) {
+            res.status(403).send("Missing client auth code in daemon request. You probably need to upgrade kachery-p2p.").end();
+            return false
+        }
+        if (!this.#node.verifyClientAuthCode(authCode, {browserAccess: opts.browserAccess})) {
+            res.status(403).send("Incorrect or invalid client authorization code.").end();
+            return false
+        }
+        return true
     }
 }
 

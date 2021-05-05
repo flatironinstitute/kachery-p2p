@@ -44,7 +44,7 @@ export type CreateWebSocketFunction = (url: string, opts: {timeoutMsec: Duration
 export interface KacheryStorageManagerInterface {
     hasLocalFile: (fileKey: FileKey) => Promise<boolean>
     findFile: (fileKey: FileKey) => Promise<{found: boolean, size: ByteCount, localFilePath: LocalFilePath | null}>
-    getFileReadStream: (fileKey: FileKey) => Promise<DataStreamy>
+    getFileReadStream: (fileKey: FileKey, startByte?: ByteCount, endByte?: ByteCount) => Promise<DataStreamy>
     storeFile: (sha1: Sha1Hash, data: Buffer) => Promise<void>
     storeLocalFile: (localFilePath: LocalFilePath) => Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}>
     storeFileFromStream: (stream: DataStreamy, fileSize: ByteCount) => Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}>

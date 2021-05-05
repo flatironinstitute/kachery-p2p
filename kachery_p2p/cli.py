@@ -1,7 +1,7 @@
 import json
 import os
 import sys
-from typing import List, Union, cast
+from typing import Any, List, Union, cast
 
 import click
 import kachery_p2p as kp
@@ -26,22 +26,33 @@ def get_channels():
         print(f'{url} {" ".join(optstrings)}')
 
 def _get_joined_channels_config() -> dict:
-    f = kp.load_feed('_kachery_p2p_config', create=True)
-    sf = f.get_subfeed('joined-channels')
-    num_messages = sf.get_num_local_messages()
-    if (num_messages > 0):
-        sf.set_position(num_messages - 1)
-        joined_channels_config = cast(dict, sf.get_next_message(wait_msec=100))
-    else:
-        joined_channels_config = {
+    c = kp.get('_joined_channels_config')
+    if c is None:
+        c = {
             'joinedChannels': []
         }
-    return joined_channels_config
+    return cast(dict, c)
+
+# def _get_joined_channels_config_from_old_method() -> dict:
+#     try:
+#         f = kp.load_feed('_kachery_p2p_config', create=False)
+#     except:
+#         return {
+#             'joinedChannels': []
+#         }
+#     sf = f.get_subfeed('joined-channels')
+#     num_messages = sf.get_num_local_messages()
+#     if (num_messages > 0):
+#         sf.set_position(num_messages - 1)
+#         joined_channels_config = cast(dict, sf.get_next_message(wait_msec=100))
+#     else:
+#         joined_channels_config = {
+#             'joinedChannels': []
+#         }
+#     return joined_channels_config
 
 def _set_joined_channels_config(joined_channels_config: dict):
-    f = kp.load_feed('_kachery_p2p_config', create=True)
-    sf = f.get_subfeed('joined-channels')
-    sf.append_message(joined_channels_config)
+    kp.set('_joined_channels_config', joined_channels_config)
 
 @click.command(help="Join a kachery-p2p channel")
 @click.argument('channel_config_url')

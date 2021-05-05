@@ -13,7 +13,7 @@ import FeedManager from './feeds/FeedManager'
 import MutableManager from './mutables/MutableManager'
 import Subfeed from './feeds/Subfeed'
 import { getStats, GetStatsOpts } from './getStats'
-import { addDurations, Address, byteCount, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, ChannelNodeInfoBody, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isKeyPair, JSONObject, KeyPair, LocalFilePath, messageCountToNumber, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, subfeedPositionToNumber, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
+import { addDurations, Address, byteCount, ChannelConfigUrl, ChannelInfo, ChannelNodeInfo, ChannelNodeInfoBody, DurationMsec, FeedId, FileKey, FindFileResult, FindLiveFeedResult, hostName, HostName, isArrayOf, isKeyPair, isString, JSONObject, JSONValue, KeyPair, LocalFilePath, messageCountToNumber, NodeId, nodeIdToPublicKey, NodeLabel, nowTimestamp, Port, publicKeyHexToNodeId, scaledDurationMsec, SignedSubfeedMessage, SubfeedHash, subfeedPositionToNumber, SubmittedSubfeedMessage, UrlString } from './interfaces/core'
 import { CheckForFileRequestData, CheckForFileResponseData, CheckForLiveFeedRequestData, DownloadFileDataRequestData, DownloadSubfeedMessagesRequestData, isAnnounceRequestData, isCheckAliveRequestData, isCheckForFileRequestData, isCheckForFileResponseData, isCheckForLiveFeedRequestData, isCheckForLiveFeedResponseData, isDownloadFileDataRequestData, isDownloadSubfeedMessagesRequestData, isFallbackUdpPacketRequestData, isGetChannelInfoRequestData, isReportNewSubfeedMessagesRequestData, isStartStreamViaUdpRequestData, isSubmitMessageToLiveFeedRequestData, isSubmitMessageToLiveFeedResponseData, isSubscribeToSubfeedRequestData, NodeToNodeRequest, NodeToNodeResponse, NodeToNodeResponseData, StreamId, SubmitMessageToLiveFeedRequestData } from './interfaces/NodeToNodeRequest'
 import NodeStats from './NodeStats'
 import { handleCheckAliveRequest } from './nodeToNodeRequestHandlers/handleCheckAliveRequest'
@@ -60,6 +60,7 @@ class KacheryP2PNode {
     #stats = new NodeStats()
     #mirrorSources: MirrorSourceConfig[] = []
     #clientAuthCode = {current: '', previous: ''}
+    #otherClientAuthCodes: string[] = []
     constructor(private p: {
         configDir: LocalFilePath | null, // no longer used, but include for migration
         verbose: number,
@@ -96,6 +97,13 @@ class KacheryP2PNode {
         this.#remoteNodeManager = new RemoteNodeManager(this)
 
         this.#downloadOptimizer = new DownloadOptimizer(this)
+
+        this._updateOtherClientAuthCodes()
+        this.#mutableManager.onSet((k: JSONValue) => {
+            if (k === '_other_client_auth_codes') {
+                this._updateOtherClientAuthCodes()
+            }
+        })
     }
     nodeId() {
         return this.#nodeId
@@ -661,10 +669,23 @@ class KacheryP2PNode {
             previous: previousCode
         }
     }
-    verifyClientAuthCode(code: string) {
+    verifyClientAuthCode(code: string, opts: {browserAccess: boolean}) {
         if (code === this.#clientAuthCode.current) return true
         if ((this.#clientAuthCode.previous) && (code === this.#clientAuthCode.previous)) return true
+        if (!opts.browserAccess) {
+            return false
+        }
+        if (this.#otherClientAuthCodes.includes(code)) return true
         return false
+    }
+    async _updateOtherClientAuthCodes() {
+        const x = await this.#mutableManager.get('_other_client_auth_codes')
+        if (x) {
+            const v = x.value
+            if ((isArrayOf(isString))(v)) {
+                this.#otherClientAuthCodes = v as string[]
+            }
+        }
     }
 }
 

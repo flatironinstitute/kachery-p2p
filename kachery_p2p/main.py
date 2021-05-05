@@ -282,7 +282,7 @@ def load_feed(feed_name_or_uri: str, *, timeout_sec: Union[None, float]=None, cr
     """
     return _load_feed(feed_name_or_uri=feed_name_or_uri, timeout_sec=timeout_sec, create=create)
 
-def watch_for_new_messages(subfeed_watches: Dict[str, dict], *, wait_msec) -> Dict[str, Any]:
+def watch_for_new_messages(subfeed_watches: Dict[str, dict], *, wait_msec, signed=False) -> Dict[str, Any]:
     """Watch for new messages on one or more subfeeds
 
     Args:
@@ -292,7 +292,7 @@ def watch_for_new_messages(subfeed_watches: Dict[str, dict], *, wait_msec) -> Di
     Returns:
         List[dict]: The list of retrieved messages (TODO: more details needed)
     """
-    return _watch_for_new_messages(subfeed_watches=subfeed_watches, wait_msec=wait_msec)
+    return _watch_for_new_messages(subfeed_watches=subfeed_watches, wait_msec=wait_msec, signed=signed)
 
 ################################################
 

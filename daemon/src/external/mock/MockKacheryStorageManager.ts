@@ -28,17 +28,23 @@ export default class MockKacheryStorageManager {
     async hasLocalFile(fileKey: FileKey): Promise<boolean> {
         return this.#mockFiles.has(fileKey.sha1)
     }
-    async getFileReadStream(fileKey: FileKey): Promise<DataStreamy> {
+    async getFileReadStream(fileKey: FileKey, startByte?: ByteCount, endByte?: ByteCount): Promise<DataStreamy> {
         const content = this.#mockFiles.get(fileKey.sha1)
         if (content) {
+            const size = (startByte === undefined) || (endByte === undefined) ? content.length : byteCountToNumber(endByte) - byteCountToNumber(startByte)
             const ret = new DataStreamy()
             setTimeout(() => {
-                ret.producer().start(byteCount(content.length))
+                ret.producer().start(byteCount(size))
                 if (this.getDefects().fileReadDefect) {
                     ret.producer().error(Error('fileReadDefect'))
                     return
                 }
-                ret.producer().data(content)
+                if ((startByte === undefined) || (endByte === undefined)) {
+                    ret.producer().data(content)
+                }
+                else {
+                    ret.producer().data(content.slice(byteCountToNumber(startByte), byteCountToNumber(endByte)))
+                }
                 ret.producer().end()
             }, 2)
             return ret

@@ -1,4 +1,4 @@
-import express, { Express } from 'express';
+import express, { Express, Request, Response } from 'express';
 import { Socket } from 'net';
 import { action } from '../common/action';
 import { JSONStringifyDeterministic } from '../common/crypto_util';
@@ -10,20 +10,20 @@ import { isNodeToNodeRequest, isStreamId, NodeToNodeRequest, NodeToNodeResponse,
 import KacheryP2PNode from '../KacheryP2PNode';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
 
-interface Req {
-    body: any,
-    on: (eventName: string, callback: () => void) => void,
-    connection: Socket
-}
+// interface Req {
+//     body: any,
+//     on: (eventName: string, callback: () => void) => void,
+//     connection: Socket
+// }
 
-interface Res {
-    json: (obj: JSONObject) => void,
-    end: () => void,
-    status: (s: number) => Res,
-    send: (x: any) => Res,
-    writeHead: Function,
-    write: (x: Buffer) => void
-}
+// interface Res {
+//     json: (obj: JSONObject) => void,
+//     end: () => void,
+//     status: (s: number) => Res,
+//     send: (x: any) => Res,
+//     writeHead: Function,
+//     write: (x: Buffer) => void
+// }
 
 export interface PublicApiProbeResponse {
     success: boolean,
@@ -213,24 +213,24 @@ export default class PublicApiServer {
         return response
     }
     // /probe - check whether the daemon is up and running and return info such as the node ID
-    async _apiProbe(req: Req, res: Res) {
+    async _apiProbe(req: Request, res: Response) {
         const response = await this._probe()
         res.json(response);
     }
     // /nodeToNodeRequest
-    async _apiNodeToNodeRequest(reqBody: NodeToNodeRequest, res: Res) {
+    async _apiNodeToNodeRequest(reqBody: NodeToNodeRequest, res: Response) {
         const response = await this._nodeToNodeRequest(reqBody)
         res.json(response);
     }
     // /download
-    async _apiDownload(fromNodeId: NodeId, toNodeId: NodeId, streamId: StreamId, req: Req, res: Res) {
+    async _apiDownload(fromNodeId: NodeId, toNodeId: NodeId, streamId: StreamId, req: Request, res: Response) {
         const ds = await this.#node.streamDataForStreamId(fromNodeId, streamId)
         let started = false
         ds.onStarted((size: ByteCount) => {
             started = true
             res.writeHead(200, {
                 'Content-Type': 'application/octet-stream',
-                'Content-Length': size
+                'Content-Length': Number(size)
             });
         })
         
@@ -256,7 +256,7 @@ export default class PublicApiServer {
         });
     }
     // Helper function for returning http request with an error response
-    async _errorResponse(req: Req, res: Res, code: number, errorString: string) {
+    async _errorResponse(req: Request, res: Response, code: number, errorString: string) {
         console.info(`Public responding with error: ${code} ${errorString}`);
         try {
             res.status(code).send(errorString);
@@ -266,7 +266,7 @@ export default class PublicApiServer {
         }
         await sleepMsec(scaledDurationMsec(100));
         try {
-            req.connection.destroy();
+            req.socket.destroy();
         }
         catch(err) {
             console.warn('Problem destroying connection', {error: err.message});

@@ -1,6 +1,6 @@
 import { IsDataProxy, IsMessageProxy, IsPublic } from "../cli";
 import { loadYamlFromPathOrUrl, sleepMsec } from "../common/util";
-import { ChannelConfigUrl, DurationMsec, feedName, isArrayOf, isBoolean, isChannelConfigUrl, isString, optional, Sha1Hash, sha1OfString, subfeedHash, _validateObject } from "../interfaces/core";
+import { ChannelConfigUrl, DurationMsec, feedName, isArrayOf, isBoolean, isChannelConfigUrl, isString, JSONValue, optional, Sha1Hash, sha1OfString, subfeedHash, _validateObject } from "../interfaces/core";
 import KacheryP2PNode from "../KacheryP2PNode";
 
 export interface JoinedChannelConfig {
@@ -86,18 +86,28 @@ export default class ConfigUpdateService {
         while (true) {
             if (this.#halted) return
             if (!this.opts.staticConfigPathOrUrl) {
-                const configFeedId = await this.#node.feedManager().getFeedId({feedName: feedName('_kachery_p2p_config')})
-                if (configFeedId) {
-                    const joinedChannelsSubfeedHash = subfeedHash(sha1OfString('joined-channels'))
-                    const joinedChannelsConfig = await this.#node.feedManager().getFinalLocalMessage({feedId: configFeedId, subfeedHash: joinedChannelsSubfeedHash})
-                    if (joinedChannelsConfig) {
-                        if (isJoinedChannelsConfig(joinedChannelsConfig)) {
-                            this.#node.setJoinedChannels(joinedChannelsConfig.joinedChannels)
+                let joinedChannelsConfigMutable = await this.#node.mutableManager().get('_joined_channels_config')
+                let joinedChannelsConfig = joinedChannelsConfigMutable ? joinedChannelsConfigMutable.value : null
+                if (!joinedChannelsConfig) {
+                    // retrieve config from old method //////////////////////////////////////////////////////
+                    const configFeedId = await this.#node.feedManager().getFeedId({feedName: feedName('_kachery_p2p_config')})
+                    if (configFeedId) {
+                        const joinedChannelsSubfeedHash = subfeedHash(sha1OfString('joined-channels'))
+                        const c = await this.#node.feedManager().getFinalLocalMessage({feedId: configFeedId, subfeedHash: joinedChannelsSubfeedHash})
+                        if (c) {
+                            joinedChannelsConfig = c as any as JSONValue
+                            await this.#node.mutableManager().set('_joined_channels_config', c)
                         }
-                        else {
-                            console.warn(joinedChannelsConfig)
-                            console.warn('Invalid joined channels config')
-                        }
+                    }
+                    //////////////////////////////////////////////////////////////////////////////////////////
+                }
+                if (joinedChannelsConfig) {
+                    if (isJoinedChannelsConfig(joinedChannelsConfig)) {
+                        this.#node.setJoinedChannels(joinedChannelsConfig.joinedChannels)
+                    }
+                    else {
+                        console.warn(joinedChannelsConfig)
+                        console.warn('Invalid joined channels config')
                     }
                 }
             }
