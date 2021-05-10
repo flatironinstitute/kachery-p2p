@@ -707,10 +707,12 @@ const migrateKeypairToStorageDir = (configDir: LocalFilePath, storageDir: LocalF
         throw Error(`Unexpected problem migrating keypair. File exists: ${oldPrivateKeyPath}`)
     }
     console.info('Migrating keypair to kachery storage directory')
-    fs.renameSync(oldPublicKeyPath, newPublicKeyPath)
-    fs.renameSync(oldPrivateKeyPath, newPrivateKeyPath)
+    fs.copyFileSync(oldPublicKeyPath, newPublicKeyPath)
+    fs.copyFileSync(oldPrivateKeyPath, newPrivateKeyPath)
     fs.chmodSync(newPublicKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
     fs.chmodSync(newPrivateKeyPath, fs.constants.S_IRUSR | fs.constants.S_IWUSR)
+    fs.unlinkSync(oldPublicKeyPath)
+    fs.unlinkSync(oldPrivateKeyPath)
 }
 
 class DownloadStreamManager {
