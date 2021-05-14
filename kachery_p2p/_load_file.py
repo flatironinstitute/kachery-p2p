@@ -56,45 +56,48 @@ def _load_file(uri: str, dest: Union[str, None]=None, p2p: bool=True, from_node:
     file_key = _create_file_key(sha1=hash0, query=query)
     api_url, headers = _api_url()
     url = f'{api_url}/loadFile'
-    sock = _http_post_json_receive_json_socket(url, dict(
+    sock, req = _http_post_json_receive_json_socket(url, dict(
         fileKey=file_key,
         fromNode=from_node
     ), headers=headers)
-    for r in sock:
-        try:
-            type0 = r.get('type')
-        except:
-            raise Exception(f'Unexpected response from daemon: {r}: {uri}')
-        if type0 == 'finished':
-            print(f'Loaded file: {uri}')
-            local_file_path: str = r['localFilePath']
-            if not os.path.exists(local_file_path):
-                raise Exception(f'Unexpected in load_file: file does not exist: {local_file_path}')
-            return local_file_path
-        elif type0 == 'progress':
-            bytes_loaded = r['bytesLoaded']
-            bytes_total = r['bytesTotal']
-            node_id = r['nodeId']
-            pct = (bytes_loaded / bytes_total) * 100
-            if node_id:
-                nodestr = f' from {node_id[:6]}'
+    try:
+        for r in sock:
+            try:
+                type0 = r.get('type')
+            except:
+                raise Exception(f'Unexpected response from daemon: {r}: {uri}')
+            if type0 == 'finished':
+                print(f'Loaded file: {uri}')
+                local_file_path: str = r['localFilePath']
+                if not os.path.exists(local_file_path):
+                    raise Exception(f'Unexpected in load_file: file does not exist: {local_file_path}')
+                return local_file_path
+            elif type0 == 'progress':
+                bytes_loaded = r['bytesLoaded']
+                bytes_total = r['bytesTotal']
+                node_id = r['nodeId']
+                pct = (bytes_loaded / bytes_total) * 100
+                if node_id:
+                    nodestr = f' from {node_id[:6]}'
+                else:
+                    nodestr = ''
+                print(f'Loaded {bytes_loaded} of {bytes_total} bytes{nodestr} ({pct:.1f} %): {uri}')
+            elif type0 == 'error':
+                return None
+                # raise LoadFileError(f'Error loading file: {r["error"]}: {uri}')
             else:
-                nodestr = ''
-            print(f'Loaded {bytes_loaded} of {bytes_total} bytes{nodestr} ({pct:.1f} %): {uri}')
-        elif type0 == 'error':
-            return None
-            # raise LoadFileError(f'Error loading file: {r["error"]}: {uri}')
-        else:
-            raise Exception(f'Unexpected message from daemon: {r}')
-    # for url in _global_config['file_server_urls']:
-    #     try:
-    #         path = _load_file_from_file_server(uri=uri, dest=dest, file_server_url=url)
-    #     except Exception as e:
-    #         print(str(e))
-    #         path = None
-    #     if path:
-    #         return path
-    raise Exception(f'Unable to download file: {uri}')
+                raise Exception(f'Unexpected message from daemon: {r}')
+        # for url in _global_config['file_server_urls']:
+        #     try:
+        #         path = _load_file_from_file_server(uri=uri, dest=dest, file_server_url=url)
+        #     except Exception as e:
+        #         print(str(e))
+        #         path = None
+        #     if path:
+        #         return path
+        raise Exception(f'Unable to download file: {uri}')
+    finally:
+        req.close()
 
 def _load_json(uri: str, p2p: bool=True, from_node: Union[str, None]=None, from_channel: Union[str, None]=None) -> Union[dict, None]:
     local_path = _load_file(uri, p2p=p2p, from_node=from_node, from_channel=from_channel)

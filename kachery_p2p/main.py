@@ -60,7 +60,8 @@ def find_file(uri: str, timeout_sec: float=5) -> Iterable[dict]:
     
     .. include:: ./find_file.md
     """
-    return _find_file(uri=uri, timeout_sec=timeout_sec)
+    x, req = _find_file(uri=uri, timeout_sec=timeout_sec)
+    return x
 
 def get_channels() -> List[dict]:
     """Returns the list channels that this node belongs to
