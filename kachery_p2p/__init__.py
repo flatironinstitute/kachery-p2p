@@ -12,7 +12,7 @@ from ._experimental_config import _experimental_config
 from .main import find_file
 from .main import get_channels, get_node_id
 from .main import load_file, load_npy, load_pkl, load_object, load_json, load_text, load_bytes
-from .main import store_file, store_object, store_json, store_npy, store_pkl, store_text
+from .main import store_file, store_object, store_json, store_npy, store_pkl, store_text, link_file
 from .main import load_feed, load_subfeed
 from .main import create_feed, delete_feed, get_feed_id, watch_for_new_messages
 from .main import get, set, delete, get_string

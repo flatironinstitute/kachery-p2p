@@ -50,9 +50,9 @@ export class KacheryStorageManager {
         }
         await renameAndCheck(destPathTmp, destPath, data.length)
     }
-    async storeFileFromStream(ds: DataStreamy, fileSize: ByteCount): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
-        const tmpDestPath = `${this.#storageDir}/store.file.${randomAlphaString(10)}.tmp`
-        const writeStream = fs.createWriteStream(tmpDestPath)
+    async storeFileFromStream(ds: DataStreamy, fileSize: ByteCount, o: {calculateHashOnly: boolean}): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
+        const tmpDestPath = !o.calculateHashOnly ? `${this.#storageDir}/store.file.${randomAlphaString(10)}.tmp` : null
+        const writeStream = tmpDestPath ? fs.createWriteStream(tmpDestPath) : null
         const shasum = crypto.createHash('sha1')
         const manifestChunks: FileManifestChunk[] = []
         const manifestData: {
@@ -85,7 +85,7 @@ export class KacheryStorageManager {
         return new Promise((resolve, reject) => {
             const _cleanup = () => {
                 try {
-                    fs.unlinkSync(tmpDestPath)
+                    if (tmpDestPath) fs.unlinkSync(tmpDestPath)
                 }
                 catch(e) {
                 }
@@ -93,7 +93,7 @@ export class KacheryStorageManager {
             ds.onData(buf => {
                 if (complete) return
                 shasum.update(buf)
-                writeStream.write(buf)
+                if (writeStream) writeStream.write(buf)
                 manifestData.buffers.push(buf)
                 manifestData.byte2 += buf.length
                 _updateManifestChunks({final: false})
@@ -127,14 +127,19 @@ export class KacheryStorageManager {
                         }
                         resolve({sha1: sha1Computed, manifestSha1})
                     }
-                    if (fs.existsSync(destPath)) {
-                        // if the dest path already exists, we already have the file and we are good
-                        nextStep()
+                    if ((!o.calculateHashOnly) && (tmpDestPath)) {
+                        if (fs.existsSync(destPath)) {
+                            // if the dest path already exists, we already have the file and we are good
+                            nextStep()
+                        }
+                        else {
+                            // dest path does not already exist
+                            fs.mkdirSync(destParentPath, {recursive: true});
+                            renameAndCheck(tmpDestPath, destPath, byteCountToNumber(fileSize)).then(nextStep)
+                        }
                     }
                     else {
-                        // dest path does not already exist
-                        fs.mkdirSync(destParentPath, {recursive: true});
-                        renameAndCheck(tmpDestPath, destPath, byteCountToNumber(fileSize)).then(nextStep)
+                        nextStep()
                     }
                 }
                 catch(err2) {
@@ -154,7 +159,47 @@ export class KacheryStorageManager {
         }
         const fileSize = byteCount(stat0.size)
         const ds = createDataStreamForFile(localFilePath, byteCount(0), fileSize)
-        return await this.storeFileFromStream(ds, fileSize)
+        return await this.storeFileFromStream(ds, fileSize, {calculateHashOnly: false})
+    }
+    async linkLocalFile(localFilePath: LocalFilePath, o: {size: number, mtime: number}): Promise<{sha1: Sha1Hash, manifestSha1: Sha1Hash | null}> {
+        let stat0: fs.Stats
+        try {
+            stat0 = await fs.promises.stat(localFilePath.toString())
+        }
+        catch (err) {
+            throw Error(`Unable to stat file. Perhaps the kachery-p2p daemon does not have permission to read this file: ${localFilePath}`)
+        }
+        const fileSize = byteCount(stat0.size)
+        if (byteCountToNumber(fileSize) !== o.size) {
+            throw Error(`Mismatch of file size in linkLocalFile: ${localFilePath} ${fileSize} <> ${o.size}`)
+        }
+        const mtime = Number(stat0.mtime) / 1000 // in seconds
+        if (Math.abs(mtime - o.mtime) > 0.002) { // allow tolerance because python gives mtime with greater precision
+            throw Error(`Mismatch of file mtime in linkLocalFile: ${localFilePath} ${mtime} <> ${o.mtime}`)
+        }
+        const ds = createDataStreamForFile(localFilePath, byteCount(0), fileSize)
+        const {sha1, manifestSha1} = await this.storeFileFromStream(ds, fileSize, {calculateHashOnly: true})
+        const s = sha1
+        const destParentPath = `${this.#storageDir}/sha1/${s[0]}${s[1]}/${s[2]}${s[3]}/${s[4]}${s[5]}`
+        if (!fs.existsSync(destParentPath)) {
+            fs.mkdirSync(destParentPath, {recursive: true})
+        }
+        const destPath = `${destParentPath}/${s}`
+        if (!fs.existsSync(destPath)) {
+            const x = {
+                path: localFilePath,
+                manifestSha1: manifestSha1,
+                stat: {
+                    size: o.size,
+                    mtime: o.mtime
+                },
+                _writingProcess: 'daemon'
+            }    
+            const tmpPath = destPath + '.link.' + randomAlphaString(8)
+            await fs.promises.writeFile(tmpPath, JSON.stringify(x))
+            fs.renameSync(tmpPath, destPath + '.link')
+        }
+        return {sha1, manifestSha1}
     }
     async concatenateChunksAndStoreResult(sha1: Sha1Hash, chunkSha1s: Sha1Hash[]): Promise<void> {
         const s = sha1

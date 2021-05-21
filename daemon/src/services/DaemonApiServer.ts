@@ -8,7 +8,7 @@ import DataStreamy from '../common/DataStreamy';
 import { sleepMsec } from '../common/util';
 import { HttpServerInterface } from '../external/ExternalInterface';
 import { isGetStatsOpts, NodeStatsInterface } from '../getStats';
-import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToNumber, ErrorMessage, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelConfigUrl, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, LocalFilePath, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject, JSONValue, isJSONValue, byteCount, ByteCount, isByteCount } from '../interfaces/core';
+import { Address, ChannelConfigUrl, DaemonVersion, DurationMsec, durationMsecToNumber, ErrorMessage, FeedId, FeedName, FileKey, FindFileResult, isAddress, isArrayOf, isBoolean, isChannelConfigUrl, isDaemonVersion, isDurationMsec, isEqualTo, isFeedId, isFeedName, isFileKey, isJSONObject, isMessageCount, isNodeId, isNull, isObjectOf, isOneOf, isSignedSubfeedMessage, isString, isSubfeedAccessRules, isSubfeedHash, isSubfeedMessage, isSubfeedPosition, isSubfeedWatches, isSubmittedSubfeedMessage, JSONObject, LocalFilePath, mapToObject, messageCount, MessageCount, NodeId, optional, Port, ProtocolVersion, scaledDurationMsec, Sha1Hash, SignedSubfeedMessage, SubfeedAccessRules, SubfeedHash, SubfeedMessage, SubfeedPosition, SubfeedWatches, SubmittedSubfeedMessage, toSubfeedWatchesRAM, _validateObject, JSONValue, isJSONValue, byteCount, ByteCount, isByteCount, isNumber } from '../interfaces/core';
 import KacheryP2PNode from '../KacheryP2PNode';
 import { loadFile } from '../loadFile';
 import { daemonVersion, protocolVersion } from '../protocolVersion';
@@ -55,6 +55,25 @@ const isStoreFileRequestData = (x: any): x is StoreFileRequestData => {
     })
 }
 type StoreFileResponseData = {
+    success: boolean
+    error: ErrorMessage | null
+    sha1: Sha1Hash | null
+    manifestSha1: Sha1Hash | null
+}
+
+type LinkFileRequestData = {
+    localFilePath: LocalFilePath
+    size: number
+    mtime: number
+}
+const isLinkFileRequestData = (x: any): x is LinkFileRequestData => {
+    return _validateObject(x, {
+        localFilePath: isString,
+        size: isNumber,
+        mtime: isNumber
+    })
+}
+type LinkFileResponseData = {
     success: boolean
     error: ErrorMessage | null
     sha1: Sha1Hash | null
@@ -489,7 +508,16 @@ export default class DaemonApiServer {
                 /* istanbul ignore next */
                 return await this._handleStoreFile(reqData)
             },
-            browserAccess: true
+            browserAccess: false
+        },
+        {
+            // /linkFile - Link a local file in local kachery storage
+            path: '/linkFile',
+            handler: async (reqData: JSONObject) => {
+                /* istanbul ignore next */
+                return await this._handleLinkFile(reqData)
+            },
+            browserAccess: false
         },
         {
             // /feed/createFeed - create a new writeable feed on this node
@@ -744,6 +772,22 @@ export default class DaemonApiServer {
         if (!isJSONObject(response)) throw Error('Unexpected json object in _handleStoreFile')
         return response
     }
+    // /linkFile - link local file in local kachery storage
+    /* istanbul ignore next */
+    async _handleLinkFile(reqData: JSONObject): Promise<JSONObject> {
+        if (!isLinkFileRequestData(reqData)) throw Error('Unexpected request data for linkFile.')
+        
+        const {sha1, manifestSha1} = await this.#node.kacheryStorageManager().linkLocalFile(reqData.localFilePath, {size: reqData.size, mtime: reqData.mtime})
+        const response: LinkFileResponseData = {
+            success: true,
+            error: null,
+            sha1,
+            manifestSha1
+        }
+        /* istanbul ignore next */
+        if (!isJSONObject(response)) throw Error('Unexpected json object in _handleLinkFile')
+        return response
+    }
     // /halt - halt the kachery-p2p daemon (stops the server process)
     /* istanbul ignore next */
     async _handleHalt(): Promise<JSONObject> {
@@ -918,7 +962,7 @@ export default class DaemonApiServer {
         })
         let response: StoreFileResponseData
         try {
-            const {sha1, manifestSha1} = await this.#node.kacheryStorageManager().storeFileFromStream(x, byteCount(fileSize))
+            const {sha1, manifestSha1} = await this.#node.kacheryStorageManager().storeFileFromStream(x, byteCount(fileSize), {calculateHashOnly: false})
             response = {
                 success: true,
                 error: null,

@@ -3,6 +3,7 @@ import sys
 import hashlib
 import shutil
 import random
+import json
 from typing import Optional, Tuple, Union
 from ._misc import _parse_kachery_uri
 from ._daemon_connection import _kachery_storage_dir
@@ -13,9 +14,41 @@ def _local_kachery_storage_load_file(*, sha1_hash: str):
     path = _get_path_ext(hash=sha1_hash, create=False, directory=sha1_directory)
     if os.path.exists(path):
         return path
-    else:
-        return None
+    elif os.path.exists(path + '.link'):
+        linked_file_path = _find_linked_file(path + '.link')
+        if linked_file_path is not None:
+            return linked_file_path
+    return None
 
+def _find_linked_file(link_path: str):
+    with open(link_path, 'r') as f:
+        link: dict = json.load(f)
+    path = link.get('path', None)
+    if path is None:
+        print(f'WARNING: problem with link (no path field): {link_path}')
+        return None
+    stat = link.get('stat', None)
+    if stat is None:
+        print(f'WARNING: problem with link (no stat field): {link_path}')
+        return None
+    if os.path.exists(path):
+        if _stat_matches(stat, path):
+            return path
+        else:
+            print(f'WARNING: linked file may have been modified: {link_path} {path}')
+            return None
+    else:
+        print('WARNING: linked file does not exist: {link_path} {path}')
+    return None
+
+def _stat_matches(stat: dict, path: str):
+    s = os.stat(path)
+    if stat['size'] != s.st_size:
+        return False
+    if stat['mtime'] != s.st_mtime:
+        return False
+    return True
+    
 def _local_kachery_storage_load_bytes(*, sha1_hash: str, start: Union[int, None]=None, end: Union[int, None]=None, write_to_stdout: bool=False):
     sha1_directory = f'{_kachery_storage_dir()}/sha1'
     path = _get_path_ext(hash=sha1_hash, create=False, directory=sha1_directory)
@@ -24,7 +57,7 @@ def _local_kachery_storage_load_bytes(*, sha1_hash: str, start: Union[int, None]
     else:
         return None
 
-def _local_kachery_storage_store_file(*, path: str, use_hard_links: bool=False, _no_manifest=False) -> Tuple[str, str, Union[str, None]]:
+def _local_kachery_storage_store_file(*, path: str, _no_manifest=False) -> Tuple[str, str, Union[str, None]]:
     from ._store_file import _store_json # don't want circular dependencies
     if (not _no_manifest) and (os.path.getsize(path) > 20000000):
         hash0, manifest0 = _compute_local_file_sha1_and_manifest(path)
@@ -40,11 +73,36 @@ def _local_kachery_storage_store_file(*, path: str, use_hard_links: bool=False, 
     path0 = _get_path_ext(hash=hash0, create=True, directory=sha1_directory)
     if not os.path.exists(path0):
         tmp_path = path0 + '.copying.' + _random_string(6)
-        if use_hard_links:
-            os.link(path, tmp_path)
-        else:
-            shutil.copyfile(path, tmp_path)
+        shutil.copyfile(path, tmp_path)
         _rename_file(tmp_path, path0, remove_if_exists=False)
+    return path0, hash0, manifest_hash
+
+def _local_kachery_storage_link_file(*, path: str, _no_manifest=False) -> Tuple[str, str, Union[str, None]]:
+    from ._store_file import _store_json # don't want circular dependencies
+    if (not _no_manifest) and (os.path.getsize(path) > 20000000):
+        hash0, manifest0 = _compute_local_file_sha1_and_manifest(path)
+        if manifest0 is None:
+            raise Exception(f'Unable to compute hash of file: {path}')
+        manifest_uri = _store_json(manifest0)
+        protocol, algorithm, manifest_hash, additional_path, query = _parse_kachery_uri(manifest_uri)
+    else:
+        hash0 = _get_file_hash(path)
+        manifest_hash = None
+    assert hash0 is not None
+    sha1_directory = f'{_kachery_storage_dir()}/sha1'
+    path0 = _get_path_ext(hash=hash0, create=True, directory=sha1_directory)
+    if not os.path.exists(path0):
+        tmp_path = path0 + '.link.' + _random_string(6)
+        with open(tmp_path, 'w') as f:
+            json.dump({
+                'path': os.path.abspath(path),
+                'manifest_hash': manifest_hash,
+                'stat': {
+                    'size': os.stat(path).st_size,
+                    'mtime': os.stat(path).st_mtime
+                }
+            }, f)
+        _rename_file(tmp_path, path0 + '.link', remove_if_exists=True)
     return path0, hash0, manifest_hash
 
 def _get_file_hash(path: str, *, _cache_only=False):

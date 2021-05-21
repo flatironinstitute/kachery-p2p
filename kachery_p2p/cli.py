@@ -131,6 +131,12 @@ def store_file(path: str):
     x = kp.store_file(path)
     print(x)
 
+@click.command(help="Store a link to file locally.")
+@click.argument('path')
+def link_file(path: str):
+    x = kp.link_file(path)
+    print(x)
+
 @click.command(help="Download a file and write the content to stdout.")
 @click.argument('uri')
 @click.option('--start', help='The start byte (optional)', default=None)
@@ -226,6 +232,7 @@ cli.add_command(join_channel)
 cli.add_command(leave_channel)
 cli.add_command(load_file)
 cli.add_command(store_file)
+cli.add_command(link_file)
 cli.add_command(node_info)
 cli.add_command(print_messages)
 cli.add_command(start_daemon)

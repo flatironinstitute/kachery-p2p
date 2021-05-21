@@ -4,9 +4,9 @@ import subprocess
 import simplejson
 import numpy as np
 import stat
-import time
+import json
 from ._daemon_connection import _is_offline_mode, _is_online_mode, _kachery_storage_dir, _api_url
-from ._local_kachery_storage import _local_kachery_storage_store_file
+from ._local_kachery_storage import _local_kachery_storage_store_file, _local_kachery_storage_link_file
 from ._misc import _http_post_json, _http_post_file
 from ._temporarydirectory import TemporaryDirectory
 from ._safe_pickle import _safe_pickle, _safe_unpickle
@@ -16,7 +16,7 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
     if basename is None:
         basename = os.path.basename(path)
     if _is_offline_mode():
-        stored_path, hash0, manifest_hash = _local_kachery_storage_store_file(path=path, use_hard_links=False)
+        stored_path, hash0, manifest_hash = _local_kachery_storage_store_file(path=path)
         if manifest_hash is None:
             return f'sha1://{hash0}/{basename}'
         else:
@@ -51,6 +51,56 @@ def _store_file(path: str, basename: Union[str, None]=None) -> str:
             raise Exception(f'Inconsistent size between stored file and original file for: {path} {path0} {file_size} {size0}')
         else:
             raise Exception(f'Unexpected size discrepancy between stored file and original file for: {path} {path0} {file_size} {size0}')
+
+    if manifest_sha1:
+        return f'sha1://{sha1}/{basename}?manifest={manifest_sha1}'
+    else:
+        return f'sha1://{sha1}/{basename}'
+
+def _link_file(path: str, basename: Union[str, None]=None) -> str:
+    if basename is None:
+        basename = os.path.basename(path)
+    if _is_offline_mode():
+        stored_path, hash0, manifest_hash = _local_kachery_storage_link_file(path=path)
+        if manifest_hash is None:
+            return f'sha1://{hash0}/{basename}'
+        else:
+            return f'sha1://{hash0}/{basename}?manifest={manifest_hash}'
+    if not _is_online_mode():
+        raise Exception('Not connected to daemon and not in offline mode.')
+    file_size = os.path.getsize(path)
+    mtime = os.stat(path).st_mtime
+    api_url, headers = _api_url()
+    url = f'{api_url}/linkFile'
+    resp = _http_post_json(url, {'localFilePath': os.path.abspath(path), 'size': file_size, 'mtime': mtime}, headers=headers)
+
+    if not resp['success']:
+        raise Exception(f'Problem linking file: {resp["error"]}')
+    sha1 = resp['sha1']
+    manifest_sha1 = resp['manifestSha1']
+
+    # important to verify that we can access the file
+    # this is crucial for systems where the daemon is running on a different computer
+    # in frank lab there was an issue where we needed to stat the file before proceeding
+    sha1_directory = f'{_kachery_storage_dir()}/sha1'
+    path0 = _get_path_ext(hash=sha1, create=False, directory=sha1_directory)
+    if (not os.path.exists(path0)) and (not os.path.exists(path0 + '.link')):
+        raise Exception(f'Unexpected, could not find stored file after linking with daemon: {path0}')
+
+    if os.path.exists(path0):
+        size0 = _get_file_size_using_system_call(path0)
+        if size0 != file_size:
+            if size0 == 0:
+                # perhaps the file has not synced across devices
+                raise Exception(f'Inconsistent size between stored/linked file and original file for: {path} {path0} {file_size} {size0}')
+            else:
+                raise Exception(f'Unexpected size discrepancy between stored/linked file and original file for: {path} {path0} {file_size} {size0}')
+    else:
+        try:
+            with open(path0 + '.link', 'r') as f:
+                json.load(f)
+        except:
+            raise Exception(f'Unexpected file reading link file after linking: {path}')
 
     if manifest_sha1:
         return f'sha1://{sha1}/{basename}?manifest={manifest_sha1}'

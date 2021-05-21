@@ -8,7 +8,7 @@ from ._feeds import (_create_feed, _delete_feed, _get_feed_id, _load_feed,
 from ._mutables import (_get, _set, _delete)
 
 from ._load_file import _load_file, _load_bytes, _load_text, _load_json, _load_npy, _load_pkl
-from ._store_file import _store_file, _store_text, _store_json, _store_npy, _store_pkl
+from ._store_file import _store_file, _store_text, _store_json, _store_npy, _store_pkl, _link_file
 
 def load_file(
     uri: str,
@@ -153,6 +153,18 @@ def store_file(path: str, basename: Union[str, None]=None) -> str:
         str: The kachery URI: sha1://...
     """
     return _store_file(path=path, basename=basename)
+
+def link_file(path: str, basename: Union[str, None]=None) -> str:
+    """Link a local file in the local kachery storage (will therefore be available on the kachery network) and return a kachery URI
+
+    Args:
+        path (str): Path of the file to link
+        basename (Union[str, None], optional): Optional base file name to append to the sha1:// URI. Defaults to None.
+
+    Returns:
+        str: The kachery URI: sha1://...
+    """
+    return _link_file(path=path, basename=basename)
 
 def store_object(object: dict, basename: Union[str, None]=None) -> str:
     """Store object (Python dict) in the local kachery storage (will therefore be available on the kachery network) and return a kachery URI
