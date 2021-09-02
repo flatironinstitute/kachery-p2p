@@ -1,6 +1,6 @@
 # kachery-p2p
 
-**This project is at an early stage of development. We welcome contributors and testers**
+**This project has been replaced by [kacheryhub](https://github.com/kacheryhub/kachery-doc)**
 
 [Current version number](./doc/current_version.md)
 
